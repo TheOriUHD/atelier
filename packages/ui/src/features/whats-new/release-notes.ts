@@ -19,6 +19,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.2.3',
+    intro: 'A small release that keeps updates coming on every Mac.',
+    highlights: [
+      {
+        icon: RefreshCw,
+        title: 'Mac updates no longer get stuck',
+        body: 'An update that was downloaded but never installed could stop every later one with “Couldn’t download Atelier …: ENOTEMPTY”. The update folder is now cleared properly, so new versions arrive again.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.2.2',
     intro: 'A server is now one command to set up, the update settings say what is going on, and the version number moves on to 0.2.',
     highlights: [
