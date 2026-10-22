@@ -1,44 +1,44 @@
 {
-  "version": "0.2.4",
-  "tag": "v0.2.4",
+  "version": "0.2.5",
+  "tag": "v0.2.5",
   "prerelease": false,
-  "publishedAt": "2026-10-22T16:41:18Z",
-  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.2.4",
+  "publishedAt": "2026-10-22T17:26:09Z",
+  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.2.5",
   "assets": {
     "macos-arm64": {
-      "name": "Atelier-0.2.4-arm64.dmg",
-      "size": 145599229,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.4-arm64.dmg"
+      "name": "Atelier-0.2.5-arm64.dmg",
+      "size": 145526554,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.5-arm64.dmg"
     },
     "macos-x64": {
-      "name": "Atelier-0.2.4.dmg",
-      "size": 152220123,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.4.dmg"
+      "name": "Atelier-0.2.5.dmg",
+      "size": 152144956,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.5.dmg"
     },
     "windows": {
-      "name": "Atelier-Setup-0.2.4.exe",
-      "size": 246747220,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.2.4.exe"
+      "name": "Atelier-Setup-0.2.5.exe",
+      "size": 246716462,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.2.5.exe"
     },
     "linux-deb-x64": {
-      "name": "Atelier-0.2.4-amd64.deb",
-      "size": 112482728,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.4-amd64.deb"
+      "name": "Atelier-0.2.5-amd64.deb",
+      "size": 112470948,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.5-amd64.deb"
     },
     "linux-deb-arm64": {
-      "name": "Atelier-0.2.4-arm64.deb",
-      "size": 107689196,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.4-arm64.deb"
+      "name": "Atelier-0.2.5-arm64.deb",
+      "size": 107676916,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.5-arm64.deb"
     },
     "linux-appimage-x64": {
-      "name": "Atelier-0.2.4.AppImage",
-      "size": 141308973,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.4.AppImage"
+      "name": "Atelier-0.2.5.AppImage",
+      "size": 141231370,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.5.AppImage"
     },
     "linux-appimage-arm64": {
-      "name": "Atelier-0.2.4-arm64.AppImage",
-      "size": 142671330,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.4-arm64.AppImage"
+      "name": "Atelier-0.2.5-arm64.AppImage",
+      "size": 142597826,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.5-arm64.AppImage"
     }
   }
 }
