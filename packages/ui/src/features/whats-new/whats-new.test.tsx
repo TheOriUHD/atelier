@@ -54,11 +54,13 @@ describe('the release notes', () => {
 describe('the dialog', () => {
   it('shows the version, each highlight and the smaller changes, and closes on "Got it"', () => {
     const onOpenChange = vi.fn();
-    mount(<WhatsNewDialog notes={notes} open onOpenChange={onOpenChange} />);
-    const dialog = screen.getByRole('dialog', { name: new RegExp(`What’s new in Atelier\\s*${notes.version}`) });
-    for (const h of notes.highlights) expect(dialog.textContent).toContain(h.title);
+    // Notes with smaller changes too (the newest may have none, and then the dialog leaves that part out).
+    const full = RELEASE_NOTES.find((n) => n.also.length > 0)!;
+    mount(<WhatsNewDialog notes={full} open onOpenChange={onOpenChange} />);
+    const dialog = screen.getByRole('dialog', { name: new RegExp(`What’s new in Atelier\\s*${full.version}`) });
+    for (const h of full.highlights) expect(dialog.textContent).toContain(h.title);
     expect(dialog.textContent).toContain('Also in this version');
-    for (const line of notes.also) expect(dialog.textContent).toContain(line);
+    for (const line of full.also) expect(dialog.textContent).toContain(line);
     fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
