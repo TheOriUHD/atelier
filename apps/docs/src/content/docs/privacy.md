@@ -6,6 +6,10 @@ description: Every network connection Atelier makes, what each one sends, and wh
 Every network connection Atelier makes, by feature. "Backend" means the computer running Atelier's backend: your own
 computer with **Run on this computer**, or your server. Rows that cost tokens or contact third parties are in bold.
 
+This page is about the app. What the project's websites (atelierhq.dev, these docs and the update feed) process is in
+the [Datenschutzerklärung](https://atelierhq.dev/datenschutz/) (German): only what serving a page needs, no analytics,
+no cookies of their own.
+
 | Feature | What is contacted | What is sent | Can I turn it off |
 |---|---|---|---|
 | **Model providers** | The address of each provider you added: for example `api.anthropic.com`, `api.openai.com`, `openrouter.ai`, `opencode.ai`, `api.githubcopilot.com`, `chatgpt.com`, or your own Ollama, llama.cpp or LM Studio server | The system prompt, the conversation, tool definitions, **tool results** (file contents and command output the agent read), attachments, your memory and instructions, and your key or token in a header | Not adding a hosted provider. Local servers on your own network send nothing outside it. |

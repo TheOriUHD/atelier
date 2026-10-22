@@ -204,7 +204,7 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 
 /* Impressum */
 .imprint { max-width: 46rem; }
-.imprint h1 { margin-bottom: 32px; }
+.imprint h1 { margin-bottom: 32px; hyphens: auto; overflow-wrap: break-word; }
 .imprint h2 { font: 600 1rem/1.4 var(--sans); letter-spacing: -0.005em; margin: 32px 0 8px; }
 .imprint p { color: var(--ink-2); line-height: 1.6; }
 

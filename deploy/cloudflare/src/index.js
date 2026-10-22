@@ -54,7 +54,7 @@ async function page(env) {
 <div class="beta"><strong>Atelier is in beta.</strong> Please be aware it is unfinished: things will be missing, change or break. The macOS builds are signed and notarized; the Windows installer is not signed yet, so Windows warns before opening it.</div>
 <h2>Download</h2><ul>${rows('stable', stable)}</ul>
 <h2>Beta channel</h2><ul>${rows('beta', beta)}</ul>
-<p><span>Installed copies update themselves from here.</span></p><p><a href="https://atelierhq.dev/impressum/" lang="de">Impressum</a></p></html>`,
+<p><span>Installed copies update themselves from here.</span></p><p lang="de"><a href="https://atelierhq.dev/impressum/">Impressum</a> · <a href="https://atelierhq.dev/datenschutz/">Datenschutz</a></p></html>`,
     { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=60' } },
   );
 }

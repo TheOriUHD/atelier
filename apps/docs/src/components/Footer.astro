@@ -1,7 +1,10 @@
 ---
-// Starlight's footer, plus a link to the site's Impressum (the operator's legal notice, required for German sites).
+// Starlight's footer, plus the site's Impressum and Datenschutzerklärung (the legal notice and privacy policy German
+// sites need).
 import Default from '@astrojs/starlight/components/Footer.astro';
 ---
 
 <Default />
-<p class="imprint-link"><a href="https://atelierhq.dev/impressum/" lang="de">Impressum</a></p>
+<p class="imprint-link" lang="de">
+  <a href="https://atelierhq.dev/impressum/">Impressum</a> · <a href="https://atelierhq.dev/datenschutz/">Datenschutz</a>
+</p>
