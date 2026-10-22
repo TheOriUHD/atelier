@@ -2,12 +2,14 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/charmbracelet/bubbles/spinner"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -124,14 +126,91 @@ func TestWelcomeShowsTheLogo(t *testing.T) {
 }
 
 func TestChecksBlockWithoutDocker(t *testing.T) {
+	// Not as root, Enter does nothing while a check fails, and the check says how to let the setup fix it.
 	m, _ := newTestModel(t)
-	m, _ = m.Update(probeMsg{system.Info{OS: "linux", Distro: "Ubuntu 24.04", Root: true, Home: "/root"}})
-	v := view(m)
-	contains(t, v, "Docker", "not installed", "install Docker")
-	// Enter does nothing while a check fails.
+	m, _ = m.Update(probeMsg{system.Info{OS: "linux", Distro: "Ubuntu 24.04", Home: "/home/sam"}})
+	contains(t, view(m), "Docker", "not installed", system.InstallCommand)
 	m = press(m, "enter")
 	if m.(Model).screen != scChecks {
 		t.Errorf("moved on past a failed check: screen %v", m.(Model).screen)
+	}
+}
+
+// Started with sudo, the wizard installs Docker on a screen of its own, shows what the installer is doing in words, and
+// looks at the machine again when it is done; a failure shows the installer's last lines and can be tried again.
+func TestTheWizardInstallsDockerItself(t *testing.T) {
+	noDocker := system.Info{OS: "linux", Distro: "Ubuntu 24.04", Root: true, Home: "/root", DiskFreeGB: 80, MemGB: 23}
+	withDocker := goodInfo()
+	var cmds []string
+	failInstall := true
+	run := func(_ context.Context, _, name string, args []string, out func(string)) error {
+		cmd := args[len(args)-1]
+		cmds = append(cmds, cmd)
+		if strings.HasPrefix(cmd, "sh /tmp/") {
+			out("+ sh -c 'apt-get -qq update >/dev/null'")
+			out("+ sh -c 'DEBIAN_FRONTEND=noninteractive apt-get -y -qq install docker-ce docker-ce-cli containerd.io >/dev/null'")
+			if failInstall {
+				out("E: Unable to locate package docker-ce")
+				return os.ErrInvalid
+			}
+		}
+		return nil
+	}
+	probes := 0
+	probe := func(context.Context, string) system.Info {
+		probes++
+		return withDocker
+	}
+	var m tea.Model = New(Config{Dir: t.TempDir(), Run: run, Probe: probe})
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 110, Height: 40})
+	m, _ = m.Update(probeMsg{noDocker})
+	contains(t, view(m), "Press Enter to install it", "enter install Docker")
+
+	var cmd tea.Cmd
+	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.(Model).screen != scDocker {
+		t.Fatalf("Enter did not start the install: screen %v", m.(Model).screen)
+	}
+	contains(t, view(m), "Install Docker", "Download Docker's installer", "Start Docker")
+	m = settle(m, cmd)
+	contains(t, view(m), "✗", "install Docker failed", "Unable to locate package docker-ce", "try again", "back to the checks")
+	if strings.Contains(view(m), "+ sh -c") && !strings.Contains(view(m), "Unable to locate") {
+		t.Error("raw installer lines while it ran")
+	}
+
+	// Escape goes back to the checks; Enter tries again, which works this time and checks the machine again.
+	m = press(m, "esc")
+	if m.(Model).screen != scChecks {
+		t.Fatalf("esc: screen %v", m.(Model).screen)
+	}
+	failInstall, cmds = false, nil
+	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = settle(m, cmd)
+	if len(cmds) != 3 || !strings.Contains(cmds[0], "get.docker.com") || !strings.Contains(cmds[2], "systemctl enable --now docker") {
+		t.Errorf("commands = %v", cmds)
+	}
+	if probes != 1 || m.(Model).screen != scChecks {
+		t.Fatalf("after the install: probes %d, screen %v", probes, m.(Model).screen)
+	}
+	contains(t, view(m), "Docker", "version 29.1", "enter continue")
+}
+
+// While Docker is installed, the screen says what is happening in words, not the installer's raw lines.
+func TestTheDockerScreenSaysWhatIsHappening(t *testing.T) {
+	m := New(Config{})
+	m.width, m.height, m.screen, m.fix = 110, 40, scDocker, apply.InstallDocker
+	for _, s := range apply.DockerSteps(apply.InstallDocker) {
+		m.fixSteps = append(m.fixSteps, stepView{ID: s.ID, Title: s.Title})
+	}
+	m.fixStarted = time.Now()
+	m.onFixEvent(apply.Event{Step: "get", Kind: "start"})
+	m.onFixEvent(apply.Event{Step: "get", Kind: "done"})
+	m.onFixEvent(apply.Event{Step: "install", Kind: "start"})
+	m.onFixEvent(apply.Event{Step: "install", Kind: "log", Text: "+ sh -c 'DEBIAN_FRONTEND=noninteractive apt-get -y -qq install docker-ce docker-ce-cli >/dev/null'"})
+	v := m.View()
+	contains(t, v, "✓ Download Docker's installer", "Installing Docker Engine, the CLI and Compose", "Docker's own installer")
+	if strings.Contains(v, "apt-get") {
+		t.Errorf("the raw line shows:\n%s", v)
 	}
 }
 
@@ -388,4 +467,51 @@ func TestAServerThatAlreadyHasAnAdminIsNotAnError(t *testing.T) {
 	cur.ans.Dir = t.TempDir()
 	next, _ := cur.Update(adminMsg{fmt.Errorf("This server already has an admin. Sign in instead.")})
 	contains(t, next.(Model).View(), "Atelier is running.", "It already had an account")
+}
+
+// The download shows a bar per image with its size, never a stream of Docker's lines; a bar does not go back when Docker
+// learns the size of another layer.
+func TestTheDownloadIsABarPerImage(t *testing.T) {
+	m := New(Config{})
+	m.width, m.height, m.screen = 110, 40, scApply
+	m.steps = []stepView{{ID: "pull", Title: "Download the images", State: "running"}, {ID: "up", Title: "Start Atelier"}}
+	m.pull, m.shown = map[string]apply.ImageProgress{}, map[string]float64{}
+	m.onEvent(apply.Event{Step: "pull", Kind: "image", Image: &apply.ImageProgress{Image: "ghcr.io/theoriuhd/atelier:latest", Downloaded: 140e6, Size: 300e6, Layers: 6, Unpacked: 2}})
+	m.onEvent(apply.Event{Step: "pull", Kind: "image", Image: &apply.ImageProgress{Image: "ghcr.io/theoriuhd/atelier-sandbox:latest", Done: true, Layers: 3, Unpacked: 3}})
+	m.onEvent(apply.Event{Step: "pull", Kind: "log", Text: "Downloading 24MB"})
+	before := m.shown["ghcr.io/theoriuhd/atelier:latest"]
+	// Another layer's size becomes known: the fraction drops, the bar stays.
+	m.onEvent(apply.Event{Step: "pull", Kind: "image", Image: &apply.ImageProgress{Image: "ghcr.io/theoriuhd/atelier:latest", Downloaded: 140e6, Size: 400e6, Layers: 7, Unpacked: 2}})
+	if m.shown["ghcr.io/theoriuhd/atelier:latest"] < before {
+		t.Error("the bar went back")
+	}
+	v := m.View()
+	contains(t, v, "atelier ", "140 MB of 400 MB", "atelier-sandbox", "ready", "━")
+	if strings.Contains(v, "Downloading 24MB") || strings.Contains(v, "ghcr.io") {
+		t.Errorf("raw lines or full image names show:\n%s", v)
+	}
+	// Only a failure shows the last lines of output.
+	m.applyDone, m.applyErr = true, errors.New("docker compose pull failed: denied")
+	contains(t, m.View(), "Downloading 24MB", "try again")
+}
+
+// A screen's heading is centered in the box and underlined, apart from the lines below it.
+func TestHeadingsAreCentered(t *testing.T) {
+	out := frame(110, 40, 3, "Review", "What will happen", "", false)
+	var heading, body string
+	for _, l := range strings.Split(out, "\n") {
+		switch {
+		case strings.Contains(l, "Review"):
+			heading = l
+		case strings.Contains(l, "What will happen"):
+			body = l
+		}
+	}
+	h, b := strings.Index(heading, "Review"), strings.Index(body, "What will happen")
+	if h < b+30 {
+		t.Errorf("the heading is not centered:\n%s\n%s", heading, body)
+	}
+	if !strings.Contains(out, "──────────") {
+		t.Error("no rule under the heading")
+	}
 }

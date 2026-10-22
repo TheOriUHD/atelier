@@ -1,9 +1,10 @@
 #!/bin/sh
 # Atelier server setup. It downloads atelier-setup for this machine, checks its checksum and starts it.
 #
-#   curl -fsSL https://updates.atelierhq.dev/install | sh
+#   curl -fsSL https://updates.atelierhq.dev/install | sudo sh
 #
-# Anything after `sh -s --` goes to atelier-setup, for example `... | sh -s -- doctor`.
+# With sudo, the wizard can install or start Docker itself. Anything after `sh -s --` goes to atelier-setup, for example
+# `... | sudo sh -s -- doctor`.
 # It is short, so read it first if you like. To pin what you run, download it and compare its sha256 with the one on the
 # release page, then run the file: sh install.sh
 set -eu

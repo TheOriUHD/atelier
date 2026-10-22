@@ -27,6 +27,8 @@ var (
 	styBad    = lipgloss.NewStyle().Foreground(bad)
 	styCode   = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#3A332D", Dark: "#D9CFC6"})
 	styKey    = lipgloss.NewStyle().Foreground(accent).Bold(true)
+	// A screen's own heading: the accent color, centered over a short rule, so it never reads like the lines below it.
+	styHeading = lipgloss.NewStyle().Foreground(accent).Bold(true)
 )
 
 // bannerLines is the logo: figlet's "standard" lettering, one colour step per line.
@@ -96,7 +98,11 @@ func frame(width, height int, step int, title, body, hints string, splash bool) 
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(faint).Padding(1, 2).Width(inner)
 	content := body
 	if title != "" {
-		content = styTitle.Render(title) + "\n\n" + body
+		// The box's text area: its width less the padding on both sides.
+		w := inner - 4
+		heading := lipgloss.PlaceHorizontal(w, lipgloss.Center, styHeading.Render(title))
+		rule := lipgloss.PlaceHorizontal(w, lipgloss.Center, styFaint.Render(strings.Repeat("─", min(lipgloss.Width(title)+8, w))))
+		content = heading + "\n" + rule + "\n\n" + body
 	}
 	parts := []string{head, "", box.Render(content), "", styMuted.Render(hints)}
 	all := lipgloss.JoinVertical(lipgloss.Center, parts...)

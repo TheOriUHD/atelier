@@ -37,7 +37,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       {
         icon: Server,
         title: 'Set up a server with one command',
-        body: 'On a Linux or macOS machine with Docker, curl -fsSL https://updates.atelierhq.dev/install | sh starts a setup wizard: it checks the machine, asks how people will reach the server, starts it, tests the address like a browser would and creates your account.',
+        body: 'On a Linux or macOS machine, curl -fsSL https://updates.atelierhq.dev/install | sudo sh starts a setup wizard: it checks the machine, asks how people will reach the server, starts it, tests the address like a browser would and creates your account.',
       },
       {
         icon: RefreshCw,

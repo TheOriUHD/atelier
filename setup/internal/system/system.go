@@ -386,24 +386,70 @@ func withoutPorts(busy, owned []int) []int {
 	return out
 }
 
+// InstallCommand starts the setup; with sudo it can install, start and fix Docker by itself.
+const InstallCommand = "curl -fsSL https://updates.atelierhq.dev/install | sudo sh"
+
+// DockerFix is what this program can do about Docker here: "install", "start" or "compose", or "" when Docker is fine
+// or the fix is not its to make (not Linux, or not running as root).
+func DockerFix(info Info) string {
+	if info.OS != "linux" || !info.Root {
+		return ""
+	}
+	switch {
+	case !info.Docker.Installed:
+		return "install"
+	case !info.Docker.Access && dockerDown(info):
+		return "start"
+	case info.Docker.Access && info.Docker.Compose == "":
+		return "compose"
+	}
+	return ""
+}
+
+// dockerDown tells a daemon that isn't there from one this user may not use: only the second says "permission denied".
+// (The wording of the first changes between Docker versions: "Cannot connect to the Docker daemon", "failed to connect to
+// the docker API … if the daemon is running".)
+func dockerDown(info Info) bool {
+	return !strings.Contains(strings.ToLower(info.Docker.AccessErr), "permission denied")
+}
+
 // Checks turns what was found into the lines the wizard shows. Only what stops every install blocks; a port is only a
 // problem for the setups that use it, which the wizard checks when they are chosen.
 func Checks(info Info) []Check {
 	var cs []Check
 	cs = append(cs, Check{Name: "System", Status: OK, Detail: fmt.Sprintf("%s, %s", firstNonEmpty(info.Distro, info.OS), info.Arch)})
+	fix := DockerFix(info)
+	// What to say when this program can't make the fix itself.
+	withSudo := "Quit (q) and start the setup with sudo, so it can do this for you:\n" + InstallCommand
 	switch {
 	case !info.Docker.Installed:
-		cs = append(cs, Check{Name: "Docker", Status: Bad, Detail: "not installed", Fix: "Atelier runs in Docker. Press I to install it with Docker's own installer, or install it yourself and run this again."})
-	case !info.Docker.Access:
-		fix := "Run this again with sudo, or add your user to the docker group (then log in again)."
-		if strings.Contains(strings.ToLower(info.Docker.AccessErr), "cannot connect") || strings.Contains(strings.ToLower(info.Docker.AccessErr), "is the docker daemon running") {
-			fix = "Docker is installed but not running. Start it (sudo systemctl start docker) and run this again."
+		how := "Atelier runs in Docker. Press Enter to install it with Docker's own installer (get.docker.com)."
+		switch {
+		case info.OS == "darwin":
+			how = "Atelier runs in Docker. Install Docker Desktop or OrbStack, start it, then press R to check again."
+		case fix == "":
+			how = "Atelier runs in Docker. " + withSudo
 		}
-		cs = append(cs, Check{Name: "Docker", Status: Bad, Detail: "installed, but this user cannot use it", Fix: fix})
+		cs = append(cs, Check{Name: "Docker", Status: Bad, Detail: "not installed", Fix: how})
+	case !info.Docker.Access && dockerDown(info):
+		how := "Press Enter to start it."
+		switch {
+		case info.OS == "darwin":
+			how = "Start Docker Desktop (or OrbStack), then press R to check again."
+		case fix == "":
+			how = withSudo
+		}
+		cs = append(cs, Check{Name: "Docker", Status: Bad, Detail: "installed, but not running", Fix: how})
+	case !info.Docker.Access:
+		cs = append(cs, Check{Name: "Docker", Status: Bad, Detail: "installed, but this user cannot use it", Fix: withSudo + "\nOr add your user to the docker group, log in again and run atelier-setup."})
 	default:
 		cs = append(cs, Check{Name: "Docker", Status: OK, Detail: "version " + info.Docker.Version})
 		if info.Docker.Compose == "" {
-			cs = append(cs, Check{Name: "Docker Compose", Status: Bad, Detail: "the compose plugin is missing", Fix: "Install the docker-compose-plugin package (Compose v2) and run this again."})
+			how := "Press Enter to install the Docker Compose plugin."
+			if fix == "" {
+				how = "Install the docker-compose-plugin package (Compose v2), or " + strings.ToLower(withSudo[:1]) + withSudo[1:]
+			}
+			cs = append(cs, Check{Name: "Docker Compose", Status: Bad, Detail: "the compose plugin is missing", Fix: how})
 		} else {
 			cs = append(cs, Check{Name: "Docker Compose", Status: OK, Detail: "version " + info.Docker.Compose})
 		}

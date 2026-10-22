@@ -20,19 +20,25 @@ your chats and settings.
 
 ## Install it with the setup wizard
 
-On a Linux or macOS machine with Docker, one line starts a full-screen wizard:
+On a Linux or macOS machine, one line starts a full-screen wizard:
 
 ```bash
-curl -fsSL https://updates.atelierhq.dev/install | sh
+curl -fsSL https://updates.atelierhq.dev/install | sudo sh
 ```
 
 The script downloads `atelier-setup` for your system, checks its checksum against the one written into the script, and
 starts it. To read it first, or to check it against the checksum on the release page, download it with
-`curl -fsSLO https://updates.atelierhq.dev/install` and run `sh install`.
+`curl -fsSLO https://updates.atelierhq.dev/install` and run `sudo sh install`.
+
+`sudo` lets the wizard fix Docker by itself on Linux: when Docker is missing it installs it with Docker's own installer
+(get.docker.com), when it is stopped it starts it, and when the Compose plugin is missing it adds it, each on a screen
+of its own. Without `sudo` it works the same where Docker already runs for your user, and otherwise says what to run.
+On a Mac, install Docker Desktop or OrbStack first.
 
 The wizard:
 
-1. **Looks at the machine:** Docker and Compose, disk, memory, and whether Ollama or Tailscale are there. If it set up
+1. **Looks at the machine:** Docker and Compose (and, with `sudo`, installs or starts them), disk, memory, and whether
+   Ollama or Tailscale are there. If it set up
    Atelier here before, it says so and offers to reinstall over it (keeping accounts and chats), remove it, or leave it.
 2. **Asks how people will reach the server:** by default **this machine's address** (`http://192.168.x.x:7340`, no
    domain, nothing else to set up); a domain with HTTPS handled by Caddy in the same Compose project (needs ports 80

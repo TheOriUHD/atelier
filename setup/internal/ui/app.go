@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -38,6 +37,7 @@ const (
 	scOptions
 	scReview
 	scApply
+	scDocker
 	scProxySetup
 	scVerify
 	scAdmin
@@ -56,7 +56,9 @@ type Config struct {
 	Run    apply.RunFunc
 	Verify func(ctx context.Context, url string, insecure bool) verify.Report
 	// PortBusy tells whether something listens on a port (default: look for real).
-	PortBusy    func(port int) bool
+	PortBusy func(port int) bool
+	// Probe looks at the machine (default: for real).
+	Probe       func(ctx context.Context, dir string) system.Info
 	CreateAdmin func(ctx context.Context, baseURL, token string, a apply.Admin, insecure bool) error
 }
 
@@ -66,6 +68,8 @@ type applyDoneMsg struct{ err error }
 type verifyMsg struct{ report verify.Report }
 type adminMsg struct{ err error }
 type execDoneMsg struct{ err error }
+type fixEventMsg struct{ ev apply.Event }
+type fixDoneMsg struct{ err error }
 type removedMsg struct{ err error }
 
 // Model is the wizard.
@@ -94,6 +98,20 @@ type Model struct {
 	events    chan apply.Event
 	applyErr  error
 	applyDone bool
+	// The pull's progress per image, in the order they started; shown never goes back, so a bar doesn't jump back when
+	// Docker learns the size of another layer.
+	pullOrder []string
+	pull      map[string]apply.ImageProgress
+	shown     map[string]float64
+
+	// Installing, starting or completing Docker from the checks screen.
+	fix         apply.DockerFix
+	fixSteps    []stepView
+	fixLog      []string
+	fixActivity string
+	fixErr      error
+	fixEvents   chan apply.Event
+	fixStarted  time.Time
 
 	snippet proxy.Snippet
 	snipVP  viewport.Model
@@ -110,7 +128,6 @@ type Model struct {
 	removeBusy bool
 	reuse      bool
 	hadAdmin   bool
-	installing bool
 	note       string
 }
 
@@ -136,6 +153,9 @@ func (m Model) probe() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
+		if m.cfg.Probe != nil {
+			return probeMsg{m.cfg.Probe(ctx, dir)}
+		}
 		return probeMsg{system.Probe(ctx, system.ExecRunner{}, dir, []int{80, 443, 7340})}
 	}
 }
@@ -190,8 +210,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.info.Existing, m.reuse = nil, false
 		m.ans.Dir = ex.Dir
 		return m.toMode()
+	case fixEventMsg:
+		m.onFixEvent(msg.ev)
+		return m, waitFix(m.fixEvents)
+	case fixDoneMsg:
+		m.fixErr = msg.err
+		if msg.err == nil {
+			m.screen = scProbe
+			return m, tea.Batch(m.spin.Tick, m.probe())
+		}
+		return m, nil
 	case execDoneMsg:
-		m.installing = false
 		if msg.err != nil {
 			m.note = "That did not finish: " + msg.err.Error()
 		} else {
@@ -243,7 +272,7 @@ func (m Model) bodyHeight() int {
 
 func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := k.String()
-	if s == "q" && m.screen != scDomain && m.screen != scOptions && m.screen != scAdmin {
+	if s == "q" && m.screen != scDomain && m.screen != scOptions && m.screen != scAdmin && m.screen != scDocker {
 		return m, tea.Quit
 	}
 	switch m.screen {
@@ -258,17 +287,22 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !system.Blocking(m.checks) {
 				return m.afterChecks()
 			}
+			if fix := system.DockerFix(m.info); fix != "" {
+				return m.startFix(apply.DockerFix(fix))
+			}
 		case "r":
 			m.screen = scProbe
 			return m, tea.Batch(m.spin.Tick, m.probe())
-		case "i":
-			if !m.info.Docker.Installed && m.info.OS == "linux" {
-				m.installing = true
-				cmd := exec.Command("sh", "-c", "curl -fsSL https://get.docker.com | sh")
-				if !m.info.Root {
-					cmd = exec.Command("sh", "-c", "curl -fsSL https://get.docker.com | sudo sh")
-				}
-				return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return execDoneMsg{err} })
+		}
+	case scDocker:
+		if m.fixErr != nil {
+			switch s {
+			case "r":
+				return m.startFix(m.fix)
+			case "esc":
+				m.screen = scChecks
+			case "q":
+				return m, tea.Quit
 			}
 		}
 	case scExisting:
@@ -398,8 +432,16 @@ func (m Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "t":
 			if m.ans.Mode == plan.Tailscale {
-				cmd := exec.Command("sh", "-c", fmt.Sprintf("tailscale serve --bg --https=443 http://127.0.0.1:%d", m.ans.Port))
-				return m, tea.ExecProcess(cmd, func(err error) tea.Msg { return execDoneMsg{err} })
+				run := m.cfg.Run
+				if run == nil {
+					run = apply.ExecRun
+				}
+				port := m.ans.Port
+				m.note = "Running tailscale serve…"
+				return m, func() tea.Msg {
+					err := run(context.Background(), "/", "tailscale", []string{"serve", "--bg", "--https=443", fmt.Sprintf("http://127.0.0.1:%d", port)}, func(string) {})
+					return execDoneMsg{err}
+				}
 			}
 		}
 		var cmd tea.Cmd
@@ -729,6 +771,7 @@ func (m Model) reviewText() string {
 func (m Model) startApply() (tea.Model, tea.Cmd) {
 	m.screen = scApply
 	m.steps, m.logLines, m.applyErr, m.applyDone = nil, nil, nil, false
+	m.pullOrder, m.pull, m.shown = nil, map[string]apply.ImageProgress{}, map[string]float64{}
 	for _, s := range m.plan.Steps {
 		if s.ID == "files" || s.ID == "pull" || s.ID == "up" || s.ID == "healthy" {
 			m.steps = append(m.steps, stepView{ID: s.ID, Title: s.Title})
@@ -772,10 +815,79 @@ func (m *Model) onEvent(e apply.Event) {
 			m.steps[i].State = "fail"
 		}
 	}
+	if e.Kind == "image" && e.Image != nil {
+		p := *e.Image
+		if _, ok := m.pull[p.Image]; !ok {
+			m.pullOrder = append(m.pullOrder, p.Image)
+		}
+		m.pull[p.Image] = p
+		m.shown[p.Image] = max(m.shown[p.Image], p.Fraction())
+	}
+	if e.Kind == "start" {
+		// What a failure shows is the failing step's own output.
+		m.logLines = nil
+	}
 	if e.Kind == "log" && strings.TrimSpace(e.Text) != "" {
 		m.logLines = append(m.logLines, e.Text)
 		if len(m.logLines) > 400 {
 			m.logLines = m.logLines[len(m.logLines)-400:]
+		}
+	}
+}
+
+// startFix installs, starts or completes Docker on its own screen, then looks at the machine again.
+func (m Model) startFix(fix apply.DockerFix) (tea.Model, tea.Cmd) {
+	m.screen, m.fix, m.fixErr, m.fixLog, m.fixActivity, m.fixStarted = scDocker, fix, nil, nil, "", time.Now()
+	m.fixSteps = nil
+	for _, s := range apply.DockerSteps(fix) {
+		m.fixSteps = append(m.fixSteps, stepView{ID: s.ID, Title: s.Title})
+	}
+	ch := make(chan apply.Event, 64)
+	m.fixEvents = ch
+	run := m.cfg.Run
+	go func() {
+		err := apply.FixDocker(context.Background(), apply.Options{Run: run}, fix, func(e apply.Event) { ch <- e })
+		ch <- apply.Event{Kind: "end", Err: err}
+		close(ch)
+	}()
+	return m, tea.Batch(m.spin.Tick, waitFix(ch))
+}
+
+func waitFix(ch chan apply.Event) tea.Cmd {
+	return func() tea.Msg {
+		e, ok := <-ch
+		if !ok {
+			return nil
+		}
+		if e.Kind == "end" {
+			return fixDoneMsg{e.Err}
+		}
+		return fixEventMsg{e}
+	}
+}
+
+func (m *Model) onFixEvent(e apply.Event) {
+	for i := range m.fixSteps {
+		if m.fixSteps[i].ID != e.Step {
+			continue
+		}
+		switch e.Kind {
+		case "start":
+			m.fixSteps[i].State = "running"
+			m.fixActivity = ""
+		case "done":
+			m.fixSteps[i].State = "done"
+		case "fail":
+			m.fixSteps[i].State = "fail"
+		}
+	}
+	if e.Kind == "log" && strings.TrimSpace(e.Text) != "" {
+		if what, ok := apply.DockerActivity(e.Text); ok {
+			m.fixActivity = what
+		}
+		m.fixLog = append(m.fixLog, e.Text)
+		if len(m.fixLog) > 200 {
+			m.fixLog = m.fixLog[len(m.fixLog)-200:]
 		}
 	}
 }
@@ -939,6 +1051,8 @@ func (m Model) View() string {
 		return frame(w, h, 3, "Review", m.review.View(), hint("↑/↓", "scroll", "enter", "install", "b", "change answers", "q", "quit"), false)
 	case scApply:
 		return m.viewApply()
+	case scDocker:
+		return m.viewDocker()
 	case scProxySetup:
 		hints := hint("↑/↓", "scroll", "enter", "my proxy is ready, test it")
 		if m.ans.Mode == plan.Tailscale {
@@ -985,8 +1099,8 @@ func (m Model) viewChecks() string {
 	hints := hint("enter", "continue", "r", "check again", "q", "quit")
 	if system.Blocking(m.checks) {
 		hints = hint("r", "check again", "q", "quit")
-		if !m.info.Docker.Installed && m.info.OS == "linux" {
-			hints = hint("i", "install Docker", "r", "check again", "q", "quit")
+		if fix := system.DockerFix(m.info); fix != "" {
+			hints = hint("enter", fixTitle(apply.DockerFix(fix)), "r", "check again", "q", "quit")
 		}
 	}
 	return frame(m.width, m.height, 0, "This machine", strings.TrimRight(b.String(), "\n"), hints, false)
@@ -995,38 +1109,145 @@ func (m Model) viewChecks() string {
 func (m Model) viewApply() string {
 	var b strings.Builder
 	for _, s := range m.steps {
-		icon := styFaint.Render("○")
-		switch s.State {
-		case "running":
-			icon = m.spin.View()
-		case "done":
-			icon = styGood.Render("✓")
-		case "fail":
-			icon = styBad.Render("✗")
-		}
-		b.WriteString(icon + " " + s.Title + "\n")
-	}
-	tail := m.logLines
-	if n := m.bodyHeight() - len(m.steps) - 6; n > 2 && len(tail) > n {
-		tail = tail[len(tail)-n:]
-	} else if n <= 2 && len(tail) > 3 {
-		tail = tail[len(tail)-3:]
-	}
-	if len(tail) > 0 {
-		b.WriteString("\n")
-		for _, l := range tail {
-			if len(l) > m.bodyWidth()-2 {
-				l = l[:m.bodyWidth()-2]
+		b.WriteString(m.stepIcon(s.State) + " " + s.Title + "\n")
+		if s.ID == "pull" && len(m.pullOrder) > 0 {
+			for _, name := range m.pullOrder {
+				b.WriteString(m.imageRow(name) + "\n")
 			}
-			b.WriteString(styFaint.Render(l) + "\n")
 		}
 	}
 	hints := hint("ctrl+c", "stop")
 	if m.applyDone && m.applyErr != nil {
 		b.WriteString("\n" + styBad.Render("✗ "+wrap(m.applyErr.Error(), m.bodyWidth()-4)) + "\n")
+		b.WriteString(m.tail(m.logLines, 8))
 		hints = hint("r", "try again", "b", "change answers", "q", "quit")
 	}
 	return frame(m.width, m.height, 4, "Installing", strings.TrimRight(b.String(), "\n"), hints, false)
+}
+
+func (m Model) stepIcon(state string) string {
+	switch state {
+	case "running":
+		return m.spin.View()
+	case "done":
+		return styGood.Render("✓")
+	case "fail":
+		return styBad.Render("✗")
+	}
+	return styFaint.Render("○")
+}
+
+// imageRow is one image of the pull: its short name, a bar and how far it is ("142 MB of 310 MB", "unpacking", "ready").
+func (m Model) imageRow(name string) string {
+	p := m.pull[name]
+	label := shortImage(name)
+	const labelWidth, textWidth = 18, 20
+	if len(label) > labelWidth-2 {
+		label = label[:labelWidth-3] + "…"
+	}
+	text := styFaint.Render("waiting")
+	switch {
+	case p.Done:
+		text = styGood.Render("ready")
+	case p.Size > 0 && p.Downloaded < p.Size:
+		text = styMuted.Render(humanBytes(p.Downloaded) + " of " + humanBytes(p.Size))
+	case p.Layers > 0 && p.Unpacked < p.Layers:
+		text = styMuted.Render("unpacking")
+	}
+	width := max(m.bodyWidth()-4-labelWidth-2-textWidth, 10)
+	return "    " + styCode.Render(fmt.Sprintf("%-*s", labelWidth, label)) + bar(m.shown[name], width) + "  " + text
+}
+
+// bar draws a progress bar of width cells, the done part in the accent color.
+func bar(fraction float64, width int) string {
+	filled := int(fraction*float64(width) + 0.5)
+	filled = min(max(filled, 0), width)
+	return styAccent.Render(strings.Repeat("━", filled)) + styFaint.Render(strings.Repeat("━", width-filled))
+}
+
+// shortImage is the name people know an image by: ghcr.io/theoriuhd/atelier-sandbox:latest is atelier-sandbox.
+func shortImage(image string) string {
+	name := image[strings.LastIndex(image, "/")+1:]
+	if i := strings.Index(name, ":"); i > 0 {
+		name = name[:i]
+	}
+	return name
+}
+
+// humanBytes is a size the way Docker writes it: 142 MB, 1.3 GB.
+func humanBytes(n int64) string {
+	switch {
+	case n >= 1e9:
+		return fmt.Sprintf("%.1f GB", float64(n)/1e9)
+	case n >= 1e6:
+		return fmt.Sprintf("%d MB", n/1e6)
+	case n >= 1e3:
+		return fmt.Sprintf("%d kB", n/1e3)
+	}
+	return fmt.Sprintf("%d B", n)
+}
+
+// tail is the last n lines of a command's output, dim, for when something failed.
+func (m Model) tail(lines []string, n int) string {
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	var b strings.Builder
+	if len(lines) > 0 {
+		b.WriteString("\n")
+	}
+	for _, l := range lines {
+		if len(l) > m.bodyWidth()-2 {
+			l = l[:m.bodyWidth()-2]
+		}
+		b.WriteString(styFaint.Render(l) + "\n")
+	}
+	return b.String()
+}
+
+func fixTitle(fix apply.DockerFix) string {
+	switch fix {
+	case apply.StartDocker:
+		return "start Docker"
+	case apply.InstallCompose:
+		return "install Docker Compose"
+	}
+	return "install Docker"
+}
+
+// viewDocker shows Docker being installed (or started, or completed): its steps, what the installer is doing in words
+// and for how long, and the installer's last lines only when it failed.
+func (m Model) viewDocker() string {
+	var b strings.Builder
+	for _, s := range m.fixSteps {
+		b.WriteString(m.stepIcon(s.State) + " " + s.Title + "\n")
+		if s.State == "running" {
+			what := m.fixActivity
+			if what == "" {
+				what = "working"
+			}
+			b.WriteString("    " + styMuted.Render(what+" · "+elapsed(time.Since(m.fixStarted))) + "\n")
+		}
+	}
+	hints := hint("ctrl+c", "stop")
+	if m.fixErr != nil {
+		b.WriteString("\n" + styBad.Render("✗ "+wrap(m.fixErr.Error(), m.bodyWidth()-4)) + "\n")
+		b.WriteString(m.tail(m.fixLog, 8))
+		hints = hint("r", "try again", "esc", "back to the checks", "q", "quit")
+	} else {
+		b.WriteString("\n" + styFaint.Render(wrap("This uses Docker's own installer and takes a minute or two. The machine is checked again when it is done.", m.bodyWidth())) + "\n")
+	}
+	title := strings.ToUpper(fixTitle(m.fix)[:1]) + fixTitle(m.fix)[1:]
+	return frame(m.width, m.height, 0, title, strings.TrimRight(b.String(), "\n"), hints, false)
+}
+
+// elapsed is "45s" or "2m 04s".
+func elapsed(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	return fmt.Sprintf("%dm %02ds", s/60, s%60)
 }
 
 func (m Model) viewVerify() string {

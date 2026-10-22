@@ -311,10 +311,10 @@ Atelier adds nothing to the model's own behaviour by default: no topic restricti
 
 The server is the same backend as the desktop app, reached from a browser. It keeps everything in one data folder.
 
-The easy way is the setup wizard, a full-screen terminal program that checks the machine, asks how people will reach the server (this machine's address with no domain by default, a domain with HTTPS, your own reverse proxy or Tailscale), writes the files, starts it, tests the address like a browser would and creates your account:
+The easy way is the setup wizard, a full-screen terminal program that checks the machine, asks how people will reach the server (this machine's address with no domain by default, a domain with HTTPS, your own reverse proxy or Tailscale), writes the files, starts it, tests the address like a browser would and creates your account. With `sudo` it also installs or starts Docker when the machine lacks it:
 
 ```bash
-curl -fsSL https://updates.atelierhq.dev/install | sh
+curl -fsSL https://updates.atelierhq.dev/install | sudo sh
 ```
 
 Afterwards `atelier-setup doctor` tests the address again and names the setting to change when something stops working, and `atelier-setup update` pulls new images. By hand:

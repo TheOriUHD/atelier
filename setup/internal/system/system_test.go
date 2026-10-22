@@ -57,7 +57,7 @@ func TestChecks(t *testing.T) {
 		t.Errorf("no access: %+v", c)
 	}
 	stopped := Info{Docker: Docker{Installed: true, AccessErr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}}
-	if c := find(Checks(stopped), "Docker"); c == nil || !strings.Contains(c.Fix, "systemctl start docker") {
+	if c := find(Checks(stopped), "Docker"); c == nil || c.Detail != "installed, but not running" || !strings.Contains(c.Fix, InstallCommand) {
 		t.Errorf("stopped docker: %+v", c)
 	}
 
@@ -124,5 +124,38 @@ func TestFindingAnEarlierInstall(t *testing.T) {
 	}
 	if got := withoutPorts([]int{80, 443, 7340}, []int{80, 443}); len(got) != 1 || got[0] != 7340 {
 		t.Errorf("without its own ports = %v", got)
+	}
+}
+
+// Run as root on Linux, the wizard fixes Docker itself and says so; anywhere else it says how to let it.
+func TestDockerFixesAreOfferedWhereThisProgramCanMakeThem(t *testing.T) {
+	stopped := Docker{Installed: true, AccessErr: "Cannot connect to the Docker daemon. Is the docker daemon running?"}
+	for _, c := range []struct {
+		name    string
+		info    Info
+		fix     string
+		message string
+	}{
+		{"missing, root", Info{OS: "linux", Root: true}, "install", "Press Enter to install it"},
+		{"missing, user", Info{OS: "linux"}, "", InstallCommand},
+		{"missing, Mac", Info{OS: "darwin", Root: true}, "", "Docker Desktop"},
+		{"stopped, root", Info{OS: "linux", Root: true, Docker: stopped}, "start", "Press Enter to start it"},
+		{"stopped, Docker 29", Info{OS: "linux", Root: true, Docker: Docker{Installed: true, AccessErr: "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory"}}, "start", "Press Enter to start it"},
+		{"no compose, root", Info{OS: "linux", Root: true, Docker: Docker{Installed: true, Access: true, Version: "29"}}, "compose", "Press Enter to install the Docker Compose plugin"},
+		{"denied, user", Info{OS: "linux", Docker: Docker{Installed: true, AccessErr: "permission denied"}}, "", InstallCommand},
+		{"fine", Info{OS: "linux", Root: true, Docker: Docker{Installed: true, Access: true, Version: "29", Compose: "5.6"}}, "", ""},
+	} {
+		if got := DockerFix(c.info); got != c.fix {
+			t.Errorf("%s: fix %q, want %q", c.name, got, c.fix)
+		}
+		var text string
+		for _, ch := range Checks(c.info) {
+			if ch.Status == Bad {
+				text += ch.Fix
+			}
+		}
+		if !strings.Contains(text, c.message) {
+			t.Errorf("%s: %q lacks %q", c.name, text, c.message)
+		}
 	}
 }

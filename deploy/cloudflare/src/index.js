@@ -65,7 +65,7 @@ export default {
     const [first, ...rest] = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
     if (!first) return page(env);
     if (CHANNELS.has(first) && rest.length === 1 && !rest[0].includes('..')) return file(request, env, `${first}/${rest[0]}`);
-    // The server installer (deploy/ship/install.sh.tmpl): `curl -fsSL https://updates.atelierhq.dev/install | sh`.
+    // The server installer (deploy/ship/install.sh.tmpl): `curl -fsSL https://updates.atelierhq.dev/install | sudo sh`.
     if (first === 'install' && rest.length === 0) {
       const res = await file(request, env, 'setup/install.sh', 'public, max-age=60');
       if (res.status === 200 || res.status === 206) res.headers.set('content-type', 'text/x-shellscript; charset=utf-8');

@@ -29,10 +29,11 @@ import (
 // Event is something that happened while applying.
 type Event struct {
 	Step string
-	// Kind is "start", "log", "done" or "fail".
-	Kind string
-	Text string
-	Err  error
+	// Kind is "start", "log", "image" (a pull's progress), "done" or "fail".
+	Kind  string
+	Text  string
+	Err   error
+	Image *ImageProgress
 }
 
 // RunFunc runs a command in dir and reports each line of its output. Tests replace it.
@@ -101,12 +102,12 @@ func Execute(ctx context.Context, p plan.Plan, a plan.Answers, o Options, emit f
 				return err
 			}
 			emit(Event{Step: s.ID, Kind: "done"})
-		case "pull", "up":
-			args := []string{"compose", "pull"}
-			if s.ID == "up" {
-				args = []string{"compose", "up", "-d", "--remove-orphans"}
+		case "pull":
+			if err := pull(ctx, o, a.Dir, s, emit); err != nil {
+				return err
 			}
-			if err := docker(ctx, o, a.Dir, s, args, emit); err != nil {
+		case "up":
+			if err := docker(ctx, o, a.Dir, s, []string{"compose", "up", "-d", "--remove-orphans"}, emit); err != nil {
 				return err
 			}
 		case "healthy":
@@ -123,8 +124,15 @@ func Execute(ctx context.Context, p plan.Plan, a plan.Answers, o Options, emit f
 
 func docker(ctx context.Context, o Options, dir string, s plan.Step, args []string, emit func(Event)) error {
 	emit(Event{Step: s.ID, Kind: "start", Text: s.Title})
-	err := o.Run(ctx, dir, "docker", args, func(line string) { emit(Event{Step: s.ID, Kind: "log", Text: line}) })
+	var lines []string
+	err := o.Run(ctx, dir, "docker", args, func(line string) {
+		lines = append(lines, line)
+		emit(Event{Step: s.ID, Kind: "log", Text: line})
+	})
 	if err != nil {
+		if why := lastProblem(lines); why != "" {
+			err = errors.New(why)
+		}
 		err = fmt.Errorf("docker %s failed: %w", strings.Join(args, " "), err)
 		emit(Event{Step: s.ID, Kind: "fail", Err: err})
 		return err
@@ -292,6 +300,19 @@ func Update(ctx context.Context, o Options, dir string, out func(string)) error 
 		}
 	}
 	return nil
+}
+
+// lastProblem is the last line of a command's output that reads like the reason it failed ("Error response from
+// daemon: …", "E: Unable to locate package …"), so the message says it instead of "exit status 1".
+func lastProblem(lines []string) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := strings.TrimSpace(lines[i])
+		low := strings.ToLower(l)
+		if strings.HasPrefix(l, "E: ") || strings.Contains(low, "error") || strings.Contains(low, "failed") || strings.Contains(low, "denied") {
+			return l
+		}
+	}
+	return ""
 }
 
 // BaseURL reads ATELIER_BASE_URL from a compose file, or "".
