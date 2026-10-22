@@ -19,6 +19,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.2.5',
+    intro: 'A security update.',
+    highlights: [
+      {
+        icon: ShieldCheck,
+        title: 'Safer connectors and math',
+        body: 'The library Atelier talks to connectors (MCP servers) with is updated to fix how it handles HTTP requests and sign-ins, and the math renderer to fix a way around its safety checks.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.2.4',
     intro: 'A smoother first start, on the desktop and on a server.',
     highlights: [

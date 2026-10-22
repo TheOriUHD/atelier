@@ -13,3 +13,8 @@ minimumReleaseAgeExclude:
   - electron@44.7.1
   - lucide-react@1.56.0
   - mermaid@12.2.0
+# Security fixes for packages that come in through other packages (GitHub's Dependabot alerts): KaTeX before 0.18.2
+# (via remark-math) and postcss-selector-parser before 7.1.6 (via the docs' code blocks).
+overrides:
+  katex@<0.18.2: ^0.19.0
+  postcss-selector-parser@<7.1.6: ^7.1.6

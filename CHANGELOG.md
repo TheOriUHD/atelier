@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Security updates (GitHub's Dependabot alerts):** the MCP SDK goes to 2.3.0 (`@modelcontextprotocol/client`, which Atelier uses for connectors: its HTTP transports and OAuth requests; and `/server`, used by the tests), KaTeX to 0.19 everywhere (the copy `remark-math` brought in was 0.16, with a prototype-pollution bypass of its trust settings), and postcss-selector-parser to 7.1.7 in the docs build. `sprintf-js` stays: only electron-builder uses it while packaging, it isn't shipped, and no fixed version exists.
+
 ## [0.2.4] — 2026-10-22
 
 - **No model yet, no welcome screen:** a new install opens on the normal Chat home. The model menu reads **Choose a model** and offers **Add a provider**, which opens Settings › Admin › Providers with what Atelier found on the machine. The full-page "Welcome to Atelier" provider screen is gone.

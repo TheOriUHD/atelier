@@ -1000,8 +1000,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-- **@modelcontextprotocol/client** 2.2.0 (MIT): https://modelcontextprotocol.io
-- **@modelcontextprotocol/core** 2.2.0 (MIT): https://modelcontextprotocol.io
+- **@modelcontextprotocol/client** 2.3.0 (Apache-2.0): https://modelcontextprotocol.io
+- **@modelcontextprotocol/core** 2.3.0 (Apache-2.0): https://modelcontextprotocol.io
 
 ```text
 The MCP project is undergoing a licensing transition from the MIT License to the Apache License, Version 2.0 ("Apache-2.0"). All new code and specification contributions to the project are licensed under Apache-2.0. Documentation contributions (excluding specifications) are licensed under CC-BY-4.0.
@@ -2513,7 +2513,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 - **commander** 4.1.1 (MIT): https://github.com/tj/commander.js
 - **commander** 7.2.0 (MIT): https://github.com/tj/commander.js
-- **commander** 8.3.0 (MIT): https://github.com/tj/commander.js
 - **commander** 15.0.0 (MIT): https://github.com/tj/commander.js
 
 ```text
@@ -5216,8 +5215,6 @@ Permission to use, copy, modify, and/or distribute this software for any purpose
 THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-- **katex** 0.16.47 (MIT): https://katex.org
-- **katex** 0.18.11 (MIT): https://katex.org
 - **katex** 0.19.0 (MIT): https://katex.org
 
 ```text
