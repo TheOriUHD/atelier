@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-10-22
+
 - **A Mac no longer gets stuck on "Couldn’t download Atelier …: ENOTEMPTY":** an update that was downloaded but never installed (because a newer copy was installed by hand) stayed in the update folder as a whole app, and Electron's file functions can't delete an app's `app.asar`, so every later update failed while clearing it. The update folder is now cleared with the system's own `rm`. A Mac already showing the error updates again once `~/Library/Application Support/Atelier/update-staging` is deleted, or after installing this version from the disk image.
 
 ## [0.2.2] — 2026-10-22
