@@ -6,7 +6,6 @@
  */
 import { execFile, spawn } from 'node:child_process';
 import { accessSync, constants, readdirSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { BundleSwap } from './updater.ts';
@@ -57,11 +56,14 @@ async function bundleId(bundle: string): Promise<string> {
 /** The real swap for the running app: `executable` is `process.execPath`, `staging` a folder in the app's own data. */
 export function createBundleSwap(executable: string, staging: string): BundleSwap {
   const target = targetOf(executable, isWritable);
+  // The system's rm, not Node's: in Electron, Node's fs sees app.asar as a folder and fails on it ("directory not empty").
+  const remove = async (path: string) => void (await run('/bin/rm', ['-rf', path]));
   return {
     target,
     staging,
+    remove,
     async unpack(zip, into) {
-      await rm(into, { recursive: true, force: true });
+      await remove(into);
       await run('/usr/bin/ditto', ['-x', '-k', zip, into]);
       const app = readdirSync(into).find((name) => name.endsWith('.app'));
       if (!app) throw new Error('the update has no app in it');

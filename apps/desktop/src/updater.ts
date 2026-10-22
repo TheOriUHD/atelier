@@ -81,6 +81,11 @@ export interface BundleSwap {
   staging: string;
   /** Unpacks a downloaded zip into `into` and returns the app bundle in it; throws when it is not this app. */
   unpack(zip: string, into: string): Promise<string>;
+  /**
+   * Deletes a folder in `staging` and everything in it. Not Node's `rm`: Electron's fs takes an app's `app.asar` for a
+   * folder and can't delete it, so a staged app that was never installed would stay, and block every later update.
+   */
+  remove(path: string): Promise<void>;
   /** Once this app has quit: puts `staged` where `target` is and, with `relaunch`, starts it. */
   replaceAfterQuit(staged: string, target: string, relaunch: boolean): void;
 }
@@ -257,7 +262,7 @@ export function createUpdates(options: UpdatesOptions) {
       if (problem) return fail(problem);
       set({ kind: 'downloading', percent: 0, version });
       // Leftovers of earlier runs go, but never the update that waits.
-      if (!ready) await rm(swap.staging, { recursive: true, force: true });
+      if (!ready) await swap.remove(swap.staging);
       await mkdir(swap.staging, { recursive: true });
       await fetchTo(from, url.href, partial, zip, version);
       const unpacked = await swap.unpack(partial, into);
@@ -268,13 +273,13 @@ export function createUpdates(options: UpdatesOptions) {
       staged = unpacked;
       ready = version;
       set({ kind: 'downloaded', version });
-      if (older && older !== version) await rm(join(swap.staging, older), { recursive: true, force: true }).catch(() => undefined);
+      if (older && older !== version) await swap.remove(join(swap.staging, older)).catch(() => undefined);
     } catch (error) {
       await rm(partial, { force: true }).catch(() => undefined);
-      if (ready) await rm(into, { recursive: true, force: true }).catch(() => undefined);
+      if (ready) await swap.remove(into).catch(() => undefined);
       else {
         staged = null;
-        await rm(swap.staging, { recursive: true, force: true }).catch(() => undefined);
+        await swap.remove(swap.staging).catch(() => undefined);
       }
       fail(`Couldn’t download Atelier ${version}: ${(error as Error).message}.`);
     } finally {

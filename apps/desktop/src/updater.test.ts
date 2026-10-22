@@ -516,6 +516,7 @@ describe('updates', () => {
     function fakeSwap(target: BundleSwap['target'] = { bundle: APP }) {
       const unpacked: string[] = [];
       const replaced: unknown[][] = [];
+      const removed: string[] = [];
       const swap: BundleSwap = {
         target,
         staging: join(downloads, 'staging'),
@@ -525,8 +526,12 @@ describe('updates', () => {
           return join(into, 'Atelier.app');
         },
         replaceAfterQuit: (...args) => void replaced.push(args),
+        remove: async (path) => {
+          removed.push(path);
+          rmSync(path, { recursive: true, force: true });
+        },
       };
-      return { swap, unpacked, replaced };
+      return { swap, unpacked, replaced, removed };
     }
 
     it('download the zip in the background, unpack it, and swap it in when Restart is pressed', async () => {
@@ -553,6 +558,20 @@ describe('updates', () => {
       updates.install();
       updates.installOnQuit();
       expect(replaced).toHaveLength(1);
+    });
+
+    it('clear a whole app left in the staging folder by an earlier run through the swap, not Node', async () => {
+      // An update staged by 0.1.10 and never installed (the person installed a newer copy by hand) stayed as a full app;
+      // Node's rm in Electron can't delete its app.asar, which failed every later update ("ENOTEMPTY").
+      const { swap, removed } = fakeSwap();
+      mkdirSync(join(swap.staging, '0.1.10', 'Atelier.app', 'Contents', 'Resources', 'app.asar'), { recursive: true });
+      const { updater, updates } = setup({ platform: 'darwin', arch: 'arm64', swap });
+      updates.setServer(SERVER);
+      updater.script = finds('0.3.0');
+      await updates.check();
+      await vi.waitFor(() => expect(updates.status().state).toEqual({ kind: 'downloaded', version: '0.3.0' }));
+      expect(removed[0]).toBe(swap.staging);
+      expect(readdirSync(swap.staging)).toEqual(['0.3.0']);
     });
 
     it('replace the staged update with a newer one the feed offers meanwhile', async () => {
