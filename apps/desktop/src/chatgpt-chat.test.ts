@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  execute: vi.fn(), insert: vi.fn(async (_text: string) => {}), load: vi.fn(async () => {}), destroy: vi.fn(), show: vi.fn(), hide: vi.fn(), clear: vi.fn(async () => {}),
+  execute: vi.fn(), insert: vi.fn(async (_text: string) => {}), load: vi.fn(async () => {}), destroy: vi.fn(), show: vi.fn(), hide: vi.fn(), clear: vi.fn(async () => {}), setUserAgent: vi.fn(),
   origin: 'https://chatgpt.com/',
 }));
 vi.mock('electron', () => ({
   app: { once: vi.fn(), removeListener: vi.fn() },
-  session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn(), clearStorageData: mocks.clear }) },
+  session: { fromPartition: () => ({ setPermissionRequestHandler: vi.fn(), clearStorageData: mocks.clear, getUserAgent: () => 'Mozilla/5.0 Chrome/140', setUserAgent: mocks.setUserAgent }) },
   BrowserWindow: class {
     webContents = { executeJavaScript: mocks.execute, insertText: mocks.insert, setWindowOpenHandler: vi.fn(), getURL: () => mocks.origin };
     loadURL = mocks.load;
@@ -30,6 +30,14 @@ beforeEach(() => {
   mocks.load.mockResolvedValue();
   mocks.insert.mockResolvedValue();
   mocks.clear.mockResolvedValue();
+});
+
+// ChatGPT follows the browser's language, and the driver reads English labels: a German system got no model list.
+it('asks ChatGPT for English before it loads, whatever the system language', async () => {
+  mocks.execute.mockResolvedValue(true);
+  await new ChatGptChatBrowser().request('status');
+  expect(mocks.setUserAgent).toHaveBeenCalledWith('Mozilla/5.0 Chrome/140', 'en-US,en');
+  expect(mocks.setUserAgent.mock.invocationCallOrder[0]!).toBeLessThan(mocks.load.mock.invocationCallOrder[0]!);
 });
 
 it('keeps authentication checks off third-party login pages', async () => {

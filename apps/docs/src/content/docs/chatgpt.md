@@ -236,6 +236,7 @@ Start with ChatGPT Plan. Add ChatGPT Chat only if you need what the web app has.
 | "ChatGPT used its own sandbox instead of Atelier’s tools, so what it reports did not happen on your computer. Send the message again." | See [Tool calls](#tool-calls). |
 | "Atelier could not confirm the ChatGPT reply before the timeout. Open the ChatGPT session to check whether it answered before sending again." | No reply was confirmed in 15 minutes, or nothing started in one minute. Check the session before resending. |
 | "Auto mode has no other model than ChatGPT Chat to check this action…" | Set a Small model or change the permission mode. |
+| The model menu shows only "ChatGPT Chat", not ChatGPT's models | Atelier reads ChatGPT's own model picker, in English: the ChatGPT window always asks for English, whatever your system's language. If you chose a language in ChatGPT's own settings (Settings › General › Language), set it to Auto-detect or English, then open the model menu again. |
 
 Other things to try: **Open ChatGPT session** and look at the page; sign in again; **Remove** the provider and add it again, which
 clears the private session.

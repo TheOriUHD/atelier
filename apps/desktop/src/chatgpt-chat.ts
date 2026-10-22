@@ -145,6 +145,10 @@ export class ChatGptChatBrowser {
     }
     const browserSession = session.fromPartition(PARTITION);
     browserSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+    // ChatGPT speaks the language the browser asks for, and this driver reads its English labels ("Select ChatGPT
+    // model", "Power", "3 of 5", "Remove …"): on a German system the model list came back empty and attachments never
+    // finished. The session always asks for English (checked on chatgpt.com: that alone turns the page English).
+    browserSession.setUserAgent(browserSession.getUserAgent(), 'en-US,en');
     const win = new BrowserWindow({ title: 'ChatGPT Chat — Atelier', width: 1000, height: 780, show: false, webPreferences: { partition: PARTITION, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     const quit = () => win.destroy();

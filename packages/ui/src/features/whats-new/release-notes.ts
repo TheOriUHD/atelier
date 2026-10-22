@@ -20,8 +20,13 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.2.5',
-    intro: 'A security update.',
+    intro: 'ChatGPT Chat lists its models on every system language, and a security update.',
     highlights: [
+      {
+        icon: MessagesSquare,
+        title: 'ChatGPT Chat’s models in any language',
+        body: 'On a computer set to German (or any language but English), ChatGPT Chat showed only “ChatGPT Chat” instead of ChatGPT’s own models and their effort steps. Its window now always opens ChatGPT in English, which Atelier reads.',
+      },
       {
         icon: ShieldCheck,
         title: 'Safer connectors and math',

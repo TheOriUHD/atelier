@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **ChatGPT Chat lists ChatGPT's models on a non-English system:** ChatGPT speaks the language the browser asks for, and the driver reads its English labels ("Select ChatGPT model", "Power", "3 of 5"). On a German Windows the model scan found nothing and the menu showed only "ChatGPT Chat" (attachments waited for English labels too), whatever the plan. The ChatGPT window's session now always asks for English (Accept-Language `en-US,en`), which turns the page English (checked on chatgpt.com with a German system).
+
 - **Security updates (GitHub's Dependabot alerts):** the MCP SDK goes to 2.3.0 (`@modelcontextprotocol/client`, which Atelier uses for connectors: its HTTP transports and OAuth requests; and `/server`, used by the tests), KaTeX to 0.19 everywhere (the copy `remark-math` brought in was 0.16, with a prototype-pollution bypass of its trust settings), and postcss-selector-parser to 7.1.7 in the docs build. `sprintf-js` stays: only electron-builder uses it while packaging, it isn't shipped, and no fixed version exists.
 
 ## [0.2.4] — 2026-10-22
