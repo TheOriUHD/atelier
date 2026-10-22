@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-10-22
+
 - **No model yet, no welcome screen:** a new install opens on the normal Chat home. The model menu reads **Choose a model** and offers **Add a provider**, which opens Settings › Admin › Providers with what Atelier found on the machine. The full-page "Welcome to Atelier" provider screen is gone.
 
 - **The server setup fixes Docker itself, and shows real progress:** the command is now `curl -fsSL https://updates.atelierhq.dev/install | sudo sh`. With sudo on Linux, a machine without Docker gets "Press Enter to install it": Docker's own installer runs on a screen of its own that says what it is doing in words ("Installing Docker Engine, the CLI and Compose", with the time), and the machine is checked again when it is done; a stopped Docker is started and a missing Compose plugin added the same way. Without sudo the check says the exact command to run instead of leaving you in the terminal. The image download is a bar per image ("142 MB of 310 MB", "unpacking", "ready") instead of Docker's scrolling lines, which now only show when something fails, and each screen's heading is centered over a rule.
