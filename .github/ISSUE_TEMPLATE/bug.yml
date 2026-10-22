@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in Atelier doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Atelier version
+      description: Settings › System on the desktop app, or /api/health on a server.
+      placeholder: 0.2.2
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Desktop app on macOS
+        - Desktop app on Windows
+        - Desktop app on Linux
+        - Server in a browser
+        - Setup program (atelier-setup)
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Provider and model
+      description: If it happened in a conversation, for example "Ollama, qwen3:30b".
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or errors
+      description: Leave out keys, tokens and anything private.
+      render: text

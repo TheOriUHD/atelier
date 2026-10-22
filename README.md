@@ -328,7 +328,7 @@ docker compose logs atelier   # copy the setup token it prints
 
 Open the site, create the admin account with that token, and add a provider in **Settings › Admin**.
 
-The compose file pulls three images from `ghcr.io/theoriuhd` (the server, the Chat sandbox and the optional updater), which every release publishes. Until the repository and its packages are public they are private, so `docker login ghcr.io` first. To build the server image yourself instead, from the repository root:
+The compose file pulls three images from `ghcr.io/theoriuhd` (the server, the Chat sandbox and the optional updater), which every release publishes. To build the server image yourself instead, from the repository root:
 
 ```bash
 docker build -f apps/server/Dockerfile -t atelier .

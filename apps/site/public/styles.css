@@ -202,6 +202,12 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 .foot a:hover { color: var(--ink); text-decoration: underline; }
 .legal { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line-soft); max-width: 46rem; }
 
+/* Impressum */
+.imprint { max-width: 46rem; }
+.imprint h1 { margin-bottom: 32px; }
+.imprint h2 { font: 600 1rem/1.4 var(--sans); letter-spacing: -0.005em; margin: 32px 0 8px; }
+.imprint p { color: var(--ink-2); line-height: 1.6; }
+
 /* Scroll entry: only where scripting is on, only for motion-tolerant visitors */
 @media (prefers-reduced-motion: no-preference) {
   .js .reveal { opacity: 0; transform: translateY(12px); transition: opacity 600ms var(--ease), transform 600ms var(--ease); }

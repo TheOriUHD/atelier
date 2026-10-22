@@ -105,8 +105,6 @@ Each release publishes the three images for **linux/amd64 and linux/arm64**, as 
 - The tag is the Git tag, including the `v`: `:v<version>`, not `:<version>`.
 - `:latest` moves with **every** `v*` tag, including prereleases such as `v0.3.0-beta.1`. If you do not want to follow
   prereleases, pin a release tag in the Compose file.
-- Until the repository and its packages are public, the images are private. Sign in first with `docker login ghcr.io`
-  and a GitHub token that can read packages.
 - To build the server yourself from the repository root: `docker build -f apps/server/Dockerfile -t atelier .`
   (`--target sandbox` and `--target updater` build the other two). It needs BuildKit, the default in Docker 23 and later.
   An image built this way has no registry name, so **Settings › Admin › Server** tells you to update by rebuilding it.

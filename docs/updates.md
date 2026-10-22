@@ -71,9 +71,8 @@ npx wrangler deploy                                 # on the domain in wrangler.
 ```
 
 The feed's address is `APP.updateFeed` in `packages/protocol/src/app.ts` (it is `https://updates.atelierhq.dev` from 0.1.1
-on, the Worker's custom domain; `ATELIER_UPDATE_FEED` overrides it per run). While the site is private, an Access
-application ("Atelier update feed (public files)") lets everyone through to `/stable` and `/beta` only; the download page at
-`/` stays behind the site's login:
+on, the Worker's custom domain; `ATELIER_UPDATE_FEED` overrides it per run). A feed of your own without a domain is the
+Worker's `workers.dev` address:
 
 ```ts
 updateFeed: 'https://atelier-updates.<you>.workers.dev', // without a domain of your own
@@ -176,7 +175,7 @@ the size of the installer.
 
 3. Point the website's download page at the feed's copies and deploy it:
    `node apps/site/scripts/releases.mjs <tag> && npx wrangler@4 deploy -c apps/site/wrangler.jsonc`. Each build links to
-   the feed (public, unlike GitHub's links to a private repository) when its copy there has the same size, else to
+   the feed when its copy there has the same size, else to
    GitHub; the script names any build still on GitHub. The release command runs this step after the feed is filled.
 
 Servers that mirror a GitHub release as their update feed (`ATELIER_UPDATES_REPO`) need the packages' `.sig` files on the

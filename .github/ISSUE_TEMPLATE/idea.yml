@@ -1,0 +1,16 @@
+name: Idea or feature request
+description: Something Atelier could do, or do differently.
+labels: [idea]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like
+      description: What you are trying to do, and what is in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How it could work
+      description: Optional. For larger changes, agree on the approach here before writing code (CONTRIBUTING.md).

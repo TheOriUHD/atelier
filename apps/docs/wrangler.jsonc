@@ -7,7 +7,7 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page",
   },
-  // Reachable only through the custom domain (which sits behind Cloudflare Access until the project goes public).
+  // Reachable only through the custom domain.
   "workers_dev": false,
   "preview_urls": false,
   "routes": [{ "pattern": "docs.atelierhq.dev", "custom_domain": true }],

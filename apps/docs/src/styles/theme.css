@@ -63,3 +63,8 @@ nav.sidebar a[aria-current="page"]:focus { background: var(--sl-color-gray-5); c
 
 /* Prompts and commands are shown exactly as written: no ligatures (<!-- must not draw as an arrow). */
 code, pre, kbd, samp { font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; }
+
+/* The Impressum link under every page's footer (src/components/Footer.astro). */
+.imprint-link { margin-top: 1.5rem; text-align: center; font-size: var(--sl-text-xs); }
+.imprint-link a { color: var(--sl-color-gray-3); }
+.imprint-link a:hover { color: var(--sl-color-white); }

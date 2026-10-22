@@ -13,6 +13,7 @@ export default defineConfig({
       logo: { src: './src/assets/icon.svg', alt: 'Atelier' },
       favicon: '/icon.svg',
       customCss: ['./src/styles/theme.css'],
+      components: { Footer: './src/components/Footer.astro' },
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/TheOriUHD/atelier' }],
       // Generated pages (prompts, tools, settings) set `editUrl: false`; the contribution terms are in CONTRIBUTING.md.
       editLink: { baseUrl: 'https://github.com/TheOriUHD/atelier/edit/main/apps/docs/' },

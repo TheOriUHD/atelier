@@ -10,7 +10,7 @@ export const APP = {
   /** Web session cookie name. */
   cookie: 'atelier_session',
   version: '0.2.2',
-  /** Where the desktop builds are published (a private repository, so only people with access can open it). */
+  /** Where the desktop builds are published. */
   releases: 'https://github.com/TheOriUHD/atelier/releases',
   /** Every change, release by release. */
   changelog: 'https://github.com/TheOriUHD/atelier/blob/main/CHANGELOG.md',
