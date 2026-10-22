@@ -25,7 +25,10 @@ test('a fresh install goes from connection choice and owner setup through the mo
     const url = page.getByRole('textbox', { name: 'Base URL' });
     await url.fill(`http://127.0.0.1:${FAKE_OLLAMA_PORT}`);
     await page.getByRole('button', { name: 'Add provider', exact: true }).last().click();
-    await page.keyboard.press('Escape');
+    // The form closes once the provider is saved, leaving Settings' own Close: back to the chat.
+    const close = page.getByRole('button', { name: 'Close' });
+    await expect(close).toHaveCount(1);
+    await close.click();
 
     const box = page.getByRole('textbox', { name: 'Message' });
     await box.fill('first message');
