@@ -1,0 +1,62 @@
+#!/bin/sh
+# Run by sshd as root before it looks at a key (AuthorizedKeysCommand, argument: the login name). It makes sure the
+# account's folders exist and belong to its own Unix user, hands over the chat folders an earlier version made for it, and
+# prints the keys that may log in: the server's, from the file it publishes in the shared keys volume.
+#
+# The server also publishes which account (its id) each sbxNNN user is for, in /keys/accounts/sbxNNN, a volume this
+# container only reads. That is the only way an account's id gets here, so no login can claim another account's folders.
+# The first account told for a user is recorded in .slots/ (root only) and the user is never given to another.
+umask 077
+user=${1-}
+vol=/home/sandbox
+keys=/keys
+
+case "$user" in
+  sbx[0-9][0-9][0-9] | sbx[0-9][0-9][0-9][0-9]) ;;
+  *) exit 0 ;;
+esac
+uid=$(id -u "$user" 2>/dev/null) || exit 0
+[ "$uid" -ge 20000 ] || exit 0
+
+# Logins of one account arrive together; one at a time here.
+exec 9>/run/atelier-sandbox.lock
+flock 9
+
+# Only paths that root alone can rename or replace are touched here (u/ and chats/ are root's), never anything below an
+# account's own folder, where a link planted by the account could point root somewhere else.
+install -d -o "$uid" -g "$uid" -m 0700 "$vol/u/$user"
+
+account=$(head -n 1 "$keys/accounts/$user" 2>/dev/null)
+case "$account" in
+  '' | *[!A-Za-z0-9_-]*) account= ;;
+esac
+if [ -n "$account" ] && [ "${#account}" -le 64 ]; then
+  # A user belongs to the first account it was told for, whatever the server says later: a server that lost or replaced its
+  # list of who has which user would otherwise hand one account's folders to another. No keys, no login.
+  recorded=$(head -n 1 "$vol/.slots/$user" 2>/dev/null)
+  if [ -z "$recorded" ]; then
+    printf '%s\n' "$account" > "$vol/.slots/$user"
+  elif [ "$recorded" != "$account" ]; then
+    echo "atelier-sandbox: $user belongs to account $recorded here, but the server says $account; refusing logins as $user (restore the server's sandbox/slots.json, or remove $vol/.slots/$user on purpose)" >&2
+    exit 0
+  fi
+  chats=$vol/chats/$account
+  if [ -L "$chats" ]; then
+    echo "atelier-sandbox: $chats is a link; left alone" >&2
+  elif [ ! -e "$chats" ]; then
+    install -d -o "$uid" -g "$uid" -m 0700 "$chats"
+  elif [ -d "$chats" ]; then
+    owner=$(stat -c %u "$chats")
+    if [ "$owner" = 0 ]; then
+      # An earlier version's folder, locked to root at start: this account's from now on. What is in it first and the folder
+      # itself last, so a login that is cut off halfway finds it root's still and does the rest next time. (-h: a link in it
+      # is handed over, never what it points at.)
+      find "$chats" -mindepth 1 -exec chown -h "$uid:$uid" {} + && chown "$uid:$uid" "$chats" && chmod 0700 "$chats"
+    elif [ "$owner" != "$uid" ]; then
+      echo "atelier-sandbox: $chats belongs to uid $owner, not to $user; left alone" >&2
+    fi
+  fi
+fi
+
+cat "$keys/authorized_keys" 2>/dev/null
+exit 0

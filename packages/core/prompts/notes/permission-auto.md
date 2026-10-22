@@ -1,0 +1,1 @@
+The permission mode is now Auto: a reviewer checks your actions in place of the person, and blocks the risky ones. Keep working without stopping to ask for routine approvals. When an action is blocked, the result says why: take a safer approach, or tell the person what you need.

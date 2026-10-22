@@ -1,0 +1,82 @@
+{
+  "model": "ollama/gpt-oss-20b:mxfp4",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "label": "r2"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": true,
+      "notes": "greet.ts updated",
+      "turns": 7,
+      "inputTokens": 2977,
+      "outputTokens": 688,
+      "tokensPerSecond": 125.6,
+      "seconds": 7.7
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 6,
+      "inputTokens": 3112,
+      "outputTokens": 280,
+      "tokensPerSecond": 127.1,
+      "seconds": 5.7
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": true,
+      "notes": "asked with AskUser",
+      "turns": 8,
+      "inputTokens": 2840,
+      "outputTokens": 1467,
+      "tokensPerSecond": 124.1,
+      "seconds": 15.4
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter\"",
+      "turns": 2,
+      "inputTokens": 1339,
+      "outputTokens": 468,
+      "tokensPerSecond": 125.7,
+      "seconds": 5
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 3,
+      "inputTokens": 2571,
+      "outputTokens": 706,
+      "tokensPerSecond": 125.8,
+      "seconds": 8.8
+    },
+    {
+      "task": "use-skill",
+      "pass": false,
+      "notes": "RELEASE_NOTES.md does not follow the skill; The model's reply didn't follow its own format, so Eval couldn't read it (500): llama-server chat error: map[code:500 message:The model produced output that does not match the expected peg-native format type:server_error]",
+      "turns": 14,
+      "inputTokens": 3846,
+      "outputTokens": 1530,
+      "tokensPerSecond": 125.2,
+      "seconds": 18.6
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 1114,
+      "outputTokens": 76,
+      "tokensPerSecond": 128.6,
+      "seconds": 2.2
+    }
+  ]
+}

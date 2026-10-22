@@ -1,0 +1,23 @@
+{
+  "model": "ollama/gemma-4-26b-a4b:q4_0",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "recheck"
+  },
+  "results": [
+    {
+      "task": "create-artifact",
+      "pass": false,
+      "notes": "no artifact",
+      "turns": 1,
+      "inputTokens": 1028,
+      "outputTokens": 612,
+      "tokensPerSecond": 84.1,
+      "seconds": 7.8
+    }
+  ]
+}

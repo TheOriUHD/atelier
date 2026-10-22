@@ -1,0 +1,47 @@
+{
+  "name": "atelier",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r --parallel typecheck && tsc -p e2e",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "build": "pnpm -r build",
+    "runner:build": "go -C runner run ./scripts/build",
+    "runner:test": "go -C runner vet ./... && go -C runner test ./...",
+    "dev:desktop": "pnpm --filter @atelier/desktop dev",
+    "dev:web": "pnpm --filter @atelier/server dev",
+    "build:theme": "pnpm --filter @atelier/design build:theme",
+    "eval": "pnpm --filter @atelier/core eval",
+    "release": "node deploy/ship/release.mjs",
+    "setup:test": "go -C setup vet ./... && go -C setup test ./...",
+    "setup:build": "go -C setup build -o bin/atelier-setup ./cmd/atelier-setup",
+    "notices": "node deploy/ship/notices.mjs",
+    "notices:check": "node deploy/ship/notices.mjs --check",
+    "prompts:show": "node packages/core/scripts/show-prompt.mjs",
+    "docs:generate": "UPDATE_DOCS=1 vitest run packages/core/src/prompts/published.test.ts packages/ui/src/features/settings/settings-reference.test.ts"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@eslint/js": "^10.0.0",
+    "@playwright/test": "1.64.0",
+    "@types/node": "^24.0.0",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "eslint": "^10.12.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.0.0",
+    "prettier": "^3.9.10",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
+  }
+}

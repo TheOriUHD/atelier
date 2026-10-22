@@ -1,0 +1,27 @@
+{
+  "name": "@atelier/server",
+  "version": "0.1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/server.mjs"
+  },
+  "dependencies": {
+    "@atelier/core": "workspace:*",
+    "@atelier/protocol": "workspace:*",
+    "@hono/node-server": "2.1.5",
+    "@hono/node-ws": "1.3.1",
+    "hono": "4.13.13",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2",
+    "esbuild": "0.28.2",
+    "yaml": "2.9.1"
+  }
+}

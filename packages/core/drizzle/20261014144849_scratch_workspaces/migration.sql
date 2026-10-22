@@ -1,0 +1,1 @@
+ALTER TABLE `workspaces` ADD `scratch` integer DEFAULT false NOT NULL;

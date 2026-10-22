@@ -1,0 +1,44 @@
+{
+  "name": "@atelier/core",
+  "version": "0.1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run",
+    "test:conformance": "go -C ../../runner run ./scripts/build -host && vitest run src/workspaces/runner.conformance.test.ts",
+    "db:generate": "drizzle-kit generate && node scripts/embed-migrations.mjs",
+    "db:embed": "node scripts/embed-migrations.mjs",
+    "prompts:embed": "node scripts/embed-prompts.mjs",
+    "eval": "tsx evals/run.ts"
+  },
+  "dependencies": {
+    "@atelier/protocol": "workspace:*",
+    "@modelcontextprotocol/client": "2.2.0",
+    "@mozilla/readability": "0.6.0",
+    "@simplewebauthn/server": "14.0.3",
+    "ajv": "8.20.0",
+    "chokidar": "5.0.0",
+    "drizzle-orm": "1.0.0-rc.4",
+    "fflate": "0.8.3",
+    "jpeg-js": "0.4.4",
+    "jsonrepair": "3.15.0",
+    "linkedom": "0.18.13",
+    "node-html-markdown": "2.0.0",
+    "pdfjs-dist": "6.4.299",
+    "pngjs": "7.0.0",
+    "tar": "7.5.22",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "2.2.0",
+    "@types/pngjs": "6.0.5",
+    "drizzle-kit": "1.0.0-rc.4",
+    "tsx": "4.23.15"
+  }
+}

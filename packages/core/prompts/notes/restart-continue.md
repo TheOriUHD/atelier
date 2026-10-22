@@ -1,0 +1,1 @@
+Atelier restarted while you were working, which cut off your last reply. What you had already done stands, and a step that was in progress did not complete: check where things stand, then carry on with the task from there.

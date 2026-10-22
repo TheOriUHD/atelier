@@ -1,0 +1,83 @@
+{
+  "model": "ollama/qwen3-coder-30b-a3b:ud-q4_k_xl",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "r2"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": true,
+      "notes": "greet.ts updated",
+      "turns": 5,
+      "inputTokens": 4196,
+      "outputTokens": 381,
+      "tokensPerSecond": 79.1,
+      "seconds": 6.6
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 7,
+      "inputTokens": 4338,
+      "outputTokens": 686,
+      "tokensPerSecond": 78.8,
+      "seconds": 11.3
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": false,
+      "notes": "no question; tools used: Glob, Read, Grep, Bash, Bash, Bash, Write, Write, Bash, Bash, Read, Read",
+      "turns": 13,
+      "inputTokens": 5071,
+      "outputTokens": 999,
+      "tokensPerSecond": 77.1,
+      "seconds": 15.8
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter\"",
+      "turns": 2,
+      "inputTokens": 1457,
+      "outputTokens": 632,
+      "tokensPerSecond": 83.8,
+      "seconds": 8.4
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 17,
+      "inputTokens": 5025,
+      "outputTokens": 1476,
+      "tokensPerSecond": 76.6,
+      "seconds": 22.9
+    },
+    {
+      "task": "use-skill",
+      "pass": true,
+      "notes": "notes follow the skill (read SKILL.md instead of loading it)",
+      "turns": 8,
+      "inputTokens": 4496,
+      "outputTokens": 361,
+      "tokensPerSecond": 76.7,
+      "seconds": 7
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 301,
+      "outputTokens": 43,
+      "tokensPerSecond": 83.6,
+      "seconds": 1.2
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+This message comes from a loop the person set up with /loop: Atelier sends the same request every {{interval}} while the conversation is idle, and this is run {{run}}. Handle it as their request; they may not be watching, so start with what changed since the previous run, if anything.

@@ -1,0 +1,8 @@
+{"api":"native","label":"no reasoning","status":200,"prompt":322}
+{"api":"native","label":"thinking field","status":200,"prompt":322}
+{"api":"native","label":"reasoning_content field","status":200,"prompt":322}
+{"api":"native","label":"reasoning as content","status":200,"prompt":427}
+{"api":"openai","label":"no reasoning","status":200,"prompt":322}
+{"api":"openai","label":"reasoning_content","status":200,"prompt":322}
+{"api":"openai","label":"reasoning","status":200,"prompt":322}
+{"api":"openai","label":"thinking","status":200,"prompt":322}

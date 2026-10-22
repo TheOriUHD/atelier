@@ -1,0 +1,23 @@
+{
+  "name": "@atelier/design",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "scripts": {
+    "build:theme": "tsx scripts/build-theme.ts",
+    "build:icon": "tsx scripts/build-icon.ts",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pngjs": "^6.0.5",
+    "pixelmatch": "^8.0.0",
+    "playwright": "1.64.0",
+    "pngjs": "^7.0.0",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "zod": "^4.6.7"
+  }
+}

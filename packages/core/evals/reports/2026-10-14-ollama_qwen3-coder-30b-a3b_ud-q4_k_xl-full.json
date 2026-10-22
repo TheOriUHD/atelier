@@ -1,0 +1,83 @@
+{
+  "model": "ollama/qwen3-coder-30b-a3b:ud-q4_k_xl",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": "full",
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": null
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": true,
+      "notes": "greet.ts updated",
+      "turns": 4,
+      "inputTokens": 8406,
+      "outputTokens": 296,
+      "tokensPerSecond": 71.5,
+      "seconds": 7.1
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 7,
+      "inputTokens": 5517,
+      "outputTokens": 681,
+      "tokensPerSecond": 71.3,
+      "seconds": 13
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": true,
+      "notes": "asked with AskUser",
+      "turns": 9,
+      "inputTokens": 5616,
+      "outputTokens": 899,
+      "tokensPerSecond": 70.5,
+      "seconds": 16
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Interactive Click Counter\"",
+      "turns": 2,
+      "inputTokens": 3295,
+      "outputTokens": 764,
+      "tokensPerSecond": 80.1,
+      "seconds": 10.8
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 3,
+      "inputTokens": 5256,
+      "outputTokens": 169,
+      "tokensPerSecond": 70.2,
+      "seconds": 4.7
+    },
+    {
+      "task": "use-skill",
+      "pass": true,
+      "notes": "notes follow the skill (read SKILL.md instead of loading it)",
+      "turns": 5,
+      "inputTokens": 6419,
+      "outputTokens": 331,
+      "tokensPerSecond": 70,
+      "seconds": 7.8
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 301,
+      "outputTokens": 42,
+      "tokensPerSecond": 79.4,
+      "seconds": 1.3
+    }
+  ]
+}

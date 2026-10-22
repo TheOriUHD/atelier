@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+dist/
+out/
+release/
+coverage/
+packages/ui/theme/
+design/reference/
+design/tokens/tokens.schema.json
+*.md
+# The website's page and stylesheet are written compactly by hand.
+apps/site/public/*.html
+apps/site/public/*.css

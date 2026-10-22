@@ -1,0 +1,18 @@
+# Short markers of distinctive lines in published assistant prompts. A case-insensitive hit in a shipped template, an assembled prompt or
+# docs/PROMPTS.md fails scripts/check-prompt-originality.mjs. Markers only, never whole sentences.
+minimum formatting appropriate
+soften the blow
+highly informed individual
+accountability without self-abasement
+steady, honest helpfulness
+earn its place
+stop scrolling and say
+strictly limit to one artifact
+critical browser storage restriction
+premature abstraction
+three similar lines
+not by compressing
+arrow chains
+smart colleague
+walked into the room
+act when ready

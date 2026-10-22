@@ -1,0 +1,1 @@
+The person interrupted your last step to send this. What you had already done stands, and an unfinished step did not complete: check where things stand, then carry on with the task from there, changing course only where this message says so.

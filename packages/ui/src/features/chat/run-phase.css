@@ -1,0 +1,9 @@
+/* PhaseText: each new text fades in. The component stops it under reduced motion. */
+@keyframes at-phase-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

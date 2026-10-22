@@ -1,0 +1,67 @@
+name: CI
+# Pushes that only touch documentation don't run it (Actions minutes are limited).
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.md', 'docs/**', 'design/**', 'LICENSE', 'deploy/**', '.github/workflows/release.yml', '.github/workflows/server-image.yml']
+  pull_request:
+    paths-ignore: ['**/*.md', 'docs/**', 'design/**', 'LICENSE', 'deploy/**', '.github/workflows/release.yml', '.github/workflows/server-image.yml']
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run every end-to-end test, not just the smoke set
+        type: boolean
+        default: false
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    # Pinned: ubuntu-latest moves to a new Ubuntu release on 2026-10-19.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27'
+          cache-dependency-path: runner/go.sum
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:theme && git diff --exit-code packages/ui/theme
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm runner:test
+      # The server installer (setup/, a Go program with its own tests).
+      - run: pnpm setup:test
+      # The host binary lets the runner conformance suite (part of pnpm test) run against the real thing.
+      - run: go -C runner run ./scripts/build -host
+      - run: pnpm test
+      - run: pnpm --filter @atelier/server build
+      - run: pnpm --filter @atelier/desktop build
+      - run: pnpm exec playwright install --with-deps chromium
+      # Electron fetches its binary on first launch; do it here so no test spends its time budget on the download.
+      - run: node apps/desktop/node_modules/electron/install.js
+      # Ubuntu 24.04 restricts the user namespaces Electron's sandbox runs in (it would stop at start). Allowed for this run only.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # A push runs the web specs and the desktop app's boot and onboarding (minutes are limited); the whole suite
+      # runs on request: Actions > CI > Run workflow > full. Electron needs a display on Linux.
+      - name: End-to-end
+        env:
+          FULL: ${{ inputs.full }}
+          # The virtual display has nobody to disturb, and a window that is never shown gets no input on Linux.
+          ATELIER_SHOW_WINDOW: '1'
+        run: |
+          SPECS="web.spec.ts e2e/desktop.spec.ts onboarding.desktop.spec.ts"
+          if [ "$FULL" = "true" ]; then SPECS=""; fi
+          xvfb-run --auto-servernum pnpm e2e $SPECS
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 3

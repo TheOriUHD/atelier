@@ -1,0 +1,15 @@
+# Only what the image build needs; never local notes or data.
+.git
+**/node_modules
+**/dist
+apps/desktop/release
+design/reference
+qa
+test-results
+playwright-report
+e2e/.auth
+.claude
+runner/bin
+.env*
+*.db
+.atelier-data

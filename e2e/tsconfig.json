@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.base.json",
+  // page.evaluate callbacks run in the browser.
+  "compilerOptions": { "types": ["node"], "lib": ["es2024", "dom"] },
+  "include": ["*.ts", "../playwright.config.ts"]
+}

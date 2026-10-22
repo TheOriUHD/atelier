@@ -1,0 +1,23 @@
+{
+  "model": "ollama/gemma-4-26b-a4b:q4_0",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "recheck"
+  },
+  "results": [
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Interactive Click Counter\"",
+      "turns": 2,
+      "inputTokens": 1668,
+      "outputTokens": 646,
+      "tokensPerSecond": 83.6,
+      "seconds": 8.7
+    }
+  ]
+}

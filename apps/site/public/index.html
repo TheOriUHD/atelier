@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atelier: a self-hosted AI workspace</title>
+<meta name="description" content="Chat, Cowork and Code on the model you choose, local or hosted. Self-hosted, no telemetry, free for noncommercial use.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://atelierhq.dev/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Atelier: a self-hosted AI workspace">
+<meta property="og:description" content="Chat, Cowork and Code on the model you choose, local or hosted. Self-hosted, no telemetry, free for noncommercial use.">
+<meta property="og:url" content="https://atelierhq.dev/">
+<meta property="og:image" content="https://atelierhq.dev/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/source-serif-4-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" as="image" href="/img/code-2560.webp" imagesrcset="/img/code-1280.webp 1280w, /img/code-2560.webp 2560w, /img/code-3840.webp 3840w" imagesizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" fetchpriority="high">
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6l7-3Z"/><path d="m9 12 2.2 2.2L15 10.4"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24"><circle cx="7" cy="6" r="2.2"/><circle cx="7" cy="18" r="2.2"/><circle cx="17" cy="9" r="2.2"/><path d="M7 8.2v7.6M17 11.2c0 3.2-3.3 3.8-8.4 5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0V8ZM12 17v4"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0M12 16l4-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2"/></symbol>
+  <symbol id="i-memory" viewBox="0 0 24 24"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Z"/><path d="M8 17h10M9 8h5"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7V3Z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></symbol>
+</svg>
+
+<header class="site-header" id="top">
+  <div class="wrap bar">
+    <a class="brand" href="/" aria-label="Atelier, home"><img src="/icon.svg" width="30" height="30" alt="">Atelier</a>
+    <nav class="nav" aria-label="Main">
+      <a href="#work">Features</a>
+      <a href="#models">Models</a>
+      <a href="#self-host">Self-hosting</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://docs.atelierhq.dev/">Docs</a>
+    </nav>
+    <div class="bar-end">
+      <button class="icon-btn" id="theme" type="button" aria-label="Switch theme">
+        <svg class="icon i-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="icon i-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/TheOriUHD/atelier" aria-label="Atelier on GitHub"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github"/></svg></a>
+      <a class="btn btn-primary btn-sm" href="/download/" data-download data-short>Download</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="wrap">
+      <h1>The AI workspace you already know how to use.</h1>
+      <p class="lead">Chat, Cowork and Code on any model, local or hosted. Run it on your own machine and keep your data.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="/download/" data-download><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span data-download-label>Download Atelier</span></a>
+        <a class="btn btn-quiet" href="https://github.com/TheOriUHD/atelier"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github"/></svg>View on GitHub</a>
+      </div>
+      <p class="fine"><span>Free for noncommercial use</span><span>macOS, Windows, Linux and Docker</span><span>Beta</span></p>
+    </div>
+
+    <div class="wrap-wide showcase">
+      <div>
+        <div class="tabs" role="tablist" aria-label="What Atelier does">
+          <button class="tab" role="tab" id="tab-code" aria-controls="panel-code" aria-selected="true" type="button" data-room="Code" data-note="Agentic sessions in your repositories. It reads, edits and runs commands; you review the diff, reject a hunk, commit and open a pull request. Five permission modes decide what it may do without asking.">Code</button>
+          <button class="tab" role="tab" id="tab-chat" aria-controls="panel-chat" aria-selected="false" tabindex="-1" type="button" data-room="Chat" data-note="Rich replies with tables, code and math, attachments, projects, web search that cites its sources, and a memory you can read and delete. Retry a reply or edit your message and the earlier versions stay one click away.">Chat</button>
+          <button class="tab" role="tab" id="tab-cowork" aria-controls="panel-cowork" aria-selected="false" tabindex="-1" type="button" data-room="Cowork" data-note="Hand it a longer task in a folder and get files back. Watch each step beside the conversation, and get a notification when it finishes, fails or needs you.">Cowork</button>
+          <button class="tab" role="tab" id="tab-artifacts" aria-controls="panel-artifacts" aria-selected="false" tabindex="-1" type="button" data-room="Artifacts" data-note="When a reply builds something, it opens beside the conversation: HTML pages, React components, diagrams, documents. Sandboxed, versioned, ready to copy or download.">Artifacts</button>
+          <button class="tab" role="tab" id="tab-approvals" aria-controls="panel-approvals" aria-selected="false" tabindex="-1" type="button" data-room="Approvals" data-note="Auto, Ask, Accept edits, Plan and Bypass decide what it may do without asking. Risky commands such as sudo, deleting outside the folder and force pushes ask first unless you chose Bypass. In Auto a separate review request to the model decides instead, and Plan mode refuses commands.">Approvals</button>
+        </div>
+        <p class="tab-note" id="tab-note" aria-live="polite"><strong>Code.</strong> Agentic sessions in your repositories. It reads, edits and runs commands; you review the diff, reject a hunk, commit and open a pull request. Five permission modes decide what it may do without asking.</p>
+      </div>
+      <div class="window">
+        <div id="panel-code" role="tabpanel" aria-labelledby="tab-code">
+          <img src="/img/code-2560.webp" srcset="/img/code-1280.webp 1280w, /img/code-2560.webp 2560w, /img/code-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" fetchpriority="high" alt="An Atelier Code session: the conversation with its tool cards on the left, and the diff it produced on the right, with commit and push controls.">
+        </div>
+        <div id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
+          <img src="/img/chat-2560.webp" srcset="/img/chat-1280.webp 1280w, /img/chat-2560.webp 2560w, /img/chat-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="An Atelier chat answering a question about database indexes with a comparison table, with earlier conversations in the sidebar.">
+        </div>
+        <div id="panel-cowork" role="tabpanel" aria-labelledby="tab-cowork" hidden>
+          <img src="/img/cowork-2560.webp" srcset="/img/cowork-1280.webp 1280w, /img/cowork-2560.webp 2560w, /img/cowork-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="A finished Cowork task: three completed steps beside the conversation, and the brief it wrote listed as an output file.">
+        </div>
+        <div id="panel-artifacts" role="tabpanel" aria-labelledby="tab-artifacts" hidden>
+          <img src="/img/artifact-2560.webp" srcset="/img/artifact-1280.webp 1280w, /img/artifact-2560.webp 2560w, /img/artifact-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="A chat with a colour palette page open in a panel beside it, as a live preview.">
+        </div>
+        <div id="panel-approvals" role="tabpanel" aria-labelledby="tab-approvals" hidden>
+          <img src="/img/permission-2560.webp" srcset="/img/permission-1280.webp 1280w, /img/permission-2560.webp 2560w, /img/permission-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="A Code session pausing to ask permission before running a git commit, with Deny, Always allow and Allow once buttons.">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2>Where you’d expect everything to be.</h2>
+        <p class="lead">There’s no tour. The sidebar is on the left, the composer is at the bottom, and artifacts open beside the conversation.</p>
+      </div>
+      <div class="trio reveal">
+        <div>
+          <h3>The layout</h3>
+          <p>A Chat and Code toggle sits at the top of the sidebar. In Chat, Cowork, Projects and Artifacts are listed under it, and Settings opens as a dialog.</p>
+        </div>
+        <div>
+          <h3>The shortcuts</h3>
+          <p><kbd>/</kbd> lists skills and commands. <kbd>Shift</kbd> <kbd>Tab</kbd> cycles permission modes. <kbd data-mac="⌘">Ctrl</kbd> <kbd>U</kbd> attaches a file, and you can drop or paste one too.</p>
+        </div>
+        <div>
+          <h3>Your files</h3>
+          <p>Agent skills, commands, sub-agents and hooks are read where they already live, and MCP config can be imported.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="models">
+    <div class="wrap split">
+      <div class="reveal">
+        <h2>Any model, local or hosted.</h2>
+        <p class="lead">Point Atelier at a model on your own machine, add an API key, or sign in with a ChatGPT plan or GitHub Copilot, then pick the model in the composer. ChatGPT Chat, which drives a signed-in browser window, is an experimental option.</p>
+        <ul class="ticks">
+          <li><strong>Local servers are detected.</strong> Ollama, llama.cpp and LM Studio on their usual ports are offered as one-click suggestions.</li>
+          <li><strong>Reasoning effort from Low to Max.</strong> Models with a setting of their own get it, the others are guided by a short note, and ChatGPT Chat uses ChatGPT’s own steps.</li>
+          <li><strong>Small local models get per-model overrides</strong> for the tool calling they struggle with, and hosted ones show what a session cost.</li>
+        </ul>
+        <p class="runs"><span class="label">Works with</span><span>Ollama</span><span>llama.cpp</span><span>LM Studio</span><span>Anthropic</span><span>OpenAI</span><span>GitHub Copilot</span><span>OpenRouter</span><span>OpenCode Zen</span><span>Any OpenAI-compatible endpoint</span><span>ChatGPT plan</span><span>ChatGPT Chat (experimental)</span></p>
+      </div>
+      <div class="frame reveal">
+        <img src="/img/providers-2496.webp" srcset="/img/providers-1280.webp 1280w, /img/providers-2496.webp 2496w" sizes="(min-width: 920px) 560px, calc(100vw - 48px)" width="2496" height="990" loading="lazy" alt="Atelier's provider settings: a local Ollama server detected and connected, with a button to add another provider.">
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="work">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2>Built for real work.</h2>
+        <p class="lead">The parts that matter once a model is changing your code or running for an hour: control over what it does, and an easy way back.</p>
+      </div>
+      <div class="cards">
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><h3>Approvals you control</h3><p>Auto, Ask, Accept edits, Plan and Bypass: pick how much it may do. Commands like <code>sudo</code>, <code>rm -rf</code> outside the folder and force pushes ask first unless you chose Bypass. In Auto a separate review request to the model decides instead, and Plan mode refuses commands.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-branch"/></svg><h3>Review and undo</h3><p>See the diff against the last commit, what’s staged, or what the session changed. Reject one hunk, commit, push and open a pull request. Rewind restores files, the conversation, or both.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><h3>Work where the code lives</h3><p>A folder on this computer, or a machine over SSH using your own keys and config. Each session without a folder gets a scratch folder of its own.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg><h3>Several sessions at once</h3><p>Split view puts up to four side by side. Type while one works: your message joins at the next step, or send it now to interrupt.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-plug"/></svg><h3>Extensible</h3><p>Skills, plugins, hooks and MCP connectors. Connectors sign in with OAuth, and each tool can be set to Ask, Always allow or Block.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg><h3>Reasoning effort</h3><p>Low to Max, and in Code Ultracode on top: it plans, sub-agents investigate in parallel and others check the results. Slower, and it uses far more tokens.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><h3>Web search built in</h3><p>Nothing to set up and nothing to pay for: Atelier searches the web itself and cites what it used, with any model that can call tools. Bring your own SearXNG, Brave or Tavily instead.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-memory"/></svg><h3>Memory you can see</h3><p>It can remember lasting preferences and facts across chats. You can read and delete every entry, keep sensitive topics out, and leave a chat out entirely with a temporary one.</p></article>
+        <article class="card reveal"><svg class="icon" aria-hidden="true"><use href="#i-doc"/></svg><h3>Prompts in the open</h3><p>Every system prompt, note and tool description Atelier sends is published word for word, and you can override any of them with a file in your config folder.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="self-host">
+    <div class="wrap split">
+      <div class="reveal">
+        <h2>Yours to run, and yours to keep.</h2>
+        <p class="lead">There is no Atelier cloud. The desktop app runs its own backend, and the web app is the same backend in a Docker image.</p>
+        <ul class="ticks">
+          <li><strong>Everything lives in one folder you control.</strong> Keep conversations as long as you like, export them as a zip, or delete them all.</li>
+          <li><strong>No telemetry.</strong> Requests go to the model providers and connectors you set up and to the search engines and pages web search reaches. The desktop app also checks for updates.</li>
+          <li><strong>Several people can share one server.</strong> Invite codes, passkeys, and provider keys encrypted at rest.</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <pre class="pre" aria-label="Self-hosting steps"><span class="c"># 1. copy deploy/compose.yaml and deploy/Caddyfile</span>
+<span class="c">#    and put your hostname in both</span>
+<span class="k">docker compose up -d</span>
+
+<span class="c"># 2. read the one-time setup token</span>
+<span class="k">docker compose logs atelier</span>
+
+<span class="c"># 3. open your site, create the admin, add a model</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="start">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2>Up and running in a few minutes.</h2>
+      </div>
+      <ol class="steps reveal">
+        <li><h3>Install</h3><p>Download the desktop app, or run it from source or in Docker. macOS builds are signed and notarized. Windows builds aren’t code-signed, so SmartScreen asks you to confirm the first launch.</p></li>
+        <li><h3>Add a model</h3><p>Open Settings, then Admin, then Providers. Local servers on their usual ports are offered as one-click suggestions.</p></li>
+        <li><h3>Start working</h3><p>Type in the composer, press <kbd>/</kbd> for commands, or switch to Code and pick a folder.</p></li>
+      </ol>
+      <div class="cta-row reveal">
+        <a class="btn btn-primary" href="/download/" data-download><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span data-download-label>Download Atelier</span></a>
+        <a class="btn btn-quiet" href="https://docs.atelierhq.dev/getting-started/">Read the docs<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="source">
+    <div class="wrap split">
+      <div class="reveal">
+        <h2>Source-available, and plain about it.</h2>
+        <p class="lead">The code is on GitHub under the PolyForm Noncommercial license: free to use, read and modify for personal and other noncommercial purposes. Commercial use needs a separate license from the author (<a href="mailto:licensing@atelierhq.dev">licensing@atelierhq.dev</a>). Atelier is an independent project, in beta, and not affiliated with any model provider.</p>
+        <div class="cta-row">
+          <a class="btn btn-quiet" href="https://github.com/TheOriUHD/atelier"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github"/></svg>View on GitHub</a>
+          <a class="btn btn-quiet" href="https://github.com/TheOriUHD/atelier/blob/main/LICENSE">Read the license</a>
+        </div>
+      </div>
+      <div class="reveal">
+        <h3>What it won’t do</h3>
+        <ul class="plain">
+          <li>It isn’t a hosted service. You run it, and you hold the data.</li>
+          <li>It doesn’t make a weak model strong. Small local models can struggle with tools.</li>
+          <li>Auto mode isn’t a security boundary. Review sensitive work yourself.</li>
+          <li>There are no mobile apps. The web app has a phone layout.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="wrap faq-layout">
+      <div class="reveal"><h2>Questions</h2></div>
+      <div class="faq reveal">
+        <details><summary>Is it free?</summary><p>For personal and other noncommercial use, yes; commercial use needs a license from the author. There is no paid tier and no account with us. You pay only for the hosted models you choose to use.</p></details>
+        <details><summary>Which models can I use?</summary><p>Local models through Ollama, llama.cpp or LM Studio, hosted ones through Anthropic or OpenAI keys, GitHub Copilot, OpenRouter, OpenCode Zen or any OpenAI-compatible endpoint, or a ChatGPT plan. ChatGPT Chat is an experimental extra: it drives a signed-in ChatGPT browser window, which OpenAI doesn’t officially support, so Atelier shows a warning first.</p></details>
+        <details><summary>Does anything leave my machine?</summary><p>Requests go to the model providers and connectors you set up, to the search engines and pages web search and fetch reach, and the desktop app checks for new versions every five minutes. There is no telemetry and no Atelier cloud.</p></details>
+        <details><summary>Can I bring my existing skills, plugins and hooks?</summary><p>Mostly. Atelier reads agent skills, commands, sub-agents and hooks where they already live, lists plugins you installed for other agents so you can switch them on or off, and can import MCP config. A few things differ, and the <a href="https://docs.atelierhq.dev/claude-code-compatibility/">compatibility page</a> lists them.</p></details>
+        <details><summary>Can I see the prompts Atelier sends to the model?</summary><p>Yes, all of them. Every system prompt, note and tool description is published verbatim in the <a href="https://docs.atelierhq.dev/prompts/">documentation</a> and lives in the repository, where you can also override them.</p></details>
+        <details><summary>Which platforms are supported?</summary><p>Desktop apps for macOS, Windows and Linux, and a web app you host with Docker. macOS is the most used. The Windows and Linux builds exist but have had less testing.</p></details>
+        <details><summary>Why does my system warn about the installer?</summary><p>macOS builds are signed with a Developer ID and notarized, so they open normally. Windows builds aren’t code-signed yet: choose More info, then Run anyway. Linux packages are unsigned.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <a class="brand" href="/" aria-label="Atelier, home"><img src="/icon.svg" width="30" height="30" alt="">Atelier</a>
+        <p class="tagline">A self-hosted AI workspace with Chat, Cowork and Code, on the model you choose.</p>
+      </div>
+      <div>
+        <h3>Product</h3>
+        <ul>
+          <li><a href="#work">Features</a></li>
+          <li><a href="#models">Models</a></li>
+          <li><a href="/download/">Download</a></li>
+          <li><a href="#self-host">Self-hosting</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Resources</h3>
+        <ul>
+          <li><a href="https://docs.atelierhq.dev/">Documentation</a></li>
+          <li><a href="https://docs.atelierhq.dev/prompts/">System prompts</a></li>
+          <li><a href="https://github.com/TheOriUHD/atelier">GitHub</a></li>
+          <li><a href="https://github.com/TheOriUHD/atelier/releases">Releases</a></li>
+          <li><a href="https://github.com/TheOriUHD/atelier/blob/main/LICENSE">License</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="legal">© 2026 TheOriUHD. Atelier is an independent project and is not affiliated with or endorsed by any model provider. Screenshots show the real interface running against a scripted demo model.</p>
+  </div>
+</footer>
+
+<script src="/site.js" defer></script>
+</body>
+</html>

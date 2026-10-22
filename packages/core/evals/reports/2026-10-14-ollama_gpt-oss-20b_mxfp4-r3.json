@@ -1,0 +1,82 @@
+{
+  "model": "ollama/gpt-oss-20b:mxfp4",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "label": "r3"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": true,
+      "notes": "greet.ts updated",
+      "turns": 8,
+      "inputTokens": 3056,
+      "outputTokens": 1286,
+      "tokensPerSecond": 124.3,
+      "seconds": 12.8
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 6,
+      "inputTokens": 2745,
+      "outputTokens": 297,
+      "tokensPerSecond": 127.2,
+      "seconds": 6
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": true,
+      "notes": "asked with AskUser",
+      "turns": 13,
+      "inputTokens": 3337,
+      "outputTokens": 2037,
+      "tokensPerSecond": 124.7,
+      "seconds": 20
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter Page\"",
+      "turns": 2,
+      "inputTokens": 1339,
+      "outputTokens": 410,
+      "tokensPerSecond": 126.2,
+      "seconds": 4.7
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 2,
+      "inputTokens": 2452,
+      "outputTokens": 265,
+      "tokensPerSecond": 127.4,
+      "seconds": 3.7
+    },
+    {
+      "task": "use-skill",
+      "pass": true,
+      "notes": "notes follow the skill",
+      "turns": 15,
+      "inputTokens": 4296,
+      "outputTokens": 1610,
+      "tokensPerSecond": 125.1,
+      "seconds": 17.2
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 1114,
+      "outputTokens": 147,
+      "tokensPerSecond": 127.6,
+      "seconds": 3.9
+    }
+  ]
+}

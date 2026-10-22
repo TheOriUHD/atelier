@@ -1,0 +1,18 @@
+{
+  "name": "@atelier/docs",
+  "version": "0.0.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && node scripts/headers.mjs",
+    "check": "node scripts/check-links.mjs",
+    "preview": "npx wrangler@4 dev --local",
+    "deploy": "pnpm run build && npx wrangler@4 deploy"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.6",
+    "astro": "7.4.0"
+  }
+}

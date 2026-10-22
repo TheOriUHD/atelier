@@ -1,0 +1,5 @@
+# Caddy gets the certificate and forwards X-Forwarded-For/Proto/Host. On a tailnet, use your *.ts.net
+# name (with `tailscale cert` or Caddy's Tailscale integration) instead of a public hostname.
+atelier.example.com {
+	reverse_proxy atelier:7340
+}

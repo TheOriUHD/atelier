@@ -1,0 +1,18 @@
+/* ThinkingDots: each dot brightens and grows in turn. The component stops it under reduced motion. */
+@keyframes at-thinking-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.7);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Only the lowest indicator of a transcript is drawn (lib/lowest-indicator.ts marks the ones above it). */
+[data-thinking-dots][data-superseded] {
+  display: none;
+}

@@ -1,0 +1,83 @@
+{
+  "model": "ollama/mistral-small-3.2-24b:q5_k_m",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "r1"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": false,
+      "notes": "greet.ts is now:\nexport function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n; Eval request failed (400): {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 91, column 40 in source:\\n...↵                    {{- raise_exception(\\\"Tool call IDs should be alphanumeric s...\\n                                           ^\\nError: Jinja Exception: Tool call IDs should be alphanumeric strings with length 9!\",\"type\":\"invalid_request_error\"}}",
+      "turns": 2,
+      "inputTokens": 3570,
+      "outputTokens": 19,
+      "tokensPerSecond": 28.6,
+      "seconds": 11.1
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": false,
+      "notes": "tests still fail; Eval request failed (400): {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 91, column 40 in source:\\n...↵                    {{- raise_exception(\\\"Tool call IDs should be alphanumeric s...\\n                                           ^\\nError: Jinja Exception: Tool call IDs should be alphanumeric strings with length 9!\",\"type\":\"invalid_request_error\"}}",
+      "turns": 2,
+      "inputTokens": 3576,
+      "outputTokens": 26,
+      "tokensPerSecond": 29.7,
+      "seconds": 4.2
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": false,
+      "notes": "no question; tools used: none",
+      "turns": 1,
+      "inputTokens": 3555,
+      "outputTokens": 65,
+      "tokensPerSecond": 31.2,
+      "seconds": 5.1
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"HTML Counter\"; Eval request failed (400): {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 91, column 40 in source:\\n...↵                    {{- raise_exception(\\\"Tool call IDs should be alphanumeric s...\\n                                           ^\\nError: Jinja Exception: Tool call IDs should be alphanumeric strings with length 9!\",\"type\":\"invalid_request_error\"}}",
+      "turns": 2,
+      "inputTokens": 1181,
+      "outputTokens": 347,
+      "tokensPerSecond": 31.3,
+      "seconds": 12.4
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial; Eval request failed (400): {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 91, column 40 in source:\\n...↵                    {{- raise_exception(\\\"Tool call IDs should be alphanumeric s...\\n                                           ^\\nError: Jinja Exception: Tool call IDs should be alphanumeric strings with length 9!\",\"type\":\"invalid_request_error\"}}",
+      "turns": 2,
+      "inputTokens": 3556,
+      "outputTokens": 89,
+      "tokensPerSecond": 29.2,
+      "seconds": 6.2
+    },
+    {
+      "task": "use-skill",
+      "pass": false,
+      "notes": "RELEASE_NOTES.md does not follow the skill (loaded with Skill); Eval request failed (400): {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 91, column 40 in source:\\n...↵                    {{- raise_exception(\\\"Tool call IDs should be alphanumeric s...\\n                                           ^\\nError: Jinja Exception: Tool call IDs should be alphanumeric strings with length 9!\",\"type\":\"invalid_request_error\"}}",
+      "turns": 2,
+      "inputTokens": 3768,
+      "outputTokens": 28,
+      "tokensPerSecond": 29.8,
+      "seconds": 4.4
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": false,
+      "notes": "the reply lacks the stock level; Eval request failed (400): {\"error\":{\"code\":400,\"message\":\"Unable to generate parser for this template. Automatic parser generation failed: \\n------------\\nWhile executing CallExpression at line 91, column 40 in source:\\n...↵                    {{- raise_exception(\\\"Tool call IDs should be alphanumeric s...\\n                                           ^\\nError: Jinja Exception: Tool call IDs should be alphanumeric strings with length 9!\",\"type\":\"invalid_request_error\"}}",
+      "turns": 2,
+      "inputTokens": 99,
+      "outputTokens": 24,
+      "tokensPerSecond": 30.9,
+      "seconds": 1.5
+    }
+  ]
+}

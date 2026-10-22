@@ -1,0 +1,57 @@
+# Written by atelier-setup. Change it by hand if you like; "atelier-setup update" keeps your edits.
+services:
+  atelier:
+    image: ghcr.io/theoriuhd/atelier:latest
+    restart: unless-stopped
+    environment:
+      ATELIER_BASE_URL: https://atelier.example.com
+      ATELIER_TRUSTED_PROXIES: 192.168.77.16
+      ATELIER_SETUP_TOKEN: ${ATELIER_SETUP_TOKEN:-}
+      ATELIER_SANDBOX_HOST: sandbox
+      ATELIER_SANDBOX_KEYS: /sandbox-keys/authorized_keys
+      ATELIER_UPDATER_URL: http://updater:7341
+    volumes:
+      - atelier-data:/data
+      - sandbox-keys:/sandbox-keys
+      - updater-secret:/updater
+    ports:
+      - '0.0.0.0:7340:7340'
+
+  # Where chats clone repositories and run commands: no secrets and no server data in it. Every account gets a Unix user of
+  # its own in it, and folders only that user can enter.
+  sandbox:
+    image: ghcr.io/theoriuhd/atelier-sandbox:latest
+    restart: unless-stopped
+    depends_on: [atelier]
+    volumes:
+      - sandbox-home:/home/sandbox
+      - sandbox-keys:/keys:ro
+    expose:
+      - '2222'
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, SYS_CHROOT]
+
+  # Lets an admin press "Update server" in Settings. The Docker socket is root on this machine, so it only pulls and
+  # recreates the services of this folder. Delete this service (and ATELIER_UPDATER_URL above) to update by hand.
+  updater:
+    image: ghcr.io/theoriuhd/atelier-updater:latest
+    restart: unless-stopped
+    depends_on: [atelier]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - updater-secret:/updater:ro
+      - .:/project:ro
+    expose:
+      - '7341'
+    mem_limit: 256m
+
+volumes:
+  atelier-data:
+  sandbox-keys:
+  sandbox-home:
+  updater-secret:

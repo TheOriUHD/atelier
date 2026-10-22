@@ -1,0 +1,68 @@
+#!/bin/sh
+# The sandbox container's start (apps/server/Dockerfile, target sandbox). It runs as root: sshd needs that to log each
+# account in as its own Unix user. Everything an account can reach afterwards is a user of its own with a folder of mode
+# 0700, so one account's commands can neither read nor change another's.
+#
+#   ATELIER_SANDBOX_SLOTS   how many accounts the sandbox can hold (default 256, at most 9999); the server's setting must match
+#
+# Layout of the home volume (/home/sandbox), all of it created here or by atelier-sandbox-keys:
+#   .sshd/                the host key (root only)
+#   .slots/sbxNNN         which account a user was first given to (root only; a user is never handed to another account)
+#   u/sbxNNN/             an account's home: runner, caches, temporary files (that user only, 0700)
+#   chats/<account>/      the account's chat folders (that user only, 0700)
+set -eu
+umask 077
+
+vol=/home/sandbox
+first=20000
+slots=${ATELIER_SANDBOX_SLOTS:-256}
+case "$slots" in
+  '' | *[!0-9]*) echo "ATELIER_SANDBOX_SLOTS must be a whole number, not '$slots'." >&2; exit 1 ;;
+esac
+if [ "$slots" -lt 1 ] || [ "$slots" -gt 9999 ]; then
+  echo "ATELIER_SANDBOX_SLOTS must be between 1 and 9999, not $slots." >&2
+  exit 1
+fi
+
+# The volume root and the folders the accounts' own folders hang from belong to root. Others may pass through (x) but not
+# list. The volume of an earlier version belongs to its shared user (uid 1000), so ownership is taken before anything is made,
+# and whatever it holds under one of these names that isn't the folder (a link, a file, a folder called u) is set aside.
+chown root:root "$vol"
+chmod 0711 "$vol"
+aside() { mv "$1" "$1.legacy-$(date +%s)"; }
+for name in u chats .sshd .slots; do
+  p=$vol/$name
+  if [ -L "$p" ] || { [ -e "$p" ] && [ ! -d "$p" ]; }; then aside "$p"; fi
+  # u/ is new: a folder of that name that isn't root's is the earlier shared user's.
+  if [ "$name" = u ] && [ -d "$p" ] && [ "$(stat -c %u "$p")" != 0 ]; then aside "$p"; fi
+  [ -d "$p" ] || mkdir "$p"
+  chown root:root "$p"
+done
+chmod 0711 "$vol/u" "$vol/chats"
+chmod 0700 "$vol/.sshd" "$vol/.slots"
+if [ ! -f "$vol/.sshd/host_ed25519" ]; then
+  ssh-keygen -q -t ed25519 -N '' -f "$vol/.sshd/host_ed25519"
+fi
+chown root:root "$vol/.sshd/host_ed25519" "$vol/.sshd/host_ed25519.pub"
+chmod 0600 "$vol/.sshd/host_ed25519"
+
+# What an earlier version left in this volume belonged to one shared user (uid 1000) and was readable by everyone who could
+# log in. It is locked to root now (the top level only: nothing below it can be reached any more); a chat folder is handed
+# to its account when that account logs in for the first time (atelier-sandbox-keys). Leftovers can be deleted by an admin.
+find "$vol" -mindepth 1 -maxdepth 1 ! -type l ! -name u ! -name chats ! -name .sshd ! -name .slots -exec chown root:root {} + -exec chmod go-rwx {} +
+find "$vol/chats" -mindepth 1 -maxdepth 1 -type d -uid +0 -uid -"$first" -exec chown root:root {} + -exec chmod 0700 {} +
+
+# The accounts' Unix users: sbx000 ... with uid 20000 + n, a group of their own, no password, home below u/. Written each
+# start, so a new ATELIER_SANDBOX_SLOTS takes effect by recreating the container.
+sed -i '/^sbx[0-9]\{3,4\}:/d' /etc/passwd /etc/group /etc/shadow
+i=0
+while [ "$i" -lt "$slots" ]; do
+  name=$(printf 'sbx%03d' "$i")
+  id=$((first + i))
+  printf '%s:x:%d:%d:Atelier sandbox account:%s/u/%s:/bin/bash\n' "$name" "$id" "$id" "$vol" "$name" >&3
+  printf '%s:x:%d:\n' "$name" "$id" >&4
+  printf '%s:*:19000:0:99999:7:::\n' "$name" >&5
+  i=$((i + 1))
+done 3>>/etc/passwd 4>>/etc/group 5>>/etc/shadow
+
+exec /usr/sbin/sshd -D -e -f /etc/atelier-sandbox/sshd_config

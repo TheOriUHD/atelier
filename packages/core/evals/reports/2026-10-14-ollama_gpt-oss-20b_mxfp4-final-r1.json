@@ -1,0 +1,83 @@
+{
+  "model": "ollama/gpt-oss-20b:mxfp4",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "final-r1"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": true,
+      "notes": "greet.ts updated",
+      "turns": 7,
+      "inputTokens": 3193,
+      "outputTokens": 396,
+      "tokensPerSecond": 124.8,
+      "seconds": 12.1
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 6,
+      "inputTokens": 3120,
+      "outputTokens": 273,
+      "tokensPerSecond": 125.6,
+      "seconds": 4.9
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": true,
+      "notes": "asked with AskUser",
+      "turns": 7,
+      "inputTokens": 2884,
+      "outputTokens": 958,
+      "tokensPerSecond": 122.8,
+      "seconds": 9.9
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter\"",
+      "turns": 2,
+      "inputTokens": 1390,
+      "outputTokens": 393,
+      "tokensPerSecond": 125.7,
+      "seconds": 4.1
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 3,
+      "inputTokens": 2568,
+      "outputTokens": 442,
+      "tokensPerSecond": 122,
+      "seconds": 4.9
+    },
+    {
+      "task": "use-skill",
+      "pass": true,
+      "notes": "notes follow the skill (read SKILL.md instead of loading it)",
+      "turns": 9,
+      "inputTokens": 3256,
+      "outputTokens": 724,
+      "tokensPerSecond": 125.2,
+      "seconds": 8.2
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 1114,
+      "outputTokens": 56,
+      "tokensPerSecond": 128.6,
+      "seconds": 1.4
+    }
+  ]
+}

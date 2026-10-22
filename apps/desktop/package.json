@@ -1,0 +1,28 @@
+{
+  "name": "@atelier/desktop",
+  "version": "0.1.11",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "description": "Atelier: a self-hosted workspace for chat, Cowork and Code with your own models.",
+  "homepage": "https://github.com/TheOriUHD/atelier",
+  "author": "Atelier",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/dev.mjs",
+    "package": "pnpm --workspace-root runner:build && node scripts/build.mjs && electron-builder --config electron-builder.yml",
+    "package:mac": "node scripts/package-mac.mjs"
+  },
+  "devDependencies": {
+    "@atelier/core": "workspace:*",
+    "@atelier/protocol": "workspace:*",
+    "electron": "44.7.1",
+    "electron-builder": "26.15.3",
+    "electron-updater": "6.8.10",
+    "esbuild": "0.28.2",
+    "happy-dom": "20.14.6",
+    "zod": "4.6.7"
+  }
+}

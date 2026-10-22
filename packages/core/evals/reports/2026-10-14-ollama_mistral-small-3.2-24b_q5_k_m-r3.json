@@ -1,0 +1,83 @@
+{
+  "model": "ollama/mistral-small-3.2-24b:q5_k_m",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "r3"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": false,
+      "notes": "greet.ts is now:\nexport function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n",
+      "turns": 2,
+      "inputTokens": 3606,
+      "outputTokens": 35,
+      "tokensPerSecond": 31.2,
+      "seconds": 4.3
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": false,
+      "notes": "tests still fail",
+      "turns": 6,
+      "inputTokens": 4265,
+      "outputTokens": 862,
+      "tokensPerSecond": 30.6,
+      "seconds": 32.5
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": false,
+      "notes": "no question; tools used: none",
+      "turns": 1,
+      "inputTokens": 3555,
+      "outputTokens": 171,
+      "tokensPerSecond": 30.8,
+      "seconds": 8.8
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter\"",
+      "turns": 2,
+      "inputTokens": 1415,
+      "outputTokens": 236,
+      "tokensPerSecond": 31.3,
+      "seconds": 9.2
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 3,
+      "inputTokens": 3941,
+      "outputTokens": 370,
+      "tokensPerSecond": 30.2,
+      "seconds": 15.8
+    },
+    {
+      "task": "use-skill",
+      "pass": false,
+      "notes": "RELEASE_NOTES.md does not follow the skill (loaded with Skill)",
+      "turns": 3,
+      "inputTokens": 4022,
+      "outputTokens": 94,
+      "tokensPerSecond": 30.4,
+      "seconds": 6.8
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 146,
+      "outputTokens": 39,
+      "tokensPerSecond": 31.7,
+      "seconds": 1.9
+    }
+  ]
+}

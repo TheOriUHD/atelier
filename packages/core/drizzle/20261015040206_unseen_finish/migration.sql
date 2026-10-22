@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `finished_unseen_at` integer;

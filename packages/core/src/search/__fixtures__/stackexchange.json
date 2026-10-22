@@ -1,0 +1,63 @@
+{
+ "items": [
+  {
+   "title": "Dropping a runtime from async code panics: &quot;Cannot drop a runtime in a context where blocking is not allowed&quot;",
+   "excerpt": "I&#39;m dropping a <span class=\"highlight\">tokio</span> <span class=\"highlight\">runtime</span> inside an async function and it <span class=\"highlight\">panics</span>. &hellip; Is there a way to shut it down without blocking?",
+   "item_type": "question",
+   "question_id": 70000001,
+   "answer_count": 2,
+   "has_accepted_answer": true,
+   "score": 14,
+   "creation_date": 1650000000,
+   "tags": [
+    "rust",
+    "rust-tokio"
+   ]
+  },
+  {
+   "title": "Dropping a runtime from async code panics: \"Cannot drop a runtime in a context where blocking is not allowed\"",
+   "excerpt": "Use <span class=\"highlight\">Runtime</span>::shutdown_background instead of dropping the <span class=\"highlight\">runtime</span> in an async context, or move the drop to a blocking thread with spawn_blocking.",
+   "item_type": "answer",
+   "question_id": 70000001,
+   "answer_id": 70000002,
+   "answer_count": 2,
+   "has_accepted_answer": true,
+   "score": 31,
+   "creation_date": 1650003600,
+   "tags": [
+    "rust",
+    "rust-tokio"
+   ]
+  },
+  {
+   "title": "How do I share one tokio runtime between libraries?",
+   "excerpt": "My library creates its own <span class=\"highlight\">runtime</span> but the application already has one &hellip; what is the idiomatic way to pass a handle?",
+   "item_type": "question",
+   "question_id": 70000003,
+   "answer_count": 1,
+   "has_accepted_answer": false,
+   "score": 3,
+   "creation_date": 1600000000,
+   "tags": [
+    "rust",
+    "rust-tokio",
+    "async-await"
+   ]
+  },
+  {
+   "title": "Tokio panics with &#39;there is no reactor running&#39;",
+   "excerpt": "Wrap the call in <span class=\"highlight\">Runtime</span>::enter or spawn it on the runtime before using the timer.",
+   "item_type": "question",
+   "question_id": 70000004,
+   "answer_count": 4,
+   "has_accepted_answer": true,
+   "score": 52,
+   "creation_date": 1560000000,
+   "tags": [
+    "rust",
+    "rust-tokio"
+   ]
+  }
+ ],
+ "quota_remaining": 290
+}

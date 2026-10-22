@@ -1,0 +1,83 @@
+{
+  "model": "ollama/qwen3.6-35b-a3b:q4_k_m",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": "high",
+    "toolCalling": null,
+    "label": "thinking-on"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": false,
+      "notes": "greet.ts is now:\nexport function greet(name: string): string {\n  return `Hi, ${name}`;\n}\n",
+      "turns": 4,
+      "inputTokens": 3892,
+      "outputTokens": 270,
+      "tokensPerSecond": 73.1,
+      "seconds": 5.9
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 5,
+      "inputTokens": 1637,
+      "outputTokens": 460,
+      "tokensPerSecond": 72.6,
+      "seconds": 9
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": false,
+      "notes": "no question; tools used: Glob, Glob, Glob, Glob, Glob, Read, Bash",
+      "turns": 3,
+      "inputTokens": 1104,
+      "outputTokens": 571,
+      "tokensPerSecond": 74.3,
+      "seconds": 9.2
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter\"",
+      "turns": 2,
+      "inputTokens": 971,
+      "outputTokens": 661,
+      "tokensPerSecond": 75,
+      "seconds": 10.1
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 2,
+      "inputTokens": 1070,
+      "outputTokens": 249,
+      "tokensPerSecond": 74.5,
+      "seconds": 4.7
+    },
+    {
+      "task": "use-skill",
+      "pass": true,
+      "notes": "notes follow the skill (loaded with Skill)",
+      "turns": 5,
+      "inputTokens": 4227,
+      "outputTokens": 445,
+      "tokensPerSecond": 72.6,
+      "seconds": 8.8
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 1485,
+      "outputTokens": 135,
+      "tokensPerSecond": 73.9,
+      "seconds": 3.2
+    }
+  ]
+}

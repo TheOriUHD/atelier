@@ -1,0 +1,49 @@
+node_modules/
+dist/
+out/
+release/
+release-*/
+coverage/
+.turbo/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+playwright-report/
+test-results/
+/e2e/.auth/
+/runner/bin/
+/setup/bin/
+*.tsbuildinfo
+.explore/
+.claude/
+.atelier-data/
+
+# Installers collected from the per-OS builds (never committed)
+/installers/
+
+# wrangler
+.wrangler/
+
+# Astro's generated types (apps/docs)
+.astro/
+
+# The maintainer's local notes and scripts: they stay on their disk.
+/ATELIER.md
+/docs/HANDOFF.md
+/docs/PROGRESS.md
+/docs/NOTION-CONNECTOR-PROGRESS.md
+/qa/
+/design/reference/
+/design/tokens/*
+!/design/tokens/tokens.json
+!/design/tokens/tokens.schema.json
+/design/scripts/*
+!/design/scripts/build-icon.ts
+!/design/scripts/build-theme.ts
+!/design/scripts/lib/
+/design/scripts/lib/*
+!/design/scripts/lib/tokens-schema.ts

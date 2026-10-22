@@ -1,0 +1,126 @@
+/*
+ * Assistant prose, per design/components.md › Transcript › AssistantMessage.
+ * Deliberately unlayered so it beats the utility classes Streamdown puts on its root (space-y-4 …).
+ * It only targets elements our markdown components render without classes.
+ */
+.atelier-prose {
+  font-family: var(--at-font-chat);
+  font-size: var(--at-text-prose-size);
+  line-height: var(--at-text-prose-leading);
+  font-weight: var(--at-text-prose-weight);
+  color: var(--at-color-text-primary);
+  overflow-wrap: break-word;
+}
+
+/* Vertical rhythm: ~8px between paragraphs and lists, more around headings and blocks (margins collapse). */
+.atelier-prose > * {
+  margin-block: 8px;
+}
+.atelier-prose > :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 20px;
+}
+.atelier-prose > [data-prose-block],
+.atelier-prose > hr {
+  margin-block: 16px;
+}
+.atelier-prose > :first-child {
+  margin-top: 0;
+}
+.atelier-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.atelier-prose :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: var(--at-weight-bold);
+}
+.atelier-prose h1 {
+  font-size: var(--at-text-prose-h1-size);
+  line-height: var(--at-text-prose-h1-leading);
+}
+.atelier-prose h2 {
+  font-size: var(--at-text-prose-h2-size);
+  line-height: var(--at-text-prose-h2-leading);
+}
+.atelier-prose h3 {
+  font-size: var(--at-text-prose-h3-size);
+  line-height: var(--at-text-prose-h3-leading);
+}
+
+.atelier-prose :is(ul, ol) {
+  padding-left: 30px;
+}
+.atelier-prose ul {
+  list-style: disc;
+}
+.atelier-prose ol {
+  list-style: decimal;
+}
+.atelier-prose li {
+  padding-left: 7.5px;
+}
+.atelier-prose li + li,
+.atelier-prose li > :is(ul, ol, p + p) {
+  margin-top: 4px;
+}
+
+.atelier-prose strong {
+  font-weight: var(--at-weight-bold);
+}
+.atelier-prose a {
+  color: var(--at-color-interactive-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.atelier-prose blockquote {
+  border-left: 2px solid var(--at-color-border-strong);
+  padding-left: 14px;
+  color: var(--at-color-text-secondary);
+}
+.atelier-prose hr {
+  border: 0;
+  border-top: 1px solid var(--at-color-border);
+}
+.atelier-prose :is(sup, sub) {
+  font-size: 0.75em;
+}
+
+/*
+ * Streaming: Streamdown wraps each new word in a span carrying its stagger delay; we supply the fade.
+ * The duration is fixed here on purpose: on the next token Streamdown marks earlier words as already
+ * visible (duration 0), which would cut their fade short. A span keeps fading for 600ms from its mount,
+ * so the newest line or two stay progressively fainter while text arrives.
+ */
+@keyframes at-prose-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes at-marker-in {
+  from {
+    color: transparent;
+  }
+}
+.atelier-prose [data-sd-animate] {
+  animation: at-prose-in 600ms var(--at-ease-out) var(--sd-delay, 0ms) both;
+}
+.atelier-prose [data-sd-animate-marker]::marker {
+  animation: at-marker-in 600ms var(--at-ease-out) var(--sd-marker-delay, 0ms) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .atelier-prose [data-sd-animate],
+  .atelier-prose [data-sd-animate-marker]::marker {
+    animation: none;
+  }
+}
+:root[data-motion='reduced'] .atelier-prose [data-sd-animate],
+:root[data-motion='reduced'] .atelier-prose [data-sd-animate-marker]::marker {
+  animation: none;
+}
+
+/* A display formula wider than the column scrolls inside itself, never the whole page. */
+.atelier-prose .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}

@@ -1,0 +1,1 @@
+Web search isn't turned on in this workspace. For things that may have changed since your training, give what you knew, say it may be out of date, and mention that an administrator can turn on web search in Settings › Admin › Capabilities. Don't answer with only "I can't browse".

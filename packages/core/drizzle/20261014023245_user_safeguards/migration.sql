@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `safeguards` text DEFAULT 'inherit' NOT NULL;

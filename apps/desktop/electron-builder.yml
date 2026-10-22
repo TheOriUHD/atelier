@@ -1,0 +1,88 @@
+appId: dev.atelier.app
+productName: Atelier
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**
+  - '!dist/**/*.map'
+  - package.json
+asar: true
+npmRebuild: false
+nodeGypRebuild: false
+# Writes electron-updater's files (latest.yml, latest-mac.yml, latest-linux*.yml) for every build, always named
+# "latest": the stable or beta channel is a path on the person's Atelier server (/updates/<channel>), which the
+# app sets at runtime (src/updater.ts), so this URL is never used.
+publish:
+  provider: generic
+  url: https://updates.invalid
+  channel: latest
+mac:
+  category: public.app-category.productivity
+  extendInfo:
+    NSLocalNetworkUsageDescription: Atelier connects to your local model servers, SSH hosts, and self-hosted services on your network.
+  # Runner builds (`pnpm runner:build`): this machine's for local folders, Linux and macOS ones (with their
+  # checksums) to upload to SSH hosts.
+  extraResources:
+    - from: ../../runner/bin
+      to: runner
+      filter: ['atelier-runner-darwin-*', 'atelier-runner-linux-*', 'checksums.json']
+    - from: ../../THIRD_PARTY_NOTICES.md
+      to: THIRD_PARTY_NOTICES.md
+    # On Windows and Linux electron-builder puts these beside the app itself; on macOS it leaves them out.
+    - from: node_modules/electron/dist/LICENSE
+      to: LICENSE.electron.txt
+    - from: node_modules/electron/dist/LICENSES.chromium.html
+      to: LICENSES.chromium.html
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  identity: null
+# Windows and Linux show icons edge to edge; resources/icon.png keeps the macOS grid's inset and looks small there.
+win:
+  icon: resources/icon-full.png
+  extraResources:
+    - from: ../../runner/bin
+      to: runner
+      filter: ['atelier-runner-windows-*', 'atelier-runner-linux-*', 'atelier-runner-darwin-*', 'checksums.json']
+    - from: ../../THIRD_PARTY_NOTICES.md
+      to: THIRD_PARTY_NOTICES.md
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+# A wizard, not a one-click installer: welcome, the license (resources/license.txt), who it is for, where it goes,
+# progress, and a last page that can start Atelier.
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Atelier
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  # Release assets keep the names the update files use only without spaces (GitHub renames them).
+  artifactName: ${productName}-Setup-${version}.${ext}
+linux:
+  category: Development
+  # The default comes from the package name, which is scoped (@atelier/desktop) and not a safe file name.
+  executableName: atelier
+  icon: resources/icon-full.png
+  extraResources:
+    - from: ../../runner/bin
+      to: runner
+      filter: ['atelier-runner-linux-*', 'atelier-runner-darwin-*', 'checksums.json']
+    - from: ../../THIRD_PARTY_NOTICES.md
+      to: THIRD_PARTY_NOTICES.md
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+  maintainer: Atelier
+deb:
+  # The default starts with the package name, which is scoped (@atelier/desktop).
+  artifactName: ${productName}-${version}-${arch}.${ext}

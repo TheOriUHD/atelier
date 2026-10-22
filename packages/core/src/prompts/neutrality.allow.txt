@@ -1,0 +1,3 @@
+# Exceptions to the neutrality check (neutrality.test.ts): `<template file or case, or *> | <exact phrase> | <reason>`.
+# Each phrase uses a listed word in a sense that isn't content policy.
+* | If the person declines, the result carries their feedback | ExitPlanMode: the person turning down a plan, a permission answer

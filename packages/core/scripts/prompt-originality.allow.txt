@@ -1,0 +1,2 @@
+# Word runs shared with the corpus that may stay, each with a reason: `<words> | <reason>`. Generic technical phrasing
+# rarely reaches ten words; anything that does is rewritten instead of listed here.

@@ -1,0 +1,141 @@
+name: Package
+# Releases are built by the release command (`pnpm release`, deploy/ship/release.mjs; docs/updates.md), on the owner's
+# own machines, not here. This workflow is the fallback for when that can't be used: run it by hand on the tag
+# (Actions > Package > Run workflow, choosing the tag as the branch).
+on:
+  workflow_dispatch:
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            args: --mac
+          - os: windows-latest
+            args: --win
+          - os: ubuntu-24.04
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27'
+          cache-dependency-path: runner/go.sum
+      # A server built from the tag reports APP.version as its own: v0.1.9 went out announcing 0.1.8.
+      - name: APP.version is the tag's version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(sed -n "s/^  version: '\([^']*\)',$/\1/p" packages/protocol/src/app.ts)"
+          if [ "$have" != "$want" ]; then echo "::error::APP.version in packages/protocol/src/app.ts is '$have', the tag is '$want'. Raise it and tag again."; exit 1; fi
+          # A stable release comes with its "What's new" notes (packages/ui/src/features/whats-new/release-notes.ts).
+          case "$want" in *-*) ;; *) grep -q "version: '$want'" packages/ui/src/features/whats-new/release-notes.ts || { echo "::error::No release notes for $want in packages/ui/src/features/whats-new/release-notes.ts."; exit 1; } ;; esac
+      - run: pnpm install --frozen-lockfile
+      # All six runner builds: the package bundles its OS's two, and the tests use the host's.
+      - run: pnpm runner:build
+      # CI already gates the commit on Linux; here Windows is checked too, because it is a target. macOS is skipped
+      # because its minutes cost ten times as much.
+      # Tests that start real processes (hooks, terminals) can run past vitest's 5 s default on the slower Windows runner.
+      - run: pnpm test --testTimeout=30000
+        if: runner.os != 'macOS'
+        # The Windows runner's own temp folder is an 8.3 short name (C:\Users\RUNNER~1\…) that Windows and git hand back
+        # long, so tests comparing their temp folders with resolved paths fail there; its work drive has no short names.
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+      # The tag is the version (v0.3.0-beta.1 → 0.3.0-beta.1): the update files carry it, and apps compare it with their own.
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: apps/desktop
+        shell: bash
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
+      - name: Build and package
+        working-directory: apps/desktop
+        run: node scripts/build.mjs && pnpm exec electron-builder --config electron-builder.yml ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v5
+        with:
+          name: atelier-${{ matrix.os }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+          if-no-files-found: error
+          # The release job below downloads these within the same run, so they need not be kept (storage is limited).
+          retention-days: 1
+
+  # Attaches every package and its update files to the tag's release. Atelier servers mirror the newest one as
+  # their desktop update feed (docs/self-hosting.md); a tag with a "-" is a prerelease, offered on the beta channel.
+  release:
+    needs: desktop
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: atelier-*
+          path: packages
+          merge-multiple: true
+      # Servers that mirror this release as their desktop update feed hand out only packages with a `<file>.sig` beside
+      # them (docs/updates.md). The key is the private half of APP.updatePublicKey; without the secret the release has no
+      # signatures and they are made by hand afterwards (deploy/cloudflare/sign-release.mjs).
+      - name: Sign the packages
+        env:
+          ATELIER_UPDATE_KEY_PEM: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -n "$ATELIER_UPDATE_KEY_PEM" ]; then node deploy/cloudflare/sign-release.mjs packages; else echo "::notice::No UPDATE_SIGNING_KEY secret: the release has no .sig files. Run deploy/cloudflare/sign-release.mjs on the packages and attach the signatures (docs/updates.md)."; fi
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: packages/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+
+  # The website's download page lists the newest stable release: its file list is regenerated from the release and the
+  # site redeployed. Needs the CLOUDFLARE_API_TOKEN secret (Workers Scripts and Routes edit) and CLOUDFLARE_ACCOUNT_ID.
+  site:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Cloudflare token present
+        id: token
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "::notice::No CLOUDFLARE_API_TOKEN secret: the website was not updated. Run apps/site/scripts/releases.mjs and deploy it by hand."; fi
+      - uses: actions/checkout@v5
+        if: steps.token.outputs.ok == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.token.outputs.ok == 'true'
+        with:
+          node-version: 24
+      - name: Download list from the release
+        if: steps.token.outputs.ok == 'true'
+        run: node apps/site/scripts/releases.mjs "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Deploy the website
+        if: steps.token.outputs.ok == 'true'
+        run: npx --yes wrangler@4 deploy -c apps/site/wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

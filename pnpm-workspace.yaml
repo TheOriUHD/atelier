@@ -1,0 +1,15 @@
+packages:
+  - packages/*
+  - apps/*
+  - design
+allowBuilds:
+  esbuild: true
+  electron: true
+  electron-winstaller: false
+minimumReleaseAgeExclude:
+  - '@hono/node-server@2.1.5'
+  - '@tanstack/react-router@1.170.44'
+  - '@tanstack/router-core@1.171.37'
+  - electron@44.7.1
+  - lucide-react@1.56.0
+  - mermaid@12.2.0

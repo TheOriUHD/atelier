@@ -1,0 +1,128 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/source-serif-4/opsz.css';
+@import '@fontsource-variable/source-serif-4/opsz-italic.css';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource/opendyslexic/400.css';
+@import '@fontsource/opendyslexic/700.css';
+@import 'tailwindcss';
+@import '../theme/tailwind.css';
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  /*
+   * macOS overlays its scroll bars; Windows and Linux draw classic ones (a bright track, arrow buttons) unless asked
+   * not to, which looks out of place in this interface. Thin, with a thumb that follows the text color, everywhere.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--at-color-text-primary) 26%, transparent) transparent;
+  }
+  /* Phones: keep clear of the notch and the home indicator (the page fills the screen, see index.html). */
+  #root {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  body {
+    margin: 0;
+    background: var(--at-color-background);
+    color: var(--at-color-text-primary);
+    font-family: var(--at-font-ui);
+    font-size: var(--at-text-body-size);
+    line-height: var(--at-text-body-leading);
+    font-weight: var(--at-weight-regular);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  :focus-visible {
+    outline: none;
+  }
+  /* An app, not a page: the arrow everywhere, the I-beam only where you type or select text to copy. */
+  body {
+    cursor: default;
+  }
+  input:not([type='button'], [type='checkbox'], [type='color'], [type='file'], [type='image'], [type='radio'], [type='range'], [type='reset'], [type='submit']),
+  textarea,
+  [contenteditable]:not([contenteditable='false']) {
+    cursor: text;
+    user-select: text;
+  }
+  .atelier-prose,
+  .at-code,
+  pre,
+  [data-selectable] {
+    cursor: text;
+  }
+  /* Controls keep the arrow even inside text, and a click never starts a text selection. */
+  button,
+  label,
+  summary,
+  [role='button'],
+  [role='checkbox'],
+  [role='combobox']:not(input),
+  [role='menuitem'],
+  [role='menuitemcheckbox'],
+  [role='menuitemradio'],
+  [role='option'],
+  [role='radio'],
+  [role='slider'],
+  [role='switch'],
+  [role='tab'] {
+    cursor: default;
+    user-select: none;
+  }
+  /* While a splitter is dragged: its cursor everywhere, no text selection, and frames under the pointer don't take it. */
+  :root[data-resizing='vertical'] * {
+    cursor: col-resize !important;
+  }
+  :root[data-resizing='horizontal'] * {
+    cursor: row-resize !important;
+  }
+  :root[data-resizing] {
+    user-select: none;
+  }
+  :root[data-resizing] :is(iframe, webview) {
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      transition-duration: 1ms !important;
+    }
+  }
+  :root[data-motion='reduced'] *,
+  :root[data-motion='reduced'] *::before,
+  :root[data-motion='reduced'] *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+@utility focus-ring {
+  &:focus-visible {
+    box-shadow: var(--at-shadow-focus);
+  }
+}
+
+/*
+ * Windows and Linux draw the window buttons over the top-right corner of the window (the title bar overlay, see apps/desktop
+ * main.ts). The browser says where they are with env(titlebar-area-*); this is how wide that corner is. It is 0 on macOS,
+ * whose buttons are at the left, and in a browser, where there is no overlay. Anything docked to the right edge of the top
+ * strip keeps clear of it: padding-right: calc(var(--at-window-controls) + <its usual gap>).
+ */
+:root {
+  --at-window-controls: max(0px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)));
+}
+
+/* Desktop window chrome: the title-bar strip drags the window; controls inside it opt out. */
+@utility app-drag {
+  -webkit-app-region: drag;
+}
+@utility app-no-drag {
+  -webkit-app-region: no-drag;
+}

@@ -1,0 +1,65 @@
+@import '../theme/tokens.css';
+
+/* Atelier's own semantic palette; widgets can use either these short aliases or --at-color-*. */
+:root {
+  color-scheme: light;
+  --text-primary: var(--at-color-text-primary);
+  --text-secondary: var(--at-color-text-secondary);
+  --text-muted: var(--at-color-text-muted);
+  --surface-1: var(--at-color-surface);
+  --surface-2: var(--at-color-surface-raised);
+  --border-strong: var(--at-color-border-strong);
+  --text-accent: var(--at-color-interactive-text);
+  --text-danger: var(--at-color-danger-text);
+  --text-success: var(--at-color-success-text);
+  --text-warning: var(--at-color-warning-text);
+  --bg-danger: var(--at-color-danger-subtle);
+  --bg-success: var(--at-color-success-subtle);
+  --bg-warning: var(--at-color-warning-subtle);
+  --font-sans: var(--at-font-ui);
+  --font-mono: var(--at-font-code);
+  --background: var(--at-color-background);
+  --surface: var(--at-color-surface);
+  --surface-raised: var(--at-color-surface-raised);
+  --foreground: var(--at-color-text-primary);
+  --muted: var(--at-color-text-muted);
+  --border: var(--at-color-border);
+  --accent: var(--at-color-accent);
+  --on-accent: var(--at-color-on-accent);
+  --success: var(--at-color-success);
+  --warning: var(--at-color-warning);
+  --danger: var(--at-color-danger);
+  font-family: var(--at-font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+:root[data-theme='dark'] { color-scheme: dark; }
+html, body { margin: 0; padding: 0; background: transparent; }
+body { min-width: 0; overflow-wrap: anywhere; }
+#inline-root { display: flow-root; min-width: 0; }
+*, *::before, *::after { box-sizing: border-box; }
+:where(button, input, select, textarea) { font: inherit; color: inherit; accent-color: var(--accent); }
+:where(button, select, textarea, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'])) {
+  border: 1px solid var(--border);
+  border-radius: var(--at-radius-sm);
+  background: var(--surface);
+  padding: 6px 10px;
+}
+:where(button) { cursor: pointer; }
+:where(button:hover) { background: var(--at-color-fill-ghost-hover); }
+:where(button:disabled, input:disabled, select:disabled, textarea:disabled) { cursor: not-allowed; opacity: .5; }
+:where(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+:where(a) { color: var(--at-color-interactive-text); }
+:where(code, pre, kbd) { font-family: var(--at-font-code); }
+:where(img, svg, canvas, video) { max-width: 100%; }
+:where(dialog) { color: var(--foreground); background: var(--surface); border: 1px solid var(--border); border-radius: var(--at-radius-lg); }
+:where(dialog)::backdrop { background: var(--at-color-backdrop); }
+:root[data-reduced-motion='true'] *, :root[data-reduced-motion='true'] *::before, :root[data-reduced-motion='true'] *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+  scroll-behavior: auto !important;
+}
+/* Prevent incomplete previews from receiving focus, navigation, or input. */
+#inline-root[inert] { pointer-events: none; }

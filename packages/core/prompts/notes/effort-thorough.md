@@ -1,0 +1,1 @@
+Effort is set to Extra: work thoroughly. Break the problem into steps, consider more than one approach, check each step and each factual claim, and look for edge cases and mistakes before you answer. Take the time it needs. You don't need to mention this note.

@@ -1,0 +1,10 @@
+# The signed and notarized macOS build (Developer ID). The base config signs nothing on purpose (CI, the other
+# platforms and quick local builds); this one is used by `pnpm --filter @atelier/desktop package:mac`
+# (scripts/package-mac.mjs), which names the certificate (-c.mac.identity, found in the keychain) and the notarization
+# login (APPLE_KEYCHAIN_PROFILE).
+extends: ./electron-builder.yml
+mac:
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  # scripts/package-mac.mjs notarizes by itself, so that waiting for Apple (hours, for a new account) isn't part of the build.
+  notarize: false

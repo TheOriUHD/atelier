@@ -1,0 +1,44 @@
+{
+  "version": "0.1.11",
+  "tag": "v0.1.11",
+  "prerelease": false,
+  "publishedAt": "2026-10-21T09:45:00Z",
+  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.1.11",
+  "assets": {
+    "macos-arm64": {
+      "name": "Atelier-0.1.11-arm64.dmg",
+      "size": 143399046,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.1.11-arm64.dmg"
+    },
+    "macos-x64": {
+      "name": "Atelier-0.1.11.dmg",
+      "size": 150026050,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.1.11.dmg"
+    },
+    "windows": {
+      "name": "Atelier-Setup-0.1.11.exe",
+      "size": 246681928,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.1.11.exe"
+    },
+    "linux-deb-x64": {
+      "name": "Atelier-0.1.11-amd64.deb",
+      "size": 112446368,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.1.11-amd64.deb"
+    },
+    "linux-deb-arm64": {
+      "name": "Atelier-0.1.11-arm64.deb",
+      "size": 107652824,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.1.11-arm64.deb"
+    },
+    "linux-appimage-x64": {
+      "name": "Atelier-0.1.11.AppImage",
+      "size": 141244000,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.1.11.AppImage"
+    },
+    "linux-appimage-arm64": {
+      "name": "Atelier-0.1.11-arm64.AppImage",
+      "size": 142606392,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.1.11-arm64.AppImage"
+    }
+  }
+}

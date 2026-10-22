@@ -1,0 +1,14 @@
+{
+  // The documentation: static files built by Astro. Deploy with `pnpm --filter @atelier/docs run deploy`.
+  "name": "atelier-docs",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  // Reachable only through the custom domain (which sits behind Cloudflare Access until the project goes public).
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "docs.atelierhq.dev", "custom_domain": true }],
+}

@@ -1,0 +1,83 @@
+# Atelier behind Caddy (HTTPS). Copy next to the Caddyfile, set your hostname in both, then: docker compose up -d
+# The first start prints a setup token in the logs (docker compose logs atelier); open the site and create the admin.
+services:
+  atelier:
+    image: ghcr.io/theoriuhd/atelier:latest
+    restart: unless-stopped
+    environment:
+      ATELIER_BASE_URL: https://atelier.example.com
+      # Caddy's address on the compose network; X-Forwarded-* headers are believed only from here.
+      ATELIER_TRUSTED_PROXIES: 172.16.0.0/12
+      # Chats get a sandbox in the container below; the server reaches it over SSH with a key it makes itself, as a Unix
+      # user of the account's own there (so one person's commands can't read or change another's folders).
+      ATELIER_SANDBOX_HOST: sandbox
+      ATELIER_SANDBOX_KEYS: /sandbox-keys/authorized_keys
+      # The sandbox has 256 such users; for more accounts set the same number here and on the sandbox service.
+      # ATELIER_SANDBOX_SLOTS: 256
+      # Settings › Admin › Server's "Update server" asks the updater below; without it the page explains the manual update.
+      ATELIER_UPDATER_URL: http://updater:7341
+    volumes:
+      - atelier-data:/data
+      - sandbox-keys:/sandbox-keys
+      # The server writes the secret the updater checks; the updater only reads it.
+      - updater-secret:/updater
+    expose:
+      - '7340'
+
+  # Where chats clone repositories and run commands: no secrets and no server data in it, limited in size. Every account of
+  # the server gets a Unix user of its own in it (sbx000, sbx001, ...) and folders only that user can enter.
+  sandbox:
+    image: ghcr.io/theoriuhd/atelier-sandbox:latest
+    restart: unless-stopped
+    # Created after the server, so the shared key volume is the server user's to write.
+    depends_on: [atelier]
+    # environment:
+    #   ATELIER_SANDBOX_SLOTS: 256   # how many accounts it holds; the same number on the atelier service
+    volumes:
+      - sandbox-home:/home/sandbox
+      - sandbox-keys:/keys:ro
+    expose:
+      - '2222'
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 512
+    # sshd runs as root so each login becomes its account's Unix user. That is all it needs of root: these six (all in Docker's
+    # default set) are the only powers the container keeps, no new privileges can be gained inside it, and its image has no
+    # setuid programs.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, SYS_CHROOT]
+
+  # Optional "Update server" in Settings › Admin › Server. The Docker socket is root on this host, so it only pulls and recreates atelier and sandbox.
+  # Leave it out (and ATELIER_UPDATER_URL) to update by hand: docker compose pull && docker compose up -d. See docs/self-hosting.md.
+  updater:
+    image: ghcr.io/theoriuhd/atelier-updater:latest
+    restart: unless-stopped
+    # Created after the server, so the secret volume is the server user's to write.
+    depends_on: [atelier]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - updater-secret:/updater:ro
+      # This folder (compose file, .env), read-only, so the services are recreated exactly as defined here.
+      - .:/project:ro
+    expose:
+      - '7341'
+    mem_limit: 256m
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+volumes:
+  atelier-data:
+  caddy-data:
+  sandbox-home:
+  sandbox-keys:
+  updater-secret:

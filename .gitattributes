@@ -1,0 +1,5 @@
+# Text files are checked out with LF on every platform: tests, prompts and snapshots compare exact text.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

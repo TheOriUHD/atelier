@@ -1,0 +1,48 @@
+---
+title: Atelier documentation
+description: Install Atelier, connect your models, run a server, and use Chat, Cowork and Code.
+template: splash
+hero:
+  tagline: A self-hosted workspace for chat, longer tasks and code, on the models you choose.
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+    - text: Run a server
+      link: /self-hosting/
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+![Atelier's Code view, with a session and the Diff pane open](/img/code-2560.webp)
+
+<CardGrid>
+  <Card title="Chat" icon="comment">
+    Conversations with artifacts, projects, memory, web search and Research. [Chat guide](/chat/)
+  </Card>
+  <Card title="Cowork" icon="document">
+    Longer tasks in a folder that leave real files behind. [Cowork guide](/cowork/)
+  </Card>
+  <Card title="Code" icon="laptop">
+    An agent in your repository with a terminal, diffs, permission modes and plans. [Code guide](/code/)
+  </Card>
+  <Card title="Your models" icon="setting">
+    Ollama, llama.cpp, Anthropic, OpenAI, any OpenAI-compatible API (LM Studio, vLLM, OpenRouter, OpenCode Zen), GitHub Copilot, a ChatGPT plan, and ChatGPT Chat. [Providers](/providers/)
+  </Card>
+  <Card title="How it works" icon="open-book">
+    The system prompts, context notes and tool descriptions, published verbatim. [Prompts](/prompts/) · [How it works](/how-it-works/)
+  </Card>
+  <Card title="What leaves your machine" icon="padlock">
+    No telemetry. The few things Atelier sends over the network, and to whom. [What leaves your machine](/privacy/)
+  </Card>
+  <Card title="Extend" icon="puzzle">
+    Skills, commands, agents, plugins, hooks and MCP connectors, including the files you already have for Claude Code. [Customize](/customize/)
+  </Card>
+  <Card title="Self-host" icon="server">
+    Run the same backend in Docker and open it from any browser, with accounts, invite codes and passkeys. [Self-hosting](/self-hosting/)
+  </Card>
+</CardGrid>
+
+<LinkCard title="Install the desktop app" description="macOS, Windows and Linux." href="/install/" />
+<LinkCard title="Something isn't working?" description="Connection problems, models that don't answer, and where to look." href="/troubleshooting/" />

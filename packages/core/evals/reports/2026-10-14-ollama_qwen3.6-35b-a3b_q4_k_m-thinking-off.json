@@ -1,0 +1,83 @@
+{
+  "model": "ollama/qwen3.6-35b-a3b:q4_k_m",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "thinking-off"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": false,
+      "notes": "greet.ts is now:\nexport function greet(name: string): string {\n  return `Hi, ${name}`;\n}\n",
+      "turns": 4,
+      "inputTokens": 3902,
+      "outputTokens": 159,
+      "tokensPerSecond": 73.5,
+      "seconds": 4.4
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 5,
+      "inputTokens": 1327,
+      "outputTokens": 355,
+      "tokensPerSecond": 73,
+      "seconds": 7.3
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": true,
+      "notes": "asked with AskUser",
+      "turns": 8,
+      "inputTokens": 1379,
+      "outputTokens": 646,
+      "tokensPerSecond": 72.9,
+      "seconds": 11.4
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter\"",
+      "turns": 2,
+      "inputTokens": 977,
+      "outputTokens": 683,
+      "tokensPerSecond": 74.3,
+      "seconds": 10.4
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 3,
+      "inputTokens": 1097,
+      "outputTokens": 228,
+      "tokensPerSecond": 74.9,
+      "seconds": 4.5
+    },
+    {
+      "task": "use-skill",
+      "pass": true,
+      "notes": "notes follow the skill (loaded with Skill)",
+      "turns": 11,
+      "inputTokens": 5100,
+      "outputTokens": 878,
+      "tokensPerSecond": 72,
+      "seconds": 16.5
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": false,
+      "notes": "the connector tool was not called",
+      "turns": 3,
+      "inputTokens": 1515,
+      "outputTokens": 205,
+      "tokensPerSecond": 73,
+      "seconds": 4.3
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+/* Syntax colors: every token carries both themes (highlighter.ts); the app theme picks one. */
+.at-code span[style] {
+  color: var(--shiki-light);
+  font-style: var(--shiki-light-font-style, inherit);
+  font-weight: var(--shiki-light-font-weight, inherit);
+  text-decoration: var(--shiki-light-text-decoration, inherit);
+}
+:root[data-theme='dark'] .at-code span[style] {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style, inherit);
+  font-weight: var(--shiki-dark-font-weight, inherit);
+  text-decoration: var(--shiki-dark-text-decoration, inherit);
+}
+
+/* Streaming code fades in line by line, like prose. */
+@keyframes at-code-line-in {
+  from {
+    opacity: 0;
+  }
+}
+.at-code pre[data-streaming] .line {
+  animation: at-code-line-in 600ms var(--at-ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .at-code pre[data-streaming] .line {
+    animation: none;
+  }
+}
+:root[data-motion='reduced'] .at-code pre[data-streaming] .line {
+  animation: none;
+}
+
+/* Read-only listings (artifact code view) number their lines. */
+.at-code pre[data-line-numbers] {
+  counter-reset: line;
+}
+.at-code pre[data-line-numbers] .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 3ch;
+  margin-right: 2ch;
+  text-align: right;
+  color: var(--at-color-text-muted);
+  user-select: none;
+}

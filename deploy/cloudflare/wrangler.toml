@@ -1,0 +1,13 @@
+# Atelier's update feed and download page: a Worker in front of an R2 bucket (docs/updates.md).
+#   cd deploy/cloudflare && npx wrangler login && npx wrangler r2 bucket create atelier-releases && npx wrangler deploy
+name = "atelier-updates"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+# Only on its own domain: the feed apps use from 0.1.1 on.
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "updates.atelierhq.dev", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "RELEASES"
+bucket_name = "atelier-releases"

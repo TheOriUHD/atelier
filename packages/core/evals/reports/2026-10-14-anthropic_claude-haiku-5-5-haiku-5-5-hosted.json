@@ -1,0 +1,83 @@
+{
+  "model": "anthropic/claude-haiku-5-5",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": null,
+    "label": "haiku-5-5-hosted"
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": true,
+      "notes": "greet.ts updated",
+      "turns": 3,
+      "inputTokens": 8,
+      "outputTokens": 254,
+      "tokensPerSecond": null,
+      "seconds": 5.1
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": true,
+      "notes": "tests pass",
+      "turns": 4,
+      "inputTokens": 10,
+      "outputTokens": 456,
+      "tokensPerSecond": null,
+      "seconds": 4.9
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": true,
+      "notes": "asked with AskUser",
+      "turns": 6,
+      "inputTokens": 14,
+      "outputTokens": 1121,
+      "tokensPerSecond": null,
+      "seconds": 11
+    },
+    {
+      "task": "create-artifact",
+      "pass": true,
+      "notes": "artifact: html \"Click Counter\"",
+      "turns": 2,
+      "inputTokens": 6,
+      "outputTokens": 1458,
+      "tokensPerSecond": null,
+      "seconds": 6.5
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 2,
+      "inputTokens": 6,
+      "outputTokens": 515,
+      "tokensPerSecond": null,
+      "seconds": 5.4
+    },
+    {
+      "task": "use-skill",
+      "pass": true,
+      "notes": "notes follow the skill (loaded with Skill)",
+      "turns": 4,
+      "inputTokens": 10,
+      "outputTokens": 505,
+      "tokensPerSecond": null,
+      "seconds": 5
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": true,
+      "notes": "answered with the stock level",
+      "turns": 2,
+      "inputTokens": 6,
+      "outputTokens": 76,
+      "tokensPerSecond": null,
+      "seconds": 2.8
+    }
+  ]
+}

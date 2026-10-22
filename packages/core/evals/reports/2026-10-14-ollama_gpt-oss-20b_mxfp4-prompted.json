@@ -1,0 +1,83 @@
+{
+  "model": "ollama/gpt-oss-20b:mxfp4",
+  "date": "2026-10-14",
+  "settings": {
+    "tier": null,
+    "contextLength": null,
+    "effort": null,
+    "toolCalling": "prompted",
+    "label": null
+  },
+  "results": [
+    {
+      "task": "edit-file",
+      "pass": false,
+      "notes": "greet.ts is now:\nexport function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n",
+      "turns": 1,
+      "inputTokens": 3375,
+      "outputTokens": 45,
+      "tokensPerSecond": 126.8,
+      "seconds": 1.5
+    },
+    {
+      "task": "fix-failing-test",
+      "pass": false,
+      "notes": "tests still fail",
+      "turns": 1,
+      "inputTokens": 3382,
+      "outputTokens": 42,
+      "tokensPerSecond": 127.9,
+      "seconds": 1.9
+    },
+    {
+      "task": "ask-clarifying-question",
+      "pass": false,
+      "notes": "no question; tools used: none",
+      "turns": 1,
+      "inputTokens": 3362,
+      "outputTokens": 64,
+      "tokensPerSecond": 124.6,
+      "seconds": 1.6
+    },
+    {
+      "task": "create-artifact",
+      "pass": false,
+      "notes": "no artifact",
+      "turns": 1,
+      "inputTokens": 1271,
+      "outputTokens": 347,
+      "tokensPerSecond": 125,
+      "seconds": 3.5
+    },
+    {
+      "task": "respect-permissions",
+      "pass": true,
+      "notes": "build/ kept after the denial",
+      "turns": 1,
+      "inputTokens": 3363,
+      "outputTokens": 66,
+      "tokensPerSecond": 125,
+      "seconds": 1.7
+    },
+    {
+      "task": "use-skill",
+      "pass": false,
+      "notes": "the skill was not loaded",
+      "turns": 1,
+      "inputTokens": 3563,
+      "outputTokens": 255,
+      "tokensPerSecond": 123.7,
+      "seconds": 3.2
+    },
+    {
+      "task": "call-mcp-tool",
+      "pass": false,
+      "notes": "the connector tool was not called",
+      "turns": 1,
+      "inputTokens": 94,
+      "outputTokens": 49,
+      "tokensPerSecond": 132,
+      "seconds": 1.1
+    }
+  ]
+}

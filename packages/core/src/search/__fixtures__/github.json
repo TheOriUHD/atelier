@@ -1,0 +1,28 @@
+{
+ "items": [
+  {
+   "full_name": "tokio-rs/tokio",
+   "html_url": "https://github.com/tokio-rs/tokio",
+   "description": "A runtime for writing reliable asynchronous applications with Rust. Provides I/O, networking, scheduling, timers, ...",
+   "stargazers_count": 33444,
+   "language": "Rust",
+   "pushed_at": "2026-10-16T11:15:35Z"
+  },
+  {
+   "full_name": "tokio-rs/tokio-uring",
+   "html_url": "https://github.com/tokio-rs/tokio-uring",
+   "description": "An io_uring backed runtime for Rust",
+   "stargazers_count": 1499,
+   "language": "Rust",
+   "pushed_at": "2025-07-07T12:11:38Z"
+  },
+  {
+   "full_name": "rustls/tokio-rustls",
+   "html_url": "https://github.com/rustls/tokio-rustls",
+   "description": "Async TLS for the Tokio runtime",
+   "stargazers_count": 238,
+   "language": "Rust",
+   "pushed_at": "2026-10-05T07:44:14Z"
+  }
+ ]
+}

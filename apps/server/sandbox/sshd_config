@@ -1,0 +1,29 @@
+# The sandbox container's sshd (apps/server/Dockerfile, target sandbox). It runs as root so that each login becomes the
+# Unix user of one account (sbx000, sbx001, ...); the operating system, not a convention, keeps the accounts apart.
+Port 2222
+HostKey /home/sandbox/.sshd/host_ed25519
+PidFile /run/atelier-sshd.pid
+# Only the account users can log in. root and anything else is refused before a key is even looked at.
+AllowUsers sbx*
+PermitRootLogin no
+# Keys only, and the only key is the server's: the script reads the file the server publishes in the shared keys volume
+# (and first prepares the account's folders, see that script).
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+PubkeyAuthentication yes
+AuthorizedKeysFile none
+AuthorizedKeysCommand /usr/local/sbin/atelier-sandbox-keys %u
+AuthorizedKeysCommandUser root
+# A login runs the server's command and nothing else: no forwarding, no environment or rc files of its own.
+AllowTcpForwarding no
+AllowStreamLocalForwarding no
+AllowAgentForwarding no
+GatewayPorts no
+X11Forwarding no
+PermitTunnel no
+PermitUserEnvironment no
+PermitUserRC no
+PrintMotd no
+# A burst of accounts starting chats opens many connections at once; each waits for the key script, so allow more than the default 10.
+MaxStartups 30:30:100

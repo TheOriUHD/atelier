@@ -1,0 +1,65 @@
+/*
+ * The website's look (apps/site/public/styles.css, from design/tokens/tokens.json) mapped onto Starlight's variables:
+ * paper, ink and clay; Inter for text, Source Serif 4 for headings, JetBrains Mono for code.
+ */
+@font-face { font-family: "Inter"; src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Source Serif 4"; src: url("/fonts/source-serif-4-latin-opsz-normal.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; font-display: swap; }
+
+:root {
+  --sl-font: "Inter", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --sl-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --at-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+
+  /* Dark */
+  --sl-color-white: #f0efec;
+  --sl-color-gray-1: #e1e0d9;
+  --sl-color-gray-2: #c3c2b7;
+  --sl-color-gray-3: #9c9a94;
+  --sl-color-gray-4: #5e5d59;
+  --sl-color-gray-5: #2c2c2a;
+  --sl-color-gray-6: #1a1a19;
+  --sl-color-black: #151515;
+  --sl-color-accent-low: #3a2219;
+  --sl-color-accent: #d97757;
+  --sl-color-accent-high: #f0b9a4;
+}
+
+:root[data-theme="light"] {
+  --sl-color-white: #0b0b0b;
+  --sl-color-gray-1: #2a2926;
+  --sl-color-gray-2: #52514e;
+  --sl-color-gray-3: #686762;
+  --sl-color-gray-4: #9c9a94;
+  --sl-color-gray-5: #e4e2dc;
+  --sl-color-gray-6: #f6f5f2;
+  --sl-color-gray-7: #f9f8f6;
+  --sl-color-black: #fcfcfb;
+  /* Clay darkened for link text: the brand clay on paper is 4:1, under the 4.5:1 text needs. */
+  --sl-color-accent-low: #f6dfd5;
+  --sl-color-accent: #a84b2c;
+  --sl-color-accent-high: #6e2f1a;
+}
+
+h1, h2, h3,
+.sl-markdown-content :is(h1, h2, h3) {
+  font-family: var(--at-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.site-title { font-family: var(--sl-font); font-weight: 600; letter-spacing: -0.01em; color: var(--sl-color-white); }
+
+/* Primary actions and the current page are ink, as on the website; clay stays an accent for links. */
+.sl-link-button.primary { background: var(--sl-color-white); border-color: var(--sl-color-white); color: var(--sl-color-black); }
+.sl-link-button.primary:hover { background: var(--sl-color-gray-1); border-color: var(--sl-color-gray-1); }
+nav.sidebar a[aria-current="page"],
+nav.sidebar a[aria-current="page"]:hover,
+nav.sidebar a[aria-current="page"]:focus { background: var(--sl-color-gray-5); color: var(--sl-color-white); font-weight: 600; }
+
+::selection { background: color-mix(in srgb, #c6613f 28%, transparent); }
+
+.sl-markdown-content img { border-radius: 10px; border: 1px solid var(--sl-color-hairline-light); }
+
+/* Prompts and commands are shown exactly as written: no ligatures (<!-- must not draw as an arrow). */
+code, pre, kbd, samp { font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; }

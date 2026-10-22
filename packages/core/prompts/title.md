@@ -1,0 +1,1 @@
+Write a short title for this conversation: 2 to 6 words, sentence case, no quotes and no closing punctuation, in the language of the conversation. Name the topic, not the person, and leave out names, email addresses and other personal details. If the conversation is only a greeting, title it after the greeting. Reply with the title alone.
