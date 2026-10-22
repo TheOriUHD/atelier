@@ -19,6 +19,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.2.4',
+    intro: 'A smoother first start, on the desktop and on a server.',
+    highlights: [
+      {
+        icon: MessagesSquare,
+        title: 'Straight to the chat',
+        body: 'With no model set up yet, Atelier opens on the normal chat. The model menu under the message box offers Add a provider, which shows what Atelier found on this computer.',
+      },
+      {
+        icon: Server,
+        title: 'The server setup installs Docker for you',
+        body: 'Run curl -fsSL https://updates.atelierhq.dev/install | sudo sh: on Linux it installs or starts Docker itself when it is missing, and the download shows a bar per image instead of scrolling lines.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.2.3',
     intro: 'A small release that keeps updates coming on every Mac.',
     highlights: [
