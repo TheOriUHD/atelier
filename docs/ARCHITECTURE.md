@@ -131,7 +131,7 @@ atelier/
       theme/            GENERATED from design/tokens/tokens.json: tokens.css (vars, light/dark), tailwind.css (@theme), colors.json
       src/app/          router (TanStack Router), shell, sidebar, command palette, shortcuts dialog
       src/components/   UI primitives (components/ui)
-      src/features/     chat, projects, artifacts, code, work (Cowork), customize, settings, onboarding, auth, ssh, workspaces
+      src/features/     chat, projects, artifacts, code, work (Cowork), customize, settings, auth, ssh, workspaces
       src/lib/          rpc client, query hooks (TanStack Query), stores (Zustand)
       artifact-runtime/ sandboxed iframe runtime (separate Vite entry, own origin)
   apps/
@@ -873,7 +873,7 @@ Semantic roles:
 | Cowork (`features/work`) | `CoworkHome`, `WorkPage`, `TaskProgressList`, `OutputFiles`, `FilePreview` |
 | Settings (`features/settings`) | `SettingsOverlay`, `SettingsSection`, `SettingRow`, `SecretField`, `ProviderWizard`, `ProvidersPage`, `ModelsPage`, `ModelOverridesDialog`, `CapabilitiesPage`, `ConnectorsPage`, `PluginsPage`, `SkillsPage`, `MemoryPage`, `UsersPage`, `ServerPage`, `ScreenLockSection` and one page component per nav entry |
 | Customize (`features/customize`) | `CustomizePage` (skills, connectors and plugins in one place) |
-| Auth and onboarding (`features/auth`, `features/onboarding`) | `AuthGate`, `LoginScreen`, `SetupScreen`, `LocalSetupScreen`, `InviteScreen`, `SignupScreen`, `LockScreen`, `ConnectionSetup`, `Onboarding` |
+| Auth and first run (`features/auth`) | `AuthGate`, `LoginScreen`, `SetupScreen`, `LocalSetupScreen`, `InviteScreen`, `SignupScreen`, `LockScreen`, `ConnectionSetup` |
 | SSH and trust (`features/ssh`, `features/workspaces`) | `SshConnectionDialog`, `RemoteFolderDialog`, `SshPrompts`, `TrustWorkspaceHost` |
 
 **Code panes** (`design/components.md` › Code panes): the session header's toggles open Terminal, Diff, Browser (desktop) and Files, More opens Background tasks and Plan. Panes tile beside the transcript by a pure reducer (`features/code/pane-layout.ts`): two stacked to a column, then a new column on the right while one more fits (400px of transcript, 320px a column), then into the column with the fewest; closing gives the room to the rest; a window too narrow for its columns is tiled again into fewer without changing what is stored; too narrow for one column, panes open as a sheet, one at a time. Panes render in a fixed order whatever the layout and are positioned absolutely, so moving them never remounts a terminal or reloads a page; splitter drags write geometry to the elements each frame and dispatch once on release. The layout is kept per session in local storage.

@@ -93,26 +93,26 @@ choose **Run on this computer** again to get back to them.
 
 ## Connect your first model
 
-Only admins connect providers. On a new install the Chat home offers to connect one, and Atelier looks for providers by
-itself:
+Only admins connect providers. A new install opens on the Chat home like any other day; the model menu under the message
+box says **Choose a model** and offers **Add a provider**, which opens **Settings › Admin › Providers**. There Atelier
+lists what it found by itself:
 
 - **Local servers on their usual ports:** Ollama on 11434, llama.cpp on 8080 and LM Studio on 1234. Only an answer in
   the server's own shape counts, so another app on the same port isn't mistaken for a model server.
 - **API keys in the environment:** `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. Atelier sees only the environment it was
   started with. An app opened from the Dock or a launcher doesn't read your shell profile (only its `PATH`), so a key
-  exported in `~/.zshrc` alone won't be found; start Atelier from a terminal, set the variable system-wide, or choose
-  **Add manually**.
+  exported in `~/.zshrc` alone won't be found; start Atelier from a terminal, set the variable system-wide, or add the
+  provider by hand.
 
 The scan runs on the machine that runs the backend: your computer in "Run on this computer" mode, the server when you are
 connected to one.
 
-Press **Connect** next to what it found. Atelier saves the provider only if a test reaches the server and finds at least
-one model, and the first model becomes the **Default model for everyone** unless one is already set. A key found in the
-environment is copied into Atelier's encrypted secret store, and only a masked ending is shown afterwards. **Add
-manually** opens the provider list, **Scan again** looks again, and a failure offers **Edit details**. If Ollama runs but
-has no models, pull one (for example `ollama pull qwen3`) and try again.
+Press **Set up** next to what it found: the provider's form opens filled in, and **Add provider** tests and saves it. A
+key found in the environment is copied into Atelier's encrypted secret store, and only a masked ending is shown
+afterwards. **Scan again** looks again. Once a provider is there, its first model is chosen in the model menu until you
+pick another. If Ollama runs but has no models, pull one (for example `ollama pull qwen3`) and try again.
 
-**Settings › Admin › Providers › Add provider** offers the same list at any time:
+**Add provider** on the same page offers the full list:
 
 | Provider | What you need | Notes |
 |---|---|---|

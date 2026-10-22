@@ -22,11 +22,9 @@ import {
   usePrefs,
   useProjects,
   useSessions,
-  useSettings,
   useWorkspaces,
 } from '../../lib/queries.ts';
 import { workspaceLabel } from '../code/workspaces.ts';
-import { Onboarding } from '../onboarding/onboarding.tsx';
 import { ProjectDetailsDialog } from '../projects/project-dialogs.tsx';
 import { askToNotify } from '../work/notifications.ts';
 import { Composer, FileDropZone, type ComposerHandle } from './composer.tsx';
@@ -53,7 +51,6 @@ export function HomePage() {
   const navigate = useNavigate();
   const temporary = useSearch({ strict: false, select: (s: { temporary?: boolean }) => s.temporary === true });
   const setTemporary = (on: boolean) => void navigate({ to: '/', search: (prev) => ({ ...prev, temporary: on || undefined }) });
-  const { settings } = useSettings();
   const { account } = useAccount();
   const { prefs } = usePrefs();
   const { data: models } = useModels();
@@ -78,9 +75,6 @@ export function HomePage() {
   const temporaryMode = prefs?.privacy.temporaryChats ?? 'private';
   // A fresh temporary chat gets no project context, so it offers none.
   const offersProject = !temporary || temporaryMode === 'private';
-
-  // Only admins can connect providers; everyone else finds a note in the model picker.
-  if (settings?.providers.length === 0 && account?.role === 'admin') return <Onboarding />;
 
   const send = (text: string) => {
     if (!model) return;

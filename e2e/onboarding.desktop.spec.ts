@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 import { launchDesktop, setUpLocal } from './desktop-app.ts';
 import { FAKE_OLLAMA_PORT } from './fixtures.ts';
 
-test('a fresh install goes from connection choice and owner setup through onboarding to a streamed reply', async () => {
+test('a fresh install goes from connection choice and owner setup through the model menu to a streamed reply', async () => {
   const configDir = await mkdtemp(join(tmpdir(), 'atelier-e2e-fresh-'));
   const app = await launchDesktop(configDir);
   try {
@@ -17,11 +17,15 @@ test('a fresh install goes from connection choice and owner setup through onboar
       expect(brand!.x).toBeGreaterThanOrEqual(80);
     }
     await setUpLocal(page);
-    await page.getByRole('button', { name: 'Add manually' }).click();
+    // No model yet: the chat home as always, and the model menu leads to adding a provider.
+    await page.getByRole('button', { name: /Choose a model/ }).click();
+    await page.getByRole('menuitem', { name: /Add a provider/ }).click();
+    await page.getByRole('button', { name: 'Add provider', exact: true }).click();
     await page.getByRole('button', { name: /^Ollama/ }).click();
     const url = page.getByRole('textbox', { name: 'Base URL' });
     await url.fill(`http://127.0.0.1:${FAKE_OLLAMA_PORT}`);
-    await page.getByRole('button', { name: 'Add provider' }).click();
+    await page.getByRole('button', { name: 'Add provider', exact: true }).last().click();
+    await page.keyboard.press('Escape');
 
     const box = page.getByRole('textbox', { name: 'Message' });
     await box.fill('first message');
