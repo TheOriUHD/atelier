@@ -102,7 +102,8 @@ func newTestModel(t *testing.T) (tea.Model, *[]string) {
 		return nil
 	}
 	dir := filepath.Join(t.TempDir(), "atelier")
-	m := New(Config{Dir: dir, Images: &plan.Images{Local: true}, Run: run, Verify: verifyOK, CreateAdmin: func(context.Context, string, string, apply.Admin, bool) error { return nil }})
+	// Every port is free here, whatever listens on the machine running the tests.
+	m := New(Config{Dir: dir, Images: &plan.Images{Local: true}, Run: run, Verify: verifyOK, PortBusy: func(int) bool { return false }, CreateAdmin: func(context.Context, string, string, apply.Admin, bool) error { return nil }})
 	var tm tea.Model = m
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 110, Height: 40})
 	return tm, &cmds
