@@ -25,10 +25,10 @@ test('a fresh install goes from connection choice and owner setup through the mo
     const url = page.getByRole('textbox', { name: 'Base URL' });
     await url.fill(`http://127.0.0.1:${FAKE_OLLAMA_PORT}`);
     await page.getByRole('button', { name: 'Add provider', exact: true }).last().click();
-    // The form closes once the provider is saved, leaving Settings' own Close: back to the chat.
-    const close = page.getByRole('button', { name: 'Close' });
-    await expect(close).toHaveCount(1);
-    await close.click();
+    // The form closes once the provider is saved (slower on a busy machine); then Settings' own Close goes back to the
+    // chat. Counting Close buttons raced: while the form is still up, the one counted can be the form's.
+    await expect(page.getByRole('dialog', { name: 'Add Ollama' })).toBeHidden({ timeout: 20_000 });
+    await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Close' }).click();
 
     const box = page.getByRole('textbox', { name: 'Message' });
     await box.fill('first message');
