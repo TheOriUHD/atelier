@@ -179,7 +179,7 @@ async function main() {
   say(`Releasing Atelier ${version} (${channel}) from ${git('rev-parse', '--abbrev-ref', 'HEAD')} ${git('rev-parse', '--short', 'HEAD')}`);
 
   // 1. Checks that need nothing built ---------------------------------------------------------------------------------
-  await step('checks', () => preflight({ version, tag, args }));
+  await step('checks', () => preflight({ version, tag, args, done: state.done }));
 
   // 2. Tests on the Linux machine, before anything is committed --------------------------------------------------------
   if (!state.done.tag && !skipped('qa')) {
@@ -282,7 +282,7 @@ function summary(work, problems = [], info) {
 // ---------------------------------------------------------------------------------------------------------------------
 // Checks
 
-async function preflight({ version, tag, args }) {
+async function preflight({ version, tag, args, done = {} }) {
   const problems = [];
   const need = (ok, message) => ok || problems.push(message);
   const major = Number(process.versions.node.split('.')[0]);
@@ -318,8 +318,12 @@ async function preflight({ version, tag, args }) {
   }
   // Machines and tools every release needs.
   const skip = (what) => args.skip.has(what);
+  // A machine whose part is done (a re-run after a failure elsewhere) needn't answer: Linux has the tests, its build and
+  // the image push, Windows only its build.
+  const finished = { linux: !!(done.tag && done['build:linux'] && done.image), windows: !!done['build:windows'] };
   for (const [name, host] of [['linux', CONFIG.linux], ['windows', CONFIG.windows]]) {
     if (skip(name) && !(name === 'linux' && !skip('qa'))) continue;
+    if (finished[name]) continue;
     const r = await exec('ssh', [...SSH, host, 'echo ok'], { check: false });
     need(r.code === 0 && r.out.includes('ok'), `Can't log in to the ${name} build machine "${host}" over ssh.`);
   }
