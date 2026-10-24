@@ -18,6 +18,7 @@ import { GeneralPage } from './general-page.tsx';
 import { MemoryPage } from './memory-page.tsx';
 import { ModelsPage } from './models-page.tsx';
 import { settingsPage, visiblePages, type SettingsPage, type SettingsPageId } from './pages.ts';
+import { PersonalModelsPage } from './personal-models-page.tsx';
 import { PluginsPage } from './plugins-page.tsx';
 import { PrivacyPage } from './privacy-page.tsx';
 import { ProvidersPage } from './providers-page.tsx';
@@ -43,6 +44,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   code: CodePage,
   folders: FoldersPage,
   cloud: CloudPage,
+  'personal-models': PersonalModelsPage,
   skills: SkillsPage,
   system: SystemPage,
   providers: ProvidersPage,

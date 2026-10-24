@@ -43,26 +43,56 @@ function ExperimentalWarning({ onBack, onContinue }: { onBack(): void; onContinu
   </>;
 }
 
+/**
+ * The ChatGPT window a sign-in drives: this backend's own (the admin's provider), or the window of the person's desktop
+ * for their own ChatGPT Chat on a server (`personalProviders.chatgptChat.*`).
+ */
+export interface ChatGptChatWindow {
+  key: string;
+  status(): Promise<{ signedIn: boolean }>;
+  open(): Promise<unknown>;
+  hide(): Promise<unknown>;
+}
+
+const OWN_WINDOW: ChatGptChatWindow = {
+  key: 'own',
+  status: () => rpc().call('chatgptChat.status', {}),
+  open: () => rpc().call('chatgptChat.open', {}),
+  hide: () => rpc().call('chatgptChat.hide', {}),
+};
+
+/** The admin's ChatGPT Chat, signed in in this backend's own window and shared like any provider. */
 export function ChatGptChatSignIn({ onBack, onAdded }: { onBack(): void; onAdded(config: ProviderConfig): void }) {
+  return (
+    <ChatGptChatSteps
+      window={OWN_WINDOW}
+      onBack={onBack}
+      add={async () => {
+        const config = await rpc().call('providers.save', { id: 'chatgpt-chat', type: 'chatgpt-chat', name: 'ChatGPT Chat', baseUrl: DEFAULT_BASE_URLS['chatgpt-chat'], headers: {}, enabled: true });
+        await OWN_WINDOW.hide();
+        onAdded(config);
+      }}
+    />
+  );
+}
+
+/** The warning, then signing in in `window`, then `add` once ChatGPT says the person is signed in. */
+export function ChatGptChatSteps({ window, onBack, add }: { window: ChatGptChatWindow; onBack(): void; add(): Promise<void> }) {
   const [understood, setUnderstood] = useState(false);
   const [opened, setOpened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { data } = useQuery({ queryKey: ['chatgptChat'], queryFn: () => rpc().call('chatgptChat.status', {}), enabled: opened, refetchInterval: opened ? 2000 : false });
-  useEffect(() => () => { void rpc().call('chatgptChat.hide', {}).catch(() => {}); }, []);
+  const { data } = useQuery({ queryKey: ['chatgptChat', window.key], queryFn: () => window.status(), enabled: opened, refetchInterval: opened ? 2000 : false });
+  useEffect(() => () => { void window.hide().catch(() => {}); }, [window]);
   const open = async () => {
     setBusy(true); setError(null);
-    try { await rpc().call('chatgptChat.open', {}); setOpened(true); }
+    try { await window.open(); setOpened(true); }
     catch (error) { setError(describeError(error).message); }
     finally { setBusy(false); }
   };
   const connect = async () => {
     setBusy(true); setError(null);
-    try {
-      const config = await rpc().call('providers.save', { id: 'chatgpt-chat', type: 'chatgpt-chat', name: 'ChatGPT Chat', baseUrl: DEFAULT_BASE_URLS['chatgpt-chat'], headers: {}, enabled: true });
-      await rpc().call('chatgptChat.hide', {});
-      onAdded(config);
-    }
+    try { await add(); }
     catch (error) { setError(describeError(error).message); }
     finally { setBusy(false); }
   };

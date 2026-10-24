@@ -1,12 +1,13 @@
 /**
  * Utility process entry for server mode: there is no local backend. Each renderer connection is relayed
  * to the server named in argv, and the device link lends this machine to the person's sessions there
- * (ARCHITECTURE §21): its runner for trusted folders, and what they allowed here (scratch folders, SSH hosts).
+ * (ARCHITECTURE §21): its runner for trusted folders, and what they allowed here (scratch folders, SSH hosts, model
+ * servers, its ChatGPT window).
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { DeviceInfo, runnerBinaryName } from '@atelier/protocol';
-import type { BackendToMain, MainToBackend } from './bridge.ts';
+import type { BackendRequest, BackendToMain, MainToBackend } from './bridge.ts';
 import { createDeviceLink, readTrustedFolders } from './device-link.ts';
 import { deviceServices } from './device-services.ts';
 import { readLending } from './lending.ts';
@@ -40,6 +41,16 @@ const relay = createRelay(serverUrl, undefined, {
       });
   },
 });
+// Calls to main's ChatGPT window, for a personal ChatGPT Chat on the server (main answers them as for the local backend).
+let nextId = 1;
+const pending = new Map<number, { resolve: (v: string) => void; reject: (e: Error) => void }>();
+const chatgptChat = (operation: Extract<BackendRequest, { op: 'chatgptChat' }>['operation'], value: string) =>
+  new Promise<string>((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    process.parentPort.postMessage({ kind: 'req', id, op: 'chatgptChat', operation, value } satisfies BackendToMain);
+  });
+
 const runnerDir = process.env.ATELIER_RUNNER_DIR;
 const runnerBinary = runnerDir ? join(runnerDir, runnerBinaryName(process.platform, process.arch)) : null;
 const device = DeviceInfo.parse(JSON.parse(process.argv[3]!));
@@ -55,12 +66,18 @@ const deviceLink = createDeviceLink({
     runnerDir: runnerDir && existsSync(join(runnerDir, 'checksums.json')) ? runnerDir : null,
     ssh: process.env.ATELIER_SSH ?? 'ssh',
     sshDir: process.env.ATELIER_SSH_DIR!,
+    chatgptChat,
   }),
 });
 
 process.parentPort.on('message', (event: { data: MainToBackend; ports: Electron.MessagePortMain[] }) => {
   const m = event.data;
-  if (m.kind === 'connect' && event.ports[0]) relay.link(event.ports[0], m.token);
+  if (m.kind === 'res') {
+    const p = pending.get(m.id);
+    pending.delete(m.id);
+    if (m.ok) p?.resolve(m.value);
+    else p?.reject(new Error(m.error));
+  } else if (m.kind === 'connect' && event.ports[0]) relay.link(event.ports[0], m.token);
   else if (m.kind === 'token') deviceLink.setToken(m.token);
   else if (m.kind === 'lending') deviceLink.lendingChanged();
   else if (m.kind === 'shutdown') {

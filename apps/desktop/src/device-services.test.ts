@@ -143,6 +143,11 @@ describe('addresses lent to a server', () => {
     }
   });
 
+  it('says which model servers answer on this computer’s default ports', async () => {
+    const found = (await services().request({ op: 'providers.detect' })) as { type: string; baseUrl: string }[];
+    for (const server of found) expect(['ollama', 'llamacpp', 'openai-compatible']).toContain(server.type);
+  });
+
   it('knows what is at or below a base address', () => {
     expect(withinAddress('http://localhost:11434/api/tags', 'http://localhost:11434')).toBe(true);
     expect(withinAddress('http://localhost:11434/v1/models', 'http://localhost:11434/v1')).toBe(true);
@@ -150,5 +155,37 @@ describe('addresses lent to a server', () => {
     expect(withinAddress('http://localhost:11434/v10', 'http://localhost:11434/v1')).toBe(false);
     expect(withinAddress('http://localhost:11435/v1', 'http://localhost:11434/v1')).toBe(false);
     expect(withinAddress('https://localhost:11434/v1', 'http://localhost:11434/v1')).toBe(false);
+  });
+});
+
+describe('the ChatGPT window lent to a server', () => {
+  it('passes calls to it only once the person allows it here', async () => {
+    const calls: string[][] = [];
+    const lent = deviceServices({
+      deviceName: 'Laptop',
+      lending: async () => lending,
+      scratchDir: join(dir, 'scratch'),
+      runnerDir: null,
+      ssh: 'ssh',
+      sshDir: join(dir, 'ssh'),
+      chatgptChat: async (operation, value) => (calls.push([operation, value]), '{"signedIn":true}'),
+    });
+    expect(lent.services).toContain('chatgptChat');
+    await expect(lent.request({ op: 'chatgptChat', operation: 'open' })).rejects.toMatchObject({ code: 'refused' });
+    expect(calls).toEqual([]);
+    lending = { ...NO_LENDING, chatgptChat: true };
+    expect(await lent.request({ op: 'chatgptChat', operation: 'status' })).toBe('{"signedIn":true}');
+    await lent.request({ op: 'chatgptChat', operation: 'start', value: '{"id":"1"}' });
+    expect(calls).toEqual([
+      ['status', ''],
+      ['start', '{"id":"1"}'],
+    ]);
+  });
+
+  it('isn’t offered where there is no ChatGPT window', async () => {
+    const lent = services();
+    expect(lent.services).not.toContain('chatgptChat');
+    lending = { ...NO_LENDING, chatgptChat: true };
+    await expect(lent.request({ op: 'chatgptChat', operation: 'status' })).rejects.toMatchObject({ code: 'unsupported' });
   });
 });

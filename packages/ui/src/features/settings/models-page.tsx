@@ -31,7 +31,9 @@ type Alias = keyof Settings['models']['aliases'];
 const ALIASES: Alias[] = ['opus', 'sonnet', 'haiku', 'fable'];
 
 export function ModelsPage() {
-  const { data: models = [] } = useModels();
+  // The admin's own models on their computers are theirs, not everyone's: they aren't set up here.
+  const { data: listed = [] } = useModels();
+  const models = useMemo(() => listed.filter((m) => !m.personal), [listed]);
   const { settings } = useSettings();
   const providerNames = useMemo(() => new Map(settings?.providers.map((p) => [p.id, p.name])), [settings?.providers]);
   const groups = useMemo(() => {

@@ -109,6 +109,11 @@ The provider's ⋯ menu has **Test connection**, **Open ChatGPT session** (shows
 prompt ChatGPT shows), **Temporary chats**, and **Remove** (clears the private browser session and removes its model from the
 picker; your Atelier conversations stay in your history). There is no **Edit**.
 
+*(next release)* With the desktop app signed in to an Atelier server, you add ChatGPT Chat for yourself instead: **Settings ›
+Your models › Add ChatGPT Chat**, with the same warning and sign-in. The window is the app's on that computer, so only you
+use it, and only while that app is connected. Signing in there allows the server to use the window; **Settings › System**
+has the switch to take that back.
+
 ### Temporary chats
 
 **Temporary chats** (on by default) makes Atelier use ChatGPT's own temporary chats, which stay out of your ChatGPT history and
@@ -183,8 +188,8 @@ ChatGPT Chat takes one request at a time, and every request is a message from yo
 
 - **ChatGPT's limits apply** and Atelier cannot see how much is left: the plan bars of ChatGPT Plan do not exist here. When the
   page shows an alert, the turn ends with the alert's text. No token counts or costs come from ChatGPT.
-- It exists only in the desktop app, which hosts the browser window: not on a server, not in a browser tab, not while the app
-  is closed.
+- It exists only in the desktop app, which hosts the browser window: not in a browser tab, not while the app is closed. On a
+  server it is yours alone, through the window of your desktop app (see [Add it](#add-it)).
 - It has been checked against the live page: formatting, continuing a chat, temporary chats, model and effort selection and
   tool calls. A long Code session on it has not been run end to end, and Windows and Linux are less exercised than macOS.
 

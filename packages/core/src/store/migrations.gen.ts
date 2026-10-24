@@ -166,5 +166,12 @@ export const migrations: { name: string; statements: string[] }[] = [
       "ALTER TABLE `workspaces` ADD `trusted` integer DEFAULT true NOT NULL;",
       "UPDATE `workspaces` SET `trusted` = false WHERE `kind` = 'codespace';"
     ]
+  },
+  {
+    "name": "20261025140000_personal_providers",
+    "statements": [
+      "CREATE TABLE `personal_providers` (\n\t`id` text PRIMARY KEY,\n\t`user_id` text NOT NULL,\n\t`device_id` text NOT NULL,\n\t`type` text NOT NULL,\n\t`name` text NOT NULL,\n\t`base_url` text NOT NULL,\n\t`options` text NOT NULL,\n\t`enabled` integer DEFAULT true NOT NULL,\n\t`created_at` integer NOT NULL,\n\tCONSTRAINT `fk_personal_providers_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE\n);",
+      "CREATE INDEX `personal_providers_user` ON `personal_providers` (`user_id`);"
+    ]
   }
 ];

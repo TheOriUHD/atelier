@@ -114,10 +114,10 @@ export function ModelMenu({ value, label, onChange, automatic, 'aria-label': ari
         {groups.map((g, i) => (
           <MenuGroup key={g.providerId}>
             {i > 0 && <MenuSeparator />}
-            {groups.length > 1 && <MenuLabel>{g.label}</MenuLabel>}
+            {(groups.length > 1 || g.offline) && <MenuLabel>{g.offline ? `${g.label} · Not connected` : g.label}</MenuLabel>}
             <MenuRadioGroup value={value ?? ''} onValueChange={select}>
               {g.models.map((m) => (
-                <MenuRadioItem key={m.ref} value={m.ref} description={modelSubtitle(m)}>
+                <MenuRadioItem key={m.ref} value={m.ref} description={modelSubtitle(m)} disabled={m.available === false && m.ref !== value}>
                   {m.displayName}
                 </MenuRadioItem>
               ))}

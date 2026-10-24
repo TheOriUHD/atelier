@@ -751,7 +751,7 @@ describe('a desktop lending itself to a server', () => {
       const { token } = await desktop.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'desktop' });
       const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
       await desktop.call('devices.register', device);
-      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh'] });
+      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh', 'http', 'chatgptChat'] });
 
       const scratchBase = join(home, 'laptop-scratch');
       let link: { receive(text: string): void } | null = null;
@@ -798,6 +798,117 @@ describe('a desktop lending itself to a server', () => {
       expect(folder.root.startsWith(join(scratchBase))).toBe(true);
     } finally {
       for (const runner of runners.values()) runner.kill();
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
+describe('a person’s own models on their desktop', () => {
+  it('serves them through that desktop to their owner alone, while it is connected', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-own-models-'));
+    // The server can't reach the laptop's LM Studio itself: every request to it goes through the laptop.
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      fetch: async () => Promise.reject(new TypeError('fetch failed')),
+    });
+    const ID = 'u-0123456789';
+    const BASE = 'http://localhost:1234/v1';
+    const asked: string[] = [];
+    try {
+      const signIn = () => {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+        return createRpcClient(contract, clientSide);
+      };
+      const ada = signIn();
+      await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      const { temporaryPassword } = await ada.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+      const browser = signIn();
+      await browser.call('auth.login', { username: 'bob', password: temporaryPassword, clientKind: 'web' });
+      await browser.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+      const desktop = signIn();
+      const { token } = await desktop.call('auth.login', { username: 'bob', password: 'bob-new-password', clientKind: 'desktop' });
+      const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
+      await desktop.call('devices.register', device);
+
+      // Bob's laptop, as its desktop app answers: LM Studio on its default port, lent under the provider's id.
+      let link: { receive(text: string): void; closed(): void } | null = null;
+      const reply = (frame: object) => link!.receive(JSON.stringify(frame));
+      const respond = (channel: string, body: string, type: string) => {
+        reply({ t: 'opened', channel });
+        reply({ t: 'line', channel, line: JSON.stringify({ head: { status: 200, headers: { 'content-type': type } } }) });
+        reply({ t: 'line', channel, line: JSON.stringify({ chunk: Buffer.from(body).toString('base64') }) });
+        reply({ t: 'closed', channel, reason: 'done' });
+      };
+      const answer = sse([{ data: { choices: [{ index: 0, delta: { content: 'from the laptop' }, finish_reason: 'stop' }] } }, { data: { choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } } }], true);
+      link = await server.linkDevice(
+        {
+          send: (frame) => {
+            if (frame.t === 'req') {
+              if (frame.request.op === 'providers.detect') return reply({ t: 'res', id: frame.id, ok: true, value: [{ type: 'openai-compatible', baseUrl: BASE, label: 'LM Studio' }] });
+              return reply({ t: 'res', id: frame.id, ok: false, code: 'unsupported', error: 'Not here.' });
+            }
+            if (frame.t !== 'start' || frame.service.kind !== 'http') return;
+            const { service } = frame;
+            if (service.target !== ID) return reply({ t: 'closed', channel: frame.channel, reason: 'Not lent.' });
+            asked.push(`${service.method} ${service.url}`);
+            setTimeout(() =>
+              service.url.endsWith('/chat/completions') ? respond(frame.channel, answer, 'text/event-stream') : respond(frame.channel, JSON.stringify({ data: [{ id: 'local-model' }] }), 'application/json'),
+            );
+          },
+          close: () => {},
+        },
+        token,
+        device,
+      );
+      reply({ t: 'hello', hello: { protocol: 2, app: '0.2.8', services: ['runner', 'http', 'chatgptChat'], lending: { scratch: false, ssh: [], http: [{ id: ID, baseUrl: BASE }] }, home: '/Users/bob', sep: '/', os: 'darwin', arch: 'arm64' } });
+
+      expect(await desktop.call('personalProviders.detect', {})).toEqual([{ type: 'openai-compatible', baseUrl: BASE, label: 'LM Studio' }]);
+      // Added from the laptop's own window; a browser has no computer of its own to add them from.
+      const draft = { id: ID, type: 'openai-compatible' as const, name: 'LM Studio', baseUrl: BASE };
+      expect(await code(browser.call('personalProviders.save', { ...draft, id: 'u-9876543210' }))).toBe('unsupported');
+      expect((await desktop.call('personalProviders.test', draft)).status.ok).toBe(true);
+      expect(await desktop.call('personalProviders.save', draft)).toMatchObject({ id: ID, deviceName: 'Laptop', online: true });
+      expect(await desktop.call('personalProviders.detect', {})).toEqual([]);
+      // The admin can't take its id for a shared provider.
+      expect(await code(ada.call('providers.save', { ...draft, headers: {}, enabled: true }))).not.toBe('ok');
+
+      const ref = `${ID}/local-model`;
+      expect((await browser.call('models.list', {})).find((m) => m.ref === ref)).toMatchObject({ personal: { deviceName: 'Laptop' }, available: true });
+      expect((await ada.call('models.list', {})).some((m) => m.ref === ref)).toBe(false);
+      expect(await ada.call('personalProviders.list', {})).toEqual([]);
+
+      // Bob's chat runs on it, through the laptop.
+      const session = await browser.call('sessions.create', { mode: 'chat', model: ref });
+      await browser.call('chat.send', { sessionId: session.id, parts: [{ type: 'text', text: 'hi' }] });
+      const replied = async () => (await browser.call('sessions.subscribe', { id: session.id })).messages.some((m) => m.role === 'assistant' && JSON.stringify(m.parts).includes('from the laptop'));
+      await vi.waitFor(async () => expect(await replied()).toBe(true), { timeout: 10_000 });
+      expect(asked).toContain(`POST ${BASE}/chat/completions`);
+
+      // Ada can't run on it, even naming it.
+      const hers = await ada.call('sessions.create', { mode: 'chat', model: ref });
+      await ada.call('chat.send', { sessionId: hers.id, parts: [{ type: 'text', text: 'hi' }] });
+      await vi.waitFor(async () => expect(JSON.stringify((await ada.call('sessions.subscribe', { id: hers.id })).messages)).toContain("isn't available"), { timeout: 10_000 });
+
+      // The laptop goes away: listed, but not available, and a turn says why.
+      const changed = new Promise<unknown>((resolve) => browser.on('models.changed', resolve));
+      link!.closed();
+      await changed;
+      expect((await browser.call('models.list', {})).find((m) => m.ref === ref)?.available).toBe(false);
+      expect((await browser.call('personalProviders.list', {}))[0]).toMatchObject({ online: false });
+      const later = await browser.call('sessions.create', { mode: 'chat', model: ref });
+      await browser.call('chat.send', { sessionId: later.id, parts: [{ type: 'text', text: 'hi' }] });
+      await vi.waitFor(async () => expect(JSON.stringify((await browser.call('sessions.subscribe', { id: later.id })).messages)).toContain("LM Studio runs on Laptop, which isn't connected."), { timeout: 10_000 });
+
+      await browser.call('personalProviders.remove', { id: ID });
+      expect((await browser.call('models.list', {})).some((m) => m.ref === ref)).toBe(false);
+    } finally {
       await server.dispose();
       await rm(home, { recursive: true, force: true });
     }

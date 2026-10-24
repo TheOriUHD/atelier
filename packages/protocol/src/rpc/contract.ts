@@ -40,6 +40,7 @@ import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, ProviderStatus, ProviderType } from '../models.ts';
+import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
 import {
   AuthSessionSummary,
@@ -127,6 +128,9 @@ export const ProviderDraft = ProviderConfig.omit({ apiKey: true }).extend({
   apiKeyFromEnv: z.string().optional(),
 });
 export type ProviderDraft = z.infer<typeof ProviderDraft>;
+
+/** A personal ChatGPT Chat provider's computer; without an id, the desktop app the call comes from. */
+const PersonalChatGpt = z.object({ providerId: z.string().optional() });
 
 const SignedIn = z.object({ token: z.string(), user: UserSummary });
 const Credentials = z.object({ username: Username, password: z.string().min(1).max(256) });
@@ -249,6 +253,23 @@ export const contract = {
     'providers.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(ProviderStatus) },
     'models.list': { input: Empty, output: z.array(ModelInfo) },
     'models.probeTools': { input: z.object({ ref: z.string() }), output: z.object({ native: z.boolean(), detail: z.string() }) },
+    /**
+     * The caller's personal providers (personal-providers.ts): their own model servers and ChatGPT Chat, on their
+     * computers. `detect`, `test` and adding one run on the desktop app the call comes from, which lends the address
+     * (or its ChatGPT window) first, under the draft's id. The ChatGPT Chat calls go to that provider's computer, or
+     * without one to the calling desktop (signing in before it is added).
+     */
+    'personalProviders.list': { input: Empty, output: z.array(PersonalProvider) },
+    'personalProviders.detect': { input: Empty, output: z.array(LocalServer) },
+    'personalProviders.test': { input: PersonalProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ModelInfo) }) },
+    'personalProviders.save': { input: PersonalProviderDraft, output: PersonalProvider },
+    'personalProviders.remove': { input: Id, output: Ok },
+    'personalProviders.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(PersonalProvider) },
+    'personalProviders.probeTools': { input: z.object({ ref: z.string() }), output: z.object({ native: z.boolean(), detail: z.string() }) },
+    'personalProviders.chatgptChat.status': { input: PersonalChatGpt, output: z.object({ available: z.boolean(), signedIn: z.boolean() }) },
+    'personalProviders.chatgptChat.open': { input: PersonalChatGpt, output: Ok },
+    'personalProviders.chatgptChat.hide': { input: PersonalChatGpt, output: Ok },
+    'personalProviders.chatgptChat.disconnect': { input: PersonalChatGpt, output: Ok },
 
     'sessions.list': {
       input: z.object({

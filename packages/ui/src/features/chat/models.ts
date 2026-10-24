@@ -65,8 +65,9 @@ export function formatTokens(n: number): string {
   return String(n);
 }
 
-/** One-line capability summary for pickers: "200K context · vision · reasoning". */
+/** One-line capability summary for pickers: "200K context · vision · reasoning"; a personal model whose computer is away says so. */
 export function modelSubtitle(m: ModelInfo): string {
+  if (m.available === false) return `${m.personal?.deviceName ?? 'Its computer'} isn’t connected`;
   const caps = [`${formatTokens(m.contextLength)} context`];
   if (m.capabilities.vision) caps.push('vision');
   if (m.capabilities.reasoning !== 'none') caps.push('reasoning');
@@ -76,18 +77,25 @@ export function modelSubtitle(m: ModelInfo): string {
   return caps.join(' · ');
 }
 
-/** Visible models grouped by provider, favorites first, then by configured order and name. */
-export function useModelGroups(): { providerId: string; label: string; models: ModelInfo[] }[] {
+/**
+ * Visible models grouped by provider, favorites first, then by configured order and name. The person's own models
+ * (personal providers) are grouped by the computer they run on, `offline` while it isn't connected.
+ */
+export function useModelGroups(): { providerId: string; label: string; models: ModelInfo[]; offline: boolean }[] {
   const { data: models } = useModels();
   const { settings } = useSettings();
   return useMemo(() => {
     const names = new Map(settings?.providers.map((p) => [p.id, p.name]) ?? []);
     const groups = new Map<string, ModelInfo[]>();
-    for (const m of models ?? []) if (!m.hidden) groups.set(m.providerId, [...(groups.get(m.providerId) ?? []), m]);
+    for (const m of models ?? []) {
+      const key = m.personal ? `device:${m.personal.deviceId}` : m.providerId;
+      if (!m.hidden) groups.set(key, [...(groups.get(key) ?? []), m]);
+    }
     return [...groups].map(([providerId, list]) => ({
       providerId,
-      label: names.get(providerId) ?? providerId,
+      label: list[0]!.personal?.deviceName ?? names.get(providerId) ?? providerId,
       models: list.sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order || a.displayName.localeCompare(b.displayName)),
+      offline: list.every((m) => m.available === false),
     }));
   }, [models, settings?.providers]);
 }
@@ -103,6 +111,6 @@ export function useDefaultModel(mode: Mode): ModelInfo | undefined {
   const preferred = prefs?.models[mode];
   const systemDefault = settings ? defaultModelFor(settings, mode) : undefined;
   return (
-    models?.find((m) => m.ref === preferred && !m.hidden) ?? models?.find((m) => m.ref === systemDefault) ?? models?.find((m) => !m.hidden)
+    models?.find((m) => m.ref === preferred && !m.hidden && m.available !== false) ?? models?.find((m) => m.ref === systemDefault) ?? models?.find((m) => !m.hidden && !m.personal)
   );
 }

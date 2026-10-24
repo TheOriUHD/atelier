@@ -501,7 +501,7 @@ function RetryWith({ sessionId, messageId, model }: { sessionId: string; message
             {i > 0 && <MenuSeparator />}
             <MenuLabel>{groups.length > 1 ? `Retry with · ${g.label}` : 'Retry with'}</MenuLabel>
             {g.models.map((m) => (
-              <MenuItem key={m.ref} description={modelSubtitle(m)} shortcut={m.ref === model?.ref ? 'This reply' : undefined} onClick={() => void retryWith(sessionId, messageId, m.ref)}>
+              <MenuItem key={m.ref} description={modelSubtitle(m)} disabled={m.available === false} shortcut={m.ref === model?.ref ? 'This reply' : undefined} onClick={() => void retryWith(sessionId, messageId, m.ref)}>
                 {m.displayName}
               </MenuItem>
             ))}

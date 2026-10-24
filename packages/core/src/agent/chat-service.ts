@@ -126,17 +126,21 @@ export interface ResolvedModel {
   info: ModelInfo;
 }
 
+/**
+ * The models a session can run on. `userId` is the session's owner: a person's own models (personal providers) serve
+ * only them.
+ */
 export interface ModelResolver {
   /** Throws a ModelUnavailableError when the ref cannot be served. */
-  resolve(ref: string): Promise<ResolvedModel>;
+  resolve(ref: string, userId?: string | null): Promise<ResolvedModel>;
   /** First visible model, used when nothing is configured for a mode. */
   firstAvailable(): Promise<string | undefined>;
-  /** Every model of the enabled providers, hidden ones included (providers/model-choice.ts skips those not listed). */
-  listModels?(): Promise<ModelInfo[]>;
+  /** Every model of the enabled providers and the person's own, hidden ones included (providers/model-choice.ts skips those not listed). */
+  listModels?(userId?: string | null): Promise<ModelInfo[]>;
   /** `ref`, or `current` when running `ref` would make their shared server swap models (providers/scheduler.ts). */
   avoidSwap?(ref: string, current: string): string;
   /** Waits for a sub-agent's turn on the server of `ref`, telling `onWait` how many are ahead; returns the release. */
-  agentTurn?(ref: string, signal: AbortSignal, onWait?: (ahead: number | null) => void): Promise<() => void>;
+  agentTurn?(ref: string, signal: AbortSignal, onWait?: (ahead: number | null) => void, userId?: string | null): Promise<() => void>;
 }
 
 /** A turn kept filling the window, however often it was summarized: it stops instead of going around again. */
@@ -873,7 +877,7 @@ export class ChatService {
           await this.addContextMessage(sessionId, { type: 'context', text: '', notice: { kind: 'command', command: focus ? `/compact ${focus}` : '/compact' } });
         await this.setStatus(sessionId, 'running');
         this.emit(sessionId, { type: 'compacting', active: true });
-        const run = await this.requestContext(session, await this.deps.models.resolve(ref), controller.signal, false);
+        const run = await this.requestContext(session, await this.deps.models.resolve(ref, session.userId), controller.signal, false);
         const { summaryTokens } = roomBudgets(run.threshold - run.fixedTokens);
         if (!(await this.compactNow(sessionId, { ...(focus ? { focus } : {}), signal: controller.signal, current: run.model, summaryTokens }))) throw new Error('There is nothing to compact yet.');
         this.emit(sessionId, { type: 'context', context: await this.measure(run, await this.forModel(run), false) });
@@ -1048,7 +1052,7 @@ export class ChatService {
       try {
         const ref = await this.modelRef(session);
         if (!ref) throw new ModelUnavailableError('Add a model provider to start chatting.');
-        resolved = await this.deps.models.resolve(ref);
+        resolved = await this.deps.models.resolve(ref, session.userId);
         if (!session.model) await this.deps.repo.update(sessionId, { model: ref });
       } catch (error) {
         await this.failWithoutModel(sessionId, error);
@@ -1329,7 +1333,7 @@ export class ChatService {
     try {
       const ref = session.model ?? (await this.requireSession(asker)).model;
       if (!ref) throw new Error('no model');
-      let model = await this.deps.models.resolve(ref);
+      let model = await this.deps.models.resolve(ref, session.userId);
       // Browser chat has one conversation slot, and a review through it would take the slot from the conversation (and
       // cost a message of the person's plan each time): the small model reviews, and without one the person decides.
       if (model.adapter.type === 'chatgpt-chat') {
@@ -1584,7 +1588,7 @@ export class ChatService {
   /** Whether a session has SendMessage, so a note to it can say how to answer: compact-tier models and some defined sub-agents don't. */
   private async offersSendMessage(row: SessionRow): Promise<boolean> {
     const ref = await this.modelRef(row);
-    const model = ref ? await this.deps.models.resolve(ref).catch(() => null) : null;
+    const model = ref ? await this.deps.models.resolve(ref, row.userId).catch(() => null) : null;
     if (model && (model.info.tier === 'compact' || model.info.capabilities.tools === 'none')) return false;
     if (!row.parentSessionId || typeof row.overrides.agent !== 'string') return true;
     const def = (await this.deps.extensions?.(row))?.agents.find((a) => a.name === row.overrides.agent);
@@ -1905,7 +1909,7 @@ export class ChatService {
     const ref = child.model ?? defaultModelFor(this.deps.settings(), child.mode);
     let release = () => {};
     try {
-      if (ref && this.deps.models.agentTurn) release = await this.deps.models.agentTurn(ref, signal, (ahead) => this.emit(child.id, { type: 'queued', ahead }));
+      if (ref && this.deps.models.agentTurn) release = await this.deps.models.agentTurn(ref, signal, (ahead) => this.emit(child.id, { type: 'queued', ahead }), (await this.deps.repo.getRow(child.id))?.userId);
     } catch {
       return unstarted();
     }
@@ -2296,7 +2300,7 @@ export class ChatService {
   async contextUsage(sessionId: string): Promise<ContextUsage | null> {
     const session = await this.requireSession(sessionId);
     const ref = session.model ?? defaultModelFor(this.deps.settings(), session.mode);
-    const model = ref ? await this.deps.models.resolve(ref).catch(() => null) : null;
+    const model = ref ? await this.deps.models.resolve(ref, session.userId).catch(() => null) : null;
     if (!model) return null;
     const run = await this.requestContext(session, model, AbortSignal.timeout(10_000), false);
     return this.measure(run, await this.forModel(run), false);

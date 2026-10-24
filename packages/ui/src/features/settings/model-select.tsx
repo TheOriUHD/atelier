@@ -27,7 +27,7 @@ export function ModelSelect({
   const byRef = new Map(models.map((m) => [m.ref, m]));
   const options: SelectOption[] = [{ value: UNSET, label: unsetLabel }, ...models.map((m) => ({ value: m.ref, label: m.displayName }))];
   if (setting.value && !byRef.has(setting.value)) options.push({ value: setting.value, label: `${setting.value} (unavailable)` });
-  const showProvider = providerNames.size > 1;
+  const showProvider = providerNames.size > 1 || models.some((m) => m.personal);
   return (
     <Select
       aria-labelledby={labelledBy}
@@ -39,7 +39,7 @@ export function ModelSelect({
         const m = byRef.get(o.value);
         return m && showProvider ? (
           <>
-            {m.displayName} <span className="text-fg-muted">· {providerNames.get(m.providerId) ?? m.providerId}</span>
+            {m.displayName} <span className="text-fg-muted">· {m.personal?.deviceName ?? providerNames.get(m.providerId) ?? m.providerId}</span>
           </>
         ) : (
           o.label

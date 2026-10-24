@@ -18,6 +18,8 @@ import {
   LOCKED_PROCEDURES,
   PROVIDER_LABELS,
   PUBLIC_PROCEDURES,
+  isPersonalProviderId,
+  LocalServer,
   parseModelRef,
   serveRpc,
   sessionEffort,
@@ -56,6 +58,7 @@ import { SshError, sshConfigHosts } from '../workspaces/ssh.ts';
 import { SshAccess, sshSecretId } from '../workspaces/ssh-access.ts';
 import * as git from '../workspaces/git.ts';
 import { DeviceLinkError, DeviceLinks, type LinkSocket } from '../workspaces/device-links.ts';
+import { deviceFetch } from '../workspaces/device-fetch.ts';
 import { findFiles, gitDiff, gitStatus, grepFiles, listDir, readFile as readWorkspaceFile, sessionDiff } from '../workspaces/workspace-view.ts';
 import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
 import { ChatService, type ExtensionCatalog } from '../agent/chat-service.ts';
@@ -84,6 +87,8 @@ import { loadTemplateOverrides } from '../prompts/templates.ts';
 import { ProjectRepo } from '../projects/project-repo.ts';
 import { createAdapter } from '../providers/index.ts';
 import { ProviderRegistry } from '../providers/registry.ts';
+import { PersonalProviderRepo, type PersonalAccess } from '../providers/personal.ts';
+import type { ChatGptChatPort } from '../providers/chatgpt-chat.ts';
 import type { ProviderFetch } from '../providers/types.ts';
 import { isPersonalSecret, SecretStore, type Cipher } from '../secrets/secret-store.ts';
 import { createExcerptReader } from '../search/excerpt.ts';
@@ -182,7 +187,7 @@ interface Connection {
 }
 
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
-const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh'];
+const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'http', 'chatgptChat'];
 
 export async function createBackend(platform: Platform): Promise<Backend> {
   const db = openDatabase(join(platform.dataDir, 'atelier.db'));
@@ -208,6 +213,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   // A device coming or going changes which of its user's workspaces are available, and what its windows offer.
   const links = new DeviceLinks((userId) => {
     emitToUser(userId, 'devices.changed', {});
+    void registry.devicesChanged(userId).catch((e: unknown) => platform.logger.error('personal provider update failed', e));
     void workspaceManager
       .list(userId)
       .then((list) => emitToUser(userId, 'workspaces.changed', list))
@@ -345,6 +351,24 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     fetch: httpFetch,
     secrets: { get: (id) => secrets.get(id), set: (secret) => secrets.set(secret), delete: (id) => secrets.delete(id) },
   });
+  const personalRepo = new PersonalProviderRepo(db);
+  /** A desktop's ChatGPT window, through its link; `start` carries the prompt and its files, so it may take longer. */
+  const deviceChatGpt = (userId: string, deviceId: string): ChatGptChatPort => ({
+    request: async (operation, value) =>
+      z.string().parse(await links.request(userId, deviceId, { op: 'chatgptChat', operation, ...(value !== undefined ? { value } : {}) }, operation === 'start' ? 300_000 : 60_000)),
+  });
+  const personalAccess: PersonalAccess = {
+    repo: personalRepo,
+    lends: (userId, deviceId, providerId, type) => {
+      const info = links.info(userId, deviceId);
+      if (!info) return false;
+      return type === 'chatgpt-chat' ? info.services.includes('chatgptChat') && info.lending.chatgptChat : info.services.includes('http') && info.lending.http.some((a) => a.id === providerId);
+    },
+    fetch: (userId, deviceId, providerId) => deviceFetch(links, userId, deviceId, providerId),
+    chatgptChat: deviceChatGpt,
+    toolCalling: async (userId) => Object.fromEntries(Object.entries((await prefs.get(userId)).personalModels).map(([ref, o]) => [ref, o.toolCalling])),
+    setToolCalling: async (userId, ref, value) => emitToUser(userId, 'prefs.changed', await prefs.set(userId, ['personalModels', ref, 'toolCalling'], value)),
+  };
   const registry = new ProviderRegistry({
     db,
     settings,
@@ -360,13 +384,31 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       chatgptChat: platform.chatgptChat,
       copilot,
     },
+    // A server reaches people's own model servers and ChatGPT windows through their desktops.
+    ...(platform.surface === 'web' ? { personal: personalAccess } : {}),
   });
   // "Connect with OpenRouter": mints a key in the person's account and saves the provider with it.
   const openrouter = new OpenRouterConnect({ fetch: httpFetch, surface: platform.surface, save: (draft) => registry.save(draft) });
   registry.on('status', (s) => emitWhere(isAdmin, 'providers.changed', s));
-  registry.on('models', (m: ModelInfo[]) => {
-    for (const c of connections) if (c.auth) c.rpc.emit('models.changed', modelsFor(c, m));
-  });
+  // Everyone gets the shared models with their own after them; a change to a person's own models goes to them only.
+  // One broadcast at a time, so a later list never arrives before an earlier one.
+  let broadcasting = Promise.resolve();
+  const sendModels = (shared: () => Promise<ModelInfo[]>, pick: (c: Connection) => boolean) => {
+    broadcasting = broadcasting
+      .then(async () => {
+        const list = await shared();
+        const own = new Map<string, ModelInfo[]>();
+        for (const c of connections) {
+          if (!c.auth || !pick(c)) continue;
+          const userId = c.auth.user.id;
+          if (!own.has(userId)) own.set(userId, await registry.personalModels(userId));
+          if (c.auth) c.rpc.emit('models.changed', modelsFor(c, [...list, ...own.get(userId)!]));
+        }
+      })
+      .catch((e: unknown) => platform.logger.error('model update broadcast failed', e));
+  };
+  registry.on('models', (m: ModelInfo[]) => sendModels(async () => m, () => true));
+  registry.on('personalModels', (userId) => sendModels(() => registry.listModels(), (c) => c.auth?.user.id === userId));
   const syncProviders = () => void registry.syncWithSettings().catch((e: unknown) => platform.logger.error('provider refresh failed', e));
   settings.on('change', () => {
     for (const c of connections) if (c.auth) c.rpc.emit('settings.changed', settingsFor(c));
@@ -904,6 +946,33 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     if (!deviceId || !userId) return null;
     return links.info(userId, deviceId)?.services.includes(service) ? deviceId : null;
   };
+  /** The desktop this call comes from, which must lend `service` to add the person's own models from it. */
+  const personalDevice = (ctx: Ctx, service: DeviceService): string => {
+    const deviceId = callerDevice(ctx, service);
+    if (!deviceId) throw appError('unsupported', 'Models on your computer are added from the desktop app there, signed in to this server.');
+    return deviceId;
+  };
+  /** A personal ChatGPT Chat's computer, or (adding one) the desktop the call comes from. */
+  const personalChatGpt = async (ctx: Ctx, providerId: string | undefined): Promise<{ userId: string; deviceId: string }> => {
+    const userId = me(ctx).id;
+    if (!providerId) return { userId, deviceId: personalDevice(ctx, 'chatgptChat') };
+    const row = await personalRepo.get(providerId);
+    if (!row || row.userId !== userId || row.type !== 'chatgpt-chat') throw appError('not_found', 'That ChatGPT Chat is gone.');
+    return { userId, deviceId: row.deviceId };
+  };
+  /** What a desktop said when it couldn't or wouldn't, as the person reads it. */
+  const deviceRefusal = (e: unknown): never => {
+    throw e instanceof DeviceLinkError ? appError(e.code === 'refused' ? 'forbidden' : 'unsupported', e.message) : e;
+  };
+  /** A personal provider call's own refusals (an id that isn't theirs, no desktop) as errors the person reads. */
+  const personalOp = async <T>(run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (e) {
+      if (e instanceof DeviceLinkError) return deviceRefusal(e);
+      throw e instanceof Error && !('code' in e) ? appError('invalid_request', e.message) : e;
+    }
+  };
   /** A new session's scratch folder (it starts with no folder); the person's clients learn of it like any folder. */
   const scratchFolder = async (userId: string, sshHost: string | undefined, deviceId: string | null): Promise<string> => {
     const added = await workspaceManager.addScratch(userId, sshHost, deviceId).catch((e: unknown) => {
@@ -1263,8 +1332,54 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     'providers.refresh': ({ id }) => registry.refresh(id),
-    'models.list': async (_input, ctx) => modelsFor(ctx.connection(), await registry.listModels()),
+    'models.list': async (_input, ctx) => modelsFor(ctx.connection(), await registry.listModels(me(ctx).id)),
     'models.probeTools': ({ ref }) => registry.probeTools(ref),
+
+    // ------------------------------------------------- your models on your computers
+    'personalProviders.list': (_input, ctx) => registry.personalProviders(me(ctx).id),
+    'personalProviders.detect': async (_input, ctx) => {
+      const deviceId = personalDevice(ctx, 'http');
+      const found = z.array(LocalServer).parse(await links.request(me(ctx).id, deviceId, { op: 'providers.detect' }).catch(deviceRefusal));
+      const added = new Set((await registry.personalProviders(me(ctx).id)).filter((p) => p.deviceId === deviceId).map((p) => `${p.type}|${p.baseUrl}`));
+      return found.filter((s) => !added.has(`${s.type}|${s.baseUrl}`));
+    },
+    'personalProviders.test': (draft, ctx) => personalOp(() => registry.testPersonal(me(ctx).id, personalDevice(ctx, draft.type === 'chatgpt-chat' ? 'chatgptChat' : 'http'), draft)),
+    'personalProviders.save': async (draft, ctx) => {
+      const existing = await personalRepo.get(draft.id);
+      const deviceId = existing?.userId === me(ctx).id ? null : personalDevice(ctx, draft.type === 'chatgpt-chat' ? 'chatgptChat' : 'http');
+      return personalOp(() => registry.savePersonal(me(ctx).id, deviceId, draft));
+    },
+    'personalProviders.remove': async ({ id }, ctx) => {
+      await personalOp(() => registry.removePersonal(me(ctx).id, id));
+      return { ok: true as const };
+    },
+    'personalProviders.refresh': ({ id }, ctx) => registry.refreshPersonal(me(ctx).id, id),
+    'personalProviders.probeTools': ({ ref }, ctx) => {
+      const providerId = parseModelRef(ref)?.providerId;
+      if (!providerId || !isPersonalProviderId(providerId)) throw appError('forbidden', 'Only your own models can be tested here.');
+      return personalOp(() => registry.probeTools(ref, me(ctx).id));
+    },
+    'personalProviders.chatgptChat.status': async ({ providerId }, ctx) => {
+      const where = await personalChatGpt(ctx, providerId).catch(() => null);
+      if (!where) return { available: false, signedIn: false };
+      const answer = await deviceChatGpt(where.userId, where.deviceId).request('status').catch(() => null);
+      return answer ? { available: true, ...(JSON.parse(answer) as { signedIn: boolean }) } : { available: false, signedIn: false };
+    },
+    'personalProviders.chatgptChat.open': async ({ providerId }, ctx) => {
+      const where = await personalChatGpt(ctx, providerId);
+      await deviceChatGpt(where.userId, where.deviceId).request('open').catch(deviceRefusal);
+      return { ok: true as const };
+    },
+    'personalProviders.chatgptChat.hide': async ({ providerId }, ctx) => {
+      const where = await personalChatGpt(ctx, providerId).catch(() => null);
+      if (where) await deviceChatGpt(where.userId, where.deviceId).request('hide').catch(() => undefined);
+      return { ok: true as const };
+    },
+    'personalProviders.chatgptChat.disconnect': async ({ providerId }, ctx) => {
+      const where = await personalChatGpt(ctx, providerId);
+      await deviceChatGpt(where.userId, where.deviceId).request('disconnect').catch(deviceRefusal);
+      return { ok: true as const };
+    },
 
     // ---------------------------------------------------------------- your chats
     'sessions.list': async (input, ctx) => {

@@ -112,6 +112,15 @@ see are hidden in the app.
 | **GitHub OAuth app** *(admins only)* | The client id of an OAuth app with device flow enabled, so people can sign in with GitHub. Without one, they connect with a personal access token. |
 | **Codespaces** | Cloud machines on GitHub for Code sessions. Each one stops after its idle timeout and runs at most 12 hours at a time. |
 
+## Settings › Your models
+
+| Setting | What it does |
+|---|---|
+| **Found on this computer** *(only where it works)* | Model servers answering on their default ports here (Ollama, llama.cpp, LM Studio). |
+| **Models on your computers** | Model servers and ChatGPT Chat on your own computers. Only you see their models, and only while that computer is connected. |
+| **Add model server** | Ollama, llama.cpp, LM Studio or another OpenAI-compatible server on this computer or its network. |
+| **ChatGPT Chat on this computer** *(only where it works)* | Your own ChatGPT, through the ChatGPT window of the desktop app here. Experimental. |
+
 ## Settings › Skills
 
 | Setting | What it does |

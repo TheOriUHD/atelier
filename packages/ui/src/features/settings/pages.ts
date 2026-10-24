@@ -7,6 +7,7 @@ import {
   CircleUserRound,
   Cloud,
   CodeXml,
+  Cpu,
   FolderClosed,
   Keyboard,
   KeyRound,
@@ -23,6 +24,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { desktop } from '../../lib/platform.ts';
+import { isLocal } from '../auth/screen-lock.ts';
 
 export type SettingsPageId =
   | 'general'
@@ -34,6 +36,7 @@ export type SettingsPageId =
   | 'code'
   | 'folders'
   | 'cloud'
+  | 'personal-models'
   | 'skills'
   | 'system'
   | 'providers'
@@ -69,6 +72,8 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'folders', label: 'Folders', icon: FolderClosed, group: 'Settings' },
   // GitHub and the codespaces that become folders.
   { id: 'cloud', label: 'Cloud', icon: Cloud, group: 'Settings' },
+  // The person's own model servers and ChatGPT Chat on their computers, reached through the desktop app there.
+  { id: 'personal-models', label: 'Your models', icon: Cpu, group: 'Settings', available: () => !isLocal() },
   { id: 'skills', label: 'Skills', icon: ScrollText, group: 'Settings' },
   // This computer: the desktop app's version and updates, launch at login, data folder.
   { id: 'system', label: 'System', icon: Laptop, group: 'Settings', available: () => !!desktop },

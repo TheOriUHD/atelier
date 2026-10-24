@@ -2,13 +2,15 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { modelCache } from '../store/schema.ts';
+import { devices, modelCache, users } from '../store/schema.ts';
 import { openDatabase, type Db } from '../store/db.ts';
 import { NodeWorkspaceFs } from '../fs/workspace-fs.ts';
 import { SettingsService } from '../settings/settings-service.ts';
 import { AesGcmCipher, SecretStore } from '../secrets/secret-store.ts';
+import { ModelUnavailableError } from '../agent/chat-service.ts';
+import { PersonalProviderRepo, type PersonalAccess } from './personal.ts';
 import { ProviderRegistry } from './registry.ts';
-import type { ProviderAdapter, ProviderInstance } from './types.ts';
+import type { AdapterDeps, ProviderAdapter, ProviderInstance } from './types.ts';
 
 let dir: string;
 let db: Db;
@@ -307,5 +309,151 @@ describe('ProviderRegistry', () => {
     const env = found.find((f) => f.via === 'env');
     expect(env).toMatchObject({ type: 'anthropic', envVar: 'ANTHROPIC_API_KEY' });
     expect(JSON.stringify(found)).not.toContain('sk-env');
+  });
+});
+
+describe('personal providers', () => {
+  const OWN = 'u-aaaaaaaaaa';
+  /** Computers connected and lending, by device id. */
+  let connected: Set<string>;
+  let fetched: string[][];
+  let tools: Record<string, Record<string, 'native' | 'prompted' | 'none'>>;
+  let built: { id: string; deps: AdapterDeps }[];
+  const inspected = vi.fn(offline);
+
+  beforeEach(async () => {
+    connected = new Set(['laptop']);
+    fetched = [];
+    tools = {};
+    built = [];
+    const now = Date.now();
+    await db.insert(users).values(['ada', 'bob'].map((id) => ({ id, username: id, name: id, role: 'user' as const, passwordHash: 'x', createdAt: now, updatedAt: now })));
+    await db.insert(devices).values({ id: 'laptop', userId: 'ada', name: 'Ada’s Laptop', platform: 'darwin', createdAt: now, lastSeenAt: now });
+  });
+
+  function personalRegistry() {
+    const access: PersonalAccess = {
+      repo: new PersonalProviderRepo(db),
+      lends: (_userId, deviceId) => connected.has(deviceId),
+      fetch: (userId, deviceId, providerId) => {
+        fetched.push([userId, deviceId, providerId]);
+        return offline;
+      },
+      chatgptChat: () => ({ request: async () => '{"signedIn":true}' }),
+      toolCalling: async (userId) => tools[userId] ?? {},
+      setToolCalling: async (userId, ref, value) => void (tools[userId] = { ...tools[userId], [ref]: value }),
+    };
+    return new ProviderRegistry({
+      db,
+      settings,
+      secrets,
+      env: {},
+      createAdapter: (instance, deps) => {
+        built.push({ id: instance.id, deps });
+        return factory(instance);
+      },
+      adapterDeps: { fetch: inspected, readBlob: async () => new Uint8Array() },
+      personal: access,
+    });
+  }
+  const draft = { id: OWN, type: 'ollama' as const, name: 'My Ollama', baseUrl: 'http://localhost:11434/' };
+
+  it('serves a person’s own models to them alone, through their computer, and says when it isn’t connected', async () => {
+    const r = personalRegistry();
+    await r.savePersonal('ada', 'laptop', draft);
+    expect((await r.listModels('ada')).find((m) => m.ref === `${OWN}/small`)).toMatchObject({ personal: { deviceId: 'laptop', deviceName: 'Ada’s Laptop' }, available: true });
+    expect(await r.listModels('bob')).toEqual([]);
+    expect(await r.listModels()).toEqual([]);
+    expect(await r.firstAvailable()).toBeUndefined();
+
+    expect((await r.resolve(`${OWN}/small`, 'ada')).info.personal?.deviceName).toBe('Ada’s Laptop');
+    expect(instances.at(-1)).toMatchObject({ id: OWN, baseUrl: 'http://localhost:11434' });
+    // Its requests go out from the laptop, never through the request inspector.
+    const own = built.findLast((b) => b.id === OWN)!.deps;
+    expect(own.fetch).not.toBe(inspected);
+    await own.fetch('http://localhost:11434/api/tags', {}).catch(() => undefined);
+    expect(fetched.at(-1)).toEqual(['ada', 'laptop', OWN]);
+    expect(inspected).not.toHaveBeenCalled();
+
+    // Anyone else, or no one, is told it isn't there.
+    await expect(r.resolve(`${OWN}/small`, 'bob')).rejects.toThrow(`${OWN}/small isn't available.`);
+    await expect(r.resolve(`${OWN}/small`)).rejects.toBeInstanceOf(ModelUnavailableError);
+
+    connected.delete('laptop');
+    expect((await r.listModels('ada')).find((m) => m.ref === `${OWN}/small`)?.available).toBe(false);
+    await expect(r.resolve(`${OWN}/small`, 'ada')).rejects.toThrow("My Ollama runs on Ada’s Laptop, which isn't connected.");
+    expect((await r.personalProviders('ada'))[0]).toMatchObject({ id: OWN, online: false, deviceName: 'Ada’s Laptop', hasKey: false });
+    expect(await r.personalProviders('bob')).toEqual([]);
+  });
+
+  it('keeps its id shape and its key to its owner', async () => {
+    const r = personalRegistry();
+    await r.savePersonal('ada', 'laptop', { ...draft, apiKey: 'sk-own-1234' });
+    expect(instances.at(-1)?.apiKey).toBe('sk-own-1234');
+    expect((await r.personalProviders('ada'))[0]?.hasKey).toBe(true);
+    expect(await secrets.forSettings(`provider-user-ada-${OWN}`)).toBeUndefined();
+    expect(await secrets.forUser('bob', `provider-user-ada-${OWN}`)).toBeUndefined();
+    // An admin provider can't take a personal provider's id, or the shape of one.
+    await expect(r.save({ id: OWN, type: 'ollama', name: 'Taken', baseUrl: 'http://localhost:11434', headers: {}, enabled: true })).rejects.toThrow("can't be a provider id");
+    await expect(r.save({ id: 'u-bbbbbbbbbb', type: 'ollama', name: 'Shape', baseUrl: 'http://localhost:11434', headers: {}, enabled: true })).rejects.toThrow("can't be a provider id");
+    // Nor can another person.
+    await expect(r.savePersonal('bob', 'laptop', draft)).rejects.toThrow('taken');
+    await expect(r.removePersonal('bob', OWN)).rejects.toThrow('gone');
+    // A new one needs the computer it runs on.
+    await expect(r.savePersonal('ada', null, { ...draft, id: 'u-cccccccccc' })).rejects.toThrow('desktop app');
+
+    await r.removePersonal('ada', OWN);
+    expect(await secrets.has(`provider-user-ada-${OWN}`)).toBe(false);
+    expect(await r.listModels('ada')).toEqual([]);
+  });
+
+  it('queues a computer’s server apart from the same address next to the server', async () => {
+    const r = personalRegistry();
+    await r.save({ id: 'local', type: 'ollama', name: 'Ollama', baseUrl: 'http://localhost:11434', headers: {}, enabled: true });
+    await r.savePersonal('ada', 'laptop', draft);
+    const signal = new AbortController().signal;
+    const held = await r.agentTurn('local/small', signal);
+    // The server's own Ollama takes one sub-agent at a time; the laptop's has a queue of its own.
+    await expect(r.agentTurn(`${OWN}/small`, signal, undefined, 'ada')).resolves.toBeTypeOf('function');
+    let next = false;
+    void r.agentTurn('local/small', signal).then(() => (next = true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(next).toBe(false);
+    held();
+    await vi.waitFor(() => expect(next).toBe(true));
+  });
+
+  it('tells only the owner when their models change, and finds them again when their computer comes back', async () => {
+    const r = personalRegistry();
+    const told: string[] = [];
+    const shared = vi.fn();
+    r.on('personalModels', (userId) => told.push(userId));
+    r.on('models', shared);
+    await r.savePersonal('ada', 'laptop', draft);
+    expect(told).toEqual(['ada']);
+    expect(shared).not.toHaveBeenCalled();
+
+    await r.devicesChanged('ada');
+    connected.delete('laptop');
+    await db.delete(modelCache);
+    await r.devicesChanged('ada');
+    expect((await r.listModels('ada')).length).toBe(0);
+    connected.add('laptop');
+    await r.devicesChanged('ada');
+    // Back: its models are asked for again.
+    expect((await r.listModels('ada')).map((m) => [m.ref, m.available])).toEqual([[`${OWN}/small`, true]]);
+    expect(told).toEqual(['ada', 'ada', 'ada', 'ada']);
+    // Someone without their own providers hears nothing.
+    await r.devicesChanged('bob');
+    expect(told).toHaveLength(4);
+  });
+
+  it('records a tool-calling test of a person’s own model in their prefs, not the admin’s settings', async () => {
+    const r = personalRegistry();
+    await r.savePersonal('ada', 'laptop', draft);
+    expect(await r.probeTools(`${OWN}/small`, 'ada')).toMatchObject({ native: false });
+    expect(tools.ada).toEqual({ [`${OWN}/small`]: 'prompted' });
+    expect(settings.effective.models.overrides).toEqual({});
+    expect((await r.resolve(`${OWN}/small`, 'ada')).info.capabilities.tools).toBe('prompted');
   });
 });

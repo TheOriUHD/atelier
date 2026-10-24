@@ -3,7 +3,7 @@
  * `settings.ts` and are admin-only; everything here belongs to one user.
  */
 import { z } from 'zod';
-import { Mode, SignupPolicy, type SafeguardCategories, type SafeguardsSettings } from './settings.ts';
+import { Mode, ModelOverride, SignupPolicy, type SafeguardCategories, type SafeguardsSettings } from './settings.ts';
 import { TemporaryMode } from './domain.ts';
 import { SshConnection } from './ssh.ts';
 import { DeviceLending } from './device-link.ts';
@@ -288,8 +288,10 @@ export const UserPrefs = z.object({
       personality: { selected: 'atelier', customModes: [] },
       atelierMd: '',
     }),
-  /** Preferred model per mode, chosen from the models the admin enabled. */
+  /** Preferred model per mode, chosen from the models the admin enabled and the person's own (personal providers). */
   models: z.object({ chat: z.string(), work: z.string(), code: z.string() }).partial().default({}),
+  /** The person's own models (personal providers), by ref: how they call tools, as "Test tool calling" found. */
+  personalModels: z.record(z.string(), ModelOverride.pick({ toolCalling: true })).default({}),
   /** Chat: the offer under a reply that used the sandbox to continue in Cowork; off once dismissed. */
   chat: z.object({ coworkOffer: z.boolean().default(true) }).default({ coworkOffer: true }),
   /** Rules this person approved with "Always allow" (Claude Code syntax), on top of the system rules. */

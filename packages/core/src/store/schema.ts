@@ -345,6 +345,26 @@ export const modelCache = sqliteTable(
   (t) => [primaryKey({ columns: [t.providerId, t.modelId] })],
 );
 
+/** A person's own model servers and ChatGPT Chat on one of their computers (providers/personal.ts); ids never clash with the admin's. */
+export const personalProviders = sqliteTable(
+  'personal_providers',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id').notNull(),
+    type: text('type', { enum: ['ollama', 'llamacpp', 'openai-compatible', 'chatgpt-chat'] }).notNull(),
+    name: text('name').notNull(),
+    baseUrl: text('base_url').notNull(),
+    /** parallelRequests, modelsAtOnce, vramGiB. */
+    options: text('options', { mode: 'json' }).$type<{ parallelRequests?: number; modelsAtOnce?: number; vramGiB?: number }>().notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('personal_providers_user').on(t.userId)],
+);
+
 export const secrets = sqliteTable('secrets', {
   id: text('id').primaryKey(),
   label: text('label').notNull(),

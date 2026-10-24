@@ -16,6 +16,8 @@ export const keys = {
   groups: ['groups'] as const,
   models: ['models'] as const,
   providers: ['providers'] as const,
+  /** The person's own model servers and ChatGPT Chat on their computers (server mode). */
+  personalProviders: ['personalProviders'] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['project', id] as const,
   secrets: ['secrets'] as const,
@@ -70,7 +72,10 @@ export function useLiveQueries(): void {
         void qc.invalidateQueries({ queryKey: keys.ssh });
       }),
       rpc().on('account.changed', (user) => qc.setQueryData(keys.account, user)),
-      rpc().on('models.changed', (models) => qc.setQueryData(keys.models, models)),
+      rpc().on('models.changed', (models) => {
+        qc.setQueryData(keys.models, models);
+        void qc.invalidateQueries({ queryKey: keys.personalProviders });
+      }),
       rpc().on('providers.changed', (status) => qc.setQueryData(keys.providers, status)),
       rpc().on('sessions.changed', (summary) => {
         qc.setQueriesData<SessionSummary[]>({ queryKey: ['sessions'] }, (list) => {
@@ -90,7 +95,10 @@ export function useLiveQueries(): void {
         void qc.invalidateQueries({ queryKey: ['sessions'] });
       }),
       rpc().on('workspaces.changed', (list) => qc.setQueryData(keys.workspaces, list)),
-      rpc().on('devices.changed', () => void qc.invalidateQueries({ queryKey: keys.devices })),
+      rpc().on('devices.changed', () => {
+        void qc.invalidateQueries({ queryKey: keys.devices });
+        void qc.invalidateQueries({ queryKey: keys.personalProviders });
+      }),
       rpc().on('extensions.changed', () => {
         for (const queryKey of [keys.skills, keys.plugins, ['slash']]) void qc.invalidateQueries({ queryKey });
       }),

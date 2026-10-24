@@ -480,7 +480,7 @@ export class MemoryService implements MemoryHooks {
   private async model(userId: string, opts: { session?: SessionRow; chosen?: string }): Promise<ResolvedModel> {
     const { models } = this.deps;
     if (opts.chosen) {
-      const chosen = await usableModel(models, opts.chosen);
+      const chosen = await usableModel(models, opts.chosen, undefined, userId);
       if (!chosen) throw new ModelChoiceError();
       return chosen;
     }
@@ -488,7 +488,7 @@ export class MemoryService implements MemoryHooks {
     const prefs = await this.deps.prefs(userId);
     const near = opts.session?.model ?? prefs.models.chat ?? defaults.chat;
     const small = defaults.small && near && models.avoidSwap ? models.avoidSwap(defaults.small, near) : defaults.small;
-    const model = await firstUsableModel(models, [small, defaults.small, opts.session?.model, prefs.models.chat, defaults.chat, await models.firstAvailable()]);
+    const model = await firstUsableModel(models, [small, defaults.small, opts.session?.model, prefs.models.chat, defaults.chat, await models.firstAvailable()], userId);
     if (!model) throw new Error('No model is available to update memory. Add a model provider first.');
     return model;
   }

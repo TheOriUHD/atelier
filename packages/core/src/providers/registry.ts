@@ -4,18 +4,21 @@
  */
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import {
   DEFAULT_BASE_URLS,
+  isPersonalProviderId,
   modelRef,
   parseModelRef,
   presetOf,
   PROVIDER_LABELS,
   type ModelInfo,
+  type PersonalProvider,
+  type PersonalProviderDraft,
   type ProviderConfig,
   type ProviderStatus,
-  type ProviderType,
   type Settings,
+  type ToolSupport,
 } from '@atelier/protocol';
 import type { DetectedProvider, ProviderDraft } from '@atelier/protocol';
 import type { SecretStore } from '../secrets/secret-store.ts';
@@ -27,6 +30,8 @@ import { ModelUnavailableError, type ModelResolver, type ResolvedModel } from '.
 import { tierFor } from './catalog.ts';
 import { estimateContext } from './context-estimator.ts';
 import { isAbortError, noAnswerError } from './http.ts';
+import { detectLocalServers } from './local-servers.ts';
+import { personalKeyId, type PersonalAccess, type PersonalRow } from './personal.ts';
 import { withPromptedTools } from './prompted-tools.ts';
 import { defaultLimits, RequestScheduler, serverName, type ServerLimits } from './scheduler.ts';
 import type { AdapterDeps, HealthResult, ProviderAdapter, ProviderInstance } from './types.ts';
@@ -41,9 +46,10 @@ export interface RegistryDeps {
   env: Record<string, string | undefined>;
   createAdapter: AdapterFactory;
   adapterDeps: AdapterDeps;
+  /** People's own providers on their computers (personal.ts); without it there are none. */
+  personal?: PersonalAccess;
 }
 
-const DETECT_TIMEOUT_MS = 800;
 /** A health check that gets no answer this soon says so: the server is down or unreachable. */
 const HEALTH_TIMEOUT_MS = 6_000;
 /** Listing models may ask the server about each one in turn. */
@@ -58,17 +64,15 @@ function checkError(error: unknown, baseUrl: string, timeoutMs: number): string 
 /** Order-independent identity of a provider config (settings normalization may reorder keys). */
 const configKey = (p: ProviderConfig): string => JSON.stringify(Object.fromEntries(Object.entries(p).sort(([a], [b]) => a.localeCompare(b))));
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+/** A personal provider's row as a provider config (its key is the owner's own secret, read separately). */
+const personalConfig = (row: PersonalRow): ProviderConfig => ({ id: row.id, type: row.type, name: row.name, baseUrl: row.baseUrl, headers: {}, enabled: row.enabled, ...row.options });
+const deviceLabel = (row: PersonalRow): string => row.deviceName ?? 'a removed computer';
 
-/** Default local ports and the response that proves the expected server is behind them. */
-const PORT_PROBES: { type: ProviderType; label: string; path: string; accepts(status: number, body: unknown): boolean }[] = [
-  { type: 'ollama', label: PROVIDER_LABELS.ollama, path: '/api/version', accepts: (s, b) => s === 200 && isObject(b) && typeof b.version === 'string' },
-  // llama-server answers 503 {"error":…} while it is still loading the model.
-  { type: 'llamacpp', label: PROVIDER_LABELS.llamacpp, path: '/health', accepts: (s, b) => isObject(b) && ((s === 200 && b.status === 'ok') || (s === 503 && 'error' in b)) },
-  { type: 'openai-compatible', label: 'LM Studio', path: '/models', accepts: (s, b) => s === 200 && isObject(b) && Array.isArray(b.data) },
-];
-
-export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]]; models: [ModelInfo[]] }> implements ModelResolver {
+/**
+ * `models` carries the shared models whenever they change; `personalModels` names a person whose own models (personal
+ * providers) changed, which only their windows hear about.
+ */
+export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]]; models: [ModelInfo[]]; personalModels: [string] }> implements ModelResolver {
   private adapters = new Map<string, { key: string; adapter: ProviderAdapter }>();
   /** Provider configs as last probed, to notice edits made outside save/remove (e.g. a hand-edited settings.json). */
   private known = new Map<string, string>();
@@ -79,6 +83,8 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
   private readonly scheduler = new RequestScheduler();
   /** What each provider's server said about its capacity, by provider id. */
   private reported = new Map<string, { parallel?: number; modelsAtOnce?: number }>();
+  /** Personal providers whose computer lent them at the last look, to discover one again when it comes back. */
+  private reachable = new Set<string>();
 
   constructor(private readonly deps: RegistryDeps) {
     super();
@@ -101,23 +107,36 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     };
   }
 
-  private async adapterFor(config: ProviderConfig): Promise<ProviderAdapter> {
+  private async adapterFor(config: ProviderConfig, personal?: PersonalRow): Promise<ProviderAdapter> {
     // Keyed on the resolved key and headers too, so a rotated secret takes effect on the next request.
-    const instance = await this.instance(config);
-    const key = createHash('sha256').update(JSON.stringify(instance)).digest('hex');
+    const instance = personal ? await this.instance(config, await this.personalKey(personal)) : await this.instance(config);
+    const key = createHash('sha256').update(JSON.stringify(personal ? [instance, personal.userId, personal.deviceId] : instance)).digest('hex');
     const cached = this.adapters.get(config.id);
     if (cached && cached.key === key) return cached.adapter;
     // Limits are read per request, so an edit in Settings applies to the next one.
-    const adapter = this.scheduler.wrap(this.deps.createAdapter(instance, this.deps.adapterDeps), serverName(config.baseUrl), () => this.limits(config.id) ?? defaultLimits(config.baseUrl));
+    const adapter = personal
+      ? this.scheduler.wrap(this.deps.createAdapter(instance, this.personalDeps(personal)), this.serverOf(config, personal), () => this.limitsOf(config))
+      : this.scheduler.wrap(this.deps.createAdapter(instance, this.deps.adapterDeps), serverName(config.baseUrl), () => this.limits(config.id) ?? defaultLimits(config.baseUrl));
     this.adapters.set(config.id, { key, adapter });
     return adapter;
+  }
+
+  /**
+   * The queue of a provider's server. A personal provider's is its computer's (`localhost` there is neither the
+   * server's own nor another computer's), so desktops and an Ollama next to the server never share one.
+   */
+  private serverOf(config: ProviderConfig, personal?: PersonalRow | null): string {
+    return personal ? `device:${personal.deviceId}|${serverName(config.baseUrl)}` : serverName(config.baseUrl);
   }
 
   /** The provider's server limits: from settings, else as the server reported them, else the defaults for where it runs. */
   private limits(providerId: string): ServerLimits | null {
     const config = this.providers.find((p) => p.id === providerId);
-    if (!config) return null;
-    const reported = this.reported.get(providerId) ?? {};
+    return config ? this.limitsOf(config) : null;
+  }
+
+  private limitsOf(config: ProviderConfig): ServerLimits {
+    const reported = this.reported.get(config.id) ?? {};
     const fallback = defaultLimits(config.baseUrl);
     return {
       parallel: config.type === 'chatgpt-chat' ? 1 : config.parallelRequests ?? reported.parallel ?? fallback.parallel,
@@ -140,16 +159,18 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
   }
 
   /** Waits until a sub-agent may start on the server of `ref` (as many at once as it answers requests); returns the release. */
-  async agentTurn(ref: string, signal: AbortSignal, onWait?: (ahead: number | null) => void): Promise<() => void> {
-    const config = this.providers.find((p) => p.id === parseModelRef(ref)?.providerId);
+  async agentTurn(ref: string, signal: AbortSignal, onWait?: (ahead: number | null) => void, userId?: string | null): Promise<() => void> {
+    const providerId = parseModelRef(ref)?.providerId;
+    const personal = providerId && isPersonalProviderId(providerId) ? await this.ownPersonal(providerId, userId) : null;
+    const config = personal ? personalConfig(personal) : this.providers.find((p) => p.id === providerId);
     if (!config) return () => {};
-    return this.scheduler.agentTurn(serverName(config.baseUrl), () => this.limits(config.id) ?? defaultLimits(config.baseUrl), signal, onWait);
+    const limits = () => (personal ? this.limitsOf(config) : (this.limits(config.id) ?? defaultLimits(config.baseUrl)));
+    return this.scheduler.agentTurn(this.serverOf(config, personal), limits, signal, onWait);
   }
 
   // ------------------------------------------------------------- models
 
-  private calculated(model: DiscoveredModel): DiscoveredModel {
-    const provider = this.providers.find((p) => p.id === model.providerId);
+  private calculated(model: DiscoveredModel, provider = this.providers.find((p) => p.id === model.providerId)): DiscoveredModel {
     const calculatedContextLength = provider?.type === 'ollama' && model.contextEstimate
       ? estimateContext({ ...provider, ...model.contextEstimate }) : undefined;
     return calculatedContextLength ? { ...model, contextLength: calculatedContextLength, calculatedContextLength } : model;
@@ -167,7 +188,13 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     return info;
   }
 
-  async listModels(): Promise<ModelInfo[]> {
+  /** The shared models, and with `userId` that person's own after them. */
+  async listModels(userId?: string | null): Promise<ModelInfo[]> {
+    const shared = await this.sharedModels();
+    return userId ? [...shared, ...(await this.personalModels(userId))] : shared;
+  }
+
+  private async sharedModels(): Promise<ModelInfo[]> {
     const enabled = new Set(this.providers.filter((p) => p.enabled).map((p) => p.id));
     const rows = await this.deps.db.select().from(modelCache).all();
     const overrides = this.deps.settings.effective.models.overrides;
@@ -183,9 +210,10 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
       .sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order || a.displayName.localeCompare(b.displayName));
   }
 
-  async resolve(ref: string): Promise<ResolvedModel> {
+  async resolve(ref: string, userId?: string | null): Promise<ResolvedModel> {
     const parsed = parseModelRef(ref);
     if (!parsed) throw new ModelUnavailableError(`Invalid model "${ref}".`, 'settings/models');
+    if (isPersonalProviderId(parsed.providerId)) return this.resolvePersonal(ref, parsed.providerId, parsed.modelId, userId);
     const config = this.providers.find((p) => p.id === parsed.providerId);
     if (!config) throw new ModelUnavailableError(`The provider for ${ref} is not configured.`);
     if (!config.enabled) throw new ModelUnavailableError(`${config.name} is disabled.`);
@@ -207,6 +235,7 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     return wrapped;
   }
 
+  /** Shared models only: a person's own are nobody's fallback. */
   async firstAvailable(): Promise<string | undefined> {
     return (await this.listModels()).find((m) => !m.hidden)?.ref;
   }
@@ -260,8 +289,8 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     return this.statusList();
   }
 
-  private async refreshOne(config: ProviderConfig): Promise<void> {
-    const adapter = await this.adapterFor(config);
+  private async refreshOne(config: ProviderConfig, personal?: PersonalRow): Promise<void> {
+    const adapter = await this.adapterFor(config, personal);
     this.reported.delete(config.id);
     let timeoutMs = HEALTH_TIMEOUT_MS;
     try {
@@ -313,6 +342,8 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
 
   /** Stores the key in the secret store and writes the provider (with a secret reference) to settings. */
   async save(draft: ProviderDraft): Promise<ProviderConfig> {
+    // The personal providers' id shape is theirs alone, so a ref never means two providers.
+    if (isPersonalProviderId(draft.id) || (await this.deps.personal?.repo.get(draft.id))) throw new Error(`"${draft.id}" can't be a provider id: choose another.`);
     const rawKey = draft.apiKeyFromEnv ? this.deps.env[draft.apiKeyFromEnv] : draft.apiKey;
     const existing = this.providers.find((p) => p.id === draft.id);
     let apiKey = existing?.apiKey;
@@ -358,21 +389,7 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
   /** Finds local servers on default ports and API keys in the environment (values are never returned). */
   async detect(): Promise<DetectedProvider[]> {
     const configured = new Set(this.providers.map((p) => `${p.type}|${p.baseUrl}`));
-    const found: DetectedProvider[] = [];
-    await Promise.all(
-      PORT_PROBES.map(async (p) => {
-        const url = DEFAULT_BASE_URLS[p.type];
-        if (configured.has(`${p.type}|${url}`)) return;
-        try {
-          const res = await this.deps.adapterDeps.fetch(url + p.path, { signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
-          // Other local apps answer on these ports too; only accept the server's own JSON shape.
-          const body: unknown = await res.json().catch(() => null);
-          if (p.accepts(res.status, body)) found.push({ type: p.type, baseUrl: url, label: p.label, via: 'port' });
-        } catch {
-          // Nothing listening.
-        }
-      }),
-    );
+    const found: DetectedProvider[] = (await detectLocalServers(this.deps.adapterDeps.fetch, configured)).map((s) => ({ ...s, via: 'port' as const }));
     for (const [envVar, type] of [['ANTHROPIC_API_KEY', 'anthropic'], ['OPENAI_API_KEY', 'openai']] as const) {
       if (this.deps.env[envVar] && !this.providers.some((p) => p.type === type)) {
         found.push({ type, baseUrl: DEFAULT_BASE_URLS[type], label: PROVIDER_LABELS[type], via: 'env', envVar });
@@ -381,9 +398,194 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     return found.sort((a, b) => a.label.localeCompare(b.label));
   }
 
+  // ------------------------------------------------------ personal providers
+
+  /** The person's own provider `id`; null when it isn't theirs (or there is none). */
+  private async ownPersonal(id: string, userId: string | null | undefined): Promise<PersonalRow | null> {
+    const row = userId && this.deps.personal ? await this.deps.personal.repo.get(id) : null;
+    return row && row.userId === userId ? row : null;
+  }
+
+  private requirePersonal(): PersonalAccess {
+    if (!this.deps.personal) throw new Error('Models on your computers need an Atelier server.');
+    return this.deps.personal;
+  }
+
+  /** Its computer is connected and lends it. */
+  private online(row: PersonalRow): boolean {
+    return this.deps.personal?.lends(row.userId, row.deviceId, row.id, row.type) ?? false;
+  }
+
+  private personalKey(row: PersonalRow): Promise<string | undefined> {
+    return this.deps.secrets.forUser(row.userId, personalKeyId(row.userId, row.id));
+  }
+
+  /** Requests go out from the person's computer, never through the request inspector (they are the person's own). */
+  private personalDeps(row: PersonalRow): AdapterDeps {
+    const personal = this.requirePersonal();
+    return { ...this.deps.adapterDeps, fetch: personal.fetch(row.userId, row.deviceId, row.id), chatgptChat: personal.chatgptChat(row.userId, row.deviceId) };
+  }
+
+  /** The person's own models, under their computer's name; `available` false while it isn't connected. */
+  async personalModels(userId: string): Promise<ModelInfo[]> {
+    if (!this.deps.personal) return [];
+    const rows = (await this.deps.personal.repo.list(userId)).filter((r) => r.enabled);
+    if (rows.length === 0) return [];
+    const cached = await this.deps.db.select().from(modelCache).where(inArray(modelCache.providerId, rows.map((r) => r.id))).all();
+    const toolCalling = await this.deps.personal.toolCalling(userId);
+    return rows.flatMap((row) => {
+      const config = personalConfig(row);
+      const extra = { personal: { deviceId: row.deviceId, deviceName: deviceLabel(row) }, available: this.online(row) };
+      return cached
+        .filter((c) => c.providerId === row.id)
+        .map((c) => ({ ...this.personalInfo(c.info as unknown as DiscoveredModel, config, toolCalling), ...extra }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+    });
+  }
+
+  private personalInfo(model: DiscoveredModel, config: ProviderConfig, toolCalling: Record<string, ToolSupport | undefined>): ModelInfo {
+    const tools = toolCalling[model.ref];
+    return applyOverrides(this.calculated(model, config), tools ? { [model.ref]: { toolCalling: tools } } : {});
+  }
+
+  /**
+   * A personal model, for its owner only: anyone else is told it isn't available, as if it didn't exist. Its computer
+   * must be connected; a turn on it isn't moved to another model.
+   */
+  private async resolvePersonal(ref: string, providerId: string, modelId: string, userId: string | null | undefined): Promise<ResolvedModel> {
+    const row = await this.ownPersonal(providerId, userId);
+    if (!row) throw new ModelUnavailableError(`${ref} isn't available.`, 'settings/models');
+    if (!row.enabled) throw new ModelUnavailableError(`${row.name} is turned off.`, 'settings/personal-models');
+    if (!this.online(row)) throw new ModelUnavailableError(`${row.name} runs on ${deviceLabel(row)}, which isn't connected.`, 'settings/personal-models');
+    const config = personalConfig(row);
+    const cached = (await this.deps.db.select().from(modelCache).where(eq(modelCache.providerId, providerId)).all()).find((r) => r.modelId === modelId);
+    const base: DiscoveredModel = cached ? (cached.info as unknown as DiscoveredModel) : fallbackModel(config, modelId);
+    const info: ModelInfo = { ...this.personalInfo(base, config, await this.deps.personal!.toolCalling(row.userId)), personal: { deviceId: row.deviceId, deviceName: deviceLabel(row) }, available: true };
+    const adapter = await this.adapterFor(config, row);
+    return { adapter: info.capabilities.tools === 'prompted' ? this.prompted(adapter) : adapter, info };
+  }
+
+  /** The person's own providers, with whether each computer is connected and the last check. */
+  async personalProviders(userId: string): Promise<PersonalProvider[]> {
+    if (!this.deps.personal) return [];
+    const rows = await this.deps.personal.repo.list(userId);
+    return Promise.all(
+      rows.map(async (row) => {
+        const status = this.statuses.get(row.id);
+        const limits = this.limitsOf(personalConfig(row));
+        return {
+          id: row.id,
+          type: row.type,
+          name: row.name,
+          baseUrl: row.baseUrl,
+          enabled: row.enabled,
+          deviceId: row.deviceId,
+          deviceName: row.deviceName ?? 'A removed computer',
+          online: this.online(row),
+          hasKey: await this.deps.secrets.has(personalKeyId(row.userId, row.id)),
+          ...row.options,
+          ...(status ? { status: { ...status, queue: { parallel: limits.parallel, modelsAtOnce: Number.isFinite(limits.modelsAtOnce) ? limits.modelsAtOnce : null } } } : {}),
+          createdAt: row.createdAt,
+        };
+      }),
+    );
+  }
+
+  /** The row a draft makes on `deviceId` (or its existing one's computer); refuses an id that is someone else's. */
+  private async personalDraft(userId: string, deviceId: string | null, draft: PersonalProviderDraft): Promise<{ row: PersonalRow; existing: PersonalRow | null }> {
+    const personal = this.requirePersonal();
+    const existing = await personal.repo.get(draft.id);
+    if ((existing && existing.userId !== userId) || this.providers.some((p) => p.id === draft.id)) throw new Error('That provider id is taken: add it again.');
+    const device = existing?.deviceId ?? deviceId;
+    if (!device) throw new Error('Add models on your computer from the desktop app there.');
+    const options = {
+      ...(draft.parallelRequests ? { parallelRequests: draft.parallelRequests } : {}),
+      ...(draft.modelsAtOnce ? { modelsAtOnce: draft.modelsAtOnce } : {}),
+      ...(draft.vramGiB !== undefined ? { vramGiB: draft.vramGiB } : {}),
+    };
+    const row: PersonalRow = {
+      id: draft.id,
+      userId,
+      deviceId: device,
+      type: draft.type,
+      name: draft.name,
+      baseUrl: draft.baseUrl.replace(/\/+$/, ''),
+      options,
+      enabled: draft.enabled ?? existing?.enabled ?? true,
+      createdAt: existing?.createdAt ?? Date.now(),
+      deviceName: existing?.deviceName ?? null,
+    };
+    return { row, existing };
+  }
+
+  /** Checks a draft from its computer before it is saved: health, then its models. */
+  async testPersonal(userId: string, deviceId: string | null, draft: PersonalProviderDraft): Promise<{ status: ProviderStatus; models: ModelInfo[] }> {
+    const { row, existing } = await this.personalDraft(userId, deviceId, draft);
+    const config = personalConfig(row);
+    const adapter = this.deps.createAdapter(await this.instance(config, draft.apiKey ?? (existing ? await this.personalKey(existing) : undefined)), this.personalDeps(row));
+    const health: HealthResult = await adapter.health(AbortSignal.timeout(HEALTH_TIMEOUT_MS)).catch((error: unknown) => ({ ok: false, latencyMs: null, warnings: [], error: checkError(error, draft.baseUrl, HEALTH_TIMEOUT_MS) }));
+    const models = health.ok ? await adapter.listModels(AbortSignal.timeout(DISCOVERY_TIMEOUT_MS)).catch(() => [] as DiscoveredModel[]) : [];
+    return {
+      status: { ...health, providerId: draft.id, modelCount: models.length, checkedAt: Date.now() },
+      models: models.map((m) => applyOverrides(m, {})),
+    };
+  }
+
+  /** Adds or edits one of the person's own providers (a new one on `deviceId`); its key becomes their own secret. */
+  async savePersonal(userId: string, deviceId: string | null, draft: PersonalProviderDraft): Promise<PersonalProvider> {
+    const personal = this.requirePersonal();
+    const { row } = await this.personalDraft(userId, deviceId, draft);
+    if (draft.apiKey) await this.deps.secrets.set({ id: personalKeyId(userId, draft.id), label: `${draft.name} API key`, kind: 'api_key', value: draft.apiKey });
+    const { deviceName: _, ...stored } = row;
+    await personal.repo.put(stored);
+    this.adapters.delete(draft.id);
+    await this.refreshPersonal(userId, draft.id);
+    return (await this.personalProviders(userId)).find((p) => p.id === draft.id)!;
+  }
+
+  async removePersonal(userId: string, id: string): Promise<void> {
+    const personal = this.requirePersonal();
+    if (!(await this.ownPersonal(id, userId))) throw new Error('That provider is gone.');
+    await personal.repo.remove(id);
+    this.adapters.delete(id);
+    this.statuses.delete(id);
+    this.reported.delete(id);
+    this.reachable.delete(id);
+    await this.deps.db.delete(modelCache).where(eq(modelCache.providerId, id));
+    if (await this.deps.secrets.has(personalKeyId(userId, id))) await this.deps.secrets.delete(personalKeyId(userId, id));
+    this.emit('personalModels', userId);
+  }
+
+  /** Re-checks the person's providers (or one) on their computers that are connected, and tells their windows. */
+  async refreshPersonal(userId: string, id?: string): Promise<PersonalProvider[]> {
+    if (!this.deps.personal) return [];
+    const rows = (await this.deps.personal.repo.list(userId)).filter((r) => r.enabled && (!id || r.id === id) && this.online(r));
+    for (const r of rows) this.reachable.add(r.id);
+    await Promise.all(rows.map((r) => this.refreshOne(personalConfig(r), r)));
+    this.emit('personalModels', userId);
+    return this.personalProviders(userId);
+  }
+
+  /**
+   * One of the person's computers came, went, or changed what it lends: their own models there become available or
+   * not, and one that just came back is discovered again (its models may have changed meanwhile).
+   */
+  async devicesChanged(userId: string): Promise<void> {
+    if (!this.deps.personal) return;
+    const rows = await this.deps.personal.repo.list(userId);
+    if (rows.length === 0) return;
+    const back = rows.filter((r) => r.enabled && this.online(r) && !this.reachable.has(r.id));
+    for (const r of rows) {
+      if (r.enabled && this.online(r)) this.reachable.add(r.id);
+      else this.reachable.delete(r.id);
+    }
+    await Promise.all(back.map((r) => this.refreshOne(personalConfig(r), r)));
+    this.emit('personalModels', userId);
+  }
+
   /** One-shot native tool-call test; records the result as an override so the picker shows it. */
-  async probeTools(ref: string): Promise<{ native: boolean; detail: string }> {
-    const { adapter, info } = await this.resolve(ref);
+  async probeTools(ref: string, userId?: string | null): Promise<{ native: boolean; detail: string }> {
+    const { adapter, info } = await this.resolve(ref, userId);
     const signal = AbortSignal.timeout(60_000);
     let called = false;
     let error = '';
@@ -400,8 +602,14 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
       if (ev.type === 'tool_call_end' && ev.input && typeof ev.input === 'object') called = true;
       if (ev.type === 'finish' && ev.error) error = ev.error.message;
     }
-    await this.deps.settings.set('global', ['models', 'overrides', ref, 'toolCalling'], called ? 'native' : 'prompted');
-    this.emit('models', await this.listModels());
+    // A person's own model's result is theirs (their prefs); the admin's settings hold the shared models'.
+    if (info.personal && userId && this.deps.personal) {
+      await this.deps.personal.setToolCalling(userId, ref, called ? 'native' : 'prompted');
+      this.emit('personalModels', userId);
+    } else {
+      await this.deps.settings.set('global', ['models', 'overrides', ref, 'toolCalling'], called ? 'native' : 'prompted');
+      this.emit('models', await this.listModels());
+    }
     return { native: called, detail: called ? 'The model returned a native tool call.' : error || 'No native tool call; switched to prompted tool calling.' };
   }
 }

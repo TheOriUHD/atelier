@@ -149,6 +149,15 @@ export const DeviceRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('ssh.probe'), connection: DeviceSshConnection, answers: SshAnswers }),
   /** What the host says it is (`uname -sm`), once a probe went through. */
   z.object({ op: z.literal('ssh.test'), connection: DeviceSshConnection, answers: SshAnswers }),
+  /** The model servers answering on the device's default local ports (Ollama, llama.cpp, LM Studio): `LocalServer[]`. */
+  z.object({ op: z.literal('providers.detect') }),
+  /** One call to the desktop app's ChatGPT window there (a personal ChatGPT Chat provider); its answer is a string. */
+  z.object({
+    op: z.literal('chatgptChat'),
+    operation: z.enum(['status', 'open', 'hide', 'disconnect', 'models', 'start', 'poll', 'stop']),
+    /** What `start` sends: the prompt and its files (base64), at most 48 MiB. */
+    value: z.string().max(64 * 1024 * 1024).optional(),
+  }),
 ]);
 export type DeviceRequest = z.infer<typeof DeviceRequest>;
 
@@ -158,6 +167,8 @@ export const REQUEST_SERVICE: Record<DeviceRequest['op'], DeviceService> = {
   'ssh.hosts': 'ssh',
   'ssh.probe': 'ssh',
   'ssh.test': 'ssh',
+  'providers.detect': 'http',
+  chatgptChat: 'chatgptChat',
 };
 
 /** What a device says about itself when it connects. */

@@ -23,7 +23,8 @@ Use the **Ollama** provider for Ollama rather than pointing **OpenAI-compatible*
 provider sets the context size per request, reads each model's abilities and passes its `think` setting.
 
 On a server, `localhost` means the server (or its container), not your computer. All three default addresses are detected
-automatically when they answer on the backend's own machine (see [Providers](/providers/#detection)).
+automatically when they answer on the backend's own machine (see [Providers](/providers/#detection)). For a model server on
+your own computer, see [Your computer's models on a server](#your-computers-models-on-a-server).
 
 ## Ollama
 
@@ -195,6 +196,28 @@ address. A plain server often tells Atelier nothing about its models, so check e
 
 An address that is not on your network (a public hostname) is queued like a hosted API, 16 requests at once. Set **Requests at
 once** if your server cannot take that.
+
+## Your computer's models on a server
+
+*(next release)* With the desktop app signed in to an Atelier server, that server can use the model servers on your
+computer, for you alone. It reaches them through the app.
+
+1. In the desktop app on that computer, open **Settings › Your models**. Ollama, llama.cpp and LM Studio answering on their
+   default ports are listed under **Found on this computer**: choose **Add**. For another address, on this computer or its
+   network, choose **Add model server**.
+2. The app allows the server to reach that address through it, and the server checks the address through the app before it
+   adds it. **Settings › System** lists what the server can reach from this computer, with **Remove**.
+
+- Only you see these models, in the model picker under your computer's name. Nobody else on the server uses them, admins
+  included, and they are never anyone's default.
+- They answer while the app on that computer is connected. Otherwise they stay in the picker as not connected, and a message
+  to one ends with "*name* runs on *computer*, which isn't connected." The turn does not move to another model.
+- When the computer comes back, Atelier reads its models again.
+- Each computer's server has a queue of its own, apart from a server running next to Atelier and from other computers.
+- An API key you give is kept on the server as your own secret. Requests to your computer's servers don't appear in the
+  request inspector.
+- A model server that only your computer can reach also works from a browser tab, as long as the app on that computer is
+  connected. You add it from that computer's app.
 
 ## Sharing one GPU
 

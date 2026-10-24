@@ -8,7 +8,7 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { APP, DEVICE_LINK_PROTOCOL, type DeviceHello, type DeviceLending, type DeviceRequest, type DeviceStart } from '@atelier/protocol';
-import { bootstrapRunner, plainHttpFetch, probeSsh, remoteRunnerChannel, runOnce, sshConfigHosts, throughShell, writeAskpass, type RunnerChannel } from '@atelier/core/device';
+import { bootstrapRunner, detectLocalServers, plainHttpFetch, probeSsh, remoteRunnerChannel, runOnce, sshConfigHosts, throughShell, writeAskpass, type RunnerChannel } from '@atelier/core/device';
 
 /** Why this computer didn't do what the server asked: the person didn't allow it here, or it can't. */
 export class Refusal extends Error {
@@ -33,6 +33,8 @@ export interface DeviceServicesOptions {
   ssh: string;
   /** A private folder for ssh's askpass script and its logs. */
   sshDir: string;
+  /** One call to the app's ChatGPT window (main's ChatGptChatBrowser); absent where there is none. */
+  chatgptChat?: (operation: Extract<DeviceRequest, { op: 'chatgptChat' }>['operation'], value: string) => Promise<string>;
 }
 
 /** A runner of an SSH host that failed this soon after it started was probably gone from there: look for it again next time. */
@@ -92,7 +94,7 @@ export function deviceServices(o: DeviceServicesOptions) {
   };
 
   return {
-    services: ['runner', 'scratch', 'ssh', 'http'],
+    services: ['runner', 'scratch', 'ssh', 'http', ...(o.chatgptChat ? ['chatgptChat'] : [])],
 
     async hello(): Promise<DeviceHello> {
       return { protocol: DEVICE_LINK_PROTOCOL, app: APP.version, services: this.services, lending: await o.lending(), home: homedir(), sep, os: process.platform, arch: process.arch };
@@ -133,6 +135,12 @@ export function deviceServices(o: DeviceServicesOptions) {
           const shell = throughShell(o.ssh, o.sshDir, await askpass(), request.connection, request.answers);
           return (await runOnce(shell, 'uname -sm')).stdout;
         }
+        case 'providers.detect':
+          return detectLocalServers(fetchHere);
+        case 'chatgptChat':
+          if (!o.chatgptChat) throw new Refusal('unsupported', `${o.deviceName}'s desktop app has no ChatGPT window.`);
+          if (!(await o.lending()).chatgptChat) throw new Refusal('refused', `ChatGPT Chat isn't allowed on ${o.deviceName}: add it in the desktop app there.`);
+          return o.chatgptChat(request.operation, request.value ?? '');
       }
     },
 

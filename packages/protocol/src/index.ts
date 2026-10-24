@@ -18,3 +18,4 @@ export * from './memory.ts';
 export * from './versions.ts';
 export * from './inline-visual.ts';
 export * from './shortcuts.ts';
+export * from './personal-providers.ts';
