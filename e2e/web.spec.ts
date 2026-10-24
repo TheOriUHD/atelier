@@ -34,8 +34,9 @@ test('stop keeps the partial reply and retry adds a second version', async ({ pa
   const partial = await page.getByText(/^Counting slowly:/).innerText();
   expect(partial.length).toBeLessThan(COUNT.length);
 
-  // The retried reply streams as a second version; actions (and the ‹ 2/2 › switcher) show once it ends.
-  await page.getByRole('button', { name: 'Retry' }).last().click();
+  // The retried reply streams as a second version; actions (and the ‹ 2/2 › switcher) show once it ends. Exact: the
+  // reply's model name is a button too ("fake-chat:8b, retry with another model").
+  await page.getByRole('button', { name: 'Retry', exact: true }).last().click();
   await page.getByRole('button', { name: 'Stop' }).click();
   await expect(page.getByText('2/2')).toBeVisible();
   await page.getByRole('button', { name: 'Previous version' }).click();
