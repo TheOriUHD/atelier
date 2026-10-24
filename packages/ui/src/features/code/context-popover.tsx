@@ -8,9 +8,10 @@ import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import { chatGptPlanLabel, type ContextUsage, type ProviderType, type SessionUsage } from '@atelier/protocol';
-import { Button, IconButton, Popover, PopoverContent, PopoverTrigger, ProgressRing, cn } from '../../components/ui/index.ts';
+import { Button, IconButton, Popover, PopoverContent, PopoverTrigger, ProgressRing, Tooltip, cn } from '../../components/ui/index.ts';
 import { popupScrollClass } from '../../components/ui/styles.ts';
 import { useOpenSettings } from '../../app/navigation.ts';
+import { clockTime } from '../../lib/dates.ts';
 import { useThrottledLive } from '../../lib/live-session.ts';
 import { keys } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
@@ -247,19 +248,45 @@ export function windowName(minutes: number | null): string {
   return `${minutes}-minute limit`;
 }
 
-/** "Resets in 1 hr 22 min" within a day, "Resets Tue 8:00 AM" after. */
-export function resetsText(resetsAt: number | null, now: number): string {
+/**
+ * "Resets in 1 hr 22 min" within a day, "Resets Tue 8:00 AM" after; `exact` names the time within a day too:
+ * "Resets 2:25 PM" today, with the weekday on another day. Times follow the computer's 12- or 24-hour clock.
+ */
+export function resetsText(resetsAt: number | null, now: number, exact = false): string {
   if (resetsAt === null) return '';
   const ms = resetsAt - now;
   if (ms <= 0) return 'Resets soon';
-  if (ms < 24 * 3_600_000) {
+  if (ms < 24 * 3_600_000 && !exact) {
     const minutes = Math.max(1, Math.round(ms / 60_000));
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return `Resets in ${[h ? `${h} hr` : '', m || !h ? `${m} min` : ''].filter(Boolean).join(' ')}`;
   }
-  const at = new Date(resetsAt);
-  return `Resets ${at.toLocaleDateString(undefined, { weekday: 'short' })} ${at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  const today = new Date(resetsAt).toDateString() === new Date(now).toDateString();
+  return `Resets ${clockTime(resetsAt, { weekday: !today })}`;
+}
+
+const EXACT_KEY = 'atelier.resetsExact';
+
+/** Whether the plan's limits say when they reset as a time rather than how long until; clicking one switches, and it stays. */
+function useExactResets(): [boolean, () => void] {
+  const [exact, setExact] = useState(() => {
+    try {
+      return localStorage.getItem(EXACT_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setExact(!exact);
+    try {
+      if (exact) localStorage.removeItem(EXACT_KEY);
+      else localStorage.setItem(EXACT_KEY, '1');
+    } catch {
+      // Storage unavailable; the switch still holds while the app runs.
+    }
+  };
+  return [exact, toggle];
 }
 
 const barTone = (percent: number) => (percent >= 90 ? 'bg-danger' : percent >= 75 ? 'bg-warning' : 'bg-interactive');
@@ -296,6 +323,7 @@ function PlanLimits({ onOpenUsage }: { onOpenUsage(): void }) {
   );
   const plan = rawPlan ? chatGptPlanLabel(rawPlan) : null;
   const now = status.dataUpdatedAt || 0;
+  const [exact, toggleExact] = useExactResets();
   return (
     <section aria-labelledby={titleId} className="flex flex-col gap-2.5 border-t border-line pt-3">
       <SectionHeading id={titleId} onOpenUsage={onOpenUsage}>
@@ -306,12 +334,22 @@ function PlanLimits({ onOpenUsage }: { onOpenUsage(): void }) {
       ) : (
         windows.map((w) => {
           const pct = Math.min(100, Math.max(0, Math.round(w.usedPercent)));
+          const resets = resetsText(w.resetsAt, now, exact);
           return (
             <div key={w.windowMinutes ?? 'window'} className="flex flex-col gap-1">
               <div className="flex items-baseline justify-between gap-3 text-body">
                 <span className="text-fg">{windowName(w.windowMinutes)}</span>
                 <span className="flex items-baseline gap-3 tabular-nums">
-                  <span className="text-footnote text-fg-muted">{resetsText(w.resetsAt, now)}</span>
+                  {/* A window more than a day out names its time either way: nothing to switch. */}
+                  {resets === resetsText(w.resetsAt, now, !exact) ? (
+                    <span className="text-footnote text-fg-muted">{resets}</span>
+                  ) : (
+                    <Tooltip content={exact ? 'Show the time left' : 'Show the time'}>
+                      <button type="button" onClick={toggleExact} className="rounded-sm text-footnote text-fg-muted outline-none focus-ring hover:text-fg-secondary">
+                        {resets}
+                      </button>
+                    </Tooltip>
+                  )}
                   <span className="w-9 text-right text-fg-secondary">{pct}%</span>
                 </span>
               </div>

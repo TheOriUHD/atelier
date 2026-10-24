@@ -1,3 +1,5 @@
+import { desktop } from './platform.ts';
+
 const DAY = 86_400_000;
 const dayOfMonth = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 
@@ -41,4 +43,17 @@ const mediumDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 /** "Oct 13, 2026" in the user's locale. */
 export function shortDate(timestamp: number): string {
   return mediumDate.format(timestamp);
+}
+
+/**
+ * "14:25" or "2:25 PM" by this computer's clock (the desktop reads it from the system; in a browser the language
+ * decides), with `weekday` "Tue 14:25".
+ */
+export function clockTime(timestamp: number, { weekday = false, hourCycle = desktop?.hourCycle } = {}): string {
+  return new Intl.DateTimeFormat(undefined, {
+    ...(weekday && { weekday: 'short' }),
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(hourCycle && { hourCycle }),
+  }).format(timestamp);
 }

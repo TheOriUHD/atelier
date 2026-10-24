@@ -29,6 +29,9 @@ ipcRenderer.on('browser:read-file', (_e, request: { id: number; workspaceId: str
 // Main passes this machine's device in argv, so the bridge can expose it synchronously.
 const DEVICE_ARG = '--atelier-device=';
 const device: unknown = JSON.parse(process.argv.find((arg) => arg.startsWith(DEVICE_ARG))!.slice(DEVICE_ARG.length));
+// And this computer's clock, when main could tell it.
+const CLOCK_ARG = '--atelier-clock=';
+const hourCycle = process.argv.find((arg) => arg.startsWith(CLOCK_ARG))?.slice(CLOCK_ARG.length) ?? null;
 
 contextBridge.exposeInMainWorld('atelierDesktop', {
   platform: process.platform,
@@ -67,6 +70,7 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     clear: () => ipcRenderer.invoke('session:clear'),
   },
   device,
+  hourCycle,
   lock: {
     canUseSystem: () => ipcRenderer.invoke('lock:canUseSystem'),
     removeWithSystem: () => ipcRenderer.invoke('lock:removeWithSystem'),

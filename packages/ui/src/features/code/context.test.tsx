@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContextUsage, Message, RunEvent, SessionSnapshot, SessionUsage, UsageRow } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
+import { clockTime } from '../../lib/dates.ts';
 import { useLiveSession, type LiveSessionState } from '../../lib/live-session.ts';
 import { Transcript } from '../chat/transcript.tsx';
 import { backend, callsTo, emit } from '../settings/test-backend.ts';
@@ -340,6 +341,39 @@ describe('ContextButton', () => {
     expect(openSettings).toHaveBeenCalledWith('usage');
   });
 
+  it('says when a limit resets as a time once its countdown is clicked, and keeps it that way', async () => {
+    const resetsAt = NOW + 82 * 60_000;
+    const weekly = NOW + 3 * 86_400_000;
+    show('s-gpt', snapshot('s-gpt', { streamingMessageId: null, session: { ...snapshot('s-gpt').session, status: 'idle' } }), <ContextButton sessionId="s-gpt" busy={false} provider="chatgpt" />);
+    backend.handlers['chatgpt.status'] = () => ({
+      available: true,
+      signedIn: true,
+      signingIn: false,
+      plan: 'plus',
+      limits: { primary: { usedPercent: 42, windowMinutes: 300, resetsAt }, secondary: { usedPercent: 10, windowMinutes: 10_080, resetsAt: weekly } },
+    });
+    const ring = () => screen.getByRole('button', { name: 'Context window: 13% used' });
+    const limits = () => screen.getByRole('region', { name: 'Plan usage limits · Plus' });
+    await settle();
+    fireEvent.click(ring());
+    await settle();
+    // The weekly window already names its time: only the countdown switches.
+    const weeklyText = `Resets ${clockTime(weekly, { weekday: true })}`;
+    expect(limits().textContent).toContain(weeklyText);
+    expect(within(limits()).queryByRole('button', { name: weeklyText })).toBeNull();
+
+    fireEvent.click(within(limits()).getByRole('button', { name: 'Resets in 1 hr 22 min' }));
+    expect(within(limits()).getByRole('button', { name: `Resets ${clockTime(resetsAt)}` })).toBeTruthy();
+
+    fireEvent.click(ring());
+    await settle();
+    fireEvent.click(ring());
+    await settle();
+    fireEvent.click(within(limits()).getByRole('button', { name: `Resets ${clockTime(resetsAt)}` }));
+    expect(within(limits()).getByRole('button', { name: 'Resets in 1 hr 22 min' })).toBeTruthy();
+    expect(localStorage.getItem('atelier.resetsExact')).toBeNull();
+  });
+
   it.each([['prolite', 'Pro 100'], ['pro', 'Pro 200'], ['pro_500', 'Pro 500'], ['promax', 'Pro 500']])('shows %s with only its weekly usage window', async (plan, label) => {
     show('s-pro', snapshot('s-pro'), <ContextButton sessionId="s-pro" busy={false} provider="chatgpt" />);
     backend.handlers['chatgpt.status'] = () => ({ available: true, signedIn: true, signingIn: false, plan,
@@ -395,6 +429,15 @@ describe('plan limits', () => {
     expect(resetsText(NOW - 1, NOW)).toBe('Resets soon');
     expect(resetsText(null, NOW)).toBe('');
     expect(resetsText(NOW + 3 * 86_400_000, NOW)).toMatch(/^Resets \w+ /);
+  });
+
+  it('names the time within a day too when asked, with the weekday once it is another day', () => {
+    const today = NOW + 82 * 60_000;
+    const tomorrow = NOW + 13 * 3_600_000;
+    expect(resetsText(today, NOW, true)).toBe(`Resets ${clockTime(today)}`);
+    expect(resetsText(tomorrow, NOW, true)).toBe(`Resets ${clockTime(tomorrow, { weekday: true })}`);
+    expect(resetsText(NOW + 3 * 86_400_000, NOW, true)).toBe(resetsText(NOW + 3 * 86_400_000, NOW));
+    expect(resetsText(NOW - 1, NOW, true)).toBe('Resets soon');
   });
 });
 

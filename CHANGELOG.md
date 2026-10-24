@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **A ChatGPT limit's countdown turns into the time it resets:** in the context popover's Plan usage limits, click "Resets in 4 hr 25 min" and it reads "Resets 14:25" (with the weekday when it resets on another day); click again for the countdown. The choice stays. Times there follow the computer's 12- or 24-hour clock, not the app's language: the desktop reads it from the system (macOS's 24-hour switch, or its region, so English with region Germany is 14:25 where it said 2:25 PM; Windows' short time format; Linux's time locale), and a browser keeps its language's clock.
+
 ## [0.2.5] — 2026-10-22
 
 - **ChatGPT Chat lists ChatGPT's models on a non-English system:** ChatGPT speaks the language the browser asks for, and the driver reads its English labels ("Select ChatGPT model", "Power", "3 of 5"). On a German Windows the model scan found nothing and the menu showed only "ChatGPT Chat" (attachments waited for English labels too), whatever the plan. The ChatGPT window's session now always asks for English (Accept-Language `en-US,en`), which turns the page English (checked on chatgpt.com with a German system).

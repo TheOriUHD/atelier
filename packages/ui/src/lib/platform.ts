@@ -88,6 +88,11 @@ interface DesktopBridge {
   /** This machine, registered as a device of the signed-in user (`devices.register`). */
   device: { id: string; name: string; platform: string };
   /**
+   * The computer's clock ("h12" 2:25 PM, "h23" 14:25), which the app's language doesn't tell: null when the desktop
+   * couldn't read it, absent in desktop shells older than the UI bundle.
+   */
+  hourCycle?: 'h12' | 'h23' | null;
+  /**
    * Native folder picker. Resolves to the folder's git top level (or the folder), not yet trusted; null when
    * cancelled. `trust` records it as trusted on this machine (after the person agreed), ready for `workspaces.addLocal`.
    */

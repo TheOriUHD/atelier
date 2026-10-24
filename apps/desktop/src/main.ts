@@ -26,6 +26,7 @@ import { KeepAwake } from './keep-awake.ts';
 import { FileReads, PAGES_PRIVILEGES, PAGES_SCHEME, WorkspacePages } from './workspace-pages.ts';
 import { loginItem } from './login-item.ts';
 import { loginShellPath, mergePaths } from './shell-path.ts';
+import { parseShortTime, systemHourCycle, type HourCycle } from './clock.ts';
 import { createBundleSwap } from './bundle-swap.ts';
 import { createUpdates, inertUpdater, type Updater } from './updater.ts';
 import {
@@ -68,6 +69,8 @@ let token: string | null = null;
 /** Server mode: why the server can't be reached right now (relay's diagnosis), null while it can. Shown on the "Connecting…" screen. */
 let linkProblem: LinkProblem | null = null;
 let device: Device;
+/** This computer's 12- or 24-hour clock, for the times the page shows; null when it can't tell (clock.ts). */
+let hourCycle: HourCycle | null = null;
 /** Read while Electron starts up; the backend and its runners use it to find programs (see shell-path.ts). */
 const shellPath = loginShellPath();
 let path = process.env.PATH;
@@ -336,8 +339,8 @@ function createWindow(hash = ''): BrowserWindow {
       ...(process.env.ATELIER_HIDE_WINDOW ? { backgroundThrottling: false } : {}),
       // The Code Browser pane; each page is hardened as it attaches (browser.ts).
       webviewTag: true,
-      // Read synchronously by the preload as `atelierDesktop.device`.
-      additionalArguments: [`--atelier-device=${JSON.stringify(device)}`],
+      // Read synchronously by the preload as `atelierDesktop.device` and `atelierDesktop.hourCycle`.
+      additionalArguments: [`--atelier-device=${JSON.stringify(device)}`, ...(hourCycle ? [`--atelier-clock=${hourCycle}`] : [])],
     },
   });
   // End-to-end runs set ATELIER_HIDE_WINDOW: the page works the same unseen, and no test window takes the screen or focus.
@@ -652,7 +655,25 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
   prepareBrowserSession(session.fromPartition(BROWSER_PARTITION), browserEvents);
   session.fromPartition(BROWSER_PARTITION).protocol.handle(PAGES_SCHEME, (request) => workspacePages.handle(request));
-  [device, connection] = await Promise.all([loadDevice(), loadConnection(), shellPath.then((p) => void (path = mergePaths(p, process.env.PATH)))]);
+  [device, connection, hourCycle] = await Promise.all([
+    loadDevice(),
+    loadConnection(),
+    systemHourCycle({
+      platform: process.platform,
+      force24: () => isMac && systemPreferences.getUserDefault('AppleICUForce24HourTime', 'boolean'),
+      force12: () => isMac && systemPreferences.getUserDefault('AppleICUForce12HourTime', 'boolean'),
+      systemLocale: () => app.getSystemLocale(),
+      country: () => app.getLocaleCountryCode(),
+      shortTime: () =>
+        new Promise((resolve) =>
+          execFile('reg', ['query', 'HKCU\\Control Panel\\International', '/v', 'sShortTime'], { windowsHide: true, timeout: 3000 }, (error, stdout) =>
+            resolve(error ? null : parseShortTime(stdout)),
+          ),
+        ),
+      env: process.env,
+    }).catch(() => null),
+    shellPath.then((p) => void (path = mergePaths(p, process.env.PATH))),
+  ]);
   buildMenu();
   if (connection) token = await loadToken(tokenTarget(connection));
   const updateSettings = await loadUpdateSettings();

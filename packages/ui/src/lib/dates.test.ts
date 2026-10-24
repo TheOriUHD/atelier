@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { greeting, recentGroup, relativeTime } from './dates.ts';
+import { clockTime, greeting, recentGroup, relativeTime } from './dates.ts';
 
 const now = new Date(2026, 9, 13, 15, 0).getTime();
 const at = (d: number, h = 12) => new Date(2026, 9, d, h).getTime();
@@ -29,5 +29,14 @@ describe('greeting', () => {
     expect(greeting('Ada', new Date(2026, 0, 1, 13))).toBe('Afternoon, Ada');
     expect(greeting(undefined, new Date(2026, 0, 1, 19))).toBe('Good evening');
     expect(greeting('Ada', new Date(2026, 0, 1, 23))).toBe('Evening, Ada');
+  });
+});
+
+describe('clockTime', () => {
+  it("follows the computer's clock, not the language's", () => {
+    const at = new Date(2026, 9, 13, 14, 25).getTime();
+    expect(clockTime(at, { hourCycle: 'h23' })).toBe('14:25');
+    expect(clockTime(at, { hourCycle: 'h12' })).toMatch(/^2:25\s?PM$/i);
+    expect(clockTime(at, { weekday: true, hourCycle: 'h23' })).toMatch(/^\S+,? 14:25$/);
   });
 });
