@@ -17,6 +17,8 @@ export type MainToBackend =
   | { kind: 'token'; token: string | null }
   /** Server mode: the person changed what this computer lends the server (`lending.json`). */
   | { kind: 'lending' }
+  /** Server mode: the person opened "Import from Claude Code" here, so the server may read its connectors for a while. */
+  | { kind: 'importing' }
   /** Local mode: the person passed the OS account check (Touch ID), so the screen lock is removed. */
   | { kind: 'removeScreenLock' }
   | { kind: 'shutdown' };

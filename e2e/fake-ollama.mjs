@@ -7,6 +7,7 @@
  *   "artifact" → an `artifact` tool call (HTML page)              "slow"  → ~12s stream (stop/reconnect tests)
  *   "fail"     → HTTP 500                                         "context?" → project instructions + document names it was given
  *   "safeguards?" → whether the optional content settings block reached its system prompt
+ *   "system has <word>?" → whether that word is in its system prompt (instruction files that reached it)
  *   "long"     → ~2,400 characters over ~8s (live token counts)
  *   "shellblock" → a short reply with one bash code block (`echo from-the-block`)
  *   "request?" → the `think` value it was sent and what the notes in front of the message say about Ultracode (yes: on, off, no: nothing)
@@ -145,6 +146,11 @@ async function chat(req, res) {
   if (/request\?/i.test(lastUser)) {
     const ultracode = /Ultracode is (?:still )?on/.test(notes) ? 'yes' : /Ultracode is off/.test(notes) ? 'off' : 'no';
     send({ content: `think=${JSON.stringify(body.think ?? null)} ultracode=${ultracode}` });
+    return done(8);
+  }
+  const has = /^system has (\S+)\?$/i.exec(lastUser.trim());
+  if (has) {
+    send({ content: `System has ${has[1]}: ${system.includes(has[1]) ? 'yes' : 'no'}.` });
     return done(8);
   }
   if (/context\?/i.test(lastUser)) {

@@ -1,14 +1,32 @@
 /**
  * What this desktop lends a server beyond runners for trusted folders (ARCHITECTURE §21): a folder for each session
- * started without one, SSH hosts reached with this computer's ssh, keys, known hosts and runner builds, and requests to
- * addresses on this computer or its network (personal model servers and connectors). Each needs the person's say-so on
- * this computer (`lending.json`), so a server can't make it do more than they allowed here.
+ * started without one, SSH hosts reached with this computer's ssh, keys, known hosts and runner builds, requests to
+ * addresses on this computer or its network (personal model servers and connectors), the person's own connectors that
+ * run a program here, and their config in its home folder. Each needs the person's say-so on this computer
+ * (`lending.json`), so a server can't make it do more than they allowed here.
  */
 import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { APP, DEVICE_LINK_PROTOCOL, type DeviceHello, type DeviceLending, type DeviceRequest, type DeviceStart } from '@atelier/protocol';
-import { bootstrapRunner, plainHttpFetch, probeSsh, remoteRunnerChannel, runOnce, sshConfigHosts, throughShell, writeAskpass, type RunnerChannel } from '@atelier/core/device';
+import { APP, DEVICE_LINK_PROTOCOL, UNSAFE_CONNECTOR_ENV, type DeviceHello, type DeviceLending, type DeviceRequest, type DeviceStart } from '@atelier/protocol';
+import {
+  bootstrapRunner,
+  homeFs,
+  importClaudeCode,
+  interpolate,
+  plainHttpFetch,
+  probeSsh,
+  programChannel,
+  remoteRunnerChannel,
+  runOnce,
+  scanHome,
+  sshConfigHosts,
+  throughShell,
+  watchHome,
+  writeAskpass,
+  type RunnerChannel,
+} from '@atelier/core/device';
+import { connectorFingerprint } from './lending.ts';
 
 /** Why this computer didn't do what the server asked: the person didn't allow it here, or it can't. */
 export class Refusal extends Error {
@@ -33,7 +51,14 @@ export interface DeviceServicesOptions {
   ssh: string;
   /** A private folder for ssh's askpass script and its logs. */
   sshDir: string;
+  /** The folders trusted here, whose `.mcp.json` an import from Claude Code reads. */
+  trustedFolders?(): Promise<string[]>;
+  /** This computer's home folder (the person's config, and where connectors' programs run). */
+  home?: string;
 }
+
+/** How long after the person opened the import here a server may read Claude Code's connectors (with their keys). */
+const IMPORT_WINDOW_MS = 2 * 60_000;
 
 /** A runner of an SSH host that failed this soon after it started was probably gone from there: look for it again next time. */
 const EARLY_EXIT_MS = 10_000;
@@ -90,12 +115,28 @@ export function deviceServices(o: DeviceServicesOptions) {
   const allowSsh = async (host: string) => {
     if (!(await o.lending()).ssh.includes(host)) throw new Refusal('refused', `${host} isn't an SSH host you use from ${o.deviceName}: choose it in the desktop app there first.`);
   };
+  const home = o.home ?? homedir();
+  const allowHome = async () => {
+    if (!(await o.lending()).home) throw new Refusal('refused', `${o.deviceName} doesn't share the config in its home folder: allow it in the desktop app there.`);
+  };
+  /** Until when the person's import here lets the server read Claude Code's connectors. */
+  let importUntil = 0;
 
   return {
-    services: ['runner', 'scratch', 'ssh', 'http'],
+    services: ['runner', 'scratch', 'ssh', 'http', 'mcp', 'home'],
 
     async hello(): Promise<DeviceHello> {
-      return { protocol: DEVICE_LINK_PROTOCOL, app: APP.version, services: this.services, lending: await o.lending(), home: homedir(), sep, os: process.platform, arch: process.arch };
+      return { protocol: DEVICE_LINK_PROTOCOL, app: APP.version, services: this.services, lending: await o.lending(), home, sep, os: process.platform, arch: process.arch };
+    },
+
+    /** The person opened "Import from Claude Code" in a window here: the server may read its connectors for a while. */
+    allowImport(): void {
+      importUntil = Date.now() + IMPORT_WINDOW_MS;
+    },
+
+    /** Tells `onChange` when the person's config in the home folder changes, so a server reads it again. */
+    watchHome(onChange: () => void): () => void {
+      return watchHome(home, onChange);
     },
 
     /**
@@ -133,13 +174,23 @@ export function deviceServices(o: DeviceServicesOptions) {
           const shell = throughShell(o.ssh, o.sshDir, await askpass(), request.connection, request.answers);
           return (await runOnce(shell, 'uname -sm')).stdout;
         }
+        case 'home.scan':
+          await allowHome();
+          return scanHome(home);
+        case 'home.read':
+          await allowHome();
+          return homeFs(home).read(request.path);
+        case 'mcp.import':
+          // Claude Code's connectors carry their keys: only right after the person asked for them here.
+          if (Date.now() > importUntil) throw new Refusal('refused', `Open "Import from Claude Code" in the desktop app on ${o.deviceName} to import from there.`);
+          return importClaudeCode(home, (await o.trustedFolders?.()) ?? []);
       }
     },
 
     /** Starts what the server asked for; `log` gets what it writes to stderr. */
     async start(service: DeviceStart, log: (line: string) => void): Promise<RunnerChannel> {
       if (service.kind === 'http') return this.http(service);
-      if (service.kind !== 'ssh') throw new Refusal('unsupported', `${o.deviceName}'s desktop app doesn't lend that.`);
+      if (service.kind === 'mcp') return this.mcp(service, log);
       await allowSsh(service.connection.host);
       if (!o.runnerDir) throw new Refusal('unsupported', `${o.deviceName} has no runner builds to put on SSH hosts.`);
       const shell = throughShell(o.ssh, o.sshDir, await askpass(), service.connection, service.answers);
@@ -158,6 +209,34 @@ export function deviceServices(o: DeviceServicesOptions) {
         if (Date.now() - startedAt < EARLY_EXIT_MS && runners.get(key) === found) runners.delete(key);
       });
       return channel;
+    },
+
+    /**
+     * A personal connector's program, allowed here by exactly what runs (its fingerprint): never with an environment
+     * variable that changes which code runs, `${VAR}` filled in from this computer's environment, run in the home folder.
+     * Its stdout and stdin are the channel's lines, its stderr goes to `log`.
+     */
+    async mcp(service: Extract<DeviceStart, { kind: 'mcp' }>, log: (line: string) => void): Promise<RunnerChannel> {
+      const keys = Object.keys(service.env);
+      const lent = (await o.lending()).connectors.find((c) => c.id === service.connectorId);
+      if (!lent || lent.fingerprint !== connectorFingerprint(service.command, service.args, keys)) {
+        throw new Refusal('refused', `${o.deviceName} doesn't run that connector: allow it in Customize › Connectors in the desktop app there.`);
+      }
+      const unsafe = keys.find((k) => UNSAFE_CONNECTOR_ENV.test(k));
+      if (unsafe) throw new Refusal('refused', `${o.deviceName} doesn't let a connector set ${unsafe}.`);
+      const missing: string[] = [];
+      const env: Record<string, string> = {};
+      for (const [key, value] of Object.entries(service.env)) {
+        const filled = await interpolate(value, { secret: async () => undefined, env: (name) => process.env[name] });
+        missing.push(...filled.missing);
+        env[key] = filled.value;
+      }
+      if (missing.length) throw new Refusal('failed', `${o.deviceName} has no ${missing.join(', ')} in its environment.`);
+      try {
+        return await programChannel({ command: service.command, args: service.args, env, cwd: home }, log);
+      } catch (e) {
+        throw new Refusal('failed', `${service.command} didn't start on ${o.deviceName}: ${e instanceof Error ? e.message : String(e)}`);
+      }
     },
 
     /**

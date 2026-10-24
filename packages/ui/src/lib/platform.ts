@@ -107,6 +107,8 @@ interface DesktopBridge {
   lending?: {
     get(): Promise<DeviceLending | null>;
     change(change: LendingChange): Promise<DeviceLending | null>;
+    /** The person opened "Import from Claude Code": the server may read its connectors here for a while. Absent in older shells. */
+    allowImport?(): Promise<void>;
   };
   /**
    * The computer's clock ("h12" 2:25 PM, "h23" 14:25), which the app's language doesn't tell: null when the desktop

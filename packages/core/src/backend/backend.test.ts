@@ -3,7 +3,10 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { APP, contract, createMemoryTransportPair, createRpcClient, LOOP_MAX_PER_SESSION, LOOP_MAX_PER_USER, type AppContract, type RpcClient } from '@atelier/protocol';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { APP, connectorFingerprintInput, contract, createMemoryTransportPair, createRpcClient, LOOP_MAX_PER_SESSION, LOOP_MAX_PER_USER, type AppContract, type HomeScan, type RpcClient } from '@atelier/protocol';
+import { programChannel } from '../mcp/line-transport.ts';
 import { ArtifactRepo } from '../artifacts/artifact-repo.ts';
 import { SessionRepo } from '../sessions/session-repo.ts';
 import { TEMPORARY_MAX_IDLE_MS } from '../sessions/temporary.ts';
@@ -47,6 +50,7 @@ async function signedIn(username: string, password: string): Promise<RpcClient<A
   return c;
 }
 
+const STDIO_FIXTURE = fileURLToPath(new URL('../mcp/__fixtures__/stdio-server.ts', import.meta.url));
 const code = (p: Promise<unknown>) => p.then(() => 'ok', (e: { data?: { code?: string } }) => e.data?.code ?? String(e));
 
 afterEach(async () => {
@@ -751,7 +755,7 @@ describe('a desktop lending itself to a server', () => {
       const { token } = await desktop.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'desktop' });
       const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
       await desktop.call('devices.register', device);
-      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh'] });
+      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http'] });
 
       const scratchBase = join(home, 'laptop-scratch');
       let link: { receive(text: string): void } | null = null;
@@ -798,6 +802,78 @@ describe('a desktop lending itself to a server', () => {
       expect(folder.root.startsWith(join(scratchBase))).toBe(true);
     } finally {
       for (const runner of runners.values()) runner.kill();
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("runs the person's own connectors there and shows the skills in its home folder", async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-lend-'));
+    const server = await createBackend({ surface: 'web', configDir: home, dataDir: home, cipher: { encrypt: async (s) => s, decrypt: async (s) => s }, env: {}, logger: { info: () => {}, error: () => {} } });
+    const programs = new Map<string, RunnerChannel>();
+    try {
+      const signIn = () => {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+        return createRpcClient(contract, clientSide);
+      };
+      const browser = signIn();
+      await browser.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      const desktop = signIn();
+      const { token } = await desktop.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'desktop' });
+      const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
+      await desktop.call('devices.register', device);
+
+      // Written only through connectors.*, its values kept apart from the preferences.
+      expect(await code(browser.call('prefs.set', { path: ['connectors'], value: [] }))).toBe('forbidden');
+      const mock = await browser.call('connectors.save', { name: 'mock', type: 'stdio', command: process.execPath, args: [STDIO_FIXTURE], env: { MOCK_TOKEN: 'mine' } });
+      expect((await browser.call('prefs.get', {})).connectors).toEqual([expect.objectContaining({ id: mock.id, envKeys: ['MOCK_TOKEN'] })]);
+      expect(JSON.stringify(await browser.call('connectors.list', {}))).not.toContain('mine');
+      await browser.call('connectors.test', { id: mock.id });
+      expect((await browser.call('mcp.status', {})).find((s) => s.name === 'mock')).toMatchObject({ personal: true, state: 'error' });
+
+      // The desktop allows it (its windows write lending.json) and runs the program when asked.
+      const fingerprint = createHash('sha256').update(connectorFingerprintInput(process.execPath, [STDIO_FIXTURE], ['MOCK_TOKEN'])).digest('hex');
+      const scan: HomeScan = { home: '/Users/ada', sep: '/', dirs: { '/Users/ada/.claude/skills': ['notes'] }, files: { '/Users/ada/.claude/skills/notes/SKILL.md': '---\nname: notes\ndescription: Takes notes.\n---\n' }, real: {}, settings: null };
+      let link: { receive(text: string): void } | null = null;
+      const reply = (frame: object) => link!.receive(JSON.stringify(frame));
+      link = await server.linkDevice(
+        {
+          send: (frame) => {
+            if (frame.t === 'req') return reply(frame.request.op === 'home.scan' ? { t: 'res', id: frame.id, ok: true, value: scan } : { t: 'res', id: frame.id, ok: false, code: 'unsupported', error: 'Not here.' });
+            if (frame.t === 'start' && frame.service.kind === 'mcp') {
+              const { command, args, env } = frame.service;
+              void programChannel({ command, args, env, cwd: home }, () => {}).then((program) => {
+                programs.set(frame.channel, program);
+                program.onLine((line) => reply({ t: 'line', channel: frame.channel, line }));
+                reply({ t: 'opened', channel: frame.channel });
+              });
+            } else if (frame.t === 'line') programs.get(frame.channel)?.send(frame.line);
+            else if (frame.t === 'close') programs.get(frame.channel)?.kill();
+          },
+          close: () => {},
+        },
+        token,
+        device,
+      );
+      const lending = { scratch: false, ssh: [], connectors: [{ id: mock.id, name: 'mock', fingerprint }] };
+      reply({ t: 'hello', hello: { protocol: 2, app: '0.3.0', services: ['runner', 'mcp', 'home'], lending, home: '/Users/ada', sep: '/', os: 'darwin', arch: 'arm64' } });
+      await expect.poll(async () => (await browser.call('mcp.status', {})).find((s) => s.name === 'mock')?.state, { timeout: 10_000 }).toBe('ready');
+      expect((await browser.call('mcp.status', {})).find((s) => s.name === 'mock')).toMatchObject({ device: 'Laptop', tools: expect.arrayContaining([expect.objectContaining({ name: 'echo' })]) });
+
+      // Another person sees none of it.
+      const { temporaryPassword } = await browser.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+      const bob = signIn();
+      await bob.call('auth.login', { username: 'bob', password: temporaryPassword, clientKind: 'web' });
+      await bob.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+      expect(await bob.call('connectors.list', {})).toEqual([]);
+      expect((await bob.call('mcp.status', {})).some((s) => s.personal)).toBe(false);
+
+      // The desktop asking sees the skills in its home folder, said to be from it; a browser has none of them.
+      expect((await desktop.call('skills.list', {})).find((s) => s.name === 'notes')).toMatchObject({ scope: 'global', device: 'Laptop' });
+      expect((await browser.call('skills.list', {})).some((s) => s.name === 'notes')).toBe(false);
+    } finally {
+      for (const program of programs.values()) program.kill();
       await server.dispose();
       await rm(home, { recursive: true, force: true });
     }

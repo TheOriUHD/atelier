@@ -164,6 +164,8 @@ export const SkillSummary = z.object({
   warnings: z.array(z.string()),
   /** Set when Atelier installed it: where from and at which commit. */
   installed: z.object({ source: z.string(), sha: z.string(), installedAt: z.string() }).nullable(),
+  /** The person's computer it is on, for one from their home folder there (a desktop signed in to a server). */
+  device: z.string().optional(),
 });
 export type SkillSummary = z.infer<typeof SkillSummary>;
 
@@ -178,6 +180,8 @@ export const PluginSummary = z.object({
   skills: z.array(z.string()),
   commands: z.array(z.string()),
   agents: z.array(z.string()),
+  /** The person's computer it is installed on (Claude Code's plugins there); switching it is their own preference. */
+  device: z.string().optional(),
 });
 export type PluginSummary = z.infer<typeof PluginSummary>;
 

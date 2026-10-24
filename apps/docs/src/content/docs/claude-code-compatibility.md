@@ -33,9 +33,19 @@ How to read it:
 | [Tool names](#tool-names-and-parameters) | In rules, hook matchers and agent `tools` | Partly |
 | [Model aliases](#model-aliases) | `opus`, `sonnet`, `haiku`, `fable` in agent files | Supported, through a mapping you set |
 
-Where the table says `~/.claude`, only the desktop app reads it, from the computer it runs on; a server never does,
-though it reads project folders through their runner as usual. Permission rules and hooks in `~/.claude/settings.json`
-apply only to folders on that computer.
+Where the table says `~/.claude`, it is read on the person's own computer. The desktop app's own backend reads its
+computer's. A server reads it through the desktop app of the computer a session's folder is on: a folder on that computer,
+or an SSH host reached from it, while that desktop is online and signed in to the server. Sessions with no folder on one
+of the person's computers (chats, codespaces, folders on the server) get none of it. Permission rules and hooks in
+`~/.claude/settings.json`, Claude Code plugins' hooks, and skills' scripts apply only to folders on that same computer,
+not to SSH hosts reached from it.
+
+What a server may read there is fixed by the desktop: `~/.agents/skills`, `~/.claude/{skills,commands,agents,plugins}`,
+`~/.atelier/{skills,commands,agents}`, `~/.claude/CLAUDE.md`, `~/.atelier/ATELIER.md`, and `.md` files of at most 256 KB
+that those import. Of `~/.claude/settings.json` it sends only `permissions`, `hooks` and `enabledPlugins`, never `env`.
+Claude Code's credentials, `~/.claude.json`, history and transcripts are never read. The person can stop it in the desktop
+app (what this computer lends the server, in **Settings › System**). Skills and plugins from there are listed "From
+{computer}", and switching such a plugin on or off is the person's own choice, over the admin's.
 
 ## The admin switch
 
@@ -66,7 +76,7 @@ Code and Cowork sessions read these; Chat has no folder and reads none.
 | `CLAUDE.local.md` | Same | Ranks last within its folder. |
 | `AGENTS.md` | Same | Always loaded, also when a `CLAUDE.md` exists. |
 | `ATELIER.md` | Same | Atelier's own file. Ranks above `AGENTS.md` and `CLAUDE.md` in the same folder. |
-| `~/.claude/CLAUDE.md` | Desktop only | Counts as your personal instructions. Needs the compatibility switch. |
+| `~/.claude/CLAUDE.md` | On your computer (see above) | Counts as your personal instructions. Needs the compatibility switch. |
 | Files in subfolders | On demand | The first time a `Read`, `Edit` or `Write` works in or below a folder that has one of these files, it is added to the tool result. `node_modules`, `vendor`, `.venv`, `venv`, `target`, `dist`, `build` and `.git` are skipped. |
 
 Files load from the outermost folder to the nearest, so the nearest ranks highest. Each file is cut at 60,000
@@ -95,7 +105,7 @@ A skill is a folder with a `SKILL.md`. Atelier looks, in this order, and the fir
 | Order | Location | Notes |
 |---|---|---|
 | 1 | `.atelier/skills`, `.agents/skills`, `.claude/skills` in the session's folder | Only at the folder's root: a `.claude/skills` in a subfolder is not found. |
-| 2 | `<config>/skills`, `~/.agents/skills`, `~/.claude/skills` | `<config>` is `~/.atelier` on the desktop and the server's data folder on a server. The last two are desktop only. |
+| 2 | `<config>/skills`, `~/.agents/skills`, `~/.claude/skills` | `<config>` is `~/.atelier` on the desktop and the server's data folder on a server. The last two (and `~/.atelier/skills` on a server) are read on your computer (see above). |
 | 3 | `skills/` of enabled plugins | Named `plugin:skill`. |
 
 A skill reached twice through a symlink counts once. Atelier installs skills into `~/.agents/skills/<name>` and, with
@@ -130,7 +140,7 @@ Markdown files in a `commands` folder, started with `/name`.
 | Where | Notes |
 |---|---|
 | `.atelier/commands`, `.claude/commands` in the session's folder | |
-| `<config>/commands`, `~/.claude/commands` | The second is desktop only. |
+| `<config>/commands`, `~/.claude/commands` | The second is read on your computer (see above). |
 | `commands/` of enabled plugins | Named `plugin:name`. |
 
 * The file name (without `.md`) is the command name, 1 to 64 letters, digits, `_` or `-`. A file in a subfolder (one level
@@ -156,7 +166,7 @@ Markdown files whose front matter describes the agent and whose body is its syst
 | Where | Notes |
 |---|---|
 | `.atelier/agents`, `.claude/agents` in the session's folder | Only `*.md` files directly in the folder; subfolders are not read. |
-| `<config>/agents`, `~/.claude/agents` | The second is desktop only. |
+| `<config>/agents`, `~/.claude/agents` | The second is read on your computer (see above). |
 | `agents/` of enabled plugins | Named `plugin:agent`. |
 
 | Front matter | Status |
@@ -178,7 +188,7 @@ Permission rules `Agent(name)` and `Task(name)` both match it.
 
 | Part | Status |
 |---|---|
-| Reading plugins installed by Claude Code (`~/.claude/plugins/installed_plugins.json`, file version 2) | Desktop only. You can switch them on or off in Atelier; that never touches Claude Code's files. A plugin counts as on unless Claude Code's `~/.claude/settings.json` has `enabledPlugins` set to `false` for it, or you changed it in Atelier. |
+| Reading plugins installed by Claude Code (`~/.claude/plugins/installed_plugins.json`, file version 2) | On your computer (see above). You can switch them on or off in Atelier; that never touches Claude Code's files. A plugin counts as on unless Claude Code's `~/.claude/settings.json` has `enabledPlugins` set to `false` for it, or you changed it in Atelier. |
 | Installing from a marketplace | **Settings › Admin › Plugins › Add from a marketplace** takes `owner/repo` or a `github.com` URL with a `.claude-plugin/marketplace.json`. Admins only. |
 | Marketplace plugin sources | A relative path string, or `{ "source": "github", "repo": ..., "ref": ..., "path": ... }`. Other kinds (`url`, `git-subdir`, `archive`, ...) are listed, and cannot be installed ("Plugins from “...” sources can't be installed yet."). |
 | Where installs go | `<config>/plugins/cache/<marketplace>/<plugin>/<version>`, recorded in `<config>/plugins/installed.json`. The version is the entry's, or the first 7 characters of the commit. |
@@ -255,6 +265,11 @@ On the desktop, **Import from Claude Code** (Settings › Admin › Connectors) 
 each project's servers) and the `.mcp.json` of the folders you opened on this computer, shows them with check boxes,
 and writes the ones you pick. Credentials written into them (tokens in `env`, headers or the URL) are moved into
 [Keys & secrets](/security/). Nothing is written until you confirm.
+
+In the desktop app signed in to a server, **Customize › Connectors › Your connectors** has the same import: what you
+pick becomes [your own connectors](/connectors/#your-own-connectors-on-a-server), with their keys kept as your secrets on
+the server, and the ones that run a program run on that computer, which the import allows for exactly the command line
+it shows.
 
 | Item | Status |
 |---|---|
@@ -357,7 +372,8 @@ until you pick a model. An alias that is not set means "use the parent's model".
 ## Migration tips
 
 * On the desktop, with compatibility on, there is nothing to convert: open the folder and Atelier reads the
-  `.claude` files in it. On a server, project files are read through the folder's runner, but `~/.claude` is not.
+  `.claude` files in it. On a server, project files are read through the folder's runner, and `~/.claude` through the
+  desktop app of the computer the folder is on.
 * Run **Import from Claude Code** once to bring your MCP servers over.
 * Set the four [aliases](#model-aliases) if your agents or skills name a model.
 * Rename `AskUserQuestion` to `AskUser` anywhere you match tool names, and drop hooks on events Atelier lacks.

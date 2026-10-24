@@ -90,6 +90,7 @@ function SkillRow({ skill, admin }: { skill: SkillSummary; admin: boolean }) {
         <div className="flex items-center gap-2">
           <span className="truncate text-body-strong text-fg">{skill.name}</span>
           <Badge>{SCOPES[skill.scope]}</Badge>
+          {skill.device && <Badge>From {skill.device}</Badge>}
           {skill.manualOnly && (
             <Tooltip content="Sessions don’t start it on their own">
               <Badge>Only by /{skill.name}</Badge>

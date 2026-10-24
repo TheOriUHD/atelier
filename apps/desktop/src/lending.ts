@@ -1,13 +1,14 @@
 /**
  * What this computer lets each server it signs in to do here (ARCHITECTURE §21), beyond the folders trusted in
- * `trusted-folders.json`: make folders for sessions started without one, and reach SSH hosts with this computer's ssh.
+ * `trusted-folders.json`: make folders for sessions started without one, reach SSH hosts with this computer's ssh, run
+ * the person's own connectors' programs, reach addresses here, and read the person's config in the home folder.
  * Kept per server in `lending.json` (userData) and changed only from this computer's own windows; the device link reads
  * it on every request, so a server can't make this computer do more than the person allowed here.
  */
 import { createHash } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { connectorFingerprintInput, DeviceLending, NO_LENDING } from '@atelier/protocol';
+import { connectorFingerprintInput, DeviceLending, NO_LENDING, UNSAFE_CONNECTOR_ENV } from '@atelier/protocol';
 
 async function readAll(path: string): Promise<Record<string, unknown>> {
   try {
@@ -80,6 +81,8 @@ export function applyLending(current: DeviceLending, change: LendingChange): Dev
       const connectors = current.connectors.filter((c) => c.id !== change.id);
       if (!change.allowed) return { ...current, connectors };
       if (!change.command) throw new Error('A connector is allowed by the program it runs.');
+      const unsafe = change.envKeys.find((key) => UNSAFE_CONNECTOR_ENV.test(key));
+      if (unsafe) throw new Error(`A connector can't set ${unsafe} on this computer.`);
       return { ...current, connectors: [...connectors, { id: change.id, name: change.name, fingerprint: connectorFingerprint(change.command, change.args, change.envKeys) }] };
     }
     case 'http': {

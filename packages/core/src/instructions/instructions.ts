@@ -76,11 +76,13 @@ export const STORED_PERSONAL = 'ATELIER.md (personal, from Settings)';
 
 /**
  * The administrator's AGENTS.md and ATELIER.md, then the person's own files (docs/PROMPTS.md §1.5). `home` is set only
- * where this machine belongs to the person (the desktop); the ATELIER.md `stored` in their preferences works everywhere.
+ * where the person's own computer is (the desktop's, or theirs through their desktop, joined as that computer joins
+ * paths); the ATELIER.md `stored` in their preferences works everywhere.
  */
 export function instructionGlobals(opts: { configDir: string; home: string | null; claudeCode: boolean; stored: string }): LoadOptions['globals'] {
   const { home } = opts;
-  const own = home === null ? [] : [...(opts.claudeCode ? [join(home, '.claude', 'CLAUDE.md')] : []), join(home, APP.dirName, ATELIER_MD)];
+  const at = (...parts: string[]) => apiFor(home!).join(home!, ...parts);
+  const own = home === null ? [] : [...(opts.claudeCode ? [at('.claude', 'CLAUDE.md')] : []), at(APP.dirName, ATELIER_MD)];
   return [
     // The desktop's config folder is ~/.atelier, whose ATELIER.md is then the owner's own file rather than a system one.
     ...['AGENTS.md', ATELIER_MD].map((name) => join(opts.configDir, name)).filter((path) => !own.includes(path)).map((path) => ({ path, kind: 'system' as const })),

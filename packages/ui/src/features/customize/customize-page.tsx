@@ -1,11 +1,13 @@
 /**
  * Customize (Chat and Code sidebars): what extends the assistant, in one place. The tabs are the Settings pages;
- * connectors and plugins are admin settings, so everyone else sees them read-only.
+ * connectors and plugins are admin settings, so everyone else sees them read-only, beside their own connectors (on a
+ * server) and the plugins on their own computer.
  */
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Tab, Tabs, TabsList, TabsPanel } from '../../components/ui/index.ts';
 import { useAccount } from '../../lib/queries.ts';
 import { ConnectorsOverview, ConnectorsPage } from '../settings/connectors-page.tsx';
+import { PersonalConnectorsSection } from '../settings/personal-connectors.tsx';
 import { PluginsPage } from '../settings/plugins-page.tsx';
 import { SkillsPage } from '../settings/skills-page.tsx';
 
@@ -49,6 +51,7 @@ export function CustomizePage() {
             </TabsPanel>
             <TabsPanel value="connectors" className="pt-8">
               {admin ? <ConnectorsPage /> : <ConnectorsOverview />}
+              <PersonalConnectorsSection />
             </TabsPanel>
             <TabsPanel value="plugins" className="pt-8">
               <PluginsPage readOnly={!admin} />

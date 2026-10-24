@@ -61,10 +61,13 @@ function PluginRow({ plugin, readOnly }: { plugin: PluginSummary; readOnly?: boo
   const [removing, setRemoving] = useState(false);
   const kinds = KINDS.filter((k) => plugin[k.key].length > 0);
 
+  // One on the person's own computer is theirs to switch; the others are the admin's, for everyone.
+  const own = !!plugin.device;
   const setEnabled = async (enabled: boolean) => {
     qc.setQueryData<PluginSummary[]>(keys.plugins, (list) => list?.map((p) => (p.id === plugin.id ? { ...p, enabled } : p)));
     try {
-      await rpc().call('plugins.setEnabled', { id: plugin.id, enabled });
+      if (own) await rpc().call('prefs.set', { path: ['plugins', 'enabled', plugin.id], value: enabled });
+      else await rpc().call('plugins.setEnabled', { id: plugin.id, enabled });
     } catch (e) {
       toast.error(describeError(e).message);
     }
@@ -88,7 +91,8 @@ function PluginRow({ plugin, readOnly }: { plugin: PluginSummary; readOnly?: boo
           <div className="flex items-center gap-2">
             <span className="truncate text-body-strong text-fg">{plugin.name}</span>
             {plugin.source === 'claude-code' && <Badge>Claude Code</Badge>}
-            {readOnly && !plugin.enabled && <Badge>Off</Badge>}
+            {plugin.device && <Badge>From {plugin.device}</Badge>}
+            {readOnly && !own && !plugin.enabled && <Badge>Off</Badge>}
           </div>
           <p title={plugin.description} className="truncate text-footnote text-fg-muted">
             {[plugin.version, plugin.description].filter(Boolean).join(' · ')}
@@ -111,7 +115,7 @@ function PluginRow({ plugin, readOnly }: { plugin: PluginSummary; readOnly?: boo
         {!readOnly && plugin.source === 'atelier' && (
           <IconButton icon={Trash2} label={`Uninstall ${plugin.name}`} size="sm" onClick={() => setRemoving(true)} />
         )}
-        {!readOnly && <Switch aria-label={`Enable ${plugin.name}`} checked={plugin.enabled} onCheckedChange={(on) => void setEnabled(on)} />}
+        {(!readOnly || own) && <Switch aria-label={`Enable ${plugin.name}`} checked={plugin.enabled} onCheckedChange={(on) => void setEnabled(on)} />}
       </div>
       {expanded && (
         <div id={panel} className="mt-3 ml-[50px] flex flex-col gap-2">

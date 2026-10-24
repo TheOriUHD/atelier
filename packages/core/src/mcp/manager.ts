@@ -50,6 +50,19 @@ export interface McpManagerDeps {
   fetch?: FetchLike;
   /** How long a call may run, not counting the time the person takes to answer the server. */
   callTimeoutMs?: number;
+
+  // A person's own connectors (personal.ts) are reached another way, with their own secrets.
+  /**
+   * How a server is reached instead of as configured here: a transport to its program somewhere else, or the `fetch`
+   * its HTTP requests go through. Throws when it can't be reached now; `log` takes what the program writes to stderr.
+   */
+  reach?(server: { name: string; config: McpServerConfig }, resolved: Resolved, log: (line: string) => void): Promise<{ transport: Transport } | { fetch: FetchLike }>;
+  /** Whether a server can start at all; by default stdio ones only where the backend is the desktop's. */
+  startable?(config: McpServerConfig): boolean;
+  /** The secret an OAuth server's sign-in is kept as (`mcp-oauth:<name>` by default). */
+  signInSecret?(name: string): string;
+  /** A stdio server's `${ENV}` references are left as written, for the computer its program runs on to fill in. */
+  deferEnv?: boolean;
 }
 
 /** A tool call in flight, so that a server's question during it reaches the right person. */
@@ -201,6 +214,11 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     return this.statusList();
   }
 
+  /** Every server's status as it is, connecting nothing. */
+  current(): McpServerStatus[] {
+    return this.statusList();
+  }
+
   /** Connects a server now (after an edit); null when there is no such server. */
   async test(name: string): Promise<McpServerStatus | null> {
     const server = this.servers.get(name);
@@ -227,6 +245,20 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     const servers = [...this.servers.values()];
     this.servers.clear();
     await Promise.all(servers.map((s) => this.shutdown(s)));
+  }
+
+  /** Connects again, now, every server that failed and doesn't wait for a sign-in (the computer it runs on came back). */
+  retry(): void {
+    for (const server of this.servers.values()) {
+      if (server.state !== 'error' || server.needsSignIn || server.connecting || !this.startable(server)) continue;
+      server.failures = 0;
+      void this.connect(server);
+    }
+  }
+
+  /** Whether a sign-in waiting here started with this OAuth `state`. */
+  signingIn(state: string | null): boolean {
+    return [...this.signIns.values()].some((p) => p.flow.id === state);
   }
 
   /**
@@ -279,7 +311,7 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     if (userId ? userId !== pending.userId : pending.browser) return 'Finish signing in in the browser where you started it, signed in to Atelier as yourself.';
     const server = this.servers.get(name);
     try {
-      await saveCredentials(this.deps.secrets, name, await pending.flow.finish(params));
+      await saveCredentials(this.deps.secrets, this.signInSecret(name), name, await pending.flow.finish(params));
     } catch (error) {
       const message = `Signing in failed: ${errorMessage(error)}`.slice(0, 500);
       if (server) {
@@ -303,8 +335,12 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     await this.servers.get(name)?.connecting;
     const server = this.servers.get(name);
     if (server) this.endAuth(server);
-    await this.deps.secrets.delete(oauthSecretId(name));
+    await this.deps.secrets.delete(this.signInSecret(name));
     if (server?.config.auth && this.startable(server)) this.failed(server, SIGN_IN_NEEDED, true);
+  }
+
+  private signInSecret(name: string): string {
+    return this.deps.signInSecret?.(name) ?? oauthSecretId(name);
   }
 
   private create(name: string, config: McpServerConfig): Server {
@@ -333,7 +369,7 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
   }
 
   private startable(server: Server): boolean {
-    return server.config.enabled && (server.config.type !== 'stdio' || this.deps.surface === 'desktop');
+    return server.config.enabled && (this.deps.startable?.(server.config) ?? (server.config.type !== 'stdio' || this.deps.surface === 'desktop'));
   }
 
   private ensure(server: Server): Promise<void> {
@@ -383,16 +419,20 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     server.tools = (await client.listTools()).tools;
   }
 
-  private async handshake(server: Server, { env, headers, url }: Resolved): Promise<Client> {
+  private async handshake(server: Server, resolved: Resolved): Promise<Client> {
+    const { env, headers, url } = resolved;
     const { config } = server;
     const options = { timeout: CONNECT_TIMEOUT_MS, ...(server.prior ? { prior: server.prior } : {}) };
+    const reached = await this.deps.reach?.({ name: server.name, config }, resolved, (line) => this.note(server, line));
+    if (reached && 'transport' in reached) return connected(this.client(server, true), reached.transport, options);
     if (config.type === 'stdio') {
       const transport = new StdioClientTransport({ command: config.command!, args: config.args, env: { ...getDefaultEnvironment(), ...env }, stderr: 'pipe' });
       if (transport.stderr) createInterface({ input: transport.stderr as Readable }).on('line', (line) => this.note(server, line));
       return connected(this.client(server, true), transport, options);
     }
     const target = new URL(url);
-    const init = { requestInit: { headers }, ...(this.deps.fetch ? { fetch: this.deps.fetch } : {}), ...(server.auth ? { authProvider: server.auth } : {}) };
+    const fetchFn = reached?.fetch ?? this.deps.fetch;
+    const init = { requestInit: { headers }, ...(fetchFn ? { fetch: fetchFn } : {}), ...(server.auth ? { authProvider: server.auth } : {}) };
     if (config.type === 'sse' || server.sse) return connected(this.client(server, false), new SSEClientTransport(target, init), { timeout: CONNECT_TIMEOUT_MS });
     try {
       return await connected(this.client(server, true), new StreamableHTTPClientTransport(target, init), options);
@@ -478,9 +518,10 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
 
   /** The OAuth server's stored sign-in, for a new connection; none means it needs one. */
   private async storedSignIn(server: Server, url: string): Promise<StoredSignIn> {
-    const credentials = await loadCredentials(this.deps.secrets, server.name);
+    const id = this.signInSecret(server.name);
+    const credentials = await loadCredentials(this.deps.secrets, id);
     if (!credentials) throw new SignInNeeded();
-    return new StoredSignIn(this.deps.secrets, server.name, new URL(url), credentials, this.deps.fetch);
+    return new StoredSignIn(this.deps.secrets, id, server.name, new URL(url), credentials, this.deps.fetch);
   }
 
   /** The connection that used the sign-in is gone: a refresh still finishing must not touch the stored one. */
@@ -496,13 +537,14 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
       if (value) used.push(value);
       return value;
     };
-    const fill = async (value: string) => {
-      const result = await interpolate(value, { secret: async (id) => keep(await this.deps.secret(id)), env: (name) => keep(this.deps.env[name]) });
+    const fill = async (value: string, deferEnv = false) => {
+      const result = await interpolate(value, { secret: async (id) => keep(await this.deps.secret(id)), env: (name) => (deferEnv ? null : keep(this.deps.env[name])) });
       missing.push(...result.missing);
       return result.value;
     };
-    const fillAll = async (record: Record<string, string>) => Object.fromEntries(await Promise.all(Object.entries(record).map(async ([k, v]) => [k, await fill(v)] as const)));
-    const env = await fillAll(server.config.env);
+    const fillAll = async (record: Record<string, string>, deferEnv = false) =>
+      Object.fromEntries(await Promise.all(Object.entries(record).map(async ([k, v]) => [k, await fill(v, deferEnv)] as const)));
+    const env = await fillAll(server.config.env, this.deps.deferEnv && server.config.type === 'stdio');
     const headers = await fillAll(server.config.headers);
     const url = server.config.url ? await fill(server.config.url) : '';
     // Every env and header value is masked too, whole and word by word (`Bearer <token>`), literal or not.
@@ -628,7 +670,8 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
   }
 }
 
-interface Resolved {
+/** A server's env, headers and URL with their references filled in. */
+export interface Resolved {
   env: Record<string, string>;
   headers: Record<string, string>;
   url: string;

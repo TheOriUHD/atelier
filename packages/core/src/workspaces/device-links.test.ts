@@ -301,6 +301,23 @@ describe('device link version 2', () => {
     expect(changes).toEqual(['ada', 'ada', 'ada']);
   });
 
+  it("knows a person's devices online, and hears when their home folder's config changed", () => {
+    const homes: string[] = [];
+    links = new DeviceLinks(
+      (userId) => changes.push(userId),
+      (userId, deviceId) => homes.push(`${userId}/${deviceId}`),
+    );
+    const { receive, link } = attach();
+    links.attach('bob', 'desk', { send: () => {}, close: () => {} });
+    expect(links.devices('ada')).toEqual(['laptop']);
+    receive({ t: 'hello', hello: HELLO });
+    receive({ t: 'event', event: 'home.changed' });
+    expect(homes).toEqual(['ada/laptop']);
+    link.closed();
+    expect(links.devices('ada')).toEqual([]);
+    links.closeAll();
+  });
+
   it('starts an SSH runner through the device, with its stderr kept apart', async () => {
     const { sent, receive } = attach();
     receive({ t: 'hello', hello: HELLO });

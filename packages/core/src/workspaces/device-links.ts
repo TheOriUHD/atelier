@@ -90,8 +90,14 @@ const linkKey = (userId: string, deviceId: string) => JSON.stringify([userId, de
 export class DeviceLinks {
   private links = new Map<string, Link>();
 
-  /** `onChange` hears when one of the user's devices comes or goes, or changes what it lends. */
-  constructor(private readonly onChange: (userId: string) => void) {}
+  /**
+   * `onChange` hears when one of the user's devices comes or goes, or changes what it lends; `onHomeChanged` when the
+   * person's config in a device's home folder changed.
+   */
+  constructor(
+    private readonly onChange: (userId: string) => void,
+    private readonly onHomeChanged: (userId: string, deviceId: string) => void = () => {},
+  ) {}
 
   /** A device connected. Replaces this account's older link of the device; returns where its frames and close go. */
   attach(userId: string, deviceId: string, socket: LinkSocket): { receive(text: string): void; closed(): void } {
@@ -139,11 +145,17 @@ export class DeviceLinks {
       link.hello = { ...link.hello, lending };
       this.onChange(userId);
     };
-    return { receive: (text) => this.receive(link, text, hello, lendingChanged), closed };
+    const homeChanged = () => this.links.get(key) === link && this.onHomeChanged(userId, deviceId);
+    return { receive: (text) => this.receive(link, text, hello, lendingChanged, homeChanged), closed };
   }
 
   online(userId: string, deviceId: string): boolean {
     return this.links.has(linkKey(userId, deviceId));
+  }
+
+  /** The user's devices connected now, longest connected first. */
+  devices(userId: string): string[] {
+    return [...this.links.keys()].map((key) => JSON.parse(key) as [string, string]).flatMap(([u, d]) => (u === userId ? [d] : []));
   }
 
   /** What the connected device lends and allows; null while it isn't connected. Doesn't wait for its `hello`. */
@@ -252,7 +264,7 @@ export class DeviceLinks {
     });
   }
 
-  private receive(link: Link, text: string, hello: (said: DeviceHello) => void, lendingChanged: (lending: DeviceLending) => void): void {
+  private receive(link: Link, text: string, hello: (said: DeviceHello) => void, lendingChanged: (lending: DeviceLending) => void, homeChanged: () => void): void {
     let frame: DeviceToServer;
     try {
       frame = DeviceToServer.parse(JSON.parse(text));
@@ -266,7 +278,7 @@ export class DeviceLinks {
       case 'hello':
         return hello(frame.hello);
       case 'event':
-        return lendingChanged(frame.lending);
+        return frame.event === 'home.changed' ? void homeChanged() : lendingChanged(frame.lending);
       case 'res': {
         const pending = link.requests.get(frame.id);
         if (!pending) return;

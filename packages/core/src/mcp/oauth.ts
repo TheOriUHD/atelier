@@ -2,7 +2,8 @@
  * OAuth sign-in for HTTP connectors (ARCHITECTURE §9-B), on the SDK's `auth()`: discovery (RFC 9728, RFC 8414), PKCE,
  * the RFC 8707 resource indicator and the RFC 9207 `iss` check. An admin signs a connector in once; its client
  * registration and tokens are kept as one secret, `mcp-oauth:<name>`, which every session's connection uses and
- * refreshes. Nothing of it reaches the UI or the logs.
+ * refreshes (a person's own connector: their secret `mcp-oauth-user-<user>-<name>`). Nothing of it reaches the UI or
+ * the logs.
  */
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
@@ -40,13 +41,13 @@ export interface Credentials {
 /** The secret holding a connector's sign-in; `:` keeps it apart from every id people or the Connectors page choose. */
 export const oauthSecretId = (server: string) => `mcp-oauth:${server}`;
 
-export async function loadCredentials(secrets: OAuthSecrets, server: string): Promise<Credentials | undefined> {
-  const text = await secrets.get(oauthSecretId(server));
+export async function loadCredentials(secrets: OAuthSecrets, id: string): Promise<Credentials | undefined> {
+  const text = await secrets.get(id);
   return text ? (JSON.parse(text) as Credentials) : undefined;
 }
 
-export async function saveCredentials(secrets: OAuthSecrets, server: string, credentials: Credentials): Promise<void> {
-  await secrets.set({ id: oauthSecretId(server), label: `Sign-in for ${server}`, kind: 'mcp_oauth', value: JSON.stringify(credentials) });
+export async function saveCredentials(secrets: OAuthSecrets, id: string, server: string, credentials: Credentials): Promise<void> {
+  await secrets.set({ id, label: `Sign-in for ${server}`, kind: 'mcp_oauth', value: JSON.stringify(credentials) });
 }
 
 /** What Atelier registers as, or publishes as its client ID metadata document: a public client (PKCE, no secret). */
@@ -72,6 +73,8 @@ export class StoredSignIn implements OAuthClientProvider {
 
   constructor(
     private readonly secrets: OAuthSecrets,
+    /** The secret it is kept as. */
+    private readonly id: string,
     private readonly server: string,
     private readonly serverUrl: URL,
     private credentials: Credentials,
@@ -109,7 +112,7 @@ export class StoredSignIn implements OAuthClientProvider {
   async saveTokens(tokens: StoredOAuthTokens): Promise<void> {
     if (this.signedOut || this.closed) return;
     this.credentials = { ...this.credentials, tokens, expiresAt: expiry(tokens) };
-    await saveCredentials(this.secrets, this.server, this.credentials);
+    await saveCredentials(this.secrets, this.id, this.server, this.credentials);
   }
 
   /** A refresh that failed on the way (the network, the server's own error) is tried again with the next connection. */
@@ -131,7 +134,7 @@ export class StoredSignIn implements OAuthClientProvider {
   private async forget(): Promise<void> {
     if (this.closed) return;
     this.signedOut = true;
-    await this.secrets.delete(oauthSecretId(this.server));
+    await this.secrets.delete(this.id);
   }
 }
 

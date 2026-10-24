@@ -10,6 +10,8 @@ Atelier's own in Chat, Cowork and Code, and in sub-agents.
 
 Connectors belong to the **backend**, not to each person. An admin adds them, signs them in and sets what their tools may
 do; everyone on the server shares one connection and chooses per conversation which connectors it uses. If you run Atelier on your own computer, you are the admin.
+On a server, everyone can also add [their own connectors](#your-own-connectors-on-a-server), with their own keys, that only
+they use.
 
 :::caution
 Because the connection is shared, a connector acts as the account that signed in or whose token was pasted. Everyone on the
@@ -106,7 +108,46 @@ added". HTTP, SSE and stdio servers are imported; WebSocket and SDK servers have
 Atelier does **not** load a project's `.mcp.json` by itself. Connectors are shared by everyone on the backend and are the
 admin's decision, so a file in a repository can't add a server that runs on your computer. Import is also a one-time copy:
 later changes to the file are not followed. On a server the button isn't offered ("Importing from Claude Code works in the
-desktop app, where its settings live.").
+desktop app, where its settings live."); import them as [your own connectors](#your-own-connectors-on-a-server) instead.
+
+## Your own connectors (on a server)
+
+On an Atelier server, **Customize › Connectors** has **Your connectors** for everyone, admins included: connectors only you
+use, with keys only you give. They sit beside the admin's in **+ › Connectors**, with the same switches per conversation.
+Your own desktop app's backend has no such section; there, the connectors in **Settings › Connectors** are already yours.
+
+**Add connector** asks for a **Name**, how it **Connects over** (**HTTP**, **SSE** or **stdio**), its **URL** (with **Sign
+in with OAuth**) or its **Command** and **Arguments**, and **Headers** or **Environment variables**. Every value is kept
+encrypted on the server as your own secret, never in your preferences and never shown again: editing a connector shows
+"Unchanged" for a value you leave empty. **⋯** has **Edit**, **Sign in** (OAuth ones) and **Remove**, which forgets its keys
+and sign-in.
+
+Where each one runs:
+
+| Connector | Runs |
+|---|---|
+| stdio (a program) | On your computer: the first one that is online, in the Atelier desktop app signed in to this server, and allows exactly that program. Adding it in the desktop app allows it there; on another computer, choose **Run on this computer** in its **⋯** menu. |
+| HTTP or SSE at a public address | On the server. |
+| HTTP or SSE at an address on your computer or its network (`localhost`, `192.168.…`, `*.local`) | Through your desktop app, which allows that address when you add it there (**Reach through this computer** elsewhere). |
+
+A program runs in your home folder with a small set of your environment (`PATH`, `HOME`, `USER` and the like) plus the
+variables you gave it; a value like `${GITHUB_TOKEN}` is filled in from your computer's environment when it starts, never
+the server's. A connector can't set variables that change which code runs (`PATH`, `NODE_OPTIONS`, `LD_*`, `DYLD_*`,
+`PYTHONPATH`, `PERL5LIB`, `npm_config_*`, `GIT_*` and the like). Your computer keeps a fingerprint of the command, its
+arguments and its variables' names: if the connector changes, it says "It changed since you allowed it on {computer}:
+allow it in Customize › Connectors in the Atelier desktop app there again." What the program writes to its error output
+stays in your connector's log.
+
+| Status | Meaning |
+|---|---|
+| **Ready on {computer}** | It runs on (or through) that computer. |
+| `It runs a program on your computer: allow it in Customize › Connectors in the Atelier desktop app there.` | No computer of yours that is online allows it. |
+| `Offline on {computer}: it runs there.` | The computer it ran on went offline; it starts again when one comes back. |
+| `An admin's connector is also called {name}: rename yours.` | The admin's connector of that name is used instead. A new connector can't take an admin's name. |
+
+**Import from Claude Code** is offered in the desktop app signed in to a server: it reads Claude Code's connectors on
+that computer (as above), shows each one's exact command line, and adds the ones you choose as yours, allowed on that
+computer. The server can read those settings only for two minutes after you open the import there.
 
 ## Sign in with OAuth
 
@@ -216,8 +257,10 @@ A connector gives the model hands outside Atelier, and what it returns is text f
   output as data and to tell you when it tries to steer it, but that is a rule for the model, not a guarantee. Grant
   **Always allow** only to tools whose worst misuse you can live with, and leave write and delete tools on **Ask** or
   **Block**. In Auto mode, a call that is not allowed by rule is reviewed by another model; see [Permissions](/permissions/).
-- **Shared credentials.** A token or sign-in belongs to the backend and serves every person on it.
-- **Programs.** Only the desktop app starts stdio servers, and they run with your privileges.
+- **Shared credentials.** A token or sign-in belongs to the backend and serves every person on it. Your own connectors'
+  keys and sign-ins are yours: nobody else's sessions use them, and admins don't see them.
+- **Programs.** Only the desktop app starts stdio servers, and they run with your privileges: an admin's on the desktop's
+  own backend, your own ones on your computer when its desktop app allows them.
 
 Tokens are kept in the encrypted secret store and masked in output, errors and the connector log. See
 [Security](/security/) for the larger picture.

@@ -81,8 +81,12 @@ async function read(workspace: Workspace, files: string[]): Promise<ProjectSetti
 
 /** Claude Code's own `~/.claude/settings.json` (desktop, compatibility on): the lowest layer. */
 export async function claudeUserSettings(fs: Pick<WorkspaceFs, 'read'>, home: string): Promise<ProjectSettings> {
+  return settingsFrom(await fs.read(join(home, '.claude', 'settings.json')).catch(() => null));
+}
+
+/** One settings file's permission rules and hooks (a desktop's `~/.claude/settings.json`, as it sent it). */
+export function settingsFrom(text: string | null): ProjectSettings {
   const out: ProjectSettings = { rules: { allow: [], ask: [], deny: [] }, hooks: [] };
-  const text = await fs.read(join(home, '.claude', 'settings.json')).catch(() => null);
   if (text) addSettings(out, text);
   return out;
 }

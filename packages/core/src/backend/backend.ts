@@ -9,6 +9,7 @@ import {
   ADMIN_PROCEDURES,
   APP,
   DEVICE_LINK_PROTOCOL,
+  McpImportList,
   SshProbe,
   type DeviceService,
   appError,
@@ -44,10 +45,11 @@ import { PrefsRepo, PrefsValidationError } from '../accounts/prefs-repo.ts';
 import { ScreenLock, ScreenLockError } from '../accounts/screen-lock.ts';
 import { importClaudeCode } from '../mcp/import.ts';
 import { McpManager } from '../mcp/manager.ts';
+import { PersonalConnectorError, PersonalConnectors } from '../mcp/personal.ts';
 import { connectorContext } from '../permissions/engine.ts';
 import { hostRunnerBinary } from '../workspaces/runner-client.ts';
 import { codeContext } from '../workspaces/code-context.ts';
-import { claudeUserSettings, projectHooks, projectRules, rememberProjectRule, type ProjectSettings } from '../workspaces/project-rules.ts';
+import { projectHooks, projectRules, rememberProjectRule, type ProjectSettings } from '../workspaces/project-rules.ts';
 import { isTrusted, onThisMachine, type Workspace } from '../workspaces/workspace.ts';
 import { WorkspaceError, WorkspaceManager } from '../workspaces/workspace-manager.ts';
 import { TerminalManager } from '../workspaces/terminals.ts';
@@ -73,7 +75,8 @@ import { hostReader, instructionGlobals } from '../instructions/instructions.ts'
 import { discoverSkills, type ExtensionSource } from '../extensions/skills.ts';
 import { discoverCommands } from '../extensions/commands.ts';
 import { discoverAgents } from '../extensions/agents.ts';
-import { claudeCodePlugins, pluginHooks, pluginSources } from '../extensions/plugins.ts';
+import { pluginHooks, pluginSources, type Plugin } from '../extensions/plugins.ts';
+import { DeviceHomes, hostHome, type HomeSource } from '../extensions/home.ts';
 import { installedSkills, installSkills, uninstallSkill, type InstallTarget } from '../extensions/skill-install.ts';
 import { InstallError } from '../extensions/github.ts';
 import { atelierPlugins, browseMarketplace, installPlugin, uninstallPlugin, type PluginTarget } from '../extensions/marketplaces.ts';
@@ -182,7 +185,7 @@ interface Connection {
 }
 
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
-const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh'];
+const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http'];
 
 export async function createBackend(platform: Platform): Promise<Backend> {
   const db = openDatabase(join(platform.dataDir, 'atelier.db'));
@@ -206,13 +209,26 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const screenLock = new ScreenLock(join(platform.dataDir, 'screen-lock.json'));
   if (local) await screenLock.load();
   // A device coming or going changes which of its user's workspaces are available, and what its windows offer.
-  const links = new DeviceLinks((userId) => {
-    emitToUser(userId, 'devices.changed', {});
-    void workspaceManager
-      .list(userId)
-      .then((list) => emitToUser(userId, 'workspaces.changed', list))
-      .catch((e: unknown) => platform.logger.error('workspace update broadcast failed', e));
-  });
+  const links = new DeviceLinks(
+    (userId) => {
+      emitToUser(userId, 'devices.changed', {});
+      void workspaceManager
+        .list(userId)
+        .then((list) => emitToUser(userId, 'workspaces.changed', list))
+        .catch((e: unknown) => platform.logger.error('workspace update broadcast failed', e));
+      // Their connectors that run there (or failed for want of it), and the config from its home folder.
+      personal.devicesChanged(userId);
+      deviceHomes.forget(userId);
+      emitToUser(userId, 'extensions.changed', {});
+    },
+    (userId, deviceId) => {
+      deviceHomes.forget(userId, deviceId);
+      emitToUser(userId, 'extensions.changed', {});
+    },
+  );
+  /** A device's name, for what its person reads ("offline on MacBook", "from MacBook"). */
+  const deviceName = async (userId: string, deviceId: string) => (await devices.list(userId, null, () => false)).find((d) => d.id === deviceId)?.name ?? 'your computer';
+  const deviceHomes = new DeviceHomes(links, deviceName);
   const github = new GitHub({ fetch: httpFetch, secrets, clientId: () => settings.effective.cloud.github.clientId ?? null });
   const codespaces = new Codespaces({ fetch: httpFetch, github, ...(platform.env.ATELIER_GH ? { gh: platform.env.ATELIER_GH } : {}) });
   const sandboxReach = sandboxShell(platform.env, platform.dataDir);
@@ -390,9 +406,41 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     isAdmin(c)
       ? list
       : list.map((s) => ({ name: s.name, type: s.type, state: s.state, tools: s.tools.filter((t) => t.enabled).map((t) => ({ name: t.name, readOnly: t.readOnly, enabled: true })) }));
+  /** The shared connectors as this window may see them, then its person's own. */
+  const connectorsFor = (c: Connection, shared: McpServerStatus[]) => [...mcpStatusFor(c, shared), ...(c.auth ? personal.known(c.auth.user.id) : [])];
   mcp.on('changed', (list) => {
-    for (const c of connections) if (c.auth) c.rpc.emit('mcp.changed', mcpStatusFor(c, list));
+    for (const c of connections) if (c.auth) c.rpc.emit('mcp.changed', connectorsFor(c, list));
   });
+  // Everyone's own connectors, on a server (the desktop's backend has its one person's in Settings › Connectors).
+  const personal = new PersonalConnectors({
+    connectors: async (userId) => (await prefs.get(userId)).connectors,
+    saveConnectors: async (userId, list) => emitToUser(userId, 'prefs.changed', await prefs.set(userId, ['connectors'], list)),
+    shared: () => settings.effective.mcpServers,
+    secrets,
+    links,
+    deviceName,
+    fetch: (url, init) => httpFetch(String(url), init ?? {}),
+    blobs,
+    elicit: (sessionId, request, signal) => chat.elicit(sessionId, request, signal),
+    changed: (userId) => {
+      for (const c of connections) if (c.auth?.user.id === userId) c.rpc.emit('mcp.changed', connectorsFor(c, mcp.current()));
+    },
+  });
+  let sharedNames = Object.keys(settings.effective.mcpServers).join('\n');
+  settings.on('change', () => {
+    const names = Object.keys(settings.effective.mcpServers).join('\n');
+    if (names !== sharedNames) personal.sharedChanged();
+    sharedNames = names;
+  });
+  /** A person's own connectors are a server's; the desktop's own backend keeps its person's in its settings. */
+  const personalOp = async <T>(run: () => Promise<T>): Promise<T> => {
+    if (platform.surface === 'desktop') throw appError('not_supported', 'On this computer, add connectors in Settings › Connectors.');
+    try {
+      return await run();
+    } catch (e) {
+      throw e instanceof PersonalConnectorError ? appError(e.code, e.message) : e;
+    }
+  };
   /**
    * Writes system settings. A connector that goes away, stops signing in with OAuth or moves to another URL takes its
    * sign-in with it. Only on a write: a settings file that fails to load drops its connectors for a while, not their sign-ins.
@@ -484,12 +532,27 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       : { root: join(platform.configDir, 'skills'), lockFile: join(platform.configDir, 'skills-lock.json') };
 
   const pluginTarget: PluginTarget = { cache: join(platform.configDir, 'plugins', 'cache'), registry: join(platform.configDir, 'plugins', 'installed.json') };
-  /** Atelier's installs, then (desktop, with Claude Code compatibility) Claude Code's; Atelier's win a shared id. */
-  const installedPlugins = async () => {
+  /**
+   * Atelier's installs (`own`), then (with Claude Code compatibility) Claude Code's in the person's home folder (`home`):
+   * this computer's on the desktop, their desktop's on a server, where their own switches win. Atelier's win a shared id.
+   */
+  const installedPlugins = async (userId: string | null, home: HomeSource | null): Promise<{ own: Plugin[]; home: Plugin[] }> => {
     const enabled = settings.effective.enabledPlugins;
     const own = await atelierPlugins(pluginTarget, enabled);
-    const claude = platform.surface === 'desktop' && settings.effective.compat.claudeCode ? await claudeCodePlugins(homedir(), enabled) : [];
-    return [...own, ...claude.filter((c) => !own.some((o) => o.id === c.id))];
+    const switched = home?.device && userId ? { ...enabled, ...(await prefs.get(userId)).plugins.enabled } : enabled;
+    const claude = home && settings.effective.compat.claudeCode ? await home.plugins(switched) : [];
+    return { own, home: claude.filter((c) => !own.some((o) => o.id === c.id)) };
+  };
+  /**
+   * The person's own config for a folder: on the desktop, this computer's home folder; on a server, the one of the desktop
+   * the folder is on or reached through (`deviceId` without a folder), while it lends it. Chats and codespaces get none there.
+   */
+  const homeFor = async (userId: string | null, workspace: Workspace | null, deviceId: string | null = null): Promise<HomeSource | null> => {
+    if (platform.surface === 'desktop') {
+      return hostHome(homedir(), { sameMachine: !workspace || onThisMachine(workspace), reader: hostReader(fs, [homedir()]), read: (path) => fs.read(path) });
+    }
+    const device = workspace ? workspace.deviceId : deviceId;
+    return userId && device ? deviceHomes.get(userId, device, !!workspace && !workspace.host) : null;
   };
   const installErrors = async <T>(run: () => Promise<T>): Promise<T> => {
     try {
@@ -519,36 +582,41 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       for (const c of connections) if (c.auth) c.rpc.emit('extensions.changed', {});
     },
   );
-  const extensionsFor = async (userId: string | null, workspaceId: string | null): Promise<ExtensionCatalog> => {
+  /**
+   * `deviceId`: without a folder, the desktop asking (Customize lists what is on it). Also says which home folder it
+   * read, for what the lists show ("from MacBook").
+   */
+  const extensionsFor = async (userId: string | null, workspaceId: string | null, deviceId: string | null = null): Promise<ExtensionCatalog & { home: HomeSource | null }> => {
     const claudeCode = settings.effective.compat.claudeCode;
     const workspace = workspaceId && userId ? await workspaceManager.open(userId, workspaceId).catch(() => null) : null;
-    const desktop = platform.surface === 'desktop';
-    const global = (kind: 'skills' | 'commands' | 'agents') => globalRoots(kind, claudeCode);
-    const plugins = await installedPlugins();
+    const home = await homeFor(userId, workspace, deviceId);
+    const plugins = await installedPlugins(userId, home);
     const sources = (kind: 'skills' | 'commands' | 'agents'): ExtensionSource[] => [
       // A folder's own skills, commands and agents are offered only once the person trusted it.
       ...(workspace && isTrusted(workspace) ? [{ fs: workspaceFs(workspace), location: 'workspace' as const, scope: 'project' as const, roots: projectRoots(workspace, kind, claudeCode) }] : []),
-      { fs: hostFs, location: 'host', scope: 'global', roots: global(kind) },
-      ...pluginSources(plugins, kind),
+      { fs: hostFs, location: 'host', scope: 'global', roots: [join(platform.configDir, kind)] },
+      ...(home ? [{ fs: home.fs, location: home.location, scope: 'global' as const, roots: home.roots(kind, claudeCode) }] : []),
+      ...pluginSources(plugins.own, kind),
+      ...(home ? pluginSources(plugins.home, kind, home.fs, home.location) : []),
     ];
     const [skills, commands, agents] = await Promise.all([discoverSkills(sources('skills')), discoverCommands(sources('commands')), discoverAgents(sources('agents'))]);
     return {
       skills,
       commands,
       agents,
-      read: (item) => (item.location === 'host' || !workspace ? hostFs : workspaceFs(workspace)).read(item.path),
-      // A desktop skill used in a folder on the same machine: let Read and Glob reach its scripts and references.
+      read: (item) => (item.location === 'workspace' && workspace ? workspaceFs(workspace) : item.location === 'home' && home ? home.fs : hostFs).read(item.path),
+      // A skill from the person's home folder used in a folder on the same computer: let Read and Glob reach its scripts and references.
       reach: async (skill) => {
-        if (skill.location === 'host' && workspace && onThisMachine(workspace) && desktop) await workspace.runner.call('sys.addRoot', { path: skill.dir });
+        if (workspace && home?.sameMachine && skill.location === home.location) await workspace.runner.call('sys.addRoot', { path: skill.dir });
       },
       projectDir: workspace?.root ?? '',
+      home,
     };
   };
 
-  /** `~/.claude/settings.json` belongs to whoever owns this machine: only the desktop reads it, for its own folders. */
+  /** `~/.claude/settings.json` belongs to whoever owns that computer: it applies to their folders on it only. */
   const noClaudeSettings: ProjectSettings = { rules: { allow: [], ask: [], deny: [] }, hooks: [] };
-  const ownerClaudeSettings = (workspace: Workspace) =>
-    platform.surface === 'desktop' && onThisMachine(workspace) && settings.effective.compat.claudeCode ? claudeUserSettings(fs, homedir()) : Promise.resolve(noClaudeSettings);
+  const ownerClaudeSettings = (home: HomeSource | null) => (home?.sameMachine && settings.effective.compat.claudeCode ? home.claudeSettings() : Promise.resolve(noClaudeSettings));
 
   // Web search: one service for the tool and for Settings, so its rate limits, breakers and cache are shared. Stored secret
   // values are looked up (for a minute at a time) so that no query can carry one out.
@@ -697,7 +765,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const workspace = await workspaceManager.open(session.userId, session.workspaceId);
       const system = settings.effective.permissions;
       const project = await projectRules(workspace, settings.effective.compat.claudeCode);
-      const claude = (await ownerClaudeSettings(workspace)).rules;
+      const claude = (await ownerClaudeSettings(await homeFor(session.userId, workspace))).rules;
       const person = (await prefs.get(session.userId)).permissions;
       return {
         mode: (session.permissionMode as PermissionMode | null) ?? system.defaultMode,
@@ -760,10 +828,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     hooks: async (session) => {
       if (session.mode === 'chat' || !session.workspaceId || !session.userId) return null;
       const workspace = await workspaceManager.open(session.userId, session.workspaceId);
+      const home = await homeFor(session.userId, workspace);
+      const plugins = await installedPlugins(session.userId, home);
       const configs = [
-        ...(await ownerClaudeSettings(workspace)).hooks,
-        // Plugins live on this machine, so their hooks run only for its own folders.
-        ...(onThisMachine(workspace) ? await pluginHooks(await installedPlugins()) : []),
+        ...(await ownerClaudeSettings(home)).hooks,
+        // Plugins run where they are installed: this backend's for its own folders, a person's for their folders on that computer.
+        ...(onThisMachine(workspace) ? await pluginHooks(plugins.own) : []),
+        ...(home?.sameMachine ? await pluginHooks(plugins.home, home.fs) : []),
         // The admin's hooks run only on this backend's own machine, never on a person's device.
         ...(onThisMachine(workspace) ? [settings.effective.hooks] : []),
         ...(await projectHooks(workspace, settings.effective.compat.claudeCode)),
@@ -772,20 +843,28 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     extensions: (session) => extensionsFor(session.userId, session.mode === 'chat' ? null : session.workspaceId),
     // A sub-agent uses the connectors its parent session has on.
-    mcpTools: async (session) => mcp.tools(connectorsOff((session.parentSessionId && (await sessions.getRow(session.parentSessionId))) || session)),
+    mcpTools: async (session) => {
+      const off = connectorsOff((session.parentSessionId && (await sessions.getRow(session.parentSessionId))) || session);
+      // The shared connectors, then the person's own (on a server), switched off for the session the same way.
+      const [shared, own] = await Promise.all([mcp.tools(off), session.userId && platform.surface === 'web' ? personal.tools(session.userId, off) : []]);
+      return [...shared, ...own];
+    },
     hookError: (sessionId, message) => platform.logger.error(`hook failed in session ${sessionId}: ${message}`),
     codeContext: async (session) => {
       if (!session.workspaceId || !session.userId) return null;
       const workspace = await workspaceManager.open(session.userId, session.workspaceId);
       const claudeCode = settings.effective.compat.claudeCode;
       const summary = (await workspaceManager.list(session.userId)).find((w) => w.id === session.workspaceId);
+      // The system files on this backend's machine, the person's own in their home folder (here, or on their desktop).
+      const home = await homeFor(session.userId, workspace);
+      const system = hostReader(fs, [platform.configDir]);
       return codeContext(workspace, {
         scratch: summary?.scratch ?? false,
-        host: hostReader(fs, platform.surface === 'desktop' ? [platform.configDir, homedir()] : [platform.configDir]),
-        home: homedir(),
+        host: home ? { ...system, read: async (path) => (await system.read(path)) ?? home.reader.read(path) } : system,
+        home: home?.home ?? homedir(),
         globals: instructionGlobals({
           configDir: platform.configDir,
-          home: platform.surface === 'desktop' ? homedir() : null,
+          home: home?.home ?? null,
           claudeCode,
           stored: (await prefs.get(session.userId)).personalization.atelierMd,
         }),
@@ -1152,6 +1231,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'prefs.get': (_input, ctx) => prefs.get(me(ctx).id),
     'prefs.set': ({ path, value }, ctx) =>
       accountErrors(async () => {
+        if (path[0] === 'connectors') throw appError('forbidden', 'Connectors are changed in Customize › Connectors.');
         if (path[0] === 'remoteControl' && value === false) {
           for (const summary of await sessions.list({ userId: me(ctx).id, archived: 'all', limit: 10_000 })) {
             const row = await sessions.getRow(summary.id);
@@ -1165,6 +1245,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       }),
     'prefs.reset': ({ path }, ctx) =>
       accountErrors(async () => {
+        if (path[0] === 'connectors') throw appError('forbidden', 'Connectors are changed in Customize › Connectors.');
         const next = await prefs.reset(me(ctx).id, path);
         emitToUser(me(ctx).id, 'prefs.changed', next);
         if (path[0] === 'remoteControl') await syncRemoteAccess(me(ctx).id);
@@ -1516,27 +1597,32 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
 
     'skills.list': async ({ workspaceId }, ctx) => {
-      const [{ skills }, installed] = await Promise.all([extensionsFor(me(ctx).id, workspaceId ?? null), installedSkills(skillTarget())]);
+      const [{ skills, home }, installed] = await Promise.all([extensionsFor(me(ctx).id, workspaceId ?? null, callerDevice(ctx, 'home')), installedSkills(skillTarget())]);
       return skills.map((s) => ({
         name: s.name,
         description: s.description,
         scope: s.scope,
         manualOnly: s.disableModelInvocation,
         warnings: s.warnings,
-        installed: s.scope === 'global' && installed[s.name] ? { source: installed[s.name]!.source, sha: installed[s.name]!.sha, installedAt: installed[s.name]!.installedAt } : null,
+        installed: s.scope === 'global' && s.location === 'host' && installed[s.name] ? { source: installed[s.name]!.source, sha: installed[s.name]!.sha, installedAt: installed[s.name]!.installedAt } : null,
+        ...(s.location === 'home' && home?.device ? { device: home.device.name } : {}),
       }));
     },
     'skills.install': ({ source, replace }) => installErrors(async () => ({ installed: await installSkills(source, skillTarget(), httpFetch, replace) })),
     'skills.uninstall': ({ name }) => installErrors(async () => (await uninstallSkill(name, skillTarget()), { ok: true as const })),
-    'plugins.list': async () =>
-      Promise.all(
-        (await installedPlugins()).map(async (p) => {
-          const own = (kind: 'skills' | 'commands' | 'agents') => pluginSources([{ ...p, enabled: true }], kind);
-          const [skills, commands, agents] = await Promise.all([discoverSkills(own('skills')), discoverCommands(own('commands')), discoverAgents(own('agents'))]);
-          const names = (items: { name: string }[]) => items.map((i) => i.name);
-          return { id: p.id, name: p.name, description: p.description, version: p.version, source: p.source, enabled: p.enabled, skills: names(skills), commands: names(commands), agents: names(agents) };
-        }),
-      ),
+    'plugins.list': async (_input, ctx) => {
+      // The desktop asking lends its Claude Code plugins on a server.
+      const home = await homeFor(me(ctx).id, null, callerDevice(ctx, 'home'));
+      const plugins = await installedPlugins(me(ctx).id, home);
+      const summary = async (p: Plugin, there: HomeSource | null) => {
+        const own = (kind: 'skills' | 'commands' | 'agents') => pluginSources([{ ...p, enabled: true }], kind, there?.fs, there?.location);
+        const [skills, commands, agents] = await Promise.all([discoverSkills(own('skills')), discoverCommands(own('commands')), discoverAgents(own('agents'))]);
+        const names = (items: { name: string }[]) => items.map((i) => i.name);
+        const device = there?.device?.name;
+        return { id: p.id, name: p.name, description: p.description, version: p.version, source: p.source, enabled: p.enabled, skills: names(skills), commands: names(commands), agents: names(agents), ...(device ? { device } : {}) };
+      };
+      return Promise.all([...plugins.own.map((p) => summary(p, null)), ...plugins.home.map((p) => summary(p, home))]);
+    },
     'usage.summary': ({ days, timezoneOffset, everyone }, ctx) => {
       if (everyone && me(ctx).role !== 'admin') throw appError('forbidden', 'Only admins can see everyone’s usage.');
       return usageSummary(db, { userId: everyone ? null : me(ctx).id, days, timezoneOffset });
@@ -1858,7 +1944,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
 
-    'mcp.status': (_input, ctx) => mcpStatusFor(ctx.connection(), mcp.status()),
+    'mcp.status': async (_input, ctx) => [...mcpStatusFor(ctx.connection(), mcp.status()), ...(platform.surface === 'web' ? await personal.status(me(ctx).id) : [])],
     'mcp.test': async ({ name }) => {
       const status = await mcp.test(name);
       if (!status) throw appError('not_found', `There is no connector named ${name}.`);
@@ -1890,6 +1976,30 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const folders = (await workspaceManager.list(me(ctx).id)).filter((w) => w.kind === 'local' && !w.deviceId).map((w) => w.root);
       return importClaudeCode(homedir(), folders);
     },
+
+    // A person's own connectors (on a server): theirs to add, change and sign in; their values never come back.
+    'connectors.list': (_input, ctx) => (platform.surface === 'web' ? personal.list(me(ctx).id) : []),
+    'connectors.save': (input, ctx) => personalOp(() => personal.save(me(ctx).id, input)),
+    'connectors.remove': ({ id }, ctx) => personalOp(async () => (await personal.remove(me(ctx).id, id), { ok: true as const })),
+    'connectors.test': ({ id }, ctx) => personalOp(() => personal.test(me(ctx).id, id)),
+    'connectors.logs': ({ id }, ctx) => personalOp(async () => ({ lines: await personal.logs(me(ctx).id, id) })),
+    'connectors.signIn': ({ id }, ctx) =>
+      personalOp(() =>
+        signInError(async () => {
+          const c = ctx.connection();
+          return { url: await personal.signIn(me(ctx).id, id, { userId: me(ctx).id, browser: c.client.clientKind === 'web', origin: c.origin }) };
+        }),
+      ),
+    'connectors.import': (_input, ctx) =>
+      personalOp(async () => {
+        // Claude Code's settings are on the person's computer: the desktop asking reads them there.
+        const deviceId = callerDevice(ctx, 'mcp');
+        if (!deviceId) throw appError('unsupported', 'Import from Claude Code in the desktop app on the computer that has it.');
+        const found = await links.request(me(ctx).id, deviceId, { op: 'mcp.import' }).catch((e: unknown) => {
+          throw e instanceof DeviceLinkError ? appError(e.code === 'refused' ? 'forbidden' : 'unsupported', e.message) : e;
+        });
+        return McpImportList.parse(found);
+      }),
 
     'artifacts.list': async ({ sessionId }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
@@ -1976,7 +2086,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (!local) return;
       lockChanged(await screenLock.removeTrusted());
     },
-    finishSignIn: (params, userId) => (openrouter.owns(params) ? openrouter.finish(params, userId) : mcp.finishSignIn(params, userId)),
+    finishSignIn: (params, userId) =>
+      openrouter.owns(params) ? openrouter.finish(params, userId) : personal.owns(params) ? personal.finishSignIn(params, userId) : mcp.finishSignIn(params, userId),
     async readBlob(sha256) {
       const info = await blobs.info(sha256);
       if (!info) return undefined;
@@ -2000,6 +2111,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       memory.dispose();
       await terminals.closeAll();
       await mcp.close();
+      await personal.close();
       await workspaceManager.disposeAll();
       stopPromptWatch();
       stopExtensionWatch();

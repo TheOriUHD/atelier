@@ -43,19 +43,22 @@ const relay = createRelay(serverUrl, undefined, {
 const runnerDir = process.env.ATELIER_RUNNER_DIR;
 const runnerBinary = runnerDir ? join(runnerDir, runnerBinaryName(process.platform, process.arch)) : null;
 const device = DeviceInfo.parse(JSON.parse(process.argv[3]!));
+const trustedFolders = () => readTrustedFolders(process.env.ATELIER_TRUSTED_FOLDERS!);
+const services = deviceServices({
+  deviceName: device.name,
+  lending: () => readLending(process.env.ATELIER_LENDING_FILE!, serverUrl),
+  scratchDir: process.env.ATELIER_SCRATCH_DIR!,
+  runnerDir: runnerDir && existsSync(join(runnerDir, 'checksums.json')) ? runnerDir : null,
+  ssh: process.env.ATELIER_SSH ?? 'ssh',
+  sshDir: process.env.ATELIER_SSH_DIR!,
+  trustedFolders,
+});
 const deviceLink = createDeviceLink({
   serverUrl,
   device,
   runnerBinary: runnerBinary && existsSync(runnerBinary) ? runnerBinary : null,
-  trustedFolders: () => readTrustedFolders(process.env.ATELIER_TRUSTED_FOLDERS!),
-  services: deviceServices({
-    deviceName: device.name,
-    lending: () => readLending(process.env.ATELIER_LENDING_FILE!, serverUrl),
-    scratchDir: process.env.ATELIER_SCRATCH_DIR!,
-    runnerDir: runnerDir && existsSync(join(runnerDir, 'checksums.json')) ? runnerDir : null,
-    ssh: process.env.ATELIER_SSH ?? 'ssh',
-    sshDir: process.env.ATELIER_SSH_DIR!,
-  }),
+  trustedFolders,
+  services,
 });
 
 process.parentPort.on('message', (event: { data: MainToBackend; ports: Electron.MessagePortMain[] }) => {
@@ -63,6 +66,7 @@ process.parentPort.on('message', (event: { data: MainToBackend; ports: Electron.
   if (m.kind === 'connect' && event.ports[0]) relay.link(event.ports[0], m.token);
   else if (m.kind === 'token') deviceLink.setToken(m.token);
   else if (m.kind === 'lending') deviceLink.lendingChanged();
+  else if (m.kind === 'importing') services.allowImport();
   else if (m.kind === 'shutdown') {
     deviceLink.close();
     process.exit(0);

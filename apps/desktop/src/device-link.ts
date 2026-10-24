@@ -31,8 +31,8 @@ interface Lent {
 }
 
 const MAX_RUNNERS = 32;
-/** SSH hosts' runners at once (each is an ssh process). */
-const MAX_STARTED = 16;
+/** Channels started at once: SSH hosts' runners (each an ssh process), connectors' programs, requests in flight. */
+const MAX_STARTED = 48;
 /** The server rejected the sign-in (see apps/server): wait for a new token instead of retrying. */
 const SIGNED_OUT = 4401;
 const MISSED_PINGS = 2;
@@ -44,7 +44,7 @@ export interface DeviceLinkOptions {
   runnerBinary: string | null;
   trustedFolders(): Promise<string[]>;
   /** What else this computer lends (version 2); without it, only runners for trusted folders. */
-  services?: Pick<DeviceServices, 'hello' | 'request' | 'start' | 'scratchEnv'>;
+  services?: Pick<DeviceServices, 'hello' | 'request' | 'start' | 'scratchEnv'> & Partial<Pick<DeviceServices, 'watchHome'>>;
   openSocket?: OpenSocket;
   spawnRunner?: (binary: string, root: string, env?: Record<string, string>) => RunnerProcess;
 }
@@ -89,6 +89,7 @@ export function createDeviceLink(options: DeviceLinkOptions) {
   let started = 0;
   /** Channels whose root is being checked, or whose service is starting. */
   const opening = new Set<string>();
+  let stopWatch: (() => void) | undefined;
 
   const send = (frame: DeviceToServer) => {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(frame));
@@ -130,7 +131,7 @@ export function createDeviceLink(options: DeviceLinkOptions) {
   const start = async (channel: string, service: DeviceStart) => {
     const refuse = (reason: string) => send({ t: 'closed', channel, reason: reason.slice(0, 500) });
     if (!options.services) return refuse(`${options.device.name}'s desktop app doesn't lend that.`);
-    if (started >= MAX_STARTED) return refuse(`${options.device.name} is already connected to ${MAX_STARTED} SSH workspaces.`);
+    if (started >= MAX_STARTED) return refuse(`${options.device.name} is already running ${MAX_STARTED} SSH workspaces, connectors and requests for the server.`);
     opening.add(channel);
     started++;
     let lent: Awaited<ReturnType<NonNullable<DeviceLinkOptions['services']>['start']>>;
@@ -206,6 +207,8 @@ export function createDeviceLink(options: DeviceLinkOptions) {
     };
     ws.onopen = () => {
       failures = 0;
+      // The person's config here changing (a skill added, CLAUDE.md edited) makes the server read it again.
+      stopWatch ??= options.services?.watchHome?.(() => send({ t: 'event', event: 'home.changed' }));
       // Says what it lends first; the server waits a moment for it before taking this for an older desktop.
       void options.services
         ?.hello()
@@ -242,6 +245,8 @@ export function createDeviceLink(options: DeviceLinkOptions) {
     },
     close(): void {
       this.setToken(null);
+      stopWatch?.();
+      stopWatch = undefined;
     },
     /** The person changed what this computer lends the server: tell it. */
     lendingChanged(): void {
