@@ -116,7 +116,7 @@ On an Atelier server, **Customize › Connectors** has **Your connectors** for e
 use, with keys only you give. They sit beside the admin's in **+ › Connectors**, with the same switches per conversation.
 Your own desktop app's backend has no such section; there, the connectors in **Settings › Connectors** are already yours.
 
-**Add connector** asks for a **Name**, how it **Connects over** (**HTTP**, **SSE** or **stdio**), its **URL** (with **Sign
+**Add your own** asks for a **Name**, how it **Connects over** (**HTTP**, **SSE** or **stdio**), its **URL** (with **Sign
 in with OAuth**) or its **Command** and **Arguments**, and **Headers** or **Environment variables**. Every value is kept
 encrypted on the server as your own secret, never in your preferences and never shown again: editing a connector shows
 "Unchanged" for a value you leave empty. **⋯** has **Edit**, **Sign in** (OAuth ones) and **Remove**, which forgets its keys

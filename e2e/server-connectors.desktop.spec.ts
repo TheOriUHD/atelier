@@ -45,7 +45,7 @@ test("desktop signed in to a server: a person's own connector runs on it, and it
     // Customize › Connectors › Your connectors: added on this desktop, its program runs here.
     await page.evaluate(() => (location.hash = '#/customize?tab=connectors'));
     const yours = page.locator('section', { has: page.getByRole('heading', { name: 'Your connectors' }) });
-    await yours.getByRole('button', { name: 'Add connector' }).click();
+    await yours.getByRole('button', { name: 'Add your own' }).click();
     const dialog = page.getByRole('dialog', { name: 'Add your connector' });
     await dialog.getByLabel('Name').fill('mock');
     await dialog.getByRole('radio', { name: 'stdio' }).click();

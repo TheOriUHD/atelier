@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type ElectronApplication } from '@playwright/test';
 import { launchDesktop, PASSWORD } from './desktop-app.ts';
-import { tempConfigDir } from './fixtures.ts';
+import { sendWhenIdle, tempConfigDir } from './fixtures.ts';
 import { FAKE_SSH, PORT, SERVER_URL, SETUP_TOKEN, signedInClient, waitForHealth } from './server-mode.ts';
 
 test('desktop: connects to an Atelier server, signs in, chats through the relay and lends its runner', async () => {
@@ -36,7 +36,8 @@ test('desktop: connects to an Atelier server, signs in, chats through the relay 
 
     const box = page.getByRole('textbox', { name: 'Message' });
     await box.fill('hello from the desktop');
-    await box.press('Enter');
+    // The server's model list arrives a moment after the window does.
+    await sendWhenIdle(page);
     await expect(page.getByText('You said: hello from the desktop')).toBeVisible();
 
     // Relaunched, the app reconnects to the server with the stored token: no sign-in screen. (With a stand-in for ssh,

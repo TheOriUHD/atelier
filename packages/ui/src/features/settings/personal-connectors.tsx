@@ -92,7 +92,7 @@ export function PersonalConnectorsSection() {
               </Button>
             )}
             <Button size="sm" variant="primary" leadingIcon={Plus} onClick={add.show}>
-              Add connector
+              Add your own
             </Button>
           </div>
         }

@@ -77,7 +77,7 @@ describe('CustomizePage', () => {
     expect(within(table).queryByRole('switch')).toBeNull();
     // Only their own can be added.
     const yours = (await screen.findByRole('heading', { name: 'Your connectors' })).closest('section')!;
-    expect(screen.getAllByRole('button', { name: /Add connector/ })).toEqual([within(yours).getByRole('button', { name: 'Add connector' })]);
+    expect(screen.getAllByRole('button', { name: /^Add (connector|your own)$/ })).toEqual([within(yours).getByRole('button', { name: 'Add your own' })]);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
     expect(await screen.findByText('review-kit')).toBeTruthy();

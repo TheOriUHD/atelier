@@ -170,7 +170,7 @@ function ModelTable({ providerId, label, models }: { providerId: string; label: 
           <p className="text-footnote text-fg-muted">{active.length} enabled · {models.length} available</p>
         </div>
         <div className="flex items-center gap-1 rounded-lg bg-fill-ghost-hover p-1" role="group" aria-label={`${label} model view`}>
-          <Button size="sm" variant={catalog ? 'ghost' : 'secondary'} aria-pressed={!catalog} onClick={() => { setCatalog(false); setPage(0); }}>Your models</Button>
+          <Button size="sm" variant={catalog ? 'ghost' : 'secondary'} aria-pressed={!catalog} onClick={() => { setCatalog(false); setPage(0); }}>Enabled</Button>
           <Button size="sm" variant={catalog ? 'secondary' : 'ghost'} aria-pressed={catalog} onClick={() => { setCatalog(true); setPage(0); }}>Browse catalog</Button>
         </div>
       </div>

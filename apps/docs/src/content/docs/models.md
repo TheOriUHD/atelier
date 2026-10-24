@@ -75,8 +75,8 @@ at once** on the provider is 2 or more. Sub-agents with their own model follow t
 One block per provider, even one that lists no models (so you can add one by id). Each block shows "*N* enabled · *M*
 available" and has:
 
-- **Your models** lists the visible ones. **Browse catalog** lists everything the provider reported, hidden ones included;
-  turning on **Visible** adds a model to your list.
+- **Enabled** lists the visible ones. **Browse catalog** lists everything the provider reported, hidden ones included;
+  turning on **Visible** adds a model to the Enabled list.
 - A search box and 20 models per page.
 - **Add model by id**: for a model the provider does not report (a router's `glm-5.3-flash-free`, say). Enter the id the
   provider uses, without spaces; an id already in the list is refused. Its ⋯ menu has **Remove**; models the provider

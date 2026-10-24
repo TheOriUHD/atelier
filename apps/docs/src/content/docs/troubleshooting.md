@@ -117,7 +117,7 @@ your PIN?** › Touch ID on a Mac with it, or quit Atelier and delete `screen-lo
 - *Provider* rejected the credentials (401): the key is wrong, expired or lacks access. *Provider* endpoint not found (404) —
   check the base URL: the address is missing its path (`/v1` for OpenAI-compatible servers).
 - A model may be hidden: under **Settings › Admin › Models**, **Browse catalog** shows every model of a provider with a
-  **Visible** switch for the picker, while **Your models** shows only the visible ones. Only admins see hidden models.
+  **Visible** switch for the picker, while **Enabled** shows only the visible ones. Only admins see hidden models.
 - A model that is in the provider but not in the list can be added by its id in **Settings › Admin › Models**.
 
 ### An answer fails
