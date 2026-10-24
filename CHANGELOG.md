@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.7] — 2026-10-24
+
 - **Focus rings only when you use Tab:** the blue frame around a button or field now shows only after Tab moves the focus, until the next click. Before, any key (a shortcut, the keys of a screenshot) or a click in a field lit one up, and it stayed until you clicked elsewhere.
 
 - **Settings › Shortcuts:** the page was "Keyboard shortcuts", which wrapped onto two cramped lines in the Settings list. Rows in that list are one line now, and a test checks every page name fits.
