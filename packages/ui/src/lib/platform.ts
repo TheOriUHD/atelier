@@ -7,7 +7,17 @@ import { APP, type DeviceLending, type RpcMessage, type Transport } from '@ateli
 export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
 
 /** A change to what this computer lends the server (apps/desktop/src/lending.ts). */
-export type LendingChange = { kind: 'scratch'; allowed: boolean } | { kind: 'ssh'; host: string; allowed: boolean };
+export type LendingChange =
+  | { kind: 'scratch'; allowed: boolean }
+  | { kind: 'ssh'; host: string; allowed: boolean }
+  /** A personal connector that runs a program here: allowed by what runs, taken back by id. */
+  | { kind: 'connector'; id: string; allowed: true; name: string; command: string; args: string[]; envKeys: string[] }
+  | { kind: 'connector'; id: string; allowed: false }
+  /** An address the server may reach from here (a model server or connector on this computer or its network). */
+  | { kind: 'http'; id: string; allowed: true; baseUrl: string }
+  | { kind: 'http'; id: string; allowed: false }
+  | { kind: 'chatgptChat'; allowed: boolean }
+  | { kind: 'home'; allowed: boolean };
 
 export interface ConnectionChoice {
   mode: 'local' | 'server';

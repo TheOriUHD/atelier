@@ -6,3 +6,4 @@
 export { bootstrapRunner, remoteRunnerChannel, sshConfigHosts, type RemoteShell } from './workspaces/ssh.ts';
 export { probeSsh, runOnce, throughShell, writeAskpass } from './workspaces/ssh-access.ts';
 export type { RunnerChannel } from './workspaces/runner-client.ts';
+export { plainHttpFetch } from './providers/plain-http.ts';

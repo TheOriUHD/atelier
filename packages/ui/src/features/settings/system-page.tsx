@@ -4,7 +4,7 @@ import { APP } from '@atelier/protocol';
 import { Button, Select, Switch, type SelectOption } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
 import { changeLending, useConnection, useLending } from '../../lib/lending.ts';
-import { desktop, isMac, openExternal, os, type UpdateChannel, type UpdateStatus } from '../../lib/platform.ts';
+import { desktop, isMac, openExternal, os, type LendingChange, type UpdateChannel, type UpdateStatus } from '../../lib/platform.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useWrite } from './use-setting.ts';
 
@@ -45,44 +45,68 @@ export function SystemPage() {
 
 /**
  * Signed in to a server: what the person allowed it to do on this computer (ARCHITECTURE §21), beyond the folders they
- * opened here. Allowing happens where they use it (the first session without a folder, choosing an SSH host); this
- * takes it back.
+ * opened here. Allowing happens where they use it (the first session without a folder, choosing an SSH host, adding a
+ * connector or model server here); this takes it back.
  */
 function LentSection() {
   const lending = useLending();
   const { data: connection } = useConnection();
   const { error, run } = useWrite();
-  if (!lending.server || !lending.allowed || !(lending.ssh || lending.scratch)) return null;
+  const allowed = lending.allowed;
+  const shown = (['scratch', 'ssh', 'mcp', 'http', 'chatgptChat', 'home'] as const).filter((s) => lending.lends(s));
+  if (!lending.server || !allowed || !shown.length) return null;
   const server = connection?.serverUrl ? new URL(connection.serverUrl).host : 'the server';
-  const hosts = lending.allowed.ssh;
+  const change = (c: LendingChange) => void run(() => changeLending(c));
   return (
     <SettingsSection title={`What ${server} can do here`}>
-      {lending.scratch && (
-        <SettingRow id="system.lendScratch" error={error}>
-          {(label) => (
-            <Switch {...label} checked={lending.allowed!.scratch} onCheckedChange={(on) => void run(() => changeLending({ kind: 'scratch', allowed: on }))} />
-          )}
+      {lending.lends('home') && (
+        <SettingRow id="system.lendHome" error={error}>
+          {(label) => <Switch {...label} checked={allowed.home} onCheckedChange={(on) => change({ kind: 'home', allowed: on })} />}
         </SettingRow>
       )}
-      {lending.ssh && (
+      {lending.lends('scratch') && (
+        <SettingRow id="system.lendScratch" error={error}>
+          {(label) => <Switch {...label} checked={allowed.scratch} onCheckedChange={(on) => change({ kind: 'scratch', allowed: on })} />}
+        </SettingRow>
+      )}
+      {lending.lends('ssh') && (
         <SettingRow id="system.lendSsh" stacked error={error}>
-          {hosts.length ? (
-            <ul className="flex flex-col gap-1">
-              {hosts.map((host) => (
-                <li key={host} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate font-mono text-body text-fg">{host}</span>
-                  <Button size="sm" onClick={() => void run(() => changeLending({ kind: 'ssh', host, allowed: false }))}>
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-body text-fg-muted">None yet.</p>
-          )}
+          <LentList items={allowed.ssh.map((host) => ({ key: host, label: host, remove: () => change({ kind: 'ssh', host, allowed: false }) }))} />
+        </SettingRow>
+      )}
+      {lending.lends('mcp') && (
+        <SettingRow id="system.lendConnectors" stacked error={error}>
+          <LentList items={allowed.connectors.map((c) => ({ key: c.id, label: c.name || c.id, remove: () => change({ kind: 'connector', id: c.id, allowed: false }) }))} />
+        </SettingRow>
+      )}
+      {lending.lends('http') && (
+        <SettingRow id="system.lendHttp" stacked error={error}>
+          <LentList items={allowed.http.map((a) => ({ key: a.id, label: a.baseUrl, remove: () => change({ kind: 'http', id: a.id, allowed: false }) }))} />
+        </SettingRow>
+      )}
+      {lending.lends('chatgptChat') && (
+        <SettingRow id="system.lendChatgptChat" error={error}>
+          {(label) => <Switch {...label} checked={allowed.chatgptChat} onCheckedChange={(on) => change({ kind: 'chatgptChat', allowed: on })} />}
         </SettingRow>
       )}
     </SettingsSection>
+  );
+}
+
+/** Hosts, connectors or addresses lent to the server, each with Remove. */
+function LentList({ items }: { items: { key: string; label: string; remove(): void }[] }) {
+  if (!items.length) return <p className="text-body text-fg-muted">None yet.</p>;
+  return (
+    <ul className="flex flex-col gap-1">
+      {items.map((item) => (
+        <li key={item.key} className="flex items-center justify-between gap-3">
+          <span className="min-w-0 truncate font-mono text-body text-fg">{item.label}</span>
+          <Button size="sm" onClick={item.remove}>
+            Remove
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

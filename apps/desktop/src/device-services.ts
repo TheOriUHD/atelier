@@ -1,13 +1,14 @@
 /**
  * What this desktop lends a server beyond runners for trusted folders (ARCHITECTURE §21): a folder for each session
- * started without one, and SSH hosts reached with this computer's ssh, keys, known hosts and runner builds. Each needs
- * the person's say-so on this computer (`lending.json`), so a server can't make it do more than they allowed here.
+ * started without one, SSH hosts reached with this computer's ssh, keys, known hosts and runner builds, and requests to
+ * addresses on this computer or its network (personal model servers and connectors). Each needs the person's say-so on
+ * this computer (`lending.json`), so a server can't make it do more than they allowed here.
  */
 import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { APP, DEVICE_LINK_PROTOCOL, type DeviceHello, type DeviceLending, type DeviceRequest, type DeviceStart } from '@atelier/protocol';
-import { bootstrapRunner, probeSsh, remoteRunnerChannel, runOnce, sshConfigHosts, throughShell, writeAskpass, type RunnerChannel } from '@atelier/core/device';
+import { bootstrapRunner, plainHttpFetch, probeSsh, remoteRunnerChannel, runOnce, sshConfigHosts, throughShell, writeAskpass, type RunnerChannel } from '@atelier/core/device';
 
 /** Why this computer didn't do what the server asked: the person didn't allow it here, or it can't. */
 export class Refusal extends Error {
@@ -37,6 +38,47 @@ export interface DeviceServicesOptions {
 /** A runner of an SSH host that failed this soon after it started was probably gone from there: look for it again next time. */
 const EARLY_EXIT_MS = 10_000;
 
+/** Whether `url` is at or below `base`: the same origin, and the base's path or one under it. */
+export function withinAddress(url: string, base: string): boolean {
+  const u = URL.parse(url);
+  const b = URL.parse(base);
+  if (!u || !b || u.origin !== b.origin || u.username || u.password) return false;
+  const root = b.pathname.replace(/\/+$/, '');
+  return u.pathname === root || u.pathname.startsWith(`${root}/`) || root === '';
+}
+
+/** A channel whose lines this computer writes (an HTTP response): buffered until the link listens. */
+function lineChannel(onKill: () => void) {
+  const pending: string[] = [];
+  let listener: ((line: string) => void) | null = null;
+  let finish!: () => void;
+  const closed = new Promise<{ code: null; signal: null }>((r) => (finish = () => r({ code: null, signal: null })));
+  let ended = false;
+  const channel: RunnerChannel = {
+    send: () => {},
+    onLine: (handler) => {
+      listener = handler;
+      for (const line of pending.splice(0)) handler(line);
+    },
+    closed,
+    kill: () => {
+      onKill();
+      end();
+    },
+  };
+  const emit = (value: object) => {
+    const line = JSON.stringify(value);
+    if (listener) listener(line);
+    else pending.push(line);
+  };
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    finish();
+  };
+  return { channel, emit, end };
+}
+
 export type DeviceServices = ReturnType<typeof deviceServices>;
 
 export function deviceServices(o: DeviceServicesOptions) {
@@ -50,7 +92,7 @@ export function deviceServices(o: DeviceServicesOptions) {
   };
 
   return {
-    services: ['runner', 'scratch', 'ssh'],
+    services: ['runner', 'scratch', 'ssh', 'http'],
 
     async hello(): Promise<DeviceHello> {
       return { protocol: DEVICE_LINK_PROTOCOL, app: APP.version, services: this.services, lending: await o.lending(), home: homedir(), sep, os: process.platform, arch: process.arch };
@@ -96,6 +138,8 @@ export function deviceServices(o: DeviceServicesOptions) {
 
     /** Starts what the server asked for; `log` gets what it writes to stderr. */
     async start(service: DeviceStart, log: (line: string) => void): Promise<RunnerChannel> {
+      if (service.kind === 'http') return this.http(service);
+      if (service.kind !== 'ssh') throw new Refusal('unsupported', `${o.deviceName}'s desktop app doesn't lend that.`);
       await allowSsh(service.connection.host);
       if (!o.runnerDir) throw new Refusal('unsupported', `${o.deviceName} has no runner builds to put on SSH hosts.`);
       const shell = throughShell(o.ssh, o.sshDir, await askpass(), service.connection, service.answers);
@@ -115,5 +159,41 @@ export function deviceServices(o: DeviceServicesOptions) {
       });
       return channel;
     },
+
+    /**
+     * One request to an address the person lent here (a model server or connector on this computer or its network), at
+     * or below its base URL: no redirects followed, no cookies passed back. The response streams back as it arrives.
+     */
+    async http(service: Extract<DeviceStart, { kind: 'http' }>): Promise<RunnerChannel> {
+      const address = (await o.lending()).http.find((a) => a.id === service.target);
+      if (!address || !withinAddress(service.url, address.baseUrl)) throw new Refusal('refused', `${o.deviceName} doesn't lend that address.`);
+      const abort = new AbortController();
+      const { channel, emit, end } = lineChannel(() => abort.abort());
+      void (async () => {
+        try {
+          const response = await fetchHere(service.url, {
+            method: service.method,
+            headers: service.headers,
+            ...(service.body ? { body: Buffer.from(service.body, 'base64') } : {}),
+            signal: abort.signal,
+            redirect: 'manual',
+          });
+          const headers: Record<string, string> = {};
+          response.headers.forEach((value, name) => {
+            if (name !== 'set-cookie') headers[name] = value;
+          });
+          emit({ head: { status: response.status, headers } });
+          if (response.body) for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) emit({ chunk: Buffer.from(chunk).toString('base64') });
+        } catch (e) {
+          if (!abort.signal.aborted) emit({ error: e instanceof Error ? e.message : String(e) });
+        } finally {
+          end();
+        }
+      })();
+      return channel;
+    },
   };
 }
+
+/** Plain HTTP without Node's 300-second timeouts (a local model server can say nothing for minutes); HTTPS as usual. */
+const fetchHere = plainHttpFetch((url, init) => fetch(url, init));

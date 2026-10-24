@@ -9,8 +9,8 @@ import {
   ADMIN_PROCEDURES,
   APP,
   DEVICE_LINK_PROTOCOL,
-  DeviceService,
   SshProbe,
+  type DeviceService,
   appError,
   chatGptPlanLabel,
   contract,
@@ -180,6 +180,9 @@ interface Connection {
   deviceId: string | null;
   origin: string | undefined;
 }
+
+/** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
+const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh'];
 
 export async function createBackend(platform: Platform): Promise<Backend> {
   const db = openDatabase(join(platform.dataDir, 'atelier.db'));
@@ -1015,7 +1018,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       platform: process.platform,
       dataDir: platform.dataDir,
       // A server takes these from desktop devices (ARCHITECTURE §21); their windows offer them only where both ends can.
-      ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...DeviceService.options] } } : {}),
+      ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...SERVER_DEVICE_SERVICES] } } : {}),
     }),
 
     // ---------------------------------------------------------------- sign-in

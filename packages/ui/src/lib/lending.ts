@@ -4,7 +4,7 @@
  * allowed only from this computer's own windows: choosing an SSH host here allows it here.
  */
 import { useQuery } from '@tanstack/react-query';
-import type { DeviceLending } from '@atelier/protocol';
+import type { DeviceLending, DeviceService } from '@atelier/protocol';
 import { desktop, type LendingChange } from './platform.ts';
 import { keys, queryClient, useAppInfo } from './queries.ts';
 import { rpc } from './rpc.ts';
@@ -21,6 +21,8 @@ export interface Lending {
   ssh: boolean;
   /** Sessions started without a folder can get one made here. */
   scratch: boolean;
+  /** Whether this computer lends `service` to the server: both ends can, and its link is up. */
+  lends(service: DeviceService): boolean;
   /** What the person allowed here so far; null outside server mode. */
   allowed: DeviceLending | null;
 }
@@ -33,7 +35,7 @@ export function useLending(): Lending {
   const { data: allowed } = useQuery({ queryKey: keys.lending, queryFn: () => desktop!.lending!.get(), enabled: server && !!desktop?.lending });
   const here = devices?.find((d) => d.current);
   const can = (service: string) => server && !!desktop?.lending && !!info?.deviceLink?.services.includes(service) && !!here?.online && !!here.services?.includes(service);
-  return { server, ssh: can('ssh'), scratch: can('scratch'), allowed: allowed ?? null };
+  return { server, ssh: can('ssh'), scratch: can('scratch'), lends: can, allowed: allowed ?? null };
 }
 
 /** Changes what this computer lends the server; nothing outside server mode. */

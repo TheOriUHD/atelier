@@ -74,13 +74,17 @@ export class DeviceLinkError extends Error {
 }
 
 const OPEN_TIMEOUT_MS = 15_000;
-/** Reaching an SSH host can include uploading the runner there (up to two minutes). */
-const START_TIMEOUT_MS: Record<DeviceStart['kind'], number> = { ssh: 150_000 };
+/**
+ * How long a start may take: reaching an SSH host can include uploading the runner there (up to two minutes); an HTTP
+ * request waits for its response's head (a local model server loading a model can take minutes); a program, for npx's
+ * first download.
+ */
+const START_TIMEOUT_MS: Record<DeviceStart['kind'], number> = { ssh: 150_000, http: 15 * 60_000, mcp: 120_000 };
 const REQUEST_TIMEOUT_MS = 30_000;
 const HELLO_WAIT_MS = 3_000;
 const MISSED_PINGS = 2;
 const LEGACY: DeviceLinkInfo = { services: ['runner'], lending: NO_LENDING, home: null, sep: '/', os: null, app: null };
-const START_SERVICE: Record<DeviceStart['kind'], DeviceService> = { ssh: 'ssh' };
+const START_SERVICE: Record<DeviceStart['kind'], DeviceService> = { ssh: 'ssh', http: 'http', mcp: 'mcp' };
 const linkKey = (userId: string, deviceId: string) => JSON.stringify([userId, deviceId]);
 
 export class DeviceLinks {
@@ -207,6 +211,8 @@ export class DeviceLinks {
     const id = newId();
     return new Promise((resolve, reject) => {
       let onLine: ((line: string) => void) | undefined;
+      // Lines that come before anyone listens (a quick answer right after `opened`) wait for the listener.
+      const early: string[] = [];
       let isOpen = false;
       let ended = false;
       let resolveClosed!: (exit: RunnerExit) => void;
@@ -222,7 +228,10 @@ export class DeviceLinks {
       const timer = setTimeout(() => finish('The device did not answer.'), timeoutMs);
       const channel: RunnerChannel = {
         send: (line) => !ended && link.socket.send({ t: 'line', channel: id, line }),
-        onLine: (handler) => void (onLine = handler),
+        onLine: (handler) => {
+          onLine = handler;
+          for (const line of early.splice(0)) handler(line);
+        },
         closed,
         kill: () => {
           if (!ended) link.socket.send({ t: 'close', channel: id });
@@ -230,7 +239,7 @@ export class DeviceLinks {
         },
       };
       link.channels.set(id, {
-        line: (line) => onLine?.(line),
+        line: (line) => (onLine ? onLine(line) : early.push(line)),
         log: (line) => onLog?.(line),
         opened: () => {
           isOpen = true;

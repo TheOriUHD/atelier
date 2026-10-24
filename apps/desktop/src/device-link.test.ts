@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
+import { NO_LENDING } from '@atelier/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDeviceLink, insideTrusted, trustedPath } from './device-link.ts';
 
@@ -240,7 +241,7 @@ describe('device link', () => {
 });
 
 describe('device link version 2', () => {
-  const HELLO = { protocol: 2, app: '0.2.8', services: ['runner', 'scratch', 'ssh'], lending: { scratch: true, ssh: ['box'] }, home: '/Users/ada', sep: '/' as const, os: 'darwin', arch: 'arm64' };
+  const HELLO = { protocol: 2, app: '0.2.8', services: ['runner', 'scratch', 'ssh'], lending: { ...NO_LENDING, scratch: true, ssh: ['box'] }, home: '/Users/ada', sep: '/' as const, os: 'darwin', arch: 'arm64' };
 
   /** A lent SSH runner: lines written to it, and its own lines and end. */
   function fakeChannel() {

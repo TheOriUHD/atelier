@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ServerToDevice } from '@atelier/protocol';
+import { NO_LENDING, type ServerToDevice } from '@atelier/protocol';
 import { openDatabase, type Db } from '../store/db.ts';
 import { users } from '../store/schema.ts';
 import { DeviceLinks } from './device-links.ts';
@@ -124,7 +124,7 @@ function deviceV2(userId: string, deviceId: string) {
       if (frame.t === 'open') {
         if (!frame.root.startsWith(scratchBase)) return reply({ t: 'closed', channel: frame.channel, reason: `${frame.root} isn't trusted here.` });
         run(frame.channel, frame.root);
-      } else if (frame.t === 'start') {
+      } else if (frame.t === 'start' && frame.service.kind === 'ssh') {
         started.push(frame.service);
         run(frame.channel, frame.service.root, frame.service.env);
       } else if (frame.t === 'req') {
@@ -297,7 +297,7 @@ describe('device link version 2', () => {
     const { receive } = attach();
     receive({ t: 'hello', hello: HELLO });
     receive({ t: 'event', event: 'lending.changed', lending: { scratch: false, ssh: [] } });
-    expect(links.info('ada', 'laptop')?.lending).toEqual({ scratch: false, ssh: [] });
+    expect(links.info('ada', 'laptop')?.lending).toEqual({ ...NO_LENDING, scratch: false, ssh: [] });
     expect(changes).toEqual(['ada', 'ada', 'ada']);
   });
 

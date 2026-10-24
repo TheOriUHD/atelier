@@ -29,21 +29,45 @@ export const DEVICE_LINK_PROTOCOL = 2;
 
 /**
  * What a device can lend: `runner` (folders trusted on it), `scratch` (a new empty folder per session started without
- * one), `ssh` (SSH hosts reached with the device's own ssh, keys and runner builds).
+ * one), `ssh` (SSH hosts reached with the device's own ssh, keys and runner builds), `http` (addresses on the device or
+ * its network: personal model servers and connectors), `mcp` (personal connectors that run a program there), `home`
+ * (the person's own instructions, skills and Claude Code settings in its home folder), `chatgptChat` (the ChatGPT window
+ * of the desktop app there).
  */
-export const DeviceService = z.enum(['runner', 'scratch', 'ssh']);
+export const DeviceService = z.enum(['runner', 'scratch', 'ssh', 'http', 'mcp', 'home', 'chatgptChat']);
 export type DeviceService = z.infer<typeof DeviceService>;
+
+/** A personal connector the person allowed to run here, by what runs: see `connectorFingerprintInput`. */
+export const LentConnector = z.object({ id: z.string().min(1).max(64), name: z.string().max(80), fingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
+export type LentConnector = z.infer<typeof LentConnector>;
+
+/** An address the server may reach from here (a model server or connector on this computer or its network), by id. */
+export const LentAddress = z.object({ id: z.string().min(1).max(64), baseUrl: z.url().max(2048) });
+export type LentAddress = z.infer<typeof LentAddress>;
 
 /**
  * What the person allowed this device to do for this server, set only from the device's own windows (its
- * `lending.json`): scratch folders, and the SSH hosts it may connect to.
+ * `lending.json`): scratch folders, the SSH hosts it may connect to, personal connectors it may run, addresses it may
+ * reach, its ChatGPT window, and (on unless turned off, as the app's own backend reads them) its home folder's config.
  */
 export const DeviceLending = z.object({
   scratch: z.boolean(),
   ssh: z.array(SshHost).max(500),
+  connectors: z.array(LentConnector).max(200).default([]),
+  http: z.array(LentAddress).max(200).default([]),
+  chatgptChat: z.boolean().default(false),
+  home: z.boolean().default(true),
 });
 export type DeviceLending = z.infer<typeof DeviceLending>;
-export const NO_LENDING: DeviceLending = { scratch: false, ssh: [] };
+export const NO_LENDING: DeviceLending = { scratch: false, ssh: [], connectors: [], http: [], chatgptChat: false, home: true };
+
+/**
+ * What a personal connector's fingerprint is taken of: the program, its arguments and the names (not values) of its
+ * environment. A change to any of them needs the person's say-so on the device again; new secret values don't.
+ */
+export function connectorFingerprintInput(command: string, args: readonly string[], envKeys: readonly string[]): string {
+  return JSON.stringify([command, [...args], [...new Set(envKeys)].sort()]);
+}
 
 const Channel = z.string().min(1).max(64);
 /** A runner frame; large reads travel base64-encoded inside one line. */
@@ -83,10 +107,35 @@ export type SshProbe = z.infer<typeof SshProbe>;
 /** The environment a service may get from the server: only what keeps git inside a scratch folder. */
 const SafeEnv = z.object({ GIT_CEILING_DIRECTORIES: z.string().max(4096).optional() }).strict();
 
-/** Something long-lived the device runs for the server, its lines carried in a channel like a runner's. */
+const HeaderMap = z.record(z.string().max(256), z.string().max(16_384));
+
+/**
+ * Something long-lived the device runs for the server, its lines carried in a channel like a runner's.
+ *
+ * `http` is one request from the device to an address it lent (`lending.http`, by `target`), at or below its base URL.
+ * The device's lines are JSON: `{"head":{"status","headers"}}` first, then `{"chunk":"<base64>"}` for the body as it
+ * arrives; the channel closing ends the body. `{"error":"<why>"}` says the request failed there.
+ * `mcp` runs a personal connector's program on the device; its lines are the program's MCP JSON-RPC lines.
+ */
 export const DeviceStart = z.discriminatedUnion('kind', [
   /** A runner on an SSH host, reached with the device's ssh (the device uploads its own runner build there). */
   z.object({ kind: z.literal('ssh'), connection: DeviceSshConnection, answers: SshAnswers, root: z.string().min(1).max(4096), env: SafeEnv }),
+  z.object({
+    kind: z.literal('http'),
+    target: z.string().min(1).max(64),
+    method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']),
+    url: z.url().max(8192),
+    headers: HeaderMap,
+    /** Base64; at most 48 MiB of request. */
+    body: z.string().max(64 * 1024 * 1024).optional(),
+  }),
+  z.object({
+    kind: z.literal('mcp'),
+    connectorId: z.string().min(1).max(64),
+    command: z.string().min(1).max(4096),
+    args: z.array(z.string().max(8192)).max(200),
+    env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(200), z.string().max(65_536)),
+  }),
 ]);
 export type DeviceStart = z.infer<typeof DeviceStart>;
 

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DeviceLending } from '@atelier/protocol';
+import { NO_LENDING, type DeviceLending } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
 import { queryClient } from '../../lib/queries.ts';
 import { resetBackend, user } from '../settings/test-backend.ts';
@@ -28,7 +28,7 @@ const change = vi.fn(async (c: { kind: string; host?: string; allowed: boolean }
 });
 
 beforeEach(() => {
-  allowed = { scratch: false, ssh: [] };
+  allowed = { ...NO_LENDING, scratch: false, ssh: [] };
   change.mockClear();
   queryClient.clear();
   platform.desktop = {
@@ -66,7 +66,7 @@ describe('making folders on this computer for a server', () => {
 
 describe('Settings › System on a desktop signed in to a server', () => {
   it('lists what the server can do here, and takes it back', async () => {
-    allowed = { scratch: true, ssh: ['gpu', 'build@box'] };
+    allowed = { ...NO_LENDING, scratch: true, ssh: ['gpu', 'build@box'] };
     resetBackend({
       'app.info': () => ({ name: 'Atelier', version: '0.2.8', surface: 'web', platform: 'linux', dataDir: '/data', deviceLink: { protocol: 2, services: ['runner', 'scratch', 'ssh'] } }),
       'account.devices': () => [{ id: 'd-mac', name: 'MacBook', platform: 'darwin', createdAt: 0, lastSeenAt: 0, current: true, online: true, services: ['runner', 'scratch', 'ssh'] }],

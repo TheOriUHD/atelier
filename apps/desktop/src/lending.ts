@@ -4,9 +4,10 @@
  * Kept per server in `lending.json` (userData) and changed only from this computer's own windows; the device link reads
  * it on every request, so a server can't make this computer do more than the person allowed here.
  */
+import { createHash } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { DeviceLending, NO_LENDING } from '@atelier/protocol';
+import { connectorFingerprintInput, DeviceLending, NO_LENDING } from '@atelier/protocol';
 
 async function readAll(path: string): Promise<Record<string, unknown>> {
   try {
@@ -39,16 +40,53 @@ export function changeLending(path: string, serverUrl: string, change: (current:
   return run;
 }
 
-/** The changes a window can ask for. */
+/** The changes a window can ask for. A connector is allowed by what runs (its fingerprint), taken back by id. */
 export const LendingChange = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('scratch'), allowed: z.boolean() }),
   z.object({ kind: z.literal('ssh'), host: z.string().min(1).max(255), allowed: z.boolean() }),
+  z.object({
+    kind: z.literal('connector'),
+    id: z.string().min(1).max(64),
+    name: z.string().max(80).default(''),
+    command: z.string().max(4096).optional(),
+    args: z.array(z.string().max(8192)).max(200).default([]),
+    envKeys: z.array(z.string().max(200)).max(200).default([]),
+    allowed: z.boolean(),
+  }),
+  z.object({ kind: z.literal('http'), id: z.string().min(1).max(64), baseUrl: z.url().max(2048).optional(), allowed: z.boolean() }),
+  z.object({ kind: z.literal('chatgptChat'), allowed: z.boolean() }),
+  z.object({ kind: z.literal('home'), allowed: z.boolean() }),
 ]);
 export type LendingChange = z.infer<typeof LendingChange>;
 
+/** What a personal connector's fingerprint is: sha256 of its program, arguments and environment names. */
+export const connectorFingerprint = (command: string, args: readonly string[], envKeys: readonly string[]) =>
+  createHash('sha256').update(connectorFingerprintInput(command, args, envKeys)).digest('hex');
+
 /** Applies a window's change to what a server may do. */
 export function applyLending(current: DeviceLending, change: LendingChange): DeviceLending {
-  if (change.kind === 'scratch') return { ...current, scratch: change.allowed };
-  const ssh = current.ssh.filter((h) => h !== change.host);
-  return { ...current, ssh: change.allowed ? [...ssh, change.host] : ssh };
+  switch (change.kind) {
+    case 'scratch':
+      return { ...current, scratch: change.allowed };
+    case 'chatgptChat':
+      return { ...current, chatgptChat: change.allowed };
+    case 'home':
+      return { ...current, home: change.allowed };
+    case 'ssh': {
+      const ssh = current.ssh.filter((h) => h !== change.host);
+      return { ...current, ssh: change.allowed ? [...ssh, change.host] : ssh };
+    }
+    case 'connector': {
+      const connectors = current.connectors.filter((c) => c.id !== change.id);
+      if (!change.allowed) return { ...current, connectors };
+      if (!change.command) throw new Error('A connector is allowed by the program it runs.');
+      return { ...current, connectors: [...connectors, { id: change.id, name: change.name, fingerprint: connectorFingerprint(change.command, change.args, change.envKeys) }] };
+    }
+    case 'http': {
+      const http = current.http.filter((a) => a.id !== change.id);
+      if (!change.allowed) return { ...current, http };
+      if (!change.baseUrl) throw new Error('An address is allowed by its URL.');
+      return { ...current, http: [...http, { id: change.id, baseUrl: change.baseUrl }] };
+    }
+  }
 }

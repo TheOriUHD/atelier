@@ -56,12 +56,21 @@ export async function loadServerKey(keyFile: string, envValue?: string): Promise
   }
 }
 
+/** An id for a secret from its label; never one that reads as a person's own (`github-user-…`), which would hide it. */
 export function slugId(label: string): string {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'secret';
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'secret';
+  return isPersonalSecret(slug) ? `secret-${slug}`.slice(0, 48) : slug;
 }
 
-/** A person's own secrets (their GitHub token, `github-user-<id>`; a saved SSH password, `ssh-user-<id>-<connection>`): never listed for admins, never reachable from settings. */
-export const isPersonalSecret = (id: string) => id.startsWith('github-user-') || id.startsWith('ssh-user-');
+/**
+ * Secrets that belong to one person (`<kind>-user-<user id>-…`): their GitHub token, SSH passwords, personal connectors'
+ * and model providers' keys. Never listed for admins, never reachable from settings (`forSettings`); `forUser` gives
+ * them to their owner's own things only.
+ */
+const PERSONAL_KINDS = ['github', 'ssh', 'connector', 'mcp-oauth', 'provider'] as const;
+export const isPersonalSecret = (id: string) => PERSONAL_KINDS.some((kind) => id.startsWith(`${kind}-user-`));
+/** Whether a personal secret is `userId`'s: its id names them right after the kind. */
+export const personalSecretOf = (id: string, userId: string) => PERSONAL_KINDS.some((kind) => id.startsWith(`${kind}-user-${userId}-`));
 
 export class SecretStore {
   constructor(
@@ -89,6 +98,11 @@ export class SecretStore {
     if (!row) return undefined;
     await this.db.update(secrets).set({ lastUsedAt: Date.now() }).where(eq(secrets.id, id));
     return this.cipher.decrypt(row.ciphertext);
+  }
+
+  /** A personal secret, for its owner's own things (their connectors and providers); nothing for anyone else's. */
+  forUser(userId: string, id: string): Promise<string | undefined> {
+    return personalSecretOf(id, userId) ? this.get(id) : Promise.resolve(undefined);
   }
 
   /** Resolves a `${secret:<id>}` written in settings. A person's own secrets never resolve there, whoever wrote the setting. */

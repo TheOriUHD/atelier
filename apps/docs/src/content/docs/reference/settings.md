@@ -132,6 +132,10 @@ Desktop app only.
 | **Launch at login** | Open Atelier when you sign in to this computer. |
 | **Folders for sessions without one** *(only where it works)* | The server can make a new, empty folder on this computer for each session you start without a folder. |
 | **SSH hosts reached from here** *(only where it works)* | Hosts the server may connect to from this computer, with its ssh, keys and known hosts. Choosing a host here adds it. |
+| **Connectors that run a program here** *(only where it works)* | Your connectors the server may start on this computer. Adding or importing one here adds it; a changed program asks again. |
+| **Addresses reached from here** *(only where it works)* | Model servers and connectors on this computer or its network that the server may reach through it. |
+| **ChatGPT Chat on this computer** *(only where it works)* | Your ChatGPT Chat models answer through the ChatGPT window of this app. |
+| **Your instructions and skills from this computer** *(only where it works)* | Sessions in folders on this computer use your ~/.claude/CLAUDE.md, ~/.atelier/ATELIER.md, skills, agents, commands and Claude Code settings here. |
 | **Data folder** | Where Atelier keeps its data on this computer. |
 
 ## Settings › Admin › Providers
