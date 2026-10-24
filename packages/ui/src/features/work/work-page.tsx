@@ -12,10 +12,11 @@ import { Spinner, cn, toast } from '../../components/ui/index.ts';
 import { draftKeys } from '../../lib/drafts.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
 import { useMarkSeen } from '../../lib/mark-seen.ts';
-import { keys, useModels, useWorkspaces } from '../../lib/queries.ts';
+import { keys, useModels, useProviderType, useWorkspaces } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { Composer, FileDropZone, type ComposerHandle } from '../chat/composer.tsx';
 import { ModelPicker } from '../chat/model-picker.tsx';
+import { PlanLimitWarning, PlanUsageButton } from '../chat/plan-usage.tsx';
 import { ContextMeter, ScrollToBottom, SessionHeader, clearCommand, loopCommand, modelCommand, useFollowScroll } from '../chat/session-view.tsx';
 import { Transcript } from '../chat/transcript.tsx';
 import type { ActivityStepView } from '../chat/turns.ts';
@@ -59,6 +60,7 @@ export function WorkPage() {
   const connectors = useSessionConnectors(session);
   const workspace = workspaces?.find((w) => w.id === session?.workspaceId);
   const model = models?.find((m) => m.ref === session?.model);
+  const providerType = useProviderType(model?.providerId);
   const busy = session?.status === 'running' || session?.status === 'waiting';
   const root = workspace?.root ?? null;
   const files = useMemo(() => (root ? outputFiles(live.messages, root) : []), [live.messages, root]);
@@ -145,6 +147,7 @@ export function WorkPage() {
               }} />
                 </div>
                 <div className="pr-6 pb-5 pl-8 max-md:px-4">
+                  <PlanLimitWarning provider={providerType} busy={busy} />
                   <Composer
                     ref={composer}
                     variant="reply"
@@ -170,6 +173,7 @@ export function WorkPage() {
                     onStop={sending.stop}
                     footerEnd={
                       <>
+                        <PlanUsageButton provider={providerType} />
                         {live.context && <ContextMeter used={live.context.used} limit={live.context.limit} />}
                         <ModelPicker
                           open={pickingModel}

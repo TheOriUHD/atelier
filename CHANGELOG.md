@@ -4,6 +4,12 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **ChatGPT plan limits in Chat and Cowork, and a warning before they run out:** a gauge beside the context ring (Chat, Cowork and the Chat home) opens the plan's usage limits, as Code's context popover shows them; it turns orange from 75% and red from 90%. From 90% of a window a line above the message box says so in every mode ("You’ve used 92% of your ChatGPT 5-hour limit. Resets in 1 hr 10 min."); dismissed, it stays away until that window resets. The limits are read again after each reply. Admins only, like the plan's status.
+
+- **Retry with another model:** the model name under a reply opens "Retry with" and the visible models; the one picked answers the same message again as a new version of the reply (the arrows switch between them), and the conversation goes on with it.
+
+- **Read aloud:** a speaker button under a reply reads it with one of the computer's own voices, so nothing is sent anywhere. Code blocks, link addresses and markup are skipped, a German reply gets a German voice, and the best voice of the language is chosen (never macOS's joke voices). Click again to stop; opening another conversation stops it too.
+
 - **A ChatGPT limit's countdown turns into the time it resets:** in the context popover's Plan usage limits, click "Resets in 4 hr 25 min" and it reads "Resets 14:25" (with the weekday when it resets on another day); click again for the countdown. The choice stays. Times there follow the computer's 12- or 24-hour clock, not the app's language: the desktop reads it from the system (macOS's 24-hour switch, or its region, so English with region Germany is 14:25 where it said 2:25 PM; Windows' short time format; Linux's time locale), and a browser keeps its language's clock.
 
 ## [0.2.5] — 2026-10-22

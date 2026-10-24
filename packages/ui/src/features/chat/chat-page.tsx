@@ -4,7 +4,7 @@ import { Spinner, cn, toast } from '../../components/ui/index.ts';
 import { draftKeys } from '../../lib/drafts.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
 import { useMarkSeen } from '../../lib/mark-seen.ts';
-import { useModels } from '../../lib/queries.ts';
+import { useModels, useProviderType } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useUi } from '../../lib/ui-store.ts';
 import { ArtifactPanel } from '../artifacts/artifact-panel.tsx';
@@ -15,6 +15,7 @@ import { Composer, FileDropZone, type ComposerHandle } from './composer.tsx';
 import { CoworkOffer } from './cowork-offer.tsx';
 import { useSessionSend } from './outbox.tsx';
 import { ModelPicker } from './model-picker.tsx';
+import { PlanLimitWarning, PlanUsageButton } from './plan-usage.tsx';
 import { ContextMeter, ScrollToBottom, SessionHeader, clearCommand, modelCommand, useFollowScroll } from './session-view.tsx';
 import { Transcript } from './transcript.tsx';
 import { useSessionConnectors } from './connector-switches.ts';
@@ -36,6 +37,7 @@ export function ChatPage() {
   const connectors = useSessionConnectors(session);
   const research = useSessionResearch(session);
   const model = models?.find((m) => m.ref === session?.model);
+  const providerType = useProviderType(model?.providerId);
   // A connector's permission prompt or question keeps the run going.
   const streaming = session?.status === 'running' || session?.status === 'waiting';
   const artifact = useUi((s) => (s.artifact?.sessionId === sessionId ? s.artifact : null));
@@ -92,6 +94,7 @@ export function ChatPage() {
               }} />
           </div>
           <div className="pr-6 pb-2 pl-8 max-md:px-4">
+            <PlanLimitWarning provider={providerType} busy={streaming} />
             <Composer
               ref={composer}
               variant="reply"
@@ -120,6 +123,7 @@ export function ChatPage() {
               footerCenter={temporary ? 'Deleted when you leave · AI can make mistakes.' : 'AI can make mistakes.'}
               footerEnd={
                 <>
+                  <PlanUsageButton provider={providerType} />
                   {live.context && <ContextMeter used={live.context.used} limit={live.context.limit} />}
                   <ModelPicker
                     open={pickingModel}

@@ -40,10 +40,10 @@ const percent = (tokens: number, limit: number) => `${+((tokens / limit) * 100).
 
 const RING_CLASS = 'flex size-6 items-center justify-center rounded-md outline-none focus-ring hover:bg-fill-ghost-hover data-popup-open:bg-fill-ghost-hover';
 /** A figure, a bar, a few rows. */
-const POPOVER_CLASS = cn('flex w-[min(328px,calc(100vw-32px))] flex-col gap-3 p-3.5', popupScrollClass);
+export const POPOVER_CLASS = cn('flex w-[min(328px,calc(100vw-32px))] flex-col gap-3 p-3.5', popupScrollClass);
 
 /** Closes the popover, then opens Settings › Usage. */
-function useOpenUsage(close: () => void) {
+export function useOpenUsage(close: () => void) {
   const openSettings = useOpenSettings();
   return () => {
     close();
@@ -269,7 +269,7 @@ export function resetsText(resetsAt: number | null, now: number, exact = false):
 const EXACT_KEY = 'atelier.resetsExact';
 
 /** Whether the plan's limits say when they reset as a time rather than how long until; clicking one switches, and it stays. */
-function useExactResets(): [boolean, () => void] {
+export function useExactResets(): [boolean, () => void] {
   const [exact, setExact] = useState(() => {
     try {
       return localStorage.getItem(EXACT_KEY) === '1';
@@ -289,7 +289,7 @@ function useExactResets(): [boolean, () => void] {
   return [exact, toggle];
 }
 
-const barTone = (percent: number) => (percent >= 90 ? 'bg-danger' : percent >= 75 ? 'bg-warning' : 'bg-interactive');
+export const barTone = (percent: number) => (percent >= 90 ? 'bg-danger' : percent >= 75 ? 'bg-warning' : 'bg-interactive');
 
 /**
  * Below the context window, the plan usage limits: for a ChatGPT subscription the plan's own
@@ -312,20 +312,27 @@ function SectionHeading({ id, children, onOpenUsage }: { id: string; children: s
   );
 }
 
-/** The subscription's usage windows: how much of each is used and when it resets. */
-function PlanLimits({ onOpenUsage }: { onOpenUsage(): void }) {
-  const titleId = useId();
+/**
+ * The ChatGPT subscription's usage windows as ChatGPT last reported them (with each reply): Pro plans show only the
+ * weekly one. `now` is when they were read, for "Resets in …". Admins only: anyone else gets none.
+ */
+export function usePlanWindows() {
   const status = useQuery({ queryKey: keys.chatgpt, queryFn: () => rpc().call('chatgpt.status', {}), staleTime: 0 });
   const rawPlan = status.data?.plan?.toLowerCase();
   const pro = !!rawPlan?.startsWith('pro');
   const windows = [status.data?.limits?.primary, status.data?.limits?.secondary].filter(
     (w): w is NonNullable<typeof w> => !!w && (w.windowMinutes === null || w.windowMinutes > 0) && (!pro || w.windowMinutes === 10_080),
   );
-  const plan = rawPlan ? chatGptPlanLabel(rawPlan) : null;
-  const now = status.dataUpdatedAt || 0;
+  return { status, windows, plan: rawPlan ? chatGptPlanLabel(rawPlan) : null, now: status.dataUpdatedAt || 0 };
+}
+
+/** The subscription's usage windows: how much of each is used and when it resets. `divided` draws the rule above it (in the context popover). */
+export function PlanLimits({ onOpenUsage, divided = true }: { onOpenUsage(): void; divided?: boolean }) {
+  const titleId = useId();
+  const { status, windows, plan, now } = usePlanWindows();
   const [exact, toggleExact] = useExactResets();
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-2.5 border-t border-line pt-3">
+    <section aria-labelledby={titleId} className={cn('flex flex-col gap-2.5', divided && 'border-t border-line pt-3')}>
       <SectionHeading id={titleId} onOpenUsage={onOpenUsage}>
         {plan ? `Plan usage limits · ${plan}` : 'Plan usage limits'}
       </SectionHeading>

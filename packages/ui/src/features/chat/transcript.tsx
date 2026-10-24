@@ -1,7 +1,7 @@
 import { memo, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, FileText, History, Pencil, Repeat, RotateCcw } from 'lucide-react';
-import { messageText, unescapeTags, type ArtifactSummary, type Message, type Notice, type Part, type RunPhase, type SessionStatus } from '@atelier/protocol';
-import { Badge, Button, Icon, IconButton, ThinkingDots, cn, toast } from '../../components/ui/index.ts';
+import { ChevronDown, ChevronLeft, ChevronRight, FileText, History, Pencil, Repeat, RotateCcw } from 'lucide-react';
+import { messageText, unescapeTags, type ArtifactSummary, type Message, type ModelInfo, type Notice, type Part, type RunPhase, type SessionStatus } from '@atelier/protocol';
+import { Badge, Button, Icon, IconButton, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, ThinkingDots, cn, toast } from '../../components/ui/index.ts';
 import { ITEM_GAPS, LINE, ROW_GAPS } from './rows.ts';
 import { blobUrl } from '../../lib/platform.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
@@ -19,6 +19,8 @@ import { ArtifactCard } from './artifact-card.tsx';
 import { InlineVisual } from './inline-visual.tsx';
 import { ZoomableImage } from './images.tsx';
 import { CopyButton } from './copy-button.tsx';
+import { ReadAloudButton } from './read-aloud.tsx';
+import { modelSubtitle, useModelGroups } from './models.ts';
 import { MessageTime } from './message-time.tsx';
 import { AgentNotice, MessageNotice } from '../code/tool-cards.tsx';
 import { Outbox, type OutboxActions } from './outbox.tsx';
@@ -158,6 +160,16 @@ function retry(sessionId: string, messageId: string) {
   return rpc()
     .call('chat.retry', { sessionId, messageId })
     .catch((e: unknown) => toast.error(describeError(e).message));
+}
+
+/** The same question answered again by another model, as a new version of the reply; the conversation goes on with it. */
+async function retryWith(sessionId: string, messageId: string, model: string) {
+  try {
+    await rpc().call('sessions.update', { id: sessionId, model });
+    await rpc().call('chat.retry', { sessionId, messageId });
+  } catch (e) {
+    toast.error(describeError(e).message);
+  }
 }
 
 function switchBranch(sessionId: string, messageId: string) {
@@ -443,15 +455,12 @@ const AssistantTurn = memo(function AssistantTurn({
       {showActions && (
         <Actions align="start">
           <CopyButton text={text} />
+          <ReadAloudButton id={final.id} text={text} />
           <IconButton icon={RotateCcw} label="Retry" size="xs" onClick={() => void retry(sessionId, first.id)} />
           <BranchSwitcher sessionId={sessionId} messageId={first.id} siblings={siblings} disabled={false} />
           <MessageTime at={final.createdAt} className="ml-1" />
-          {model && (
-            <span className="ml-1 text-caption text-fg-muted">
-              {model.displayName}
-              {final.usage?.tokensPerSecond ? ` · ${final.usage.tokensPerSecond.toFixed(1)} tok/s` : ''}
-            </span>
-          )}
+          <RetryWith sessionId={sessionId} messageId={first.id} model={model} />
+          {model && final.usage?.tokensPerSecond ? <span className="text-caption text-fg-muted">· {final.usage.tokensPerSecond.toFixed(1)} tok/s</span> : null}
         </Actions>
       )}
     </div>
@@ -470,6 +479,36 @@ function Actions({ children, align = 'end' }: { children: ReactNode; align?: 'st
     >
       {children}
     </div>
+  );
+}
+
+/** The reply's model, which opens "Retry with": the visible models by provider. */
+function RetryWith({ sessionId, messageId, model }: { sessionId: string; messageId: string; model: ModelInfo | undefined }) {
+  const groups = useModelGroups();
+  if (groups.length === 0) return model ? <span className="ml-1 text-caption text-fg-muted">{model.displayName}</span> : null;
+  return (
+    <Menu>
+      <MenuTrigger
+        aria-label={model ? `${model.displayName}, retry with another model` : 'Retry with another model'}
+        className="ml-0.5 flex h-6 items-center gap-0.5 rounded-sm px-1 text-caption text-fg-muted outline-none focus-ring hover:bg-fill-ghost-hover hover:text-fg-secondary data-popup-open:bg-fill-ghost-hover"
+      >
+        {model?.displayName ?? 'Retry with…'}
+        <Icon icon={ChevronDown} className="size-3" />
+      </MenuTrigger>
+      <MenuContent align="start" className="w-[295px]">
+        {groups.map((g, i) => (
+          <MenuGroup key={g.providerId}>
+            {i > 0 && <MenuSeparator />}
+            <MenuLabel>{groups.length > 1 ? `Retry with · ${g.label}` : 'Retry with'}</MenuLabel>
+            {g.models.map((m) => (
+              <MenuItem key={m.ref} description={modelSubtitle(m)} shortcut={m.ref === model?.ref ? 'This reply' : undefined} onClick={() => void retryWith(sessionId, messageId, m.ref)}>
+                {m.displayName}
+              </MenuItem>
+            ))}
+          </MenuGroup>
+        ))}
+      </MenuContent>
+    </Menu>
   );
 }
 

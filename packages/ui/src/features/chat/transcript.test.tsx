@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message, RunPhase } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
 import type { LiveSessionState } from '../../lib/live-session.ts';
-import { backend, callsTo, resetBackend } from '../settings/test-backend.ts';
+import { backend, callsTo, model, resetBackend, snapshot } from '../settings/test-backend.ts';
 import { Transcript } from './transcript.tsx';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
@@ -119,6 +119,24 @@ describe('Transcript', () => {
     fireEvent.change(box, { target: { value: 'Write a gentler scene' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(callsTo('chat.edit')).toEqual([{ sessionId: 's', messageId: 'u1', parts: [{ type: 'text', text: 'Write a gentler scene' }] }]));
+  });
+
+  it('retries a reply with another model from its model name, and the conversation goes on with that model', async () => {
+    backend.handlers['models.list'] = () => [model('local', 'qwen', { displayName: 'Qwen' }), model('gpt', 'gpt-6', { displayName: 'GPT-6' })];
+    backend.handlers['settings.get'] = () => snapshot();
+    backend.handlers['sessions.update'] = () => ({});
+    show([asked, message('a1', 'assistant', { parentId: 'u1', model: 'local/qwen', parts: [{ type: 'text', text: 'A short scene.' }] })]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Qwen, retry with another model' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: /Qwen/ }).textContent).toContain('This reply');
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /GPT-6/ }));
+    await waitFor(() => expect(callsTo('chat.retry')).toEqual([{ sessionId: 's', messageId: 'a1' }]));
+    // The model changes first, so the new version of the reply comes from it.
+    expect(backend.calls.filter((c) => c.method === 'sessions.update' || c.method === 'chat.retry')).toEqual([
+      { method: 'sessions.update', input: { id: 's', model: 'gpt/gpt-6' } },
+      { method: 'chat.retry', input: { sessionId: 's', messageId: 'a1' } },
+    ]);
   });
 
   it("copies a reply with the tags it quoted as they were, not as the model read them", async () => {

@@ -21,6 +21,7 @@ import {
   useModels,
   usePrefs,
   useProjects,
+  useProviderType,
   useSessions,
   useWorkspaces,
 } from '../../lib/queries.ts';
@@ -30,6 +31,7 @@ import { askToNotify } from '../work/notifications.ts';
 import { Composer, FileDropZone, type ComposerHandle } from './composer.tsx';
 import { useSlashList } from './composer-menu.tsx';
 import { ModelPicker } from './model-picker.tsx';
+import { PlanUsageButton } from './plan-usage.tsx';
 import { useDefaultModel } from './models.ts';
 import { modelCommand } from './session-view.tsx';
 import { useNewConnectors } from './connector-switches.ts';
@@ -71,6 +73,7 @@ export function HomePage() {
   const research = useNewResearch();
   const composer = useRef<ComposerHandle>(null);
   const model = models?.find((m) => m.ref === modelRef) ?? defaultModel;
+  const providerType = useProviderType(model?.providerId);
   const name = prefs?.callMe.trim() || account?.name.trim();
   const temporaryMode = prefs?.privacy.temporaryChats ?? 'private';
   // A fresh temporary chat gets no project context, so it offers none.
@@ -135,15 +138,18 @@ export function HomePage() {
               ) : undefined
             }
             footerEnd={
-              <ModelPicker
-                open={pickingModel}
-                onOpenChange={setPickingModel}
-                model={model}
-                mode={folder ? 'work' : 'chat'}
-                effort={effort}
-                onModelChange={setModelRef}
-                onEffortChange={setEffort}
-              />
+              <>
+                <PlanUsageButton provider={providerType} />
+                <ModelPicker
+                  open={pickingModel}
+                  onOpenChange={setPickingModel}
+                  model={model}
+                  mode={folder ? 'work' : 'chat'}
+                  effort={effort}
+                  onModelChange={setModelRef}
+                  onEffortChange={setEffort}
+                />
+              </>
             }
           />
           {temporary && <TemporaryNote mode={temporaryMode} className="absolute inset-x-0 top-full mt-4 max-md:static max-md:mt-3" />}
