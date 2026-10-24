@@ -19,6 +19,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.2.7',
+    intro: 'Calmer focus rings, and a tidier Settings list.',
+    highlights: [
+      {
+        icon: Keyboard,
+        title: 'Focus rings only when you use Tab',
+        body: 'The blue frame around a button or field now shows only after you press Tab, and goes away at your next click. A click, a shortcut or the keys of a screenshot no longer light anything up.',
+      },
+      {
+        icon: SlidersHorizontal,
+        title: 'Settings › Shortcuts',
+        body: 'The keyboard shortcuts page is called Shortcuts in the Settings list, which keeps every page name on one line.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.2.6',
     intro: 'Your ChatGPT plan’s limits everywhere, answers from another model, replies read aloud and shortcuts of your own.',
     highlights: [
