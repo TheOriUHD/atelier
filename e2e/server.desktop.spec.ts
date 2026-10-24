@@ -69,7 +69,7 @@ test('desktop: connects to an Atelier server, signs in, chats through the relay 
 
     // What else the desktop lends, once the person allowed it there (its windows write lending.json; the test writes it):
     // a folder for a session started without one, made on the desktop.
-    expect((await rpc.call('app.info', {})).deviceLink?.services).toEqual(['runner', 'scratch', 'ssh']);
+    expect((await rpc.call('app.info', {})).deviceLink?.services).toEqual(['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'chatgptChat']);
     await expect(rpc.call('sessions.create', { mode: 'code', scratch: {} })).rejects.toThrow(/aren't allowed on/);
     await writeFile(join(configDir, 'chromium', 'lending.json'), JSON.stringify({ [SERVER_URL]: { scratch: true, ssh: ['devbox'] } }));
     const scratchSession = await rpc.call('sessions.create', { mode: 'code', scratch: {} });

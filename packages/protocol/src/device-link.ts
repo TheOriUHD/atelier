@@ -8,6 +8,7 @@
  * Each end drops frames it can't parse, so new frames never reach an old peer's handlers.
  */
 import { z } from 'zod';
+import { McpImportEntry } from './mcp.ts';
 import { SshHost } from './ssh.ts';
 
 export const DEVICE_LINK_PATH = '/api/devices/link';
@@ -68,6 +69,14 @@ export const NO_LENDING: DeviceLending = { scratch: false, ssh: [], connectors: 
 export function connectorFingerprintInput(command: string, args: readonly string[], envKeys: readonly string[]): string {
   return JSON.stringify([command, [...args], [...new Set(envKeys)].sort()]);
 }
+
+/**
+ * Environment variables a personal connector may not set, on any computer: ones that change which code a program
+ * loads or runs (the loader's, Node's, Python's, Perl's, Ruby's, the JVM's, the shell's, npm's and git's), or where
+ * it finds programs and its home. Matched without case, as Windows names are.
+ */
+export const UNSAFE_CONNECTOR_ENV =
+  /^(LD_|DYLD_|NODE_OPTIONS$|NODE_PATH$|PATH$|PATHEXT$|PYTHON(PATH|STARTUP|HOME|INSPECT)$|PERL5(LIB|OPT)$|PERLLIB$|RUBY(OPT|LIB)$|BASH_ENV$|ENV$|SHELLOPTS$|BASHOPTS$|PS4$|PROMPT_COMMAND$|IFS$|(JAVA_TOOL|_JAVA|JDK_JAVA)_OPTIONS$|CLASSPATH$|COMSPEC$|HOME$|USERPROFILE$|NPM_CONFIG_|GIT_|ELECTRON_RUN_AS_NODE$)/i;
 
 const Channel = z.string().min(1).max(64);
 /** A runner frame; large reads travel base64-encoded inside one line. */
@@ -158,6 +167,12 @@ export const DeviceRequest = z.discriminatedUnion('op', [
     /** What `start` sends: the prompt and its files (base64), at most 48 MiB. */
     value: z.string().max(64 * 1024 * 1024).optional(),
   }),
+  /** Everything the person's own config in the home folder there brings, at once: a `HomeScan`. */
+  z.object({ op: z.literal('home.scan') }),
+  /** One file there that the scan didn't hold (a file an instruction file imports): its text, or null. */
+  z.object({ op: z.literal('home.read'), path: z.string().min(1).max(4096) }),
+  /** Claude Code's connectors there (`~/.claude.json` and the folders trusted there), converted: `McpImportEntry[]`. */
+  z.object({ op: z.literal('mcp.import') }),
 ]);
 export type DeviceRequest = z.infer<typeof DeviceRequest>;
 
@@ -169,7 +184,34 @@ export const REQUEST_SERVICE: Record<DeviceRequest['op'], DeviceService> = {
   'ssh.test': 'ssh',
   'providers.detect': 'http',
   chatgptChat: 'chatgptChat',
+  'home.scan': 'home',
+  'home.read': 'home',
+  'mcp.import': 'mcp',
 };
+
+/** `mcp.import`'s answer. */
+export const McpImportList = z.array(McpImportEntry).max(500);
+
+/**
+ * What `home.scan` brings (the person's skills, commands, agents, Claude Code plugins and instruction files there): the
+ * folders listed and files read while looking, by their path there, so the server can look again in it. `settings` is
+ * `~/.claude/settings.json` without anything but its permission rules, hooks and switched plugins (never its `env`).
+ */
+export const HomeScan = z.object({
+  home: z.string().max(4096),
+  sep: z.enum(['/', '\\']),
+  dirs: z.record(z.string().max(4096), z.array(z.string().max(1024)).max(5000)),
+  files: z.record(z.string().max(4096), z.string().nullable()),
+  real: z.record(z.string().max(4096), z.string().max(4096)),
+  settings: z
+    .object({
+      permissions: z.object({ allow: z.array(z.string()), ask: z.array(z.string()), deny: z.array(z.string()) }),
+      hooks: z.unknown().optional(),
+      enabledPlugins: z.record(z.string(), z.unknown()),
+    })
+    .nullable(),
+});
+export type HomeScan = z.infer<typeof HomeScan>;
 
 /** What a device says about itself when it connects. */
 export const DeviceHello = z.object({
@@ -211,8 +253,12 @@ export const DeviceToServer = z.discriminatedUnion('t', [
   z.object({ t: z.literal('closed'), channel: Channel, reason: z.string().max(500) }),
   /** The answer to `req`: its value, or (`ok` false) why not. */
   z.object({ t: z.literal('res'), id: z.number().int().min(0), ok: z.boolean(), value: z.unknown().optional(), code: DeviceRefusal.optional(), error: z.string().max(2000).optional() }),
-  /** What the person allows this device to do for the server changed. */
-  z.object({ t: z.literal('event'), event: z.literal('lending.changed'), lending: DeviceLending }),
+  z.discriminatedUnion('event', [
+    /** What the person allows this device to do for the server changed. */
+    z.object({ t: z.literal('event'), event: z.literal('lending.changed'), lending: DeviceLending }),
+    /** The person's config in the home folder there changed (a skill added, ~/.claude/CLAUDE.md edited): scan it again. */
+    z.object({ t: z.literal('event'), event: z.literal('home.changed') }),
+  ]),
   z.object({ t: z.literal('pong') }),
 ]);
 export type DeviceToServer = z.infer<typeof DeviceToServer>;

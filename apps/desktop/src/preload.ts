@@ -127,6 +127,7 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
   lending: {
     get: () => ipcRenderer.invoke('lending:get'),
     change: (change: unknown) => ipcRenderer.invoke('lending:change', change),
+    allowImport: () => ipcRenderer.invoke('lending:allowImport'),
   },
   setShortcuts: (bindings: Record<string, string | null>) => ipcRenderer.send('menu:shortcuts', bindings),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),

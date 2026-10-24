@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { McpServerStatus, PluginSummary } from '@atelier/protocol';
+import type { McpServerStatus, PersonalConnector, PluginSummary } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
-import { resetBackend, snapshot, user } from '../settings/test-backend.ts';
+import { callsTo, resetBackend, snapshot, user } from '../settings/test-backend.ts';
 import { CUSTOMIZE_TABS, CustomizePage, type CustomizeSearch } from './customize-page.tsx';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
@@ -23,7 +23,9 @@ const github: McpServerStatus = {
 };
 const reviewKit: PluginSummary = { id: 'review-kit@acme', name: 'review-kit', description: 'Reviews pull requests.', version: '1.2.0', source: 'atelier', enabled: true, skills: ['review-kit:lint'], commands: [], agents: [] };
 
-function renderPage(role: 'admin' | 'user', url = '/customize') {
+const mine: PersonalConnector = { id: 'c1', name: 'notes', type: 'stdio', command: 'npx', args: ['-y', 'notes-mcp'], envKeys: ['NOTES_TOKEN'], headerKeys: [], enabled: true, disabledTools: [] };
+
+function renderPage(role: 'admin' | 'user', url = '/customize', extra: Record<string, () => unknown> = {}) {
   resetBackend({
     'account.get': () => user({ role }),
     'settings.get': () => snapshot(),
@@ -32,6 +34,8 @@ function renderPage(role: 'admin' | 'user', url = '/customize') {
     'skills.list': () => [{ name: 'pdf', description: 'Work with PDFs', scope: 'global', manualOnly: false, warnings: [], installed: null }],
     'mcp.status': () => [github],
     'plugins.list': () => [reviewKit],
+    'connectors.list': () => [],
+    ...extra,
   });
   const rootRoute = createRootRoute();
   const page = createRoute({
@@ -71,11 +75,35 @@ describe('CustomizePage', () => {
     expect(row.textContent).toContain('2 tools: search_issues, create_issue');
     expect(row.textContent).toContain('Ready');
     expect(within(table).queryByRole('switch')).toBeNull();
-    expect(screen.queryByRole('button', { name: /Add connector/ })).toBeNull();
+    // Only their own can be added.
+    const yours = (await screen.findByRole('heading', { name: 'Your connectors' })).closest('section')!;
+    expect(screen.getAllByRole('button', { name: /Add connector/ })).toEqual([within(yours).getByRole('button', { name: 'Add connector' })]);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
     expect(await screen.findByText('review-kit')).toBeTruthy();
     expect(screen.queryByRole('switch')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Add from a marketplace' })).toBeNull();
+  });
+
+  it("lists everyone's own connectors with where they run, and the plugins on their computer as theirs to switch", async () => {
+    const theirs: PluginSummary = { ...reviewKit, id: 'tidy@market', name: 'tidy', source: 'claude-code', device: 'MacBook' };
+    renderPage('user', '/customize?tab=connectors', {
+      'connectors.list': () => [{ connector: mine, clash: false }],
+      'mcp.status': () => [github, { name: 'notes', type: 'stdio', state: 'ready', tools: [], personal: true, device: 'MacBook' }],
+      'plugins.list': () => [reviewKit, theirs],
+      'prefs.set': () => ({}),
+    });
+    const yours = (await screen.findByRole('heading', { name: 'Your connectors' })).closest('section')!;
+    const row = (await within(yours).findByText('notes')).closest('tr')!;
+    expect(row.textContent).toContain('npx -y notes-mcp');
+    expect(row.textContent).toContain('Ready on MacBook');
+    // Theirs isn't listed with the admin's.
+    expect(within(screen.getByRole('table', { name: 'Connectors' })).queryByText('notes')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
+    expect(await screen.findByText('From MacBook')).toBeTruthy();
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable tidy' }));
+    await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['plugins', 'enabled', 'tidy@market'], value: false }]));
+    expect(screen.queryByRole('switch', { name: 'Enable review-kit' })).toBeNull();
   });
 });

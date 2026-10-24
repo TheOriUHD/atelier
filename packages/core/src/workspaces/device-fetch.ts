@@ -22,7 +22,7 @@ const failed = (cause: unknown) => new TypeError('fetch failed', { cause: cause 
 export type DeviceFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 /** `fetch` from `deviceId` to the address it lent as `target`. */
-export function deviceFetch(links: DeviceLinks, userId: string, deviceId: string, target: string): DeviceFetch {
+export function deviceFetch(links: Pick<DeviceLinks, 'start'>, userId: string, deviceId: string, target: string): DeviceFetch {
   return async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const method = (init.method ?? 'GET').toUpperCase() as 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';

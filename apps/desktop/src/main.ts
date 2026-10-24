@@ -505,6 +505,9 @@ function registerIpc(): void {
     post({ kind: 'lending' });
     return next;
   });
+  ipcMain.handle('lending:allowImport', () => {
+    if (connection?.mode === 'server') post({ kind: 'importing' });
+  });
   ipcMain.handle('connection:problem', () => linkProblem);
   // macOS asks once whether an app may reach the local network, and answers every later request with a silent failure
   // when it was refused; its switch for the app is the only way to change that.

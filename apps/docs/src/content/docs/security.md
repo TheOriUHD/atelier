@@ -232,6 +232,25 @@ Connectors (MCP servers) add tools. Their trust level is whatever you give the s
 - HTTP connectors that use OAuth are signed in once by an admin; the tokens are stored encrypted and used for every
   session, so everyone on the server acts through that one sign-in.
 - Credentials are masked in the connector logs under **Settings › Admin › Developer**.
+- **A person's own connectors** (on a server) use only their own secrets, never the server's environment, and only in
+  their own sessions. One that runs a program runs it on their desktop, which starts only exactly the command, arguments
+  and variable names allowed there (a fingerprint in `lending.json`), refuses variables that change which code runs
+  (`PATH`, `NODE_OPTIONS`, `LD_*`, `DYLD_*`, `PYTHONPATH`, `npm_config_*` and the like), fills `${VAR}` from its own
+  environment, and runs it in the home folder. One at a public address is reached from the server, which refuses private
+  addresses and redirects for it; one on the person's network only through a desktop that allows that address.
+
+## Your computer's config on a server
+
+A desktop app signed in to a server lends it the person's own config in its home folder, for sessions whose folder is on
+that computer (or an SSH host reached from it): instructions, skills, commands, agents, Claude Code's plugins and the rules
+and hooks of `~/.claude/settings.json`. The desktop decides what may be read: only `~/.agents/skills`,
+`~/.claude/{skills,commands,agents,plugins}`, `~/.atelier/{skills,commands,agents}`, `~/.claude/CLAUDE.md`,
+`~/.atelier/ATELIER.md` and Markdown files of at most 256 KB elsewhere in the home folder (for instruction imports); never
+Claude Code's credentials, `~/.claude.json`, history or transcripts, `~/.ssh`, `~/.aws` or `~/.gnupg`; of
+`settings.json` only its permission rules, hooks and switched plugins, never its `env`. Hooks and skill scripts from there
+run only for folders on that same computer, and an admin's hooks never run on a person's computer. Claude Code's
+connectors (with their keys) are sent only in the two minutes after the person opened **Import from Claude Code** on that
+computer. Turning off the home folder in the desktop app (**Settings › System**) stops all of it.
 
 ## The desktop app
 
@@ -299,8 +318,8 @@ but it is an address, not a grant); and an admin can reset a password and thereb
   such as `${secret:my-key}`.
 - A saved secret is never shown again: the interface gets only its last four characters. The request log masks headers and
   query parameters whose names look like credentials.
-- **Settings › Admin › Keys & secrets** shows which settings use a secret. A person's own GitHub token and SSH passwords
-  are hidden from admins and cannot be referenced from settings.
+- **Settings › Admin › Keys & secrets** shows which settings use a secret. A person's own GitHub token, SSH passwords,
+  and their own connectors' keys and sign-ins are hidden from admins and cannot be referenced from settings.
 
 What encryption at rest does not do: it does not protect conversations and files, and with the default server setup the key
 is in the same volume as the secrets (see [Run a server](/self-hosting/#the-secrets-key)).

@@ -191,7 +191,8 @@ function ConnectorRow({ name, config, status, onOpen }: { name: string; config: 
  * tools they bring. Admins manage them; people switch them per conversation under + › Connectors.
  */
 export function ConnectorsOverview() {
-  const statuses = useMcpStatus();
+  // The person's own are under Your connectors.
+  const statuses = useMcpStatus()?.filter((s) => !s.personal);
   return (
     <SettingsSection
       title="Connectors"

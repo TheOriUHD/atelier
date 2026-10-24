@@ -45,6 +45,10 @@ export const McpServerStatus = z.object({
   protocolEra: z.enum(['modern', 'legacy']).optional(),
   /** An OAuth server (state `error`) that has no usable sign-in: `needed` until an admin signs in, `waiting` while the sign-in page is open. */
   signIn: z.enum(['needed', 'waiting']).optional(),
+  /** One of the person's own connectors (`PersonalConnector`), only ever reported to them. */
+  personal: z.boolean().optional(),
+  /** A personal connector's desktop device it runs on or through, while it does ("MacBook"). */
+  device: z.string().optional(),
 });
 export type McpServerStatus = z.infer<typeof McpServerStatus>;
 
@@ -54,6 +58,58 @@ export type McpServerStatus = z.infer<typeof McpServerStatus>;
  */
 export const McpImportEntry = z.object({ name: McpServerName, config: McpServerConfig, secrets: z.array(z.array(z.string())), source: z.string() });
 export type McpImportEntry = z.infer<typeof McpImportEntry>;
+
+// ---------------------------------------------------------------- personal connectors
+
+/** An environment variable's name. */
+export const EnvName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Letters, digits and _, not starting with a digit.').max(200);
+const HeaderName = z.string().regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,256}$/, 'Not a header name.');
+
+/**
+ * A person's own connector (ARCHITECTURE §9-B), anyone's on a server: kept in their preferences without its values,
+ * which are one personal secret (`connector-user-<user>-<id>`, `{env, headers}`). A program (stdio) runs on a desktop
+ * of theirs that allows it (`lending.json`); an HTTP or SSE server is reached from the server, or through their desktop
+ * when its address is on that computer or its network. Its name can't be an admin connector's: theirs wins.
+ */
+export const PersonalConnector = z
+  .object({
+    id: z.string().regex(/^[a-z0-9]{1,32}$/),
+    name: McpServerName,
+    type: McpTransport,
+    command: z.string().min(1).max(4096).optional(),
+    args: z.array(z.string().max(8192)).max(200).default([]),
+    url: z.string().min(1).max(2048).optional(),
+    /** The names of its environment variables (stdio) and headers; the values are in its secret. */
+    envKeys: z.array(EnvName).max(100).default([]),
+    headerKeys: z.array(HeaderName).max(50).default([]),
+    enabled: z.boolean().default(true),
+    disabledTools: z.array(z.string()).default([]),
+    auth: z.literal('oauth').optional(),
+  })
+  .refine((c) => (c.type === 'stdio' ? !!c.command : !!c.url), { message: 'stdio connectors need a command; http and sse ones need a url.' })
+  .refine((c) => c.type !== 'stdio' || !c.auth, { message: 'Only http and sse connectors can sign in with OAuth.' });
+export type PersonalConnector = z.infer<typeof PersonalConnector>;
+
+/** A personal connector to save: its values by name, where null keeps the value saved before. */
+export const PersonalConnectorInput = z.object({
+  /** Absent for a new one. */
+  id: z.string().regex(/^[a-z0-9]{1,32}$/).optional(),
+  name: McpServerName,
+  type: McpTransport,
+  command: z.string().min(1).max(4096).optional(),
+  args: z.array(z.string().max(8192)).max(200).default([]),
+  url: z.string().min(1).max(2048).optional(),
+  env: z.record(EnvName, z.string().max(65_536).nullable()).default({}),
+  headers: z.record(HeaderName, z.string().max(16_384).nullable()).default({}),
+  enabled: z.boolean().default(true),
+  disabledTools: z.array(z.string()).default([]),
+  auth: z.literal('oauth').optional(),
+});
+export type PersonalConnectorInput = z.infer<typeof PersonalConnectorInput>;
+
+/** A personal connector as its owner's windows list it; `clash` is an admin connector of the same name, which wins. */
+export const PersonalConnectorView = z.object({ connector: PersonalConnector, clash: z.boolean() });
+export type PersonalConnectorView = z.infer<typeof PersonalConnectorView>;
 
 /**
  * The model-facing name of a server's tool, built as Claude Code builds it so its permission rules apply:

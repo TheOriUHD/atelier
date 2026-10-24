@@ -422,7 +422,7 @@ function PairsEditor({ noun, title, pairs, error, onChange }: { noun: string; ti
   );
 }
 
-function EditorForm({ onSubmit, error, saving, submitLabel, onBack, children }: { onSubmit(): void; error: string | null; saving: boolean; submitLabel: string; onBack?: (() => void) | undefined; children: ReactNode }) {
+export function EditorForm({ onSubmit, error, saving, submitLabel, onBack, children }: { onSubmit(): void; error: string | null; saving: boolean; submitLabel: string; onBack?: (() => void) | undefined; children: ReactNode }) {
   return (
     <form
       noValidate

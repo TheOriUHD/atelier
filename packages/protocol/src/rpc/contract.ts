@@ -33,7 +33,7 @@ import {
   WorkspaceFile,
   WorkspaceSummary,
 } from '../domain.ts';
-import { McpImportEntry, McpServerName, McpServerStatus } from '../mcp.ts';
+import { McpImportEntry, McpServerName, McpServerStatus, PersonalConnector, PersonalConnectorInput, PersonalConnectorView } from '../mcp.ts';
 import { MEMORY_DETAILS_MAX, MEMORY_SUMMARY_MAX, MEMORY_TITLE_MAX, MemoryChange, MemoryEntry, MemorySection } from '../memory.ts';
 import { LOOP_MAX_INTERVAL_MS } from '../loops.ts';
 import { ServerUpdateStatus } from '../versions.ts';
@@ -612,6 +612,20 @@ export const contract = {
     'mcp.cancelSignIn': { input: z.object({ name: McpServerName }), output: Ok },
     /** Forgets an OAuth connector's tokens; it needs signing in again. */
     'mcp.signOut': { input: z.object({ name: McpServerName }), output: Ok },
+
+    /** The person's own connectors (Customize › Connectors › Your connectors); their status comes with `mcp.status`. */
+    'connectors.list': { input: Empty, output: z.array(PersonalConnectorView) },
+    /** Adds or changes one; its values stay on the server, encrypted, and never come back. */
+    'connectors.save': { input: PersonalConnectorInput, output: PersonalConnector },
+    'connectors.remove': { input: Id, output: Ok },
+    /** Connects one now, e.g. after editing it or allowing it on a computer. */
+    'connectors.test': { input: Id, output: McpServerStatus },
+    /** Starts an OAuth connector's sign-in, as `mcp.signIn` does for an admin's. */
+    'connectors.signIn': { input: Id, output: z.object({ url: z.string() }) },
+    /** Its recent log lines (what its program writes to stderr, connections, failures), credentials masked. */
+    'connectors.logs': { input: Id, output: z.object({ lines: z.array(z.string()) }) },
+    /** Desktop signed in to a server: Claude Code's connectors on this computer, converted. Nothing is written. */
+    'connectors.import': { input: Empty, output: z.array(McpImportEntry) },
     /** Settings › Admin › Developer: the newest recorded provider requests first (while `developer.inspector` is on). */
     'developer.requests': { input: Empty, output: z.array(InspectedRequest) },
     'developer.clearRequests': { input: Empty, output: Ok },

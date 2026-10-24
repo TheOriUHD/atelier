@@ -6,7 +6,8 @@ const PATTERN = /\$\{(secret:([A-Za-z0-9._-]+)|([A-Za-z_][A-Za-z0-9_]*)(?::-([^}
 
 export interface Resolvers {
   secret: (id: string) => Promise<string | undefined>;
-  env: (name: string) => string | undefined;
+  /** null leaves the reference as written, for where the value is used to fill in (a program on a person's desktop). */
+  env: (name: string) => string | undefined | null;
 }
 
 export async function interpolate(input: string, resolvers: Resolvers): Promise<{ value: string; missing: string[] }> {
@@ -21,6 +22,10 @@ export async function interpolate(input: string, resolvers: Resolvers): Promise<
       replacements.set(token, v ?? '');
     } else if (envName) {
       const v = resolvers.env(envName);
+      if (v === null) {
+        replacements.set(token, token);
+        continue;
+      }
       if (v === undefined && envDefault === undefined) missing.push(envName);
       replacements.set(token, v ?? envDefault ?? '');
     }

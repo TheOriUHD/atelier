@@ -15,8 +15,8 @@ export interface Skill {
   /** SKILL.md itself. */
   path: string;
   scope: ExtensionSource['scope'];
-  /** Where the folder is: the backend's machine, or the workspace's (read through its runner). */
-  location: 'host' | 'workspace';
+  /** Where the folder is: the backend's machine, the person's home folder on their desktop, or the workspace's (read through its runner). */
+  location: 'host' | 'home' | 'workspace';
   /** Set for a plugin's skills. */
   pluginRoot?: string;
   /** Only `/name` can start it. */
@@ -40,7 +40,7 @@ export interface ExtensionFs {
 
 export interface ExtensionSource {
   fs: ExtensionFs;
-  location: 'host' | 'workspace';
+  location: 'host' | 'home' | 'workspace';
   scope: 'project' | 'global' | 'plugin';
   roots: string[];
   /** A plugin's components: names become `plugin:name`, and `${CLAUDE_PLUGIN_ROOT}` points at its folder. */

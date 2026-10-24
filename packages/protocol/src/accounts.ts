@@ -7,6 +7,7 @@ import { Mode, ModelOverride, SignupPolicy, type SafeguardCategories, type Safeg
 import { TemporaryMode } from './domain.ts';
 import { SshConnection } from './ssh.ts';
 import { DeviceLending } from './device-link.ts';
+import { PersonalConnector } from './mcp.ts';
 import { ShortcutPrefs } from './shortcuts.ts';
 
 export const UserRole = z.enum(['admin', 'user', 'pending']);
@@ -322,6 +323,10 @@ export const UserPrefs = z.object({
   whatsNew: z.object({ seen: z.string().max(40).nullable().default(null) }).default({ seen: null }),
   /** Keyboard shortcuts this person changed (Settings › Keyboard shortcuts); null turns one off. */
   shortcuts: ShortcutPrefs.default({}),
+  /** This person's own connectors, without their values; written only through `connectors.*`, never `prefs.set`. */
+  connectors: z.array(PersonalConnector).max(50).default([]),
+  /** Claude Code plugins on this person's computers they switched on or off, over the admin's `enabledPlugins`. */
+  plugins: z.object({ enabled: z.record(z.string(), z.boolean()).default({}) }).default({ enabled: {} }),
 });
 export type UserPrefs = z.infer<typeof UserPrefs>;
 
