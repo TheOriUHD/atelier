@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { DeviceSummary, SshConnectionView, WorkspaceSummary } from '@atelier/protocol';
 import { Badge, Button, ConfirmDialog, Dialog, DialogContent, DialogFooter, Field, IconButton, TextField, toast } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
+import { lendSsh, useConnection, useLending } from '../../lib/lending.ts';
 import { desktop } from '../../lib/platform.ts';
 import { keys, useWorkspaces } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
@@ -34,8 +35,10 @@ export function FoldersPage() {
   // Scratch folders belong to the sessions that started with no folder, not to this list.
   const workspaces = useWorkspaces().data?.filter((w) => !w.scratch);
   const { data: devices } = useQuery({ queryKey: keys.devices, queryFn: () => rpc().call('account.devices', {}), staleTime: 0 });
-  // SSH folders are reached from the backend's machine, so they need the app's own backend, not a server.
-  const { data: connection } = useQuery({ queryKey: ['connection'], queryFn: () => desktop!.connection.get(), enabled: !!desktop });
+  // SSH folders are reached from this computer: by the app's own backend, or for a server that takes them from here.
+  const { data: connection } = useConnection();
+  const lending = useLending();
+  const sshHere = connection?.mode === 'local' || lending.ssh;
   const ssh = useDialog();
   const entry = settingEntry('folders.list');
 
@@ -48,7 +51,7 @@ export function FoldersPage() {
       action={
         desktop ? (
           <div className="flex gap-2">
-            {connection?.mode === 'local' && (
+            {sshHere && (
               <Button size="sm" leadingIcon={Server} onClick={ssh.show}>
                 Add SSH folder…
               </Button>
@@ -77,7 +80,7 @@ export function FoldersPage() {
       )}
       {desktop && <SshDialog key={ssh.key} open={ssh.open} onOpenChange={ssh.onOpenChange} />}
     </SettingsSection>
-    {desktop && connection?.mode === 'local' && <SshConnectionsSection />}
+    {desktop && sshHere && <SshConnectionsSection />}
     </>
   );
 }
@@ -277,6 +280,8 @@ export function SshDialog({ open, onOpenChange, host = '', onAdded }: { open: bo
   const [values, setValues] = useState({ host, path: connections.find((c) => c.host === host)?.folder ?? '' });
   const form = useFormSubmit(SshFolder, {}, async (v) => {
     if (!(await requestTrust(v.path, v.host))) return;
+    // Added on this computer: a server may reach the host from here.
+    await lendSsh(v.host);
     const added = await rpc().call('workspaces.addSsh', v);
     await qc.invalidateQueries({ queryKey: keys.workspaces });
     onOpenChange(false);

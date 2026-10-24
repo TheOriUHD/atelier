@@ -13,6 +13,7 @@ import { useTaskNotifications } from '../features/work/notifications.ts';
 import { KeepAwakeSync } from '../features/code/keep-awake.tsx';
 import { SshPrompts } from '../features/ssh/ssh-prompts.tsx';
 import { TrustWorkspaceHost } from '../features/workspaces/trust.tsx';
+import { LendScratchHost } from '../features/workspaces/lend-scratch.tsx';
 import { WhatsNewHost } from '../features/whats-new/whats-new.tsx';
 import { CommandPalette } from './command-palette.tsx';
 import { useLockNow } from '../features/auth/screen-lock.ts';
@@ -43,9 +44,11 @@ export function AppShell() {
       <CommandPalette />
       <SettingsOverlay />
       {desktop && <KeepAwakeSync />}
-      {desktop && <SshPrompts />}
+      {/* Also in the browser: a session there can use an SSH host reached from the person's desktop. */}
+      <SshPrompts />
       {/* Also in the browser: a codespace is opened there, and its question must be asked there. */}
       <TrustWorkspaceHost />
+      {desktop && <LendScratchHost />}
       <WhatsNewHost />
     </div>
   );

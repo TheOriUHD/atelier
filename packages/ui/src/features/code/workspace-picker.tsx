@@ -24,6 +24,7 @@ import {
   MenuTrigger,
   toast,
 } from '../../components/ui/index.ts';
+import { lendSsh, useLending } from '../../lib/lending.ts';
 import { desktop } from '../../lib/platform.ts';
 import { keys, useWorkspaces } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
@@ -58,11 +59,15 @@ function useOwnBackend(): boolean {
   return data?.mode === 'local';
 }
 
-/** The environments this app offers: this computer only in the desktop app, SSH hosts only with its own backend. */
+/**
+ * The environments this app offers: this computer only in the desktop app; SSH hosts with its own backend, or reached
+ * from it for a server that takes them.
+ */
 function useEnvironments(): Environment[] {
   const ownBackend = useOwnBackend();
+  const lending = useLending();
   if (!desktop) return ['cloud', 'remote'];
-  return ownBackend ? ['local', 'cloud', 'remote', 'ssh'] : ['local', 'cloud', 'remote'];
+  return ownBackend || lending.ssh ? ['local', 'cloud', 'remote', 'ssh'] : ['local', 'cloud', 'remote'];
 }
 
 function storedEnvironment(key: string): Environment | null {
@@ -86,24 +91,27 @@ export function useEnvironment(mode: 'code' | 'work', requested: string | undefi
   const { data: workspaces = [] } = useWorkspaces();
   const offered = useEnvironments();
   const ownBackend = useOwnBackend();
+  const lending = useLending();
+  // Where no folder can be offered: this computer and SSH hosts, with the app's own backend or where it lends them to a server.
+  const scratchHere = ownBackend || lending.scratch;
+  const scratchOnSsh = ownBackend || lending.ssh;
   const [picked, setPicked] = useState(() => storedEnvironment(key));
   const asked = workspaces.find((w) => w.id === requested);
   const latest = initialWorkspace(workspaces, undefined);
   const remembered = picked && offered.includes(picked) ? picked : null;
   const environment: Environment = asked
     ? envOf(asked)
-    : requested === NO_FOLDER && ownBackend
+    : requested === NO_FOLDER && (requestedHost ? scratchOnSsh : scratchHere)
       ? requestedHost
         ? 'ssh'
         : 'local'
       : (remembered ?? (desktop ? 'local' : latest ? envOf(latest) : 'cloud'));
   const here = recentWorkspaces(workspaces.filter((w) => envOf(w) === environment));
   // On SSH: the host asked for (or the folder's), else the one of the latest session there.
-  const scratchHost = !ownBackend
-    ? undefined
-    : environment === 'local'
+  const scratchHost =
+    environment === 'local' && scratchHere
       ? null
-      : environment === 'ssh'
+      : environment === 'ssh' && scratchOnSsh
         ? (requestedHost ?? asked?.host ?? here[0]?.host ?? undefined)
         : undefined;
   const choose = (next: Environment) => {
@@ -147,7 +155,7 @@ export function WorkspaceChips({ environment, folders, value, noFolder, onEnviro
   const computerName = (id: string | null) => devices?.find((d) => d.id === id)?.name ?? 'Another computer';
   // Other computers with folders, most recently used first; offline while none of their folders can be reached.
   const computers = [...new Set(remote.map((w) => w.deviceId!))].map((id) => ({ id, online: remote.some((w) => w.deviceId === id && w.available) }));
-  const sshHosts = [...new Set(workspaces.filter((w) => w.kind === 'ssh').map((w) => w.host!))];
+  const sshHosts = [...new Set(workspaces.filter((w) => envOf(w) === 'ssh').map((w) => w.host!))];
   const [adding, setAdding] = useState(false);
   const browse = useDialog();
   const sshConnection = useDialog();
@@ -177,15 +185,17 @@ export function WorkspaceChips({ environment, folders, value, noFolder, onEnviro
     });
   /** A folder on the chosen SSH host, picked in the remote folder browser and trusted first. */
   const browseRemote = () => {
-    if (host) browse.show();
+    if (host) void lendSsh(host).then(browse.show, (e: unknown) => toast.error(describeError(e).message));
     else toast.error('Choose an SSH connection first.');
   };
   const chooseRemote = (path: string) => {
     browse.onOpenChange(false);
     const picked = host!;
     void run('ssh', async () => {
-      const known = workspaces.some((w) => w.kind === 'ssh' && w.host === picked && w.root === path);
+      const known = workspaces.some((w) => w.kind === 'ssh' && w.host === picked && w.root === path && (!w.deviceId || w.deviceId === desktop?.device.id));
       if (!known && !(await requestTrust(path, picked))) return null;
+      // Chosen on this computer: a server may reach the host from here.
+      await lendSsh(picked);
       return rpc().call('workspaces.addSsh', { host: picked, path });
     });
   };
@@ -201,7 +211,8 @@ export function WorkspaceChips({ environment, folders, value, noFolder, onEnviro
   };
   /** A host's latest session decides, as on the home: its folder, or no folder (also on a host without folders yet). */
   const pickHost = (picked: string) => {
-    const latest = recentWorkspaces(workspaces.filter((w) => w.kind === 'ssh' && w.host === picked))[0];
+    void lendSsh(picked).catch(() => undefined);
+    const latest = recentWorkspaces(workspaces.filter((w) => envOf(w) === 'ssh' && w.host === picked))[0];
     if (latest && !latest.scratch) onEnvironmentChange('ssh', latest.id);
     else onEnvironmentChange('ssh', NO_FOLDER, picked);
   };

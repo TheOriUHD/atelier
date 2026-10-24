@@ -557,5 +557,10 @@ export const AppInfo = z.object({
   surface: z.enum(['desktop', 'web']),
   platform: z.string(),
   dataDir: z.string(),
+  /**
+   * A server: the device link version it speaks and the services it takes from desktop devices (ARCHITECTURE §21).
+   * Absent on a desktop's own backend and on servers from before version 2.
+   */
+  deviceLink: z.object({ protocol: z.number(), services: z.array(z.string()) }).optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

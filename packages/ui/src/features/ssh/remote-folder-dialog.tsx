@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Folder, FolderPlus, House } from 'lucide-react';
 import { Button, Dialog, DialogContent, DialogFooter, Icon, Spinner, TextField } from '../../components/ui/index.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
+import { lendSsh } from '../../lib/lending.ts';
 
 interface Listing {
   path: string;
@@ -73,8 +74,9 @@ export function RemoteFolderDialog({
   useEffect(() => {
     if (!open) return;
     let live = true;
-    rpc()
-      .call('ssh.browse', { host, ...(start ? { path: start } : {}) })
+    // Browsed from this computer: a server may reach the host from here.
+    lendSsh(host)
+      .then(() => rpc().call('ssh.browse', { host, ...(start ? { path: start } : {}) }))
       .then(
         (next) => {
           if (!live) return;

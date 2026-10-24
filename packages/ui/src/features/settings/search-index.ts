@@ -464,6 +464,22 @@ export const SETTINGS_INDEX = [
     keywords: ['startup', 'start automatically', 'autostart', 'login item', 'open at login', 'boot'],
   },
   {
+    id: 'system.lendScratch',
+    page: 'system',
+    label: 'Folders for sessions without one',
+    description: 'The server can make a new, empty folder on this computer for each session you start without a folder.',
+    keywords: ['no folder', 'scratch', 'server', 'device', 'lend', 'allow', 'this computer'],
+    available: () => !isLocal(),
+  },
+  {
+    id: 'system.lendSsh',
+    page: 'system',
+    label: 'SSH hosts reached from here',
+    description: 'Hosts the server may connect to from this computer, with its ssh, keys and known hosts. Choosing a host here adds it.',
+    keywords: ['ssh', 'remote', 'server', 'device', 'lend', 'allow', 'hosts'],
+    available: () => !isLocal(),
+  },
+  {
     id: 'system.dataFolder',
     page: 'system',
     label: 'Data folder',

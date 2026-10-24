@@ -734,6 +734,76 @@ describe('personal instructions', () => {
   }, 30_000);
 });
 
+describe('a desktop lending itself to a server', () => {
+  it.skipIf(!existsSync(hostRunnerBinary(runnerDir)))('takes SSH hosts and folders for sessions without one from the person’s desktop', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-lend-'));
+    const server = await createBackend({ surface: 'web', configDir: home, dataDir: home, cipher: { encrypt: async (s) => s, decrypt: async (s) => s }, env: {}, logger: { info: () => {}, error: () => {} } });
+    const runners = new Map<string, RunnerChannel>();
+    try {
+      const signIn = () => {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+        return createRpcClient(contract, clientSide);
+      };
+      const browser = signIn();
+      await browser.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      const desktop = signIn();
+      const { token } = await desktop.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'desktop' });
+      const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
+      await desktop.call('devices.register', device);
+      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh'] });
+
+      const scratchBase = join(home, 'laptop-scratch');
+      let link: { receive(text: string): void } | null = null;
+      const reply = (frame: object) => link!.receive(JSON.stringify(frame));
+      link = await server.linkDevice(
+        {
+          send: (frame) => {
+            if (frame.t === 'req') {
+              const { request } = frame;
+              if (request.op === 'ssh.hosts') return reply({ t: 'res', id: frame.id, ok: true, value: ['gpu', 'pi'] });
+              if (request.op === 'scratch.create') {
+                const root = join(scratchBase, request.user, request.name);
+                void mkdir(root, { recursive: true }).then(() => reply({ t: 'res', id: frame.id, ok: true, value: { root } }));
+                return;
+              }
+              return reply({ t: 'res', id: frame.id, ok: false, code: 'unsupported', error: 'Not here.' });
+            }
+            if (frame.t === 'open') {
+              const runner = spawnRunner({ binaryPath: hostRunnerBinary(runnerDir), roots: [frame.root] });
+              runners.set(frame.channel, runner);
+              runner.onLine((line) => reply({ t: 'line', channel: frame.channel, line }));
+              reply({ t: 'opened', channel: frame.channel });
+            } else if (frame.t === 'line') runners.get(frame.channel)?.send(frame.line);
+            else if (frame.t === 'close') runners.get(frame.channel)?.kill();
+          },
+          close: () => {},
+        },
+        token,
+        device,
+      );
+      reply({ t: 'hello', hello: { protocol: 2, app: '0.2.8', services: ['runner', 'scratch', 'ssh'], lending: { scratch: true, ssh: ['gpu'] }, home: '/Users/ada', sep: '/', os: 'darwin', arch: 'arm64' } });
+
+      expect((await desktop.call('account.devices', {}))[0]).toMatchObject({ current: true, online: true, services: ['runner', 'scratch', 'ssh'], lending: { scratch: true, ssh: ['gpu'] } });
+      // The desktop's own ~/.ssh/config, asked of it; a browser has no desktop to ask.
+      expect(await desktop.call('workspaces.sshHosts', {})).toEqual(['gpu', 'pi']);
+      expect(await browser.call('workspaces.sshHosts', {})).toEqual([]);
+      await desktop.call('ssh.save', { name: 'GPU', host: 'gpu', port: null, keyPath: null, folder: null });
+      expect(await code(browser.call('ssh.save', { name: 'Pi', host: 'pi', port: null, keyPath: null, folder: null }))).toBe('forbidden');
+
+      // A Code session started on the desktop without a folder gets one made there.
+      const session = await desktop.call('sessions.create', { mode: 'code', scratch: {} });
+      const folder = (await desktop.call('workspaces.list', {})).find((w) => w.id === session.workspaceId)!;
+      expect(folder).toMatchObject({ kind: 'local', deviceId: device.id, scratch: true, available: true });
+      expect(folder.root.startsWith(join(scratchBase))).toBe(true);
+    } finally {
+      for (const runner of runners.values()) runner.kill();
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
 /** Stands in for `gh codespace ssh -c <name> -- <command>`: runs the command here, in HOME=FAKE_SSH_HOME, where `/workspaces/` is. */
 const FAKE_GH = `#!/usr/bin/env node
 import { spawn } from 'node:child_process';

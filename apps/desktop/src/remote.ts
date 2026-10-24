@@ -1,13 +1,15 @@
 /**
  * Utility process entry for server mode: there is no local backend. Each renderer connection is relayed
- * to the server named in argv, and the device link lends this machine's runner for trusted folders
- * (ARCHITECTURE §21).
+ * to the server named in argv, and the device link lends this machine to the person's sessions there
+ * (ARCHITECTURE §21): its runner for trusted folders, and what they allowed here (scratch folders, SSH hosts).
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { DeviceInfo, runnerBinaryName } from '@atelier/protocol';
 import type { BackendToMain, MainToBackend } from './bridge.ts';
 import { createDeviceLink, readTrustedFolders } from './device-link.ts';
+import { deviceServices } from './device-services.ts';
+import { readLending } from './lending.ts';
 import { diagnose, type LinkProblem } from './link-problem.ts';
 import { createRelay } from './relay.ts';
 
@@ -40,17 +42,27 @@ const relay = createRelay(serverUrl, undefined, {
 });
 const runnerDir = process.env.ATELIER_RUNNER_DIR;
 const runnerBinary = runnerDir ? join(runnerDir, runnerBinaryName(process.platform, process.arch)) : null;
+const device = DeviceInfo.parse(JSON.parse(process.argv[3]!));
 const deviceLink = createDeviceLink({
   serverUrl,
-  device: DeviceInfo.parse(JSON.parse(process.argv[3]!)),
+  device,
   runnerBinary: runnerBinary && existsSync(runnerBinary) ? runnerBinary : null,
   trustedFolders: () => readTrustedFolders(process.env.ATELIER_TRUSTED_FOLDERS!),
+  services: deviceServices({
+    deviceName: device.name,
+    lending: () => readLending(process.env.ATELIER_LENDING_FILE!, serverUrl),
+    scratchDir: process.env.ATELIER_SCRATCH_DIR!,
+    runnerDir: runnerDir && existsSync(join(runnerDir, 'checksums.json')) ? runnerDir : null,
+    ssh: process.env.ATELIER_SSH ?? 'ssh',
+    sshDir: process.env.ATELIER_SSH_DIR!,
+  }),
 });
 
 process.parentPort.on('message', (event: { data: MainToBackend; ports: Electron.MessagePortMain[] }) => {
   const m = event.data;
   if (m.kind === 'connect' && event.ports[0]) relay.link(event.ports[0], m.token);
   else if (m.kind === 'token') deviceLink.setToken(m.token);
+  else if (m.kind === 'lending') deviceLink.lendingChanged();
   else if (m.kind === 'shutdown') {
     deviceLink.close();
     process.exit(0);

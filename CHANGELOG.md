@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Connected to a server, the desktop app keeps your computer's SSH hosts and No folder:** the server keeps your chats, settings and permissions; your computer lends the rest to your sessions there. SSH hosts are reached with this computer's `ssh`, keys, agent and known hosts (Atelier puts its runner on the host from here; password and host-key questions show in the app and in the browser), and a session started without a folder gets one made on this computer. The server may reach an SSH host from here once you chose it here, and make folders here once you allowed it ("Make folders on this computer?"); Settings › System lists both, with Remove. Another computer's SSH folder shows under Remote Control. The device link speaks version 2 (`hello`, `start`, requests); older desktop apps and servers keep working as before.
+
 ## [0.2.7] — 2026-10-24
 
 - **Focus rings only when you use Tab:** the blue frame around a button or field now shows only after Tab moves the focus, until the next click. Before, any key (a shortcut, the keys of a screenshot) or a click in a field lit one up, and it stayed until you clicked elsewhere.

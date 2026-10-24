@@ -238,3 +238,125 @@ describe('device link', () => {
     l.close();
   });
 });
+
+describe('device link version 2', () => {
+  const HELLO = { protocol: 2, app: '0.2.8', services: ['runner', 'scratch', 'ssh'], lending: { scratch: true, ssh: ['box'] }, home: '/Users/ada', sep: '/' as const, os: 'darwin', arch: 'arm64' };
+
+  /** A lent SSH runner: lines written to it, and its own lines and end. */
+  function fakeChannel() {
+    let onLine: ((line: string) => void) | undefined;
+    let end!: () => void;
+    const written: string[] = [];
+    const channel = {
+      send: (line: string) => void written.push(line),
+      onLine: (handler: (line: string) => void) => void (onLine = handler),
+      closed: new Promise<{ code: null; signal: null }>((r) => (end = () => r({ code: null, signal: null }))),
+      kill: () => end(),
+    };
+    return { channel, written, say: (line: string) => onLine?.(line), end: () => end() };
+  }
+
+  function linkWith(services: Partial<NonNullable<Parameters<typeof createDeviceLink>[0]['services']>>) {
+    return createDeviceLink({
+      serverUrl: 'https://atelier.example.com',
+      device,
+      runnerBinary: '/bin/runner',
+      trustedFolders: async () => [app],
+      services: { hello: async () => HELLO, request: async () => null, start: async () => fakeChannel().channel, scratchEnv: async () => null, ...services },
+      openSocket: (url, headers) => {
+        const s = new FakeSocket(url, headers);
+        sockets.push(s);
+        return s as unknown as WebSocket;
+      },
+      spawnRunner: (_binary, root, env) => {
+        const r = new FakeRunner(root);
+        (r as FakeRunner & { env?: unknown }).env = env;
+        runners.push(r);
+        return r as never;
+      },
+    });
+  }
+
+  it('says what it lends first, and again when the person changes it', async () => {
+    const l = linkWith({});
+    l.setToken('tok');
+    sockets[0]!.open();
+    await tick();
+    expect(sockets[0]!.sent[0]).toEqual({ t: 'hello', hello: HELLO });
+    l.lendingChanged();
+    await tick();
+    expect(sockets[0]!.sent.at(-1)).toEqual({ t: 'event', event: 'lending.changed', lending: HELLO.lending });
+  });
+
+  it('answers requests with their value, or with why not', async () => {
+    const l = linkWith({
+      request: async (request) => {
+        if (request.op === 'ssh.hosts') return ['box'];
+        throw Object.assign(new Error('Sessions without a folder aren’t allowed on Laptop.'), { code: 'refused' });
+      },
+    });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    s.frame({ t: 'req', id: 1, request: { op: 'ssh.hosts' } });
+    s.frame({ t: 'req', id: 2, request: { op: 'scratch.create', user: 'ada', name: 'scratch-2026-10-25-abcdef' } });
+    await tick();
+    expect(s.sent).toContainEqual({ t: 'res', id: 1, ok: true, value: ['box'] });
+    expect(s.sent).toContainEqual({ t: 'res', id: 2, ok: false, code: 'refused', error: 'Sessions without a folder aren’t allowed on Laptop.' });
+  });
+
+  it('lends an SSH runner: lines both ways, stderr apart, its end said', async () => {
+    const lent = fakeChannel();
+    let logged: ((line: string) => void) | undefined;
+    const l = linkWith({
+      start: async (_service, log) => {
+        logged = log;
+        return lent.channel;
+      },
+    });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    s.frame({ t: 'start', channel: 'c1', service: { kind: 'ssh', connection: { name: 'Box', host: 'box', port: null, keyPath: null }, answers: { trust: false }, root: '/srv', env: {} } });
+    await tick();
+    expect(s.sent).toContainEqual({ t: 'opened', channel: 'c1' });
+    s.frame({ t: 'line', channel: 'c1', line: '{"id":1}' });
+    expect(lent.written).toEqual(['{"id":1}']);
+    lent.say('{"result":1}');
+    logged?.('remote says hi');
+    expect(s.sent).toContainEqual({ t: 'line', channel: 'c1', line: '{"result":1}' });
+    expect(s.sent).toContainEqual({ t: 'log', channel: 'c1', line: 'remote says hi' });
+    lent.end();
+    await tick();
+    expect(s.sent.at(-1)).toEqual({ t: 'closed', channel: 'c1', reason: 'The connection ended.' });
+  });
+
+  it('passes on why a service wasn’t started', async () => {
+    const l = linkWith({
+      start: async () => {
+        throw new Error("box isn't an SSH host you use from Laptop.");
+      },
+    });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    s.frame({ t: 'start', channel: 'c1', service: { kind: 'ssh', connection: { name: 'Box', host: 'box', port: null, keyPath: null }, answers: { trust: false }, root: '/srv', env: {} } });
+    await tick();
+    expect(s.sent.at(-1)).toEqual({ t: 'closed', channel: 'c1', reason: "box isn't an SSH host you use from Laptop." });
+  });
+
+  it('lends a runner at one of its scratch folders, with what keeps git inside it', async () => {
+    const scratch = join(dir, 'scratch', 'ada', 'scratch-2026-10-25-abcdef');
+    mkdirSync(scratch, { recursive: true });
+    const l = linkWith({ scratchEnv: async (real) => (real === scratch ? { GIT_CEILING_DIRECTORIES: join(dir, 'scratch', 'ada') } : null) });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    s.frame({ t: 'open', channel: 'c1', root: scratch });
+    s.frame({ t: 'open', channel: 'c2', root: dir });
+    await vi.waitFor(() => expect(s.sent.filter((f) => (f as { t: string }).t !== 'hello')).toHaveLength(2));
+    expect(s.sent).toContainEqual({ t: 'opened', channel: 'c1' });
+    expect((runners[0] as FakeRunner & { env?: unknown }).env).toEqual({ GIT_CEILING_DIRECTORIES: join(dir, 'scratch', 'ada') });
+    expect(s.sent).toContainEqual({ t: 'closed', channel: 'c2', reason: `${dir} isn't a folder you opened in Laptop's desktop app.` });
+  });
+});

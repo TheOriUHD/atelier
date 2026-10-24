@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SshAnswer, SshConnection, SshPrompt } from '@atelier/protocol';
-import { classifyPrompt, SshAccess, sshSecretId } from './ssh-access.ts';
+import { classifyPrompt, probeSsh, runOnce, SshAccess, sshSecretId, throughShell, writeAskpass, type SshDevice } from './ssh-access.ts';
 
 /**
  * A stand-in for ssh: it asks the way ssh does (through SSH_ASKPASS) about an unknown host's key and then a
@@ -58,8 +58,26 @@ let answers: Partial<SshAnswer>[];
 
 const connection: SshConnection = { id: 'c1', name: 'GPU box', host: 'alice@devbox', port: null, keyPath: null, folder: null };
 
-function access(connections: SshConnection[] = [connection]) {
+/** A desktop device doing what the desktop app does: probes and tests with its own ssh (here the fake), answers from the server. */
+function fakeDevice(): SshDevice & { probes: number } {
+  const ssh = join(dir, 'ssh');
+  const ask = join(dir, 'device-ask');
+  const script = writeAskpass(ask);
+  const device = {
+    probes: 0,
+    probe: async (_user: string, _device: string, target: Parameters<SshDevice['probe']>[2], given: Parameters<SshDevice['probe']>[3]) => {
+      device.probes++;
+      return probeSsh({ ssh, dir: ask }, await script, target, given);
+    },
+    test: async (_user: string, _device: string, target: Parameters<SshDevice['test']>[2], given: Parameters<SshDevice['test']>[3]) =>
+      (await runOnce(throughShell(ssh, ask, await script, target, given), 'uname -sm')).stdout,
+  };
+  return device;
+}
+
+function access(connections: SshConnection[] = [connection], device?: SshDevice) {
   return new SshAccess({
+    ...(device ? { device } : {}),
     ssh: join(dir, 'ssh'),
     dir: join(dir, 'ask'),
     connections: async () => connections,
@@ -179,5 +197,33 @@ describe.skipIf(process.platform === 'win32')('SshAccess', () => {
     expect(result).toEqual({ ok: true, message: 'Connected: Linux x86_64.' });
     answers.push({ accept: false });
     expect(await access().test('u1', { name: 'Other', host: 'carol@third', port: null, keyPath: null, folder: null })).toMatchObject({ ok: false, message: expect.stringMatching(/wasn't trusted/) });
+  });
+});
+
+describe('SSH through a desktop device', () => {
+  it('probes on the device and asks here, keeping a password the person wants kept', async () => {
+    writeFileSync(join(dir, 'password'), 'hunter2');
+    answers.push({ accept: true }, { password: 'hunter2', save: true });
+    const device = fakeDevice();
+    const ssh = access([connection], device);
+    const got = await ssh.onDevice('ada', 'laptop', 'alice@devbox');
+    expect(asked.map((p) => p.kind)).toEqual(['hostkey', 'password']);
+    expect(got).toEqual({ connection: { name: 'GPU box', host: 'alice@devbox', port: null, keyPath: null }, answers: { trust: true, password: 'hunter2', passphrase: false } });
+    expect(secrets.get(sshSecretId('ada', 'c1'))).toBe('hunter2');
+    // Once through, the same host on the same device isn't probed again.
+    await ssh.onDevice('ada', 'laptop', 'alice@devbox');
+    expect(device.probes).toBe(3);
+  });
+
+  it('tests a connection from the device', async () => {
+    answers.push({ accept: true });
+    const result = await access([connection], fakeDevice()).test('ada', { name: 'GPU box', host: 'alice@devbox', port: 2200, keyPath: '~/.ssh/box', folder: null }, 'laptop');
+    expect(result).toEqual({ ok: true, message: 'Connected: Linux x86_64.' });
+  });
+
+  it('refuses a key file the device couldn’t use, and needs a device to go through', async () => {
+    const odd = { ...connection, keyPath: 'keys/box' };
+    expect(await access([odd], fakeDevice()).test('ada', odd, 'laptop')).toMatchObject({ ok: false, message: expect.stringContaining('full path') });
+    await expect(access([connection]).onDevice('ada', 'laptop', 'alice@devbox')).rejects.toThrow(/desktop app/);
   });
 });

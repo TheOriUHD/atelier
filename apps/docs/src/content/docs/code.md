@@ -22,7 +22,7 @@ The first chip above the message box is the environment:
 | **Local** | Folders on this computer. | Desktop app. |
 | **Cloud** | A GitHub codespace, by repository. | Everywhere. |
 | **Remote Control** | Folders on another computer of yours, opened in its desktop app. | Needs an Atelier server; lists a computer once its desktop app, connected to that server, has opened folders. |
-| **SSH** | Folders on a machine you reach with `ssh`. | Desktop app running its own backend (**Run on this computer**) only. |
+| **SSH** | Folders on a machine you reach with `ssh`. | Desktop app: on its own backend, or connected to a server (reached with this computer's `ssh`; see below). |
 
 <!-- screenshot: the environment chip's menu open with the SSH submenu showing a connection and Add SSH connection… -->
 
@@ -44,13 +44,13 @@ The backend keeps the answer, so it holds for any client, a browser included. Un
 
 ### No folder
 
-**No folder** gives each new session an empty scratch folder of its own, for questions and experiments that don't belong to a project. It works in the desktop app on its own backend, in Local and on an SSH host, and is the first menu entry until you open a folder.
+**No folder** gives each new session an empty scratch folder of its own, for questions and experiments that don't belong to a project. It works in the desktop app, in Local and on an SSH host, and is the first menu entry until you open a folder. Connected to a server, the folder is made on this computer: the first time, Atelier asks **Make folders on this computer?** (**Allow** or **Cancel**).
 
 - Scratch folders live under `scratch-workspaces/<your account id>/scratch-<date>-<code>` in the data folder (`~/.atelier/data` by default), and under `~/.atelier/scratch-workspaces/` on an SSH host.
 - Git never looks above a scratch folder, so a repository around it (such as a home folder kept in git) isn't taken for the session's. `git init` makes it a repository like any other.
 - Deleting a session leaves its scratch folder on disk; delete it yourself.
 - `/clear` goes on in the same scratch folder. **New**, and the **+** of the sidebar's **No folder** group, start a session in a new one.
-- Elsewhere (a browser, a desktop connected to a server, a codespace, Remote Control) it isn't offered, and a server answers **Sessions without a folder need the desktop app running on this computer.**
+- Elsewhere (a browser, a codespace, Remote Control) it isn't offered.
 
 ### SSH hosts
 
@@ -70,6 +70,16 @@ Choose **SSH › Add SSH connection…** and fill in:
 - A host Atelier doesn't know yet asks **Trust &lt;connection&gt;?** with the key's fingerprint; **Trust and connect** records it in your `~/.ssh/known_hosts`. A password or key passphrase asks in **Sign in to &lt;connection&gt;**, with **Save password**, kept encrypted per connection. On Windows these prompts aren't available yet: keys and the agent only.
 - The remote machine must run **Linux or macOS on x86-64 or ARM64**. The first connection uploads Atelier's runner to `~/.atelier/runner/<version>/` there and checks it against a checksum.
 - Edit or remove connections, or forget a saved password, in **Settings › Folders**. Removing one leaves the folders in your list and the machine untouched.
+
+### Connected to a server
+
+A desktop app connected to an Atelier server keeps doing what it does on its own: the server keeps your chats, settings and permissions, and your computer lends the rest to your sessions there.
+
+- **SSH hosts** are reached from this computer, with its `ssh`, keys, agent and known hosts, and Atelier puts its runner on the host from here. Password and host-key questions show in Atelier as above, in the desktop app and in the browser alike; a saved password is kept on the server, for your account only.
+- **No folder** makes the session's folder on this computer, as above.
+- **Only what you allowed here.** The server may reach an SSH host from this computer once you chose that host here (added a folder on it, browsed it, tested or saved its connection, or started a session on it), and make folders here once you said **Allow**. **Settings › System › What &lt;server&gt; can do here** lists both, with **Remove** and a switch.
+- Another computer's SSH folder shows under **Remote Control**: it goes through that computer, so it works while that computer's desktop app is connected.
+- A desktop app older than the server, or a server older than the app, keeps working as before, without these.
 
 ### Codespaces
 

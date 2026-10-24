@@ -2,9 +2,12 @@
  * Surface-specific plumbing: how the UI reaches the backend and how blobs are addressed.
  * Desktop talks over a MessagePort brokered by the preload; web uses a reconnecting WebSocket.
  */
-import { APP, type RpcMessage, type Transport } from '@atelier/protocol';
+import { APP, type DeviceLending, type RpcMessage, type Transport } from '@atelier/protocol';
 
 export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
+
+/** A change to what this computer lends the server (apps/desktop/src/lending.ts). */
+export type LendingChange = { kind: 'scratch'; allowed: boolean } | { kind: 'ssh'; host: string; allowed: boolean };
 
 export interface ConnectionChoice {
   mode: 'local' | 'server';
@@ -87,6 +90,14 @@ interface DesktopBridge {
   };
   /** This machine, registered as a device of the signed-in user (`devices.register`). */
   device: { id: string; name: string; platform: string };
+  /**
+   * Server mode: what this computer lets the server do here (ARCHITECTURE §21), changed only from these windows. `get`
+   * is null on the app's own backend. Absent in desktop shells older than the UI bundle.
+   */
+  lending?: {
+    get(): Promise<DeviceLending | null>;
+    change(change: LendingChange): Promise<DeviceLending | null>;
+  };
   /**
    * The computer's clock ("h12" 2:25 PM, "h23" 14:25), which the app's language doesn't tell: null when the desktop
    * couldn't read it, absent in desktop shells older than the UI bundle.

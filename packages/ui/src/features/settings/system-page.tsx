@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { APP } from '@atelier/protocol';
 import { Button, Select, Switch, type SelectOption } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
+import { changeLending, useConnection, useLending } from '../../lib/lending.ts';
 import { desktop, isMac, openExternal, os, type UpdateChannel, type UpdateStatus } from '../../lib/platform.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useWrite } from './use-setting.ts';
@@ -37,7 +38,51 @@ export function SystemPage() {
         <LaunchAtLoginRow />
         <DataFolderRow />
       </SettingsSection>
+      <LentSection />
     </>
+  );
+}
+
+/**
+ * Signed in to a server: what the person allowed it to do on this computer (ARCHITECTURE §21), beyond the folders they
+ * opened here. Allowing happens where they use it (the first session without a folder, choosing an SSH host); this
+ * takes it back.
+ */
+function LentSection() {
+  const lending = useLending();
+  const { data: connection } = useConnection();
+  const { error, run } = useWrite();
+  if (!lending.server || !lending.allowed || !(lending.ssh || lending.scratch)) return null;
+  const server = connection?.serverUrl ? new URL(connection.serverUrl).host : 'the server';
+  const hosts = lending.allowed.ssh;
+  return (
+    <SettingsSection title={`What ${server} can do here`}>
+      {lending.scratch && (
+        <SettingRow id="system.lendScratch" error={error}>
+          {(label) => (
+            <Switch {...label} checked={lending.allowed!.scratch} onCheckedChange={(on) => void run(() => changeLending({ kind: 'scratch', allowed: on }))} />
+          )}
+        </SettingRow>
+      )}
+      {lending.ssh && (
+        <SettingRow id="system.lendSsh" stacked error={error}>
+          {hosts.length ? (
+            <ul className="flex flex-col gap-1">
+              {hosts.map((host) => (
+                <li key={host} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate font-mono text-body text-fg">{host}</span>
+                  <Button size="sm" onClick={() => void run(() => changeLending({ kind: 'ssh', host, allowed: false }))}>
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-body text-fg-muted">None yet.</p>
+          )}
+        </SettingRow>
+      )}
+    </SettingsSection>
   );
 }
 

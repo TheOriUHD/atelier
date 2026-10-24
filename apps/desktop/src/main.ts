@@ -25,6 +25,7 @@ import { readTrustedFolders, trustedPath } from './device-link.ts';
 import { KeepAwake } from './keep-awake.ts';
 import { FileReads, PAGES_PRIVILEGES, PAGES_SCHEME, WorkspacePages } from './workspace-pages.ts';
 import { loginItem } from './login-item.ts';
+import { applyLending, changeLending, LendingChange, readLending } from './lending.ts';
 import { loginShellPath, mergePaths } from './shell-path.ts';
 import { parseShortTime, systemHourCycle, type HourCycle } from './clock.ts';
 import { createBundleSwap } from './bundle-swap.ts';
@@ -42,6 +43,8 @@ import {
   tokenTarget,
   trustedFoldersFile,
   trustFolder,
+  lendingFile,
+  sshDir,
   workspaceRoot,
   type Device,
 } from './user-data.ts';
@@ -127,7 +130,8 @@ const dataFolder = () => (connection?.mode === 'local' ? localDataDir() : app.ge
 /** Where "Show in Finder" may look: the folders the person trusted here and the built-in backend's scratch folders. */
 async function revealableFolders(): Promise<string[]> {
   const trusted = await readTrustedFolders(trustedFoldersFile());
-  const scratch = connection?.mode === 'local' ? await realpath(join(localDataDir(), 'scratch-workspaces')).catch(() => null) : null;
+  // Scratch folders are made here in either mode: by this computer's own backend, or for a server's sessions.
+  const scratch = await realpath(join(localDataDir(), 'scratch-workspaces')).catch(() => null);
   return scratch ? [...trusted, scratch] : trusted;
 }
 
@@ -148,7 +152,16 @@ function startBackend(): void {
   if (!connection) return;
   linkProblem = null;
   // Both find the runner: the local backend runs workspaces itself, the server relay lends it over the device link.
-  const env = { ...process.env, PATH: path, ATELIER_RUNNER_DIR: runnerDir(), ATELIER_TRUSTED_FOLDERS: trustedFoldersFile() };
+  const env = {
+    ...process.env,
+    PATH: path,
+    ATELIER_RUNNER_DIR: runnerDir(),
+    ATELIER_TRUSTED_FOLDERS: trustedFoldersFile(),
+    // Server mode: what this computer lends the server, and where its scratch folders and ssh's askpass go.
+    ATELIER_LENDING_FILE: lendingFile(),
+    ATELIER_SCRATCH_DIR: join(localDataDir(), 'scratch-workspaces'),
+    ATELIER_SSH_DIR: sshDir(),
+  };
   const child =
     connection.mode === 'server'
       ? utilityProcess.fork(join(import.meta.dirname, 'remote.mjs'), [connection.serverUrl, JSON.stringify(device)], { serviceName: `${APP.name} Connection`, stdio: 'inherit', env })
@@ -483,6 +496,15 @@ function registerIpc(): void {
     if (url.success) void shell.openExternal(url.data);
   });
   ipcMain.handle('connection:get', () => ({ mode: connection?.mode ?? null, serverUrl: connection?.mode === 'server' ? connection.serverUrl : null }));
+  // What this computer lets the server it's signed in to do here; only these windows change it (lending.ts).
+  ipcMain.handle('lending:get', async () => (connection?.mode === 'server' ? readLending(lendingFile(), connection.serverUrl) : null));
+  ipcMain.handle('lending:change', async (_e, input: unknown) => {
+    if (connection?.mode !== 'server') return null;
+    const change = LendingChange.parse(input);
+    const next = await changeLending(lendingFile(), connection.serverUrl, (current) => applyLending(current, change));
+    post({ kind: 'lending' });
+    return next;
+  });
   ipcMain.handle('connection:problem', () => linkProblem);
   // macOS asks once whether an app may reach the local network, and answers every later request with a silent failure
   // when it was refused; its switch for the app is the only way to change that.

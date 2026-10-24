@@ -7,6 +7,8 @@ import { toast } from '../../components/ui/index.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useSplitCell } from '../../lib/split-cell.tsx';
+import { lendSsh } from '../../lib/lending.ts';
+import { lendScratch } from '../workspaces/lend-scratch.tsx';
 import { trustWorkspace } from '../workspaces/trust.tsx';
 import type { useAttachments } from './use-attachments.ts';
 
@@ -31,6 +33,9 @@ export function useStartSession(attachments: ReturnType<typeof useAttachments>) 
         const folder = (await rpc().call('workspaces.list', {})).find((w) => w.id === session.workspaceId);
         if (folder && !(await trustWorkspace(folder))) return;
       }
+      // A server makes a session's empty folder on this computer, or on an SSH host reached from it: the person allows that here.
+      if (session.scratch?.sshHost) await lendSsh(session.scratch.sshHost);
+      else if (session.scratch && !(await lendScratch())) return;
       sessionId = (await rpc().call('sessions.create', session)).id;
       const parts: Part[] = [...attachments.parts(), ...(text ? [{ type: 'text' as const, text }] : [])];
       await rpc().call('chat.send', { sessionId, parts });

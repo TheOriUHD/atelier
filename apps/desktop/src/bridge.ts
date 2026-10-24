@@ -15,6 +15,8 @@ export type MainToBackend =
   | { kind: 'blob'; id: number; sha256: string }
   /** Server mode: the current sign-in for the device link (null when signed out). */
   | { kind: 'token'; token: string | null }
+  /** Server mode: the person changed what this computer lends the server (`lending.json`). */
+  | { kind: 'lending' }
   /** Local mode: the person passed the OS account check (Touch ID), so the screen lock is removed. */
   | { kind: 'removeScreenLock' }
   | { kind: 'shutdown' };

@@ -14,7 +14,9 @@ import type { WorkspaceSummary } from '@atelier/protocol';
 import type { Db } from '../store/db.ts';
 import { sessions, workspaces } from '../store/schema.ts';
 import { newId } from '../util/ids.ts';
-import type { DeviceLinks } from './device-links.ts';
+import { z } from 'zod';
+import { DeviceLinkError, type DeviceLinks } from './device-links.ts';
+import type { DeviceSshAccess } from './ssh-access.ts';
 import { RunnerClient } from './runner-client.ts';
 import { SANDBOX_HOST, sandboxHint, sandboxWrap } from './sandbox.ts';
 import { SandboxAccountError, sandboxChats } from './sandbox-accounts.ts';
@@ -77,6 +79,8 @@ export interface WorkspaceManagerDeps {
   codespaceWake?(userId: string, name: string, waking: () => void): Promise<void>;
   /** How to reach an SSH host (its connection's port, key, saved password, and the person's answers); plain `ssh` without. */
   sshShell?(userId: string, host: string): Promise<RemoteShell>;
+  /** The same for an SSH host reached from the person's desktop device (a server): what its ssh needs there. */
+  deviceSsh?(userId: string, deviceId: string, host: string): Promise<DeviceSshAccess>;
   /** A codespace's folder is waiting for it to wake (true) or it came up, or failed to (false). */
   codespaceWaking?(workspaceId: string, waking: boolean): void;
   logger: { info(message: string): void; error(message: string, error?: unknown): void };
@@ -124,12 +128,12 @@ export class WorkspaceManager {
    * The subfolders of `path` on an SSH host (its home folder by default), for the remote folder browser. Hidden folders
    * are left out. The listing is read through a runner rooted at `/`, kept for a minute while the dialog is used.
    */
-  async browseRemote(userId: string, host: string, path?: string): Promise<{ path: string; home: string; dirs: string[] }> {
-    const target = this.sshTarget(userId, host);
-    const { home } = await this.remoteRunner(target);
+  async browseRemote(userId: string, host: string, path?: string, deviceId: string | null = null): Promise<{ path: string; home: string; dirs: string[] }> {
+    const target = this.sshTarget(userId, host, deviceId);
+    const home = await this.sshHome(target);
     const wanted = (path?.trim() || home).replace(/^~(?=\/|$)/, home);
     const dir = posix.normalize(posix.isAbsolute(wanted) ? wanted : posix.join(home, wanted)).replace(/(.)\/+$/, '$1');
-    const client = await this.browser(userId, host);
+    const client = await this.browser(userId, host, deviceId);
     try {
       const { entries } = await client.call('fs.list', { path: dir, depth: 1, respectGitignore: false });
       const dirs = entries.filter((e) => e.type === 'dir' && !e.name.startsWith('.')).map((e) => e.name).sort((a, b) => a.localeCompare(b));
@@ -140,15 +144,15 @@ export class WorkspaceManager {
   }
 
   /** Makes the folder `name` inside `parent` on an SSH host (one level; the name can't hold a slash). */
-  async createRemoteFolder(userId: string, host: string, parent: string, name: string): Promise<string> {
+  async createRemoteFolder(userId: string, host: string, parent: string, name: string, deviceId: string | null = null): Promise<string> {
     const clean = name.trim();
     if (!clean || clean === '.' || clean === '..' || /[\\/\0]/.test(clean)) throw new WorkspaceError('Use a folder name without slashes.');
-    const target = this.sshTarget(userId, host);
-    const { home } = await this.remoteRunner(target);
+    const target = this.sshTarget(userId, host, deviceId);
+    const home = await this.sshHome(target);
     const base = posix.normalize(parent.replace(/^~(?=\/|$)/, home));
     if (!posix.isAbsolute(base)) throw new WorkspaceError('The folder to create it in must be an absolute path.');
     const path = posix.join(base, clean);
-    const client = await this.browser(userId, host);
+    const client = await this.browser(userId, host, deviceId);
     try {
       await client.call('fs.mkdir', { path, recursive: false });
     } catch (e) {
@@ -157,12 +161,12 @@ export class WorkspaceManager {
     return path;
   }
 
-  private browser(userId: string, host: string): Promise<RunnerClient> {
-    const key = `${userId}\0${host}`;
+  private browser(userId: string, host: string, deviceId: string | null = null): Promise<RunnerClient> {
+    const key = `${userId}\0${deviceId ?? ''}\0${host}`;
     let entry = this.browsers.get(key);
     if (entry) clearTimeout(entry.timer);
     else {
-      const client = this.connect({ ...this.sshTarget(userId, host), root: '/' });
+      const client = this.connect({ ...this.sshTarget(userId, host, deviceId), root: '/' });
       entry = { client, timer: undefined as never };
       client.catch(() => this.browsers.delete(key));
     }
@@ -183,30 +187,51 @@ export class WorkspaceManager {
     const row = await this.deps.db.select().from(workspaces).where(and(eq(workspaces.userId, userId), eq(workspaces.id, workspaceId))).get();
     if (!row) throw new WorkspaceError('This session has no folder to move from.');
     if (row.kind === 'codespace') throw new WorkspaceError('A codespace is one repository. Open another one from the folder menu (Cloud › Open a repository…).');
-    if (row.deviceId) throw new WorkspaceError("This folder is on another computer; open folders there in that computer's desktop app.");
+    if (row.deviceId && !row.host) throw new WorkspaceError("This folder is on another computer; open folders there in that computer's desktop app.");
     if (row.host) {
-      const { home } = await this.remoteRunner(this.sshTarget(userId, row.host));
+      const home = await this.sshHome(this.sshTarget(userId, row.host, row.deviceId));
       const full = path.replace(/^~(?=\/|$)/, home);
-      return this.addSsh(userId, row.host, posix.isAbsolute(full) ? posix.normalize(full) : posix.join(row.root, full));
+      return this.addSsh(userId, row.host, posix.isAbsolute(full) ? posix.normalize(full) : posix.join(row.root, full), row.deviceId);
     }
     const full = path.replace(/^~(?=[\\/]|$)/, homedir());
     return this.addLocal(userId, isAbsolute(full) ? full : join(row.root, full));
   }
 
-  /** Trusts a folder on an SSH host (desktop); `~/` paths start in the host's home folder. */
-  async addSsh(userId: string, host: string, path: string): Promise<WorkspaceSummary> {
-    const target = this.sshTarget(userId, host);
-    const { home } = await this.remoteRunner(target);
+  /**
+   * Trusts a folder on an SSH host, reached from this machine or (on a server) from the person's desktop `deviceId`;
+   * `~/` paths start in the host's home folder.
+   */
+  async addSsh(userId: string, host: string, path: string, deviceId: string | null = null): Promise<WorkspaceSummary> {
+    const target = this.sshTarget(userId, host, deviceId);
+    const home = await this.sshHome(target);
     return this.addRemote({ ...target, root: path.replace(/^~(?=\/|$)/, home) });
   }
 
   /**
    * A new, empty folder for one session started with no folder: `scratch-workspaces/<user>/scratch-<date>-<hex>` in
-   * this machine's data folder or, with `sshHost`, in the host's `~/.atelier`. Its runner is rooted at exactly that
-   * folder (never at a repository around it). Deleting the session leaves it on disk.
+   * this machine's data folder or, with `sshHost`, in the host's `~/.atelier`. On a server, `deviceId` is the person's
+   * desktop: the folder is made in its data folder, or the SSH host is reached from it. Its runner is rooted at exactly
+   * that folder (never at a repository around it). Deleting the session leaves it on disk.
    */
-  async addScratch(userId: string, sshHost?: string): Promise<WorkspaceSummary> {
+  async addScratch(userId: string, sshHost?: string, deviceId: string | null = null): Promise<WorkspaceSummary> {
     const name = scratchName(new Date());
+    if (sshHost && deviceId) {
+      const target = this.sshTarget(userId, sshHost, deviceId);
+      const client = await this.browser(userId, sshHost, deviceId).catch((e: unknown) => {
+        throw new WorkspaceError(`Can't reach ${sshHost}: ${e instanceof Error ? e.message : String(e)}`);
+      });
+      const root = `${client.info.home}/.atelier/scratch-workspaces/${userId}/${name}`;
+      await client.call('fs.mkdir', { path: root, recursive: true });
+      return this.insert({ ...target, root, scratch: true });
+    }
+    if (deviceId) {
+      if (!this.deps.links) throw new WorkspaceError('Sessions without a folder need the desktop app.');
+      const answer = await this.deps.links.request(userId, deviceId, { op: 'scratch.create', user: userId, name }).catch((e: unknown) => {
+        throw new WorkspaceError(e instanceof Error ? e.message : String(e));
+      });
+      const root = z.object({ root: z.string().min(1) }).parse(answer).root;
+      return this.insert({ userId, kind: 'local', root, deviceId, host: null, scratch: true });
+    }
     if (sshHost) {
       const target = this.sshTarget(userId, sshHost);
       const atelier = `${(await this.remoteRunner(target)).home}/.atelier`;
@@ -271,10 +296,21 @@ export class WorkspaceManager {
     return this.insert({ userId, kind: 'local', root: await realpath(dir), deviceId: null, host: null, scratch: true, sandbox: true });
   }
 
-  private sshTarget(userId: string, host: string) {
+  /** An SSH host reached from this machine, or (`deviceId`, on a server) from the person's desktop. */
+  private sshTarget(userId: string, host: string, deviceId: string | null = null): Target & { kind: 'ssh' } {
+    if (!/^[\w.@:+-]+$/.test(host) || host.startsWith('-')) throw new WorkspaceError('Use a host from ~/.ssh/config or user@host.');
+    if (deviceId) {
+      if (!this.deps.links || !this.deps.deviceSsh) throw new WorkspaceError('SSH workspaces need the desktop app.');
+      return { userId, kind: 'ssh', deviceId, host, root: '' };
+    }
     if (!this.deps.runnerBinary || !this.deps.runnerDir) throw new WorkspaceError('SSH workspaces need the desktop app.');
-    if (!/^[\w.@:-]+$/.test(host) || host.startsWith('-')) throw new WorkspaceError('Use a host from ~/.ssh/config or user@host.');
-    return { userId, kind: 'ssh' as const, deviceId: null, host };
+    return { userId, kind: 'ssh', deviceId: null, host, root: '' };
+  }
+
+  /** The SSH host's home folder: from its runner, found once per host (or, through a device, from the folder browser's). */
+  private async sshHome(target: Target): Promise<string> {
+    if (target.deviceId) return (await this.browser(target.userId, target.host!, target.deviceId)).info.home;
+    return (await this.remoteRunner(target)).home;
   }
 
   /**
@@ -289,7 +325,9 @@ export class WorkspaceManager {
 
   private async addRemote(target: Target, trusted = true): Promise<WorkspaceSummary> {
     const root = await this.topLevel(target);
-    const existing = await this.deps.db.select().from(workspaces).where(and(eq(workspaces.userId, target.userId), eq(workspaces.host, target.host!), eq(workspaces.root, root))).get();
+    // The same folder reached from another computer is another workspace: it goes through that computer.
+    const sameRoute = target.deviceId ? eq(workspaces.deviceId, target.deviceId) : isNull(workspaces.deviceId);
+    const existing = await this.deps.db.select().from(workspaces).where(and(eq(workspaces.userId, target.userId), eq(workspaces.host, target.host!), eq(workspaces.root, root), sameRoute)).get();
     if (existing) return trusted && !existing.trusted ? this.markTrusted(existing) : this.summary(existing);
     return this.insert({ ...target, root, trusted });
   }
@@ -411,9 +449,19 @@ export class WorkspaceManager {
    */
   private async connect(target: Target & { scratch?: boolean; sandbox?: boolean }): Promise<RunnerClient> {
     const { userId, root, deviceId, host } = target;
-    if (deviceId) return RunnerClient.connect(await this.deps.links!.open(userId, deviceId, root));
     const onLog = (line: string) => this.deps.logger.info(`runner ${basename(root)}: ${line}`);
     const env: Record<string, string> = target.scratch ? { GIT_CEILING_DIRECTORIES: (host ? posix.dirname : dirname)(root) } : {};
+    if (deviceId && host) {
+      // An SSH host reached from the person's desktop: its ssh, keys and runner builds, the answers checked here.
+      const access = await this.deps.deviceSsh!(userId, deviceId, host);
+      const service = { kind: 'ssh' as const, connection: access.connection, answers: access.answers, root, env };
+      try {
+        return await RunnerClient.connect(await this.deps.links!.start(userId, deviceId, service, onLog));
+      } catch (e) {
+        throw e instanceof DeviceLinkError ? new WorkspaceError(e.message) : e;
+      }
+    }
+    if (deviceId) return RunnerClient.connect(await this.deps.links!.open(userId, deviceId, root));
     if (!host) {
       const wrap = target.sandbox ? sandboxWrap(root, homedir()) : null;
       return RunnerClient.spawn({ binaryPath: this.deps.runnerBinary!, roots: [root], env: { ...process.env, ...env }, onLog, ...(wrap ? { wrap } : {}) });

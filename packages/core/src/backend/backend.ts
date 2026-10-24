@@ -3,10 +3,14 @@
  * injects the only surface-specific pieces; everything else is identical on desktop and web.
  */
 import { homedir } from 'node:os';
+import { z } from 'zod';
 import { dirname, join, posix } from 'node:path';
 import {
   ADMIN_PROCEDURES,
   APP,
+  DEVICE_LINK_PROTOCOL,
+  DeviceService,
+  SshProbe,
   appError,
   chatGptPlanLabel,
   contract,
@@ -51,7 +55,7 @@ import { sandboxShell } from '../workspaces/sandbox.ts';
 import { SshError, sshConfigHosts } from '../workspaces/ssh.ts';
 import { SshAccess, sshSecretId } from '../workspaces/ssh-access.ts';
 import * as git from '../workspaces/git.ts';
-import { DeviceLinks, type LinkSocket } from '../workspaces/device-links.ts';
+import { DeviceLinkError, DeviceLinks, type LinkSocket } from '../workspaces/device-links.ts';
 import { findFiles, gitDiff, gitStatus, grepFiles, listDir, readFile as readWorkspaceFile, sessionDiff } from '../workspaces/workspace-view.ts';
 import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
 import { ChatService, type ExtensionCatalog } from '../agent/chat-service.ts';
@@ -198,13 +202,14 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const local = platform.surface === 'desktop' && !platform.setupToken;
   const screenLock = new ScreenLock(join(platform.dataDir, 'screen-lock.json'));
   if (local) await screenLock.load();
-  // A device coming or going changes which of its user's workspaces are available.
-  const links = new DeviceLinks((userId) =>
+  // A device coming or going changes which of its user's workspaces are available, and what its windows offer.
+  const links = new DeviceLinks((userId) => {
+    emitToUser(userId, 'devices.changed', {});
     void workspaceManager
       .list(userId)
       .then((list) => emitToUser(userId, 'workspaces.changed', list))
-      .catch((e: unknown) => platform.logger.error('workspace update broadcast failed', e)),
-  );
+      .catch((e: unknown) => platform.logger.error('workspace update broadcast failed', e));
+  });
   const github = new GitHub({ fetch: httpFetch, secrets, clientId: () => settings.effective.cloud.github.clientId ?? null });
   const codespaces = new Codespaces({ fetch: httpFetch, github, ...(platform.env.ATELIER_GH ? { gh: platform.env.ATELIER_GH } : {}) });
   const sandboxReach = sandboxShell(platform.env, platform.dataDir);
@@ -217,6 +222,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     // Chats' sandboxes: in the server's sandbox container, or on this computer for the desktop's own backend.
     ...(platform.surface === 'web' ? (sandboxReach ? { sandboxShell: sandboxReach } : {}) : { chatSandboxDir: join(platform.dataDir, 'chat-sandboxes') }),
     sshShell: (userId, host) => sshAccess.shell(userId, host),
+    deviceSsh: (userId, deviceId, host) => sshAccess.onDevice(userId, deviceId, host),
     codespaceShell: (userId, name) => codespaces.shell(userId, name),
     codespaceWake: async (userId, name, waking) => void (await codespaces.wake(userId, name, waking)),
     codespaceWaking: (workspaceId, waking) => void chat.workspaceWaking(workspaceId, waking),
@@ -231,9 +237,16 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   // Questions an SSH connection puts to the person (a new host's key, a password): shown in their windows, answered by id.
   const sshWaiting = new Map<string, { userId: string; resolve(answer: SshAnswer): void; reject(error: Error): void }>();
   const sandboxesMaking = new Map<string, Promise<Workspace>>();
+  // On a server, SSH hosts are reached from the person's desktop: its ssh probes there, the questions are asked here.
+  const throughDevice = <T>(asked: Promise<unknown>, parse: (value: unknown) => T): Promise<T> =>
+    asked.then(parse, (e: unknown) => Promise.reject(e instanceof DeviceLinkError ? new SshError(e.message) : e));
   const sshAccess = new SshAccess({
     ssh: platform.env.ATELIER_SSH ?? 'ssh',
     dir: join(platform.dataDir, 'ssh'),
+    device: {
+      probe: (userId, deviceId, connection, answers) => throughDevice(links.request(userId, deviceId, { op: 'ssh.probe', connection, answers }, 60_000), (v) => SshProbe.parse(v)),
+      test: (userId, deviceId, connection, answers) => throughDevice(links.request(userId, deviceId, { op: 'ssh.test', connection, answers }, 60_000), (v) => z.string().parse(v)),
+    },
     connections: async (userId) => (await prefs.get(userId)).ssh.connections,
     secrets: { get: (id) => secrets.get(id), set: (secret) => secrets.set(secret), delete: (id) => secrets.delete(id) },
     prompt: (userId, prompt) =>
@@ -876,9 +889,21 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     workspaceManager.open(me(ctx).id, id).catch((e: unknown) => {
       throw e instanceof WorkspaceError ? appError('workspace_unavailable', e.message) : e;
     });
+  /**
+   * On a server, the desktop device this connection comes from, when it lends `service` (its folders, scratch folders,
+   * SSH hosts reached from it); null on the desktop's own backend, which does these itself.
+   */
+  const callerDevice = (ctx: { connection(): Connection }, service: DeviceService): string | null => {
+    if (platform.surface === 'desktop') return null;
+    const c = ctx.connection();
+    const deviceId = c.deviceId;
+    const userId = c.auth?.user.id;
+    if (!deviceId || !userId) return null;
+    return links.info(userId, deviceId)?.services.includes(service) ? deviceId : null;
+  };
   /** A new session's scratch folder (it starts with no folder); the person's clients learn of it like any folder. */
-  const scratchFolder = async (userId: string, sshHost: string | undefined): Promise<string> => {
-    const added = await workspaceManager.addScratch(userId, sshHost).catch((e: unknown) => {
+  const scratchFolder = async (userId: string, sshHost: string | undefined, deviceId: string | null): Promise<string> => {
+    const added = await workspaceManager.addScratch(userId, sshHost, deviceId).catch((e: unknown) => {
       throw e instanceof WorkspaceError || e instanceof SshError ? appError('workspace_unavailable', e.message) : e;
     });
     emitToUser(userId, 'workspaces.changed', await workspaceManager.list(userId));
@@ -983,7 +1008,15 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
 
   const handlers: Handlers<AppContract, Ctx> = {
-    'app.info': () => ({ name: APP.name, version: APP.version, surface: platform.surface, platform: process.platform, dataDir: platform.dataDir }),
+    'app.info': () => ({
+      name: APP.name,
+      version: APP.version,
+      surface: platform.surface,
+      platform: process.platform,
+      dataDir: platform.dataDir,
+      // A server takes these from desktop devices (ARCHITECTURE §21); their windows offer them only where both ends can.
+      ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...DeviceService.options] } } : {}),
+    }),
 
     // ---------------------------------------------------------------- sign-in
     'auth.status': async (_input, ctx) => ({
@@ -1094,10 +1127,14 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       await passkeys.remove(me(ctx).id, id);
       return { ok: true as const };
     },
-    'account.devices': (_input, ctx) => {
+    'account.devices': async (_input, ctx) => {
       const userId = me(ctx).id;
       const connected = (id: string) => [...connections].some((c) => c.deviceId === id && c.auth?.user.id === userId);
-      return devices.list(userId, ctx.connection().deviceId, (id) => links.online(userId, id) || connected(id));
+      const list = await devices.list(userId, ctx.connection().deviceId, (id) => links.online(userId, id) || connected(id));
+      return list.map((d) => {
+        const info = links.info(userId, d.id);
+        return info ? { ...d, services: [...info.services], lending: info.lending } : d;
+      });
     },
     'account.removeDevice': async ({ id }, ctx) => {
       await devices.remove(me(ctx).id, id);
@@ -1241,7 +1278,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (temporary && (mode !== 'chat' || groupId)) throw appError('unsupported', 'Only a chat can be temporary, and it isn’t filed in a group.');
       if (workspaceId && !(await workspaceManager.list(userId)).some((w) => w.id === workspaceId)) throw appError('not_found', 'Workspace not found.');
       if (scratch && (mode === 'chat' || workspaceId)) throw appError('unsupported', 'Only a Code or Cowork session without a folder gets a scratch folder.');
-      const folder = scratch ? await scratchFolder(userId, scratch.sshHost) : workspaceId;
+      const folder = scratch ? await scratchFolder(userId, scratch.sshHost, callerDevice(ctx, scratch.sshHost ? 'ssh' : 'scratch')) : workspaceId;
       const created = await sessions.create({
         mode,
         userId,
@@ -1639,12 +1676,21 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'codespaces.start': ({ name }, ctx) => githubOp(async () => (await codespaces.start(me(ctx).id, name), { ok: true as const })),
     'codespaces.stop': ({ name }, ctx) => githubOp(async () => (await codespaces.stop(me(ctx).id, name), { ok: true as const })),
     'codespaces.delete': ({ name }, ctx) => githubOp(async () => (await codespaces.remove(me(ctx).id, name), { ok: true as const })),
-    // SSH folders are a desktop feature; the server's own ~/.ssh/config is nobody else's business.
-    'workspaces.sshHosts': async () => (platform.surface === 'desktop' ? sshConfigHosts() : []),
+    // SSH hosts are the desktop's: its own backend reads ~/.ssh/config, a server asks the person's desktop for its list.
+    // The server's own ~/.ssh/config is nobody else's business.
+    'workspaces.sshHosts': async (_input, ctx) => {
+      if (platform.surface === 'desktop') return sshConfigHosts();
+      const deviceId = callerDevice(ctx, 'ssh');
+      if (!deviceId) return [];
+      return links
+        .request(me(ctx).id, deviceId, { op: 'ssh.hosts' })
+        .then((v) => z.array(z.string()).parse(v))
+        .catch(() => []);
+    },
     'ssh.list': async (_input, ctx) => sshViews(me(ctx).id),
     'ssh.save': async (input, ctx) => {
       const userId = me(ctx).id;
-      if (platform.surface !== 'desktop') throw appError('forbidden', 'SSH connections are managed in the desktop app.');
+      if (platform.surface !== 'desktop' && !callerDevice(ctx, 'ssh')) throw appError('forbidden', 'SSH connections are managed in the desktop app.');
       const { id, ...fields } = input;
       const list = (await prefs.get(userId)).ssh.connections;
       if (list.some((c) => c.id !== id && c.host.toLowerCase() === fields.host.toLowerCase())) throw appError('conflict', `${fields.host} is already one of your connections.`);
@@ -1669,16 +1715,17 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     'ssh.test': async (input, ctx) => {
-      if (platform.surface !== 'desktop') throw appError('forbidden', 'SSH connections are managed in the desktop app.');
+      const deviceId = callerDevice(ctx, 'ssh');
+      if (platform.surface !== 'desktop' && !deviceId) throw appError('forbidden', 'SSH connections are managed in the desktop app.');
       const { id, ...fields } = input;
-      return sshAccess.test(me(ctx).id, { ...fields, ...(id ? { id } : {}) });
+      return sshAccess.test(me(ctx).id, { ...fields, ...(id ? { id } : {}) }, deviceId ?? undefined);
     },
     'ssh.browse': async ({ host, path }, ctx) =>
-      workspaceManager.browseRemote(me(ctx).id, host, path).catch((e: unknown) => {
+      workspaceManager.browseRemote(me(ctx).id, host, path, callerDevice(ctx, 'ssh')).catch((e: unknown) => {
         throw e instanceof WorkspaceError || e instanceof SshError ? appError('workspace_unavailable', e.message) : e;
       }),
     'ssh.mkdir': async ({ host, parent, name }, ctx) =>
-      workspaceManager.createRemoteFolder(me(ctx).id, host, parent, name).then(
+      workspaceManager.createRemoteFolder(me(ctx).id, host, parent, name, callerDevice(ctx, 'ssh')).then(
         (path) => ({ path }),
         (e: unknown) => {
           throw e instanceof WorkspaceError || e instanceof SshError ? appError('workspace_unavailable', e.message) : e;
@@ -1693,7 +1740,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'workspaces.addSsh': async ({ host, path }, ctx) => {
       try {
-        const added = await workspaceManager.addSsh(me(ctx).id, host, path);
+        const added = await workspaceManager.addSsh(me(ctx).id, host, path, callerDevice(ctx, 'ssh'));
         emitToUser(me(ctx).id, 'workspaces.changed', await workspaceManager.list(me(ctx).id));
         return added;
       } catch (e) {

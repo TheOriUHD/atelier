@@ -10,16 +10,28 @@
 import { spawn } from 'node:child_process';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { SshAnswer, SshConnection, SshConnectionInput, SshPrompt, SshTestResult } from '@atelier/protocol';
+import { DeviceSshConnection, type SshAnswer, type SshAnswers, type SshConnection, type SshConnectionInput, type SshProbe, type SshPrompt, type SshTestResult } from '@atelier/protocol';
 import { newId } from '../util/ids.ts';
 import { SshError, sshShell, type RemoteShell } from './ssh.ts';
 
 /** The answers a probe gets from the script: whether to trust a new host key, and a password to give. */
-interface Answers {
-  trust: boolean;
-  password?: string | undefined;
-  /** Also give the password for a local key's passphrase (the person was shown that prompt). */
-  passphrase?: boolean;
+type Answers = SshAnswers;
+/** Where to connect: what `ssh` needs of a connection. */
+type Destination = Pick<SshConnection, 'name' | 'host' | 'port' | 'keyPath'>;
+
+/**
+ * A desktop device that runs ssh for this backend (a server's sessions on SSH hosts reached from the person's computer):
+ * the probes and the test run there, with that computer's ssh, keys and known hosts. The questions stay here.
+ */
+export interface SshDevice {
+  probe(userId: string, deviceId: string, connection: DeviceSshConnection, answers: Answers): Promise<SshProbe>;
+  test(userId: string, deviceId: string, connection: DeviceSshConnection, answers: Answers): Promise<string>;
+}
+
+/** An SSH connection that went through on a device: what to start its runners with there. */
+export interface DeviceSshAccess {
+  connection: DeviceSshConnection;
+  answers: Answers;
 }
 
 export interface SshAccessDeps {
@@ -34,6 +46,8 @@ export interface SshAccessDeps {
   prompt(userId: string, prompt: SshPrompt): Promise<SshAnswer>;
   /** For tests: spawn instead of the system's. */
   spawn?: typeof spawn;
+  /** Devices that run ssh for this backend (a server). */
+  device?: SshDevice;
 }
 
 /** The secret holding a connection's saved password. Personal: never listed for admins or reachable from settings. */
@@ -60,12 +74,7 @@ const PROBE_MS = 25_000;
 /** Prompts put to the person for one connection, at most (a wrong password asked again, a host key, a code). */
 const MAX_ROUNDS = 5;
 
-interface Probe {
-  code: number | null;
-  stderr: string;
-  /** What ssh asked, in order. */
-  prompts: string[];
-}
+type Probe = SshProbe;
 
 export type Classified =
   | { kind: 'hostkey'; host: string; keyType: string; fingerprint: string }
@@ -87,6 +96,8 @@ export function classifyPrompt(prompt: string): Classified {
 export class SshAccess {
   /** Hosts that went through in this run, by user and host: no probe again. */
   private verified = new Map<string, RemoteShell>();
+  /** The same for hosts reached through a device, by user, device and host. */
+  private verifiedOnDevice = new Map<string, DeviceSshAccess>();
   private script: Promise<string | null> | null = null;
 
   constructor(private readonly deps: SshAccessDeps) {}
@@ -96,43 +107,87 @@ export class SshAccess {
     const key = `${userId}\0${host}`;
     const known = this.verified.get(key);
     if (known) return known;
-    const connection = (await this.deps.connections(userId)).find((c) => c.host === host) ?? null;
-    const shell = await this.connect(userId, connection ?? { id: '', name: host, host, port: null, keyPath: null, folder: null });
+    const connection = await this.connection(userId, host);
+    const shell = await this.connect(userId, connection);
     this.verified.set(key, shell);
     return shell;
   }
 
-  /** Forgets that a host went through (its connection's details or password changed). */
-  forget(userId: string, host?: string): void {
-    for (const key of [...this.verified.keys()]) if (key.startsWith(`${userId}\0`) && (!host || key.endsWith(`\0${host}`))) this.verified.delete(key);
+  /**
+   * How to reach `host` from the person's desktop device: the connection, and the answers its ssh needs (the saved
+   * password, a host key the person trusted the first time). Probes there, asking the person here.
+   */
+  async onDevice(userId: string, deviceId: string, host: string): Promise<DeviceSshAccess> {
+    const key = `${userId}\0${deviceId}\0${host}`;
+    const known = this.verifiedOnDevice.get(key);
+    if (known) return known;
+    const connection = await this.connection(userId, host);
+    const access = { connection: forDevice(connection), answers: await this.authenticate(userId, connection, (answers) => this.device().probe(userId, deviceId, forDevice(connection), answers)) };
+    this.verifiedOnDevice.set(key, access);
+    return access;
   }
 
-  /** Connects with what the person typed (a connection not saved yet): the same questions, then what answers. */
-  async test(userId: string, input: SshConnectionInput & { id?: string }): Promise<SshTestResult> {
+  /** Forgets that a host went through (its connection's details or password changed). */
+  forget(userId: string, host?: string): void {
+    for (const map of [this.verified, this.verifiedOnDevice] as Map<string, unknown>[]) {
+      for (const key of [...map.keys()]) if (key.startsWith(`${userId}\0`) && (!host || key.endsWith(`\0${host}`))) map.delete(key);
+    }
+  }
+
+  /**
+   * Connects with what the person typed (a connection not saved yet): the same questions, then what answers. With
+   * `deviceId`, from that desktop device.
+   */
+  async test(userId: string, input: SshConnectionInput & { id?: string }, deviceId?: string): Promise<SshTestResult> {
     const connection: SshConnection = { ...input, id: input.id ?? '' };
     try {
-      const shell = await this.connect(userId, connection);
-      const run = await this.run(shell, 'uname -sm');
-      return { ok: true, message: run.stdout.trim() ? `Connected: ${run.stdout.trim()}.` : 'Connected.' };
+      let said: string;
+      if (deviceId) {
+        const target = forDevice(connection);
+        const answers = await this.authenticate(userId, connection, (a) => this.device().probe(userId, deviceId, target, a));
+        said = (await this.device().test(userId, deviceId, target, answers)).trim();
+      } else {
+        const shell = await this.connect(userId, connection);
+        said = (await this.run(shell, 'uname -sm')).stdout.trim();
+      }
+      return { ok: true, message: said ? `Connected: ${said}.` : 'Connected.' };
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : String(e) };
     }
   }
 
+  private async connection(userId: string, host: string): Promise<SshConnection> {
+    return (await this.deps.connections(userId)).find((c) => c.host === host) ?? { id: '', name: host, host, port: null, keyPath: null, folder: null };
+  }
+
+  private device(): SshDevice {
+    if (!this.deps.device) throw new SshError('SSH connections need the desktop app.');
+    return this.deps.device;
+  }
+
   private async connect(userId: string, connection: SshConnection): Promise<RemoteShell> {
     const script = await this.askpass();
     // Windows (no sh) and a missing ssh: the plain shell, keys and agent only.
-    if (!script) return this.plain(connection);
+    if (!script) return plainShell(this.deps.ssh, connection);
+    const answers = await this.authenticate(userId, connection, (a) => probeSsh({ ssh: this.deps.ssh, dir: this.deps.dir, ...(this.deps.spawn ? { spawn: this.deps.spawn } : {}) }, script, connection, a));
+    return throughShell(this.deps.ssh, this.deps.dir, script, connection, answers);
+  }
+
+  /**
+   * Probes until ssh goes through, putting what it asks to the person: a new host's key, a password or passphrase. A
+   * password the person asked to keep is saved once it worked. Returns the answers that worked.
+   */
+  private async authenticate(userId: string, connection: SshConnection, probeWith: (answers: Answers) => Promise<Probe>): Promise<Answers> {
     const saved = connection.id ? await this.deps.secrets.get(sshSecretId(userId, connection.id)) : undefined;
-    const answers: Answers = { trust: false, password: saved };
+    const answers: Answers = { trust: false, ...(saved !== undefined ? { password: saved } : {}) };
     let keep: string | null = null;
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      const probe = await this.probe(connection, script, answers);
+      const probe = await probeWith(answers);
       if (probe.code === 0) {
         if (keep && connection.id) {
           await this.deps.secrets.set({ id: sshSecretId(userId, connection.id), label: `SSH password (${connection.name})`, kind: 'token', value: keep });
         }
-        return this.through(connection, script, answers);
+        return answers;
       }
       const asked = probe.prompts.map(classifyPrompt);
       const hostkey = asked.find((a) => a.kind === 'hostkey');
@@ -174,74 +229,94 @@ export class SshAccess {
     throw new SshError(`Couldn't sign in to ${connection.name}.`);
   }
 
-  /** `ssh … true` with the askpass script answering from `answers`; what it asked and how it ended. */
-  private async probe(connection: SshConnection, script: string, answers: Answers): Promise<Probe> {
-    const log = join(this.deps.dir, `askpass-${newId()}.log`);
-    const spawnIt = this.deps.spawn ?? spawn;
-    const args = ['-o', 'BatchMode=no', '-o', 'ConnectTimeout=10', '-o', 'NumberOfPasswordPrompts=1', '-o', 'StrictHostKeyChecking=ask', ...target(connection), 'true'];
-    const child = spawnIt(this.deps.ssh, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, ...askpassEnv(script, log, answers) } });
-    let stderr = '';
-    child.stderr?.on('data', (d: Buffer) => (stderr += d.toString()));
-    const timer = setTimeout(() => child.kill('SIGKILL'), PROBE_MS);
-    const code = await new Promise<number | null>((resolve) => {
-      child.on('error', (e) => {
-        stderr += e.message;
-        resolve(null);
-      });
-      child.on('close', (c) => resolve(c));
-    });
-    clearTimeout(timer);
-    const logged = await readFile(log, 'utf8').catch(() => '');
-    await rm(log, { force: true });
-    return { code, stderr, prompts: logged.split('--ATELIER--\n').map((p) => p.trim()).filter(Boolean) };
+  private run(shell: RemoteShell, command: string): Promise<{ stdout: string }> {
+    return runOnce(shell, command, this.deps.spawn);
   }
 
-  /** The shell the runner uses once a probe went through: no prompts, the password (if any) answered from the environment. */
-  private through(connection: SshConnection, script: string, answers: Answers): RemoteShell {
-    const base = this.plain(connection);
-    if (answers.password === undefined) return base;
-    return {
-      ...base,
-      args: ['-o', 'BatchMode=no', ...base.args.filter((a, i, all) => !(a === 'BatchMode=yes' || (a === '-o' && all[i + 1] === 'BatchMode=yes')))],
-      env: askpassEnv(script, join(this.deps.dir, 'askpass-runtime.log'), { trust: false, password: answers.password, passphrase: !!answers.passphrase }),
-    };
-  }
-
-  /** BatchMode ssh to the connection's host: keys and agent only, never a prompt. */
-  private plain(connection: SshConnection): RemoteShell {
-    const shell = sshShell(this.deps.ssh, connection.host);
-    const options = shell.args.slice(0, -1);
-    return { ...shell, args: [...options, ...target(connection)], label: connection.name };
-  }
-
-  private async run(shell: RemoteShell, command: string): Promise<{ stdout: string }> {
-    const spawnIt = this.deps.spawn ?? spawn;
-    const child = spawnIt(shell.command, [...shell.args, command], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, ...shell.env } });
-    let stdout = '';
-    child.stdout?.on('data', (d: Buffer) => (stdout += d.toString()));
-    await new Promise<void>((resolve) => {
-      child.on('error', () => resolve());
-      child.on('close', () => resolve());
-    });
-    return { stdout };
-  }
-
-  /** The askpass script, written once; null where there is no `sh` to run it. */
   private askpass(): Promise<string | null> {
-    this.script ??= (async () => {
-      if (process.platform === 'win32') return null;
-      await mkdir(this.deps.dir, { recursive: true, mode: 0o700 });
-      const path = join(this.deps.dir, 'askpass.sh');
-      await writeFile(path, ASKPASS, { mode: 0o700 });
-      await chmod(path, 0o700);
-      return path;
-    })().catch(() => null);
+    this.script ??= writeAskpass(this.deps.dir);
     return this.script;
   }
 }
 
+/** The connection as a device's ssh takes it; a key path the device couldn't use is refused here. */
+function forDevice(connection: Destination): DeviceSshConnection {
+  const parsed = DeviceSshConnection.safeParse({ name: connection.name, host: connection.host, port: connection.port, keyPath: connection.keyPath });
+  if (!parsed.success) throw new SshError(`${connection.name}'s key file must be a full path or start with ~/.`);
+  return parsed.data;
+}
+
+/** The askpass script in `dir`, written (private) once per process; null where there is no `sh` to run it (Windows). */
+export function writeAskpass(dir: string): Promise<string | null> {
+  return (async () => {
+    if (process.platform === 'win32') return null;
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    const path = join(dir, 'askpass.sh');
+    await writeFile(path, ASKPASS, { mode: 0o700 });
+    await chmod(path, 0o700);
+    return path;
+  })().catch(() => null);
+}
+
+/**
+ * `ssh … true` with the askpass script answering from `answers`; what it asked and how it ended. Without a script
+ * (Windows) a BatchMode attempt: keys and the agent only, nothing asked.
+ */
+export async function probeSsh(opts: { ssh: string; dir: string; spawn?: typeof spawn }, script: string | null, connection: Destination, answers: Answers): Promise<Probe> {
+  const log = join(opts.dir, `askpass-${newId()}.log`);
+  const spawnIt = opts.spawn ?? spawn;
+  const mode = script ? ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=1', '-o', 'StrictHostKeyChecking=ask'] : ['-o', 'BatchMode=yes'];
+  const args = [...mode, '-o', 'ConnectTimeout=10', ...target(connection), 'true'];
+  const child = spawnIt(opts.ssh, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, ...(script ? askpassEnv(script, log, answers) : {}) } });
+  let stderr = '';
+  child.stderr?.on('data', (d: Buffer) => (stderr += d.toString()));
+  const timer = setTimeout(() => child.kill('SIGKILL'), PROBE_MS);
+  const code = await new Promise<number | null>((resolve) => {
+    child.on('error', (e) => {
+      stderr += e.message;
+      resolve(null);
+    });
+    child.on('close', (c) => resolve(c));
+  });
+  clearTimeout(timer);
+  const logged = script ? await readFile(log, 'utf8').catch(() => '') : '';
+  if (script) await rm(log, { force: true });
+  return { code, stderr: stderr.slice(-60_000), prompts: logged.split('--ATELIER--\n').map((p) => p.trim()).filter(Boolean).slice(0, 20) };
+}
+
+/** The shell runners use once a probe went through: no prompts, the password (if any) answered from the environment. */
+export function throughShell(ssh: string, dir: string, script: string | null, connection: Destination, answers: Answers): RemoteShell {
+  const base = plainShell(ssh, connection);
+  if (answers.password === undefined || !script) return base;
+  return {
+    ...base,
+    args: ['-o', 'BatchMode=no', ...base.args.filter((a, i, all) => !(a === 'BatchMode=yes' || (a === '-o' && all[i + 1] === 'BatchMode=yes')))],
+    env: askpassEnv(script, join(dir, 'askpass-runtime.log'), { trust: false, password: answers.password, passphrase: !!answers.passphrase }),
+  };
+}
+
+/** BatchMode ssh to the connection's host: keys and agent only, never a prompt. */
+export function plainShell(ssh: string, connection: Destination): RemoteShell {
+  const shell = sshShell(ssh, connection.host);
+  const options = shell.args.slice(0, -1);
+  return { ...shell, args: [...options, ...target(connection)], label: connection.name };
+}
+
+/** Runs one command over `shell` and returns what it printed. */
+export async function runOnce(shell: RemoteShell, command: string, spawnWith?: typeof spawn): Promise<{ stdout: string }> {
+  const spawnIt = spawnWith ?? spawn;
+  const child = spawnIt(shell.command, [...shell.args, command], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, ...shell.env } });
+  let stdout = '';
+  child.stdout?.on('data', (d: Buffer) => (stdout += d.toString()));
+  await new Promise<void>((resolve) => {
+    child.on('error', () => resolve());
+    child.on('close', () => resolve());
+  });
+  return { stdout };
+}
+
 /** ssh's destination arguments for a connection: port, key and host. */
-function target(connection: SshConnection): string[] {
+function target(connection: Destination): string[] {
   return [...(connection.port ? ['-p', String(connection.port)] : []), ...(connection.keyPath ? ['-i', expandHome(connection.keyPath)] : []), connection.host];
 }
 
@@ -262,7 +337,7 @@ function askpassEnv(script: string, log: string, answers: Answers): Record<strin
 
 const isKeyPassphrase = (prompt: string) => /^Enter passphrase for key/i.test(prompt);
 
-function changedKeyMessage(connection: SshConnection, stderr: string): string {
+function changedKeyMessage(connection: Destination, stderr: string): string {
   const fingerprint = /fingerprint for the \w+ key sent by the remote host is\s+(\S+?)\.?\s/i.exec(stderr)?.[1];
   return (
     `${connection.name}'s host key changed since it was last trusted${fingerprint ? ` (it is now ${fingerprint})` : ''}. ` +
@@ -270,7 +345,7 @@ function changedKeyMessage(connection: SshConnection, stderr: string): string {
   );
 }
 
-function failureMessage(connection: SshConnection, stderr: string, code: number | null): string {
+function failureMessage(connection: Destination, stderr: string, code: number | null): string {
   const text = stderr.trim().split('\n').filter((l) => !/^Warning: Permanently added/.test(l)).slice(-2).join(' ');
   if (/Permission denied/i.test(text)) return `${connection.name} refused the sign-in (${text}). Check the user name, the key or the password.`;
   if (/Could not resolve hostname|Connection refused|timed out|No route to host/i.test(text)) return `Can't reach ${connection.name}: ${text}`;

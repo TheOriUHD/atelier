@@ -8,11 +8,14 @@ export function workspaceLabel(w: WorkspaceSummary): string {
 /** Where a home's folders are: this computer, a codespace, another computer of the person's (lent over the device link) or an SSH host. */
 export type Environment = 'local' | 'cloud' | 'remote' | 'ssh';
 
-/** A folder's environment; `thisDevice` is the desktop app's own device (none in the browser). */
+/**
+ * A folder's environment; `thisDevice` is the desktop app's own device (none in the browser). An SSH host reached from
+ * another of the person's computers is that computer's (Remote Control): it goes through it.
+ */
 export function environmentOf(w: WorkspaceSummary, thisDevice: string | undefined): Environment {
   if (w.kind === 'codespace') return 'cloud';
-  if (w.kind === 'ssh') return 'ssh';
-  return w.deviceId && w.deviceId !== thisDevice ? 'remote' : 'local';
+  if (w.deviceId && w.deviceId !== thisDevice) return 'remote';
+  return w.kind === 'ssh' ? 'ssh' : 'local';
 }
 
 /** Most recently used first. */

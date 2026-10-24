@@ -11,6 +11,7 @@ import { Button, Dialog, DialogContent, DialogFooter, Field, TextField } from '.
 import { desktop } from '../../lib/platform.ts';
 import { keys } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
+import { lendSsh } from '../../lib/lending.ts';
 
 interface Values {
   name: string;
@@ -79,6 +80,8 @@ export function SshConnectionDialog({
     setPending('test');
     setTested(null);
     try {
+      // Tried from this computer: a server may reach the host from here.
+      await lendSsh(input.host);
       setTested(await rpc().call('ssh.test', { ...input, ...(connection ? { id: connection.id } : {}) }));
     } catch (e) {
       setTested({ ok: false, message: describeError(e).message });
@@ -93,6 +96,7 @@ export function SshConnectionDialog({
     if (!input) return;
     setPending('save');
     try {
+      await lendSsh(input.host);
       const saved = await rpc().call('ssh.save', { ...input, ...(connection ? { id: connection.id } : {}) });
       await qc.invalidateQueries({ queryKey: keys.ssh });
       onOpenChange(false);

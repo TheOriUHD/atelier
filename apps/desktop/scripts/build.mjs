@@ -16,7 +16,7 @@ await Promise.all([
   build({ ...common, entryPoints: ['src/main.ts'], outfile: 'dist/main.mjs', format: 'esm', external: ['electron'], banner: esmBanner }),
   build({ ...common, entryPoints: ['src/preload.ts'], outfile: 'dist/preload.cjs', format: 'cjs', external: ['electron'] }),
   build({ ...common, entryPoints: ['src/backend.ts'], outfile: 'dist/backend.mjs', format: 'esm', external: ['electron'], banner: esmBanner }),
-  build({ ...common, entryPoints: ['src/remote.ts'], outfile: 'dist/remote.mjs', format: 'esm', external: ['electron'] }),
+  build({ ...common, entryPoints: ['src/remote.ts'], outfile: 'dist/remote.mjs', format: 'esm', external: ['electron'], banner: esmBanner }),
 ]);
 if (!skipUi) {
   // On Windows pnpm is a .cmd file, which only a shell can start.

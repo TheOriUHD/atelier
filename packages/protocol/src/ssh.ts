@@ -2,7 +2,7 @@
 import { z } from 'zod';
 
 /** What `ssh` is given as the destination: `user@host` or a Host from ~/.ssh/config. Never starts with `-`. */
-const SshHost = z
+export const SshHost = z
   .string()
   .trim()
   .min(1)

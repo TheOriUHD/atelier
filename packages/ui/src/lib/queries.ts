@@ -24,6 +24,10 @@ export const keys = {
   account: ['account'] as const,
   authSessions: ['account', 'sessions'] as const,
   devices: ['account', 'devices'] as const,
+  /** What this desktop lets the server it is signed in to do here (its `lending.json`). */
+  lending: ['lending'] as const,
+  /** The desktop app's connection (its own backend, or a server). */
+  connection: ['connection'] as const,
   passkeys: ['account', 'passkeys'] as const,
   screenLock: ['screenLock'] as const,
   /** Every usage summary; each is keyed further by period and scope. */
@@ -86,6 +90,7 @@ export function useLiveQueries(): void {
         void qc.invalidateQueries({ queryKey: ['sessions'] });
       }),
       rpc().on('workspaces.changed', (list) => qc.setQueryData(keys.workspaces, list)),
+      rpc().on('devices.changed', () => void qc.invalidateQueries({ queryKey: keys.devices })),
       rpc().on('extensions.changed', () => {
         for (const queryKey of [keys.skills, keys.plugins, ['slash']]) void qc.invalidateQueries({ queryKey });
       }),

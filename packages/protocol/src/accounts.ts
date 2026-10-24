@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Mode, SignupPolicy, type SafeguardCategories, type SafeguardsSettings } from './settings.ts';
 import { TemporaryMode } from './domain.ts';
 import { SshConnection } from './ssh.ts';
+import { DeviceLending } from './device-link.ts';
 import { ShortcutPrefs } from './shortcuts.ts';
 
 export const UserRole = z.enum(['admin', 'user', 'pending']);
@@ -78,6 +79,9 @@ export const DeviceSummary = z.object({
   /** The device this connection comes from. */
   current: z.boolean(),
   online: z.boolean(),
+  /** While its link is up: what it lends this server, and what the person allowed it to do here. */
+  services: z.array(z.string()).optional(),
+  lending: DeviceLending.optional(),
 });
 export type DeviceSummary = z.infer<typeof DeviceSummary>;
 

@@ -420,6 +420,50 @@ describe('the environment and folder chips in the desktop app', () => {
   });
 });
 
+describe('the chips on a desktop that lends itself to its server', () => {
+  const SERVER_INFO = { name: 'Atelier', version: '0.2.8', surface: 'web', platform: 'linux', dataDir: '/data', deviceLink: { protocol: 2, services: ['runner', 'scratch', 'ssh'] } };
+  const lendingBridge = () => {
+    const bridge = desktopBridge('server');
+    let allowed = { scratch: false, ssh: [] as string[] };
+    const change = vi.fn(async (c: { kind: string; host?: string; allowed: boolean }) => {
+      allowed = c.kind === 'ssh' ? { ...allowed, ssh: c.allowed ? [...allowed.ssh, c.host!] : allowed.ssh.filter((h) => h !== c.host) } : { ...allowed, scratch: c.allowed };
+      return allowed;
+    });
+    return { ...bridge, lending: { get: vi.fn(async () => allowed), change } };
+  };
+
+  it('offers SSH hosts and No folder there, and lets the server reach a host chosen here', async () => {
+    const bridge = lendingBridge();
+    platform.desktop = bridge;
+    renderHome([ws('mine', { deviceId: 'd-mac' })], {
+      'app.info': () => SERVER_INFO,
+      'account.devices': () => [{ ...device('d-mac', 'MacBook', true), current: true, services: ['runner', 'scratch', 'ssh'], lending: { scratch: false, ssh: [] } }],
+      'ssh.list': () => [{ id: 'c1', name: 'gpu', host: 'gpu', port: null, keyPath: null, folder: null, passwordSaved: false }],
+    });
+    expect(await screen.findByRole('button', { name: 'mine' })).toBeTruthy();
+    await waitFor(async () => {
+      await closeMenus();
+      expect(within(await openMenu('Environment: Local')).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Cloud', 'Remote Control', 'SSH']);
+    });
+    await closeMenus();
+    expect(within(await openMenu('mine')).getByRole('menuitemradio', { name: 'No folder' })).toBeTruthy();
+    await closeMenus();
+    fireEvent.click(await within(await openSubmenu(await openMenu('Environment: Local'), 'SSH')).findByRole('menuitemradio', { name: 'gpu' }));
+    expect(await screen.findByRole('button', { name: 'Environment: gpu' })).toBeTruthy();
+    await waitFor(() => expect(bridge.lending.change).toHaveBeenCalledWith({ kind: 'ssh', host: 'gpu', allowed: true }));
+  });
+
+  it('shows an SSH folder another computer reaches as that computer’s', async () => {
+    platform.desktop = lendingBridge();
+    renderHome([ws('api', { kind: 'ssh', host: 'devbox', root: '/srv/api', deviceId: 'd-pc' })], {
+      'app.info': () => SERVER_INFO,
+      'account.devices': () => [device('d-pc', 'Studio PC', true)],
+    }, { id: 'api' });
+    expect(await screen.findByRole('button', { name: 'Environment: Studio PC' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'devbox:/srv/api SSH' })).toBeTruthy();
+  });
+});
+
 describe('the folder badge of a session', () => {
   it('says when the folder is not trusted and its own settings are ignored', () => {
     const { rerender } = render(<FolderBadge workspace={ws('site', { kind: 'codespace', host: 'cs-1', trusted: false })} />);

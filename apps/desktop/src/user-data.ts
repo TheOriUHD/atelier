@@ -98,6 +98,12 @@ export async function loadDevice(): Promise<Device> {
  */
 export const trustedFoldersFile = () => file('trusted-folders.json');
 
+/** What this computer lets each server do here (`lending.ts`). */
+export const lendingFile = () => file('lending.json');
+
+/** ssh's askpass script and its logs, for SSH hosts reached from here for a server. */
+export const sshDir = () => file('ssh');
+
 /** A picked folder's workspace root: its git top level, or the folder itself (resolved). Trusts nothing. */
 export async function workspaceRoot(picked: string): Promise<string> {
   const top = await promisify(execFile)('git', ['rev-parse', '--show-toplevel'], { cwd: picked, timeout: 5000, windowsHide: true }).then(

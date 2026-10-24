@@ -661,6 +661,8 @@ export const contract = {
     'models.changed': z.array(ModelInfo),
     'projects.changed': Empty,
     'workspaces.changed': z.array(WorkspaceSummary),
+    /** One of the person's desktop devices came or went, or changed what it lends: read `account.devices` again. */
+    'devices.changed': Empty,
     /** A connection needs the person: trust a host key, or give a password (answer with `ssh.answer`). */
     'ssh.prompt': SshPrompt,
     /** A prompt is no longer waiting (answered elsewhere, or it timed out). */
