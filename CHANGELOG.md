@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.6] — 2026-10-24
+
 - **Keyboard shortcuts you can change:** Settings › Keyboard shortcuts changes the keys for New chat, New temporary chat, Search, Settings, the sidebar, Lock, Upload or add files and Change effort, or turns one off. Atelier refuses keys another shortcut or the system already uses and says why, the desktop menu bar shows your keys, and the change follows your account to your other devices.
 
 - **ChatGPT plan limits in Chat and Cowork, and a warning before they run out:** the context ring in Chat and Cowork (and on their homes) opens a popover like Code's, kept simple: how full the window is as one plain bar, then the plan's usage limits (or a hosted API's cost, or your usage). From 90% of a window a line above the message box says so in every mode ("You’ve used 92% of your ChatGPT 5-hour limit. Resets in 1 hr 10 min."); dismissed, it stays away until that window resets. The limits are read again after each reply. Admins only, like the plan's status.
