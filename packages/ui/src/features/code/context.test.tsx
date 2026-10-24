@@ -341,6 +341,30 @@ describe('ContextButton', () => {
     expect(openSettings).toHaveBeenCalledWith('usage');
   });
 
+  it('is one plain bar in Chat and Cowork, with no breakdown and no Compact session, above the plan’s limits', async () => {
+    show('s-chat', snapshot('s-chat', { streamingMessageId: null, session: { ...snapshot('s-chat').session, status: 'idle' } }), <ContextButton sessionId="s-chat" busy={false} provider="chatgpt" simple />);
+    backend.handlers['chatgpt.status'] = () => ({
+      available: true,
+      signedIn: true,
+      signingIn: false,
+      plan: 'plus',
+      limits: { primary: { usedPercent: 42, windowMinutes: 300, resetsAt: NOW + 70 * 60_000 }, secondary: { usedPercent: 10, windowMinutes: 10_080, resetsAt: NOW + 3 * 86_400_000 } },
+    });
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Context window: 13% used' }));
+    await settle();
+    const popover = screen.getByRole('dialog', { name: 'Context window' });
+    expect(popover.textContent).toContain('Older messages are summarized automatically when it fills up.');
+    expect(within(popover).queryByRole('button', { name: 'Show the breakdown' })).toBeNull();
+    expect(within(popover).queryByRole('button', { name: 'Compact session' })).toBeNull();
+    // One color: the categories' colors are Code's.
+    expect(popover.querySelectorAll('[aria-hidden="true"] > span')).toHaveLength(1);
+    const limits = within(popover).getByRole('region', { name: 'Plan usage limits · Plus' });
+    expect(limits.textContent).toContain('Resets in 1 hr 10 min');
+    fireEvent.click(within(limits).getByRole('button', { name: 'Open Usage in Settings' }));
+    expect(openSettings).toHaveBeenCalledWith('usage');
+  });
+
   it('says when a limit resets as a time once its countdown is clicked, and keeps it that way', async () => {
     const resetsAt = NOW + 82 * 60_000;
     const weekly = NOW + 3 * 86_400_000;

@@ -16,8 +16,9 @@ import { keys, useModels, useProviderType, useWorkspaces } from '../../lib/queri
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { Composer, FileDropZone, type ComposerHandle } from '../chat/composer.tsx';
 import { ModelPicker } from '../chat/model-picker.tsx';
-import { PlanLimitWarning, PlanUsageButton } from '../chat/plan-usage.tsx';
-import { ContextMeter, ScrollToBottom, SessionHeader, clearCommand, loopCommand, modelCommand, useFollowScroll } from '../chat/session-view.tsx';
+import { PlanLimitWarning } from '../chat/plan-usage.tsx';
+import { ContextButton } from '../code/context-popover.tsx';
+import { ScrollToBottom, SessionHeader, clearCommand, loopCommand, modelCommand, useFollowScroll } from '../chat/session-view.tsx';
 import { Transcript } from '../chat/transcript.tsx';
 import type { ActivityStepView } from '../chat/turns.ts';
 import { useSessionConnectors } from '../chat/connector-switches.ts';
@@ -173,8 +174,7 @@ export function WorkPage() {
                     onStop={sending.stop}
                     footerEnd={
                       <>
-                        <PlanUsageButton provider={providerType} />
-                        {live.context && <ContextMeter used={live.context.used} limit={live.context.limit} />}
+                        <ContextButton sessionId={sessionId} busy={busy} provider={providerType} simple />
                         <ModelPicker
                           open={pickingModel}
                           onOpenChange={setPickingModel}

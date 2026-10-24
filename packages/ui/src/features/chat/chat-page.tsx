@@ -15,8 +15,9 @@ import { Composer, FileDropZone, type ComposerHandle } from './composer.tsx';
 import { CoworkOffer } from './cowork-offer.tsx';
 import { useSessionSend } from './outbox.tsx';
 import { ModelPicker } from './model-picker.tsx';
-import { PlanLimitWarning, PlanUsageButton } from './plan-usage.tsx';
-import { ContextMeter, ScrollToBottom, SessionHeader, clearCommand, modelCommand, useFollowScroll } from './session-view.tsx';
+import { PlanLimitWarning } from './plan-usage.tsx';
+import { ContextButton } from '../code/context-popover.tsx';
+import { ScrollToBottom, SessionHeader, clearCommand, modelCommand, useFollowScroll } from './session-view.tsx';
 import { Transcript } from './transcript.tsx';
 import { useSessionConnectors } from './connector-switches.ts';
 import { useSessionResearch } from './research.ts';
@@ -123,8 +124,7 @@ export function ChatPage() {
               footerCenter={temporary ? 'Deleted when you leave · AI can make mistakes.' : 'AI can make mistakes.'}
               footerEnd={
                 <>
-                  <PlanUsageButton provider={providerType} />
-                  {live.context && <ContextMeter used={live.context.used} limit={live.context.limit} />}
+                  <ContextButton sessionId={sessionId} busy={streaming} provider={providerType} simple />
                   <ModelPicker
                     open={pickingModel}
                     onOpenChange={setPickingModel}

@@ -16,7 +16,7 @@ import { useAccount, useModels, usePrefs, useProviderType } from '../../lib/quer
 import { Composer, FileDropZone } from '../chat/composer.tsx';
 import { ModelPicker } from '../chat/model-picker.tsx';
 import { useDefaultModel } from '../chat/models.ts';
-import { ContextMeter, modelCommand } from '../chat/session-view.tsx';
+import { modelCommand } from '../chat/session-view.tsx';
 import { useNewConnectors } from '../chat/connector-switches.ts';
 import { useStartSession } from '../chat/start-session.ts';
 import { useAttachments } from '../chat/use-attachments.ts';
@@ -133,7 +133,7 @@ export function FolderHome({ mode: sessionMode, children }: { mode: 'work' | 'co
                   onModelChange={setModelRef}
                   onEffortChange={setEffort}
                 />
-                {model && (code ? <NewSessionContextButton limit={model.contextLength} provider={providerType} /> : <ContextMeter used={0} limit={model.contextLength} />)}
+                {model && <NewSessionContextButton limit={model.contextLength} provider={providerType} />}
               </>
             }
           />

@@ -1,13 +1,13 @@
 /**
- * A ChatGPT subscription's plan limits outside Code's context popover: a gauge in Chat and Cowork's message box that
- * opens them, and a line above the box once a limit is nearly used up (every mode). Only admins can read them.
+ * A line above the message box once a ChatGPT subscription's limit is nearly used up (every mode); the limits
+ * themselves are in the context ring's popover. Only admins can read them.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Gauge, TriangleAlert, X } from 'lucide-react';
+import { TriangleAlert, X } from 'lucide-react';
 import type { ProviderType } from '@atelier/protocol';
-import { Icon, IconButton, Popover, PopoverContent, PopoverTrigger, cn } from '../../components/ui/index.ts';
+import { Icon, IconButton, cn } from '../../components/ui/index.ts';
 import { useAccount } from '../../lib/queries.ts';
-import { PlanLimits, POPOVER_CLASS, resetsText, useExactResets, useOpenUsage, usePlanWindows, windowName } from '../code/context-popover.tsx';
+import { resetsText, useExactResets, usePlanWindows, windowName } from '../code/context-popover.tsx';
 
 /** From this share of a window on, the line above the message box warns. */
 export const NEAR_LIMIT = 90;
@@ -15,40 +15,6 @@ export const NEAR_LIMIT = 90;
 function useShown(provider: ProviderType | null): boolean {
   const { account } = useAccount();
   return provider === 'chatgpt' && account?.role === 'admin';
-}
-
-/** Chat and Cowork's plan usage: a gauge beside the context ring, warning-colored as the fullest window fills up. */
-export function PlanUsageButton({ provider }: { provider: ProviderType | null }) {
-  return useShown(provider) ? <PlanUsagePopover /> : null;
-}
-
-function PlanUsagePopover() {
-  const [open, setOpen] = useState(false);
-  const openUsage = useOpenUsage(() => setOpen(false));
-  const { windows } = usePlanWindows();
-  const fullest = windows.reduce<(typeof windows)[number] | null>((a, w) => (!a || w.usedPercent > a.usedPercent ? w : a), null);
-  const pct = fullest ? Math.min(100, Math.round(fullest.usedPercent)) : null;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <button
-            type="button"
-            aria-label={fullest && pct !== null ? `Plan usage limits: ${windowName(fullest.windowMinutes)} ${pct}% used` : 'Plan usage limits'}
-            className={cn(
-              'flex size-6 items-center justify-center rounded-md outline-none focus-ring hover:bg-fill-ghost-hover data-popup-open:bg-fill-ghost-hover',
-              pct !== null && pct >= NEAR_LIMIT ? 'text-danger-text' : pct !== null && pct >= 75 ? 'text-warning-text' : 'text-fg-muted',
-            )}
-          />
-        }
-      >
-        <Icon icon={Gauge} />
-      </PopoverTrigger>
-      <PopoverContent side="top" align="end" sideOffset={8} aria-label="Plan usage limits" className={POPOVER_CLASS}>
-        <PlanLimits onOpenUsage={openUsage} divided={false} />
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 const DISMISSED_KEY = 'atelier.planWarningDismissed';

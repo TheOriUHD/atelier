@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type UIEvent } from 
 import { useNavigate } from '@tanstack/react-router';
 import { ArrowDown, Box, ChevronDown, FoldVertical, Pencil, Pin, PinOff, Repeat, SquarePen, Trash2, X } from 'lucide-react';
 import { formatInterval, parseLoopCommand, type SessionSummary } from '@atelier/protocol';
-import { ConfirmDialog, Icon, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ProgressRing, ThinkingDots, Tooltip, cn, toast } from '../../components/ui/index.ts';
+import { ConfirmDialog, Icon, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ThinkingDots, cn, toast } from '../../components/ui/index.ts';
 import { trafficLightInset, useSidebarHidden } from '../../app/chrome.tsx';
 import { MODE_HOME } from '../../app/navigation.ts';
 import { RenameDialog } from '../../app/session-rows.tsx';
@@ -13,7 +13,6 @@ import { isLocal } from '../auth/screen-lock.ts';
 import { usePrefs } from '../../lib/queries.ts';
 import { sessionNoun, sessionTitle } from '../../lib/sessions.ts';
 import type { SlashCommand } from './composer-menu.tsx';
-import { formatTokens } from './models.ts';
 
 /** How long a smooth scroll to the bottom keeps the reader's own scroll events from ending the following. */
 const SMOOTH_MS = 700;
@@ -68,18 +67,6 @@ export function ScrollToBottom({ onClick, working = false }: { onClick(): void; 
       <Icon icon={ArrowDown} />
       {working && <ThinkingDots aria-hidden="true" />}
     </button>
-  );
-}
-
-/** Chat and Cowork's context ring: how full the window is; older messages are summarized on their own when it fills up. */
-export function ContextMeter({ used, limit }: { used: number; limit: number }) {
-  const fraction = used / limit;
-  return (
-    <Tooltip content={`${formatTokens(used)} of ${formatTokens(limit)} tokens used (${Math.round(fraction * 100)}%). Older messages are summarized automatically when it fills up.`}>
-      <span className="flex size-6 items-center justify-center" aria-label={`Context ${Math.round(fraction * 100)}% full`} role="img">
-        <ProgressRing value={fraction} />
-      </span>
-    </Tooltip>
   );
 }
 

@@ -53,9 +53,10 @@ export function useOpenUsage(close: () => void) {
 
 /**
  * `provider` is the type of the session's model provider: a ChatGPT subscription shows its plan's usage limits, and a
- * hosted API shows what the session cost.
+ * hosted API shows what the session cost. `simple` (Chat and Cowork): the window is one plain bar, with no breakdown
+ * and no Compact session (they summarize older messages on their own).
  */
-export function ContextButton({ sessionId, busy, provider = null }: { sessionId: string; busy: boolean; provider?: ProviderType | null }) {
+export function ContextButton({ sessionId, busy, provider = null, simple = false }: { sessionId: string; busy: boolean; provider?: ProviderType | null; simple?: boolean }) {
   const [open, setOpen] = useState(false);
   const openUsage = useOpenUsage(() => setOpen(false));
   const live = useThrottledLive(sessionId, liveContext, 150);
@@ -83,6 +84,7 @@ export function ContextButton({ sessionId, busy, provider = null }: { sessionId:
         context={context}
         usage={breakdown.data?.usage}
         provider={provider}
+        simple={simple}
         busy={busy}
         onCompact={() => {
           setOpen(false);
@@ -106,7 +108,7 @@ export function NewSessionContextButton({ limit, provider = null }: { limit: num
       </PopoverTrigger>
       <PopoverContent side="top" align="end" sideOffset={8} aria-labelledby={titleId} className={POPOVER_CLASS}>
         <WindowHeading titleId={titleId} used={0} limit={limit} />
-        <div className="h-1.5 shrink-0 rounded-full bg-fill-control" aria-hidden="true" />
+        <PlainBar fraction={0} />
         <UsageSection provider={provider} sessionCost={null} onOpenUsage={openUsage} />
       </PopoverContent>
     </Popover>
@@ -117,6 +119,7 @@ function ContextPopover({
   context,
   usage,
   provider,
+  simple,
   busy,
   onCompact,
   onOpenUsage,
@@ -124,6 +127,7 @@ function ContextPopover({
   context: ContextUsage;
   usage: SessionUsage | undefined;
   provider: ProviderType | null;
+  simple: boolean;
   busy: boolean;
   onCompact(): void;
   onOpenUsage(): void;
@@ -134,6 +138,15 @@ function ContextPopover({
   const [expanded, setExpanded] = useState(false);
   const rows = contextRows(context);
   const left = context.threshold - context.used;
+  if (simple)
+    return (
+      <PopoverContent side="top" align="end" sideOffset={8} aria-labelledby={titleId} className={POPOVER_CLASS}>
+        <WindowHeading titleId={titleId} used={context.used} limit={context.limit} />
+        <PlainBar fraction={context.used / context.limit} />
+        <p className="text-body text-fg-secondary">Older messages are summarized automatically when it fills up.</p>
+        <UsageSection provider={provider} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
+      </PopoverContent>
+    );
   return (
     <PopoverContent side="top" align="end" sideOffset={8} aria-labelledby={titleId} className={POPOVER_CLASS}>
       <WindowHeading
@@ -192,6 +205,15 @@ function ContextPopover({
       </div>
       <UsageSection provider={provider} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
     </PopoverContent>
+  );
+}
+
+/** How full the window is, in one color: Chat and Cowork's, and a new session's (empty). */
+function PlainBar({ fraction }: { fraction: number }) {
+  return (
+    <div className="h-1.5 shrink-0 overflow-hidden rounded-full bg-fill-control" aria-hidden="true">
+      <span className="block h-full rounded-full bg-interactive" style={{ width: `${Math.min(100, fraction * 100)}%` }} />
+    </div>
   );
 }
 

@@ -31,7 +31,7 @@ import { askToNotify } from '../work/notifications.ts';
 import { Composer, FileDropZone, type ComposerHandle } from './composer.tsx';
 import { useSlashList } from './composer-menu.tsx';
 import { ModelPicker } from './model-picker.tsx';
-import { PlanUsageButton } from './plan-usage.tsx';
+import { NewSessionContextButton } from '../code/context-popover.tsx';
 import { useDefaultModel } from './models.ts';
 import { modelCommand } from './session-view.tsx';
 import { useNewConnectors } from './connector-switches.ts';
@@ -139,7 +139,7 @@ export function HomePage() {
             }
             footerEnd={
               <>
-                <PlanUsageButton provider={providerType} />
+                {model && <NewSessionContextButton limit={model.contextLength} provider={providerType} />}
                 <ModelPicker
                   open={pickingModel}
                   onOpenChange={setPickingModel}
