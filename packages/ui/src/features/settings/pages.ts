@@ -60,7 +60,7 @@ export interface SettingsPage {
 /** Nav order. Only pages that work end to end are listed. */
 export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'general', label: 'General', icon: SettingsIcon, group: 'Settings' },
-  { id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, group: 'Settings' },
+  { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, group: 'Settings' },
   { id: 'account', label: 'Account', icon: CircleUserRound, group: 'Settings' },
   { id: 'privacy', label: 'Privacy', icon: Shield, group: 'Settings' },
   { id: 'memory', label: 'Memory', icon: Brain, group: 'Settings' },

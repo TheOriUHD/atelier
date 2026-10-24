@@ -61,7 +61,7 @@ const APP_SHORTCUTS: [ShortcutId, MenuCommand][] = [
 ];
 
 /**
- * App shortcuts, as the person set them (Settings › Keyboard shortcuts). On desktop the native menu owns the
+ * App shortcuts, as the person set them (Settings › Shortcuts). On desktop the native menu owns the
  * accelerators and forwards them here; the page tells it the bindings.
  */
 function useAppShortcuts(): void {

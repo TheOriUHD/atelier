@@ -153,7 +153,7 @@ interface DesktopBridge {
   openWindow(hash: string): Promise<boolean>;
   onMenu(handler: (command: MenuCommand) => void): () => void;
   /**
-   * The keyboard shortcuts in force (Settings › Keyboard shortcuts), so the native menu's accelerators follow them; null
+   * The keyboard shortcuts in force (Settings › Shortcuts), so the native menu's accelerators follow them; null
    * is a shortcut turned off. Absent in desktop shells older than the UI bundle, which keep the default accelerators.
    */
   setShortcuts?(bindings: Record<string, string | null>): void;

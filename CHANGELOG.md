@@ -4,6 +4,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Focus rings only when you use Tab:** the blue frame around a button or field now shows only after Tab moves the focus, until the next click. Before, any key (a shortcut, the keys of a screenshot) or a click in a field lit one up, and it stayed until you clicked elsewhere.
+
+- **Settings › Shortcuts:** the page was "Keyboard shortcuts", which wrapped onto two cramped lines in the Settings list. Rows in that list are one line now, and a test checks every page name fits.
+
 ## [0.2.6] — 2026-10-24
 
 - **Keyboard shortcuts you can change:** Settings › Keyboard shortcuts changes the keys for New chat, New temporary chat, Search, Settings, the sidebar, Lock, Upload or add files and Change effort, or turns one off. Atelier refuses keys another shortcut or the system already uses and says why, the desktop menu bar shows your keys, and the change follows your account to your other devices.

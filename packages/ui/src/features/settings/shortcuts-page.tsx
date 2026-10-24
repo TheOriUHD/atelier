@@ -1,5 +1,5 @@
 /**
- * Settings › Keyboard shortcuts: each changeable shortcut with its keys, Change (records the next key combination),
+ * Settings › Shortcuts: each changeable shortcut with its keys, Change (records the next key combination),
  * Turn off and Reset; Reset all. Only changes are stored (`prefs.shortcuts`); the defaults are `SHORTCUTS`'.
  */
 import { useEffect, useState, type KeyboardEvent } from 'react';

@@ -31,6 +31,43 @@ test('personality custom modes can be created and persist across reload', async 
   await page.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Delete mode', exact: true }).click();
 });
 
+test('every page in the Settings list fits on one line', async ({ page }) => {
+  await page.goto('/#/?settings=general');
+  const rows = page.getByRole('navigation', { name: 'Settings pages' }).locator('button[data-page]');
+  await expect(rows.first()).toBeVisible();
+  // Wrapped (taller than the 32px row) or cut off with an ellipsis: either is a name too long for the column.
+  const bad = await rows.evaluateAll((buttons) =>
+    buttons.flatMap((b) => {
+      const label = b.querySelector('span');
+      return b.getBoundingClientRect().height > 32.5 || (label && label.scrollWidth > label.clientWidth) ? [b.textContent] : [];
+    }),
+  );
+  expect(bad).toEqual([]);
+});
+
+test('focus rings show after Tab, not after a click or other keys', async ({ page }) => {
+  await page.goto('/#/?settings=general');
+  const privacy = page.getByRole('navigation', { name: 'Settings pages' }).getByRole('button', { name: 'Privacy' });
+  const focused = () =>
+    page.evaluate(() => ({ visible: document.activeElement!.matches(':focus-visible'), ring: getComputedStyle(document.activeElement!).boxShadow }));
+  const BLUE = '42, 120, 214';
+  await privacy.click();
+  await privacy.focus();
+  // Any key but Tab (Shift, as in a screenshot's keys) makes the browser draw its focus ring; Atelier doesn't.
+  await page.keyboard.press('Shift');
+  expect(await focused()).toEqual({ visible: true, ring: expect.not.stringContaining(BLUE) });
+
+  await page.keyboard.press('Tab');
+  await privacy.focus();
+  expect((await focused()).ring).toContain(BLUE);
+
+  // A click ends it.
+  await page.mouse.click(5, 5);
+  await page.keyboard.press('Shift');
+  await privacy.focus();
+  expect((await focused()).ring).not.toContain(BLUE);
+});
+
 test('settings search jumps to the row and highlights it; changes apply live', async ({ page }) => {
   await page.goto('/');
   // The shortcut works once the sign-in check has let the app in.

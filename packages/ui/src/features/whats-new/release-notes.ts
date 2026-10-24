@@ -40,7 +40,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       {
         icon: Keyboard,
         title: 'Your own keyboard shortcuts',
-        body: 'Settings › Keyboard shortcuts changes the keys for a new chat, search, settings, the sidebar, uploads and more, or turns one off. Keys already in use are refused with the reason, and the menu bar shows yours.',
+        body: 'Settings › Shortcuts changes the keys for a new chat, search, settings, the sidebar, uploads and more, or turns one off. Keys already in use are refused with the reason, and the menu bar shows yours.',
       },
     ],
     also: [],

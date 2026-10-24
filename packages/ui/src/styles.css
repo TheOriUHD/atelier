@@ -110,6 +110,15 @@
 }
 
 /*
+ * Focus rings only while the person moves with Tab (lib/focus-mode.ts sets data-focus="tab" until the next click): every
+ * ring is drawn with --at-shadow-focus, so without Tab it is nothing. A click, a shortcut or a screenshot's keys light
+ * nothing up. `html:root` outranks the theme's own `:root[data-theme…]` definitions.
+ */
+html:root:not([data-focus='tab']) {
+  --at-shadow-focus: 0 0 #0000;
+}
+
+/*
  * Windows and Linux draw the window buttons over the top-right corner of the window (the title bar overlay, see apps/desktop
  * main.ts). The browser says where they are with env(titlebar-area-*); this is how wide that corner is. It is 0 on macOS,
  * whose buttons are at the left, and in a browser, where there is no overlay. Anything docked to the right edge of the top

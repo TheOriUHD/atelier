@@ -8,7 +8,7 @@ short version of the first two tables inside the app, with the keys you set.
 
 ## Changing a shortcut
 
-**Settings › Keyboard shortcuts** changes the keys of the shortcuts in the first table and of **Upload or add files**
+**Settings › Shortcuts** changes the keys of the shortcuts in the first table and of **Upload or add files**
 and **Change effort**. **Change** waits for the new combination (Esc cancels), **Turn off** removes a shortcut and
 **Reset** brings back its default; **Reset all** does that for every one. A shortcut needs ⌘ or ⌃ (Ctrl on Windows and
 Linux), unless it is a function key such as F6. Atelier refuses a combination another of its shortcuts already has
@@ -170,7 +170,7 @@ Ctrl is needed.
 ## The desktop menu
 
 The desktop app has a menu bar. Its own items, with their default keys (the menu shows the ones you set in
-**Settings › Keyboard shortcuts**):
+**Settings › Shortcuts**):
 
 | Menu | Item | macOS | Windows / Linux |
 |---|---|---|---|

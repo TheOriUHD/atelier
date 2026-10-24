@@ -169,7 +169,8 @@ function SettingsBody({ page, list, admin, row, onClose }: { page: SettingsPage;
   );
 }
 
-const NAV_ITEM_CLASS = 'flex h-8 w-full items-center gap-3 rounded-lg px-2 text-left text-body text-fg-secondary outline-none focus-ring max-md:h-11';
+/** One line, always: a label too long for the 192px column is cut off with an ellipsis, never wrapped (pages.ts keeps them short). */
+const NAV_ITEM_CLASS = 'flex h-8 w-full min-w-0 items-center gap-3 rounded-lg px-2 text-left text-body whitespace-nowrap text-fg-secondary outline-none focus-ring max-md:h-11';
 
 /**
  * 192 wide: search on top, then grouped pages. While searching, matching rows replace the pages.
@@ -261,8 +262,8 @@ function SettingsNav({ ref, current, admin, onOpen }: { ref?: Ref<HTMLElement>; 
                 }}
                 className={cn(NAV_ITEM_CLASS, p.id === current ? 'bg-fill-ghost-selected font-medium text-fg' : 'hover:bg-fill-ghost-hover')}
               >
-                <Icon icon={p.icon} size="md" />
-                {p.label}
+                <Icon icon={p.icon} size="md" className="shrink-0" />
+                <span className="min-w-0 truncate">{p.label}</span>
               </button>
             ))}
           </div>

@@ -125,7 +125,7 @@ export function Splitter({ orientation, label, value, min = 0, max = 1, measure,
           aria-hidden
           className={cn(
             'rounded-full bg-transparent transition-colors duration-(--at-duration-fast)',
-            'group-hover/splitter:bg-line-stronger group-focus-visible/splitter:bg-interactive group-active/splitter:bg-interactive',
+            'group-hover/splitter:bg-line-stronger [:root[data-focus=tab]_&]:group-focus-visible/splitter:bg-interactive group-active/splitter:bg-interactive',
             vertical ? 'h-10 max-h-[50%] w-0.5' : 'h-0.5 w-10 max-w-[50%]',
           )}
         />

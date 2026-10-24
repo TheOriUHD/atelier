@@ -17,7 +17,7 @@ export const FIXED_SHORTCUTS: [string, string[]][] = [
 /** The shortcuts that work here: the screen lock exists only on "Run on this computer". */
 export const shortcutsHere = (): readonly ShortcutInfo[] => SHORTCUTS.filter((s) => s.id !== 'lock' || isLocal());
 
-/** Every shortcut Atelier binds, as the person set them (Settings › Keyboard shortcuts changes them). */
+/** Every shortcut Atelier binds, as the person set them (Settings › Shortcuts changes them). */
 const groups = (bindings: ShortcutBindings): { title: string; keys: [string, string[] | null][] }[] => [
   { title: 'App', keys: shortcutsHere().filter((s) => s.group === 'App').map((s) => [s.label, keysOf(bindings[s.id])]) },
   {

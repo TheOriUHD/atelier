@@ -7,6 +7,9 @@ import { queryClient } from './lib/queries.ts';
 import { router } from './app/router.tsx';
 import { Toaster, TooltipProvider } from './components/ui/index.ts';
 import { AuthGate } from './features/auth/auth-gate.tsx';
+import { trackTabFocus } from './lib/focus-mode.ts';
+
+trackTabFocus();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

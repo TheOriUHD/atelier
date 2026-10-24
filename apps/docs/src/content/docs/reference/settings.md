@@ -24,7 +24,7 @@ see are hidden in the app.
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |
 
-## Settings › Keyboard shortcuts
+## Settings › Shortcuts
 
 | Setting | What it does |
 |---|---|

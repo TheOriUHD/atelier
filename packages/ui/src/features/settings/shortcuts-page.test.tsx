@@ -46,7 +46,7 @@ function renderPage(shortcuts: UserPrefs['shortcuts'] = {}) {
 const row = (label: string) => screen.getByRole('group', { name: label });
 const keys = (label: string) => [...row(label).querySelectorAll('kbd')].map((k) => k.textContent);
 
-describe('Settings › Keyboard shortcuts', () => {
+describe('Settings › Shortcuts', () => {
   it('records a new shortcut, and refuses one another action or the system uses', async () => {
     renderPage();
     await waitFor(() => expect(keys('Search')).toEqual([MOD, 'K']));
