@@ -17,3 +17,4 @@ export * from './ssh.ts';
 export * from './memory.ts';
 export * from './versions.ts';
 export * from './inline-visual.ts';
+export * from './shortcuts.ts';

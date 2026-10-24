@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Effort, Mode, ModelInfo } from '@atelier/protocol';
+import { shortcutBindings, type Effort, type Mode, type ModelInfo } from '@atelier/protocol';
 import { EffortControl } from './effort-control.tsx';
+
+// The person's shortcuts are their preferences; here, the defaults.
+vi.mock('../../lib/shortcuts.ts', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useShortcut: (id: keyof ReturnType<typeof shortcutBindings>) => shortcutBindings(undefined)[id],
+}));
 
 const opus: ModelInfo = {
   ref: 'anthropic/claude-opus-5-5',

@@ -28,7 +28,8 @@ import {
   toast,
 } from '../../components/ui/index.ts';
 import { useOpenSettings } from '../../app/navigation.ts';
-import { desktop, isMac } from '../../lib/platform.ts';
+import { desktop } from '../../lib/platform.ts';
+import { shortcutText, useShortcut } from '../../lib/shortcuts.ts';
 import { keys, useAccount, useWorkspaces } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { recentWorkspaces, workspaceLabel } from '../code/workspaces.ts';
@@ -39,8 +40,6 @@ import type { ResearchSwitch } from './research.ts';
 
 /** Rows 36 tall with 15px labels. */
 const ROW = 'min-h-9 text-composer';
-
-export const UPLOAD_SHORTCUT = isMac ? '⌘U' : 'Ctrl+U';
 
 export function PlusMenu({
   onUpload,
@@ -61,6 +60,7 @@ export function PlusMenu({
 }) {
   const navigate = useNavigate();
   const { account } = useAccount();
+  const upload = useShortcut('upload');
   const skills = (useSlashList(workspaceId).data ?? []).filter((e) => e.kind === 'skill');
   const extend = skills.length > 0 || !!connectors?.list.length || account?.role === 'admin';
 
@@ -68,7 +68,7 @@ export function PlusMenu({
     <Menu>
       <MenuTrigger render={<IconButton icon={Plus} label="Add files and more" iconSize="md" />} />
       <MenuContent side="top" align="start" className="w-[250px]">
-        <MenuItem icon={Paperclip} shortcut={UPLOAD_SHORTCUT} className={ROW} onClick={onUpload}>
+        <MenuItem icon={Paperclip} shortcut={shortcutText(upload)} className={ROW} onClick={onUpload}>
           Upload or add files
         </MenuItem>
         {onAddFolder && <AddFolder onAdd={onAddFolder} />}

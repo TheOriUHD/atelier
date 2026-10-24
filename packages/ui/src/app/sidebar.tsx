@@ -43,7 +43,8 @@ import {
 } from '../components/ui/index.ts';
 import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { recentGroup } from '../lib/dates.ts';
-import { blobUrl, isMac } from '../lib/platform.ts';
+import { blobUrl } from '../lib/platform.ts';
+import { shortcutText, useShortcutBindings } from '../lib/shortcuts.ts';
 import { useAccount, usePrefs, useProjects, useSessions, useSetPref } from '../lib/queries.ts';
 import { describeError, rpc } from '../lib/rpc.ts';
 import { useUi } from '../lib/ui-store.ts';
@@ -426,6 +427,7 @@ function ProfileFooter() {
   const setPref = useSetPref();
   const openSettings = useOpenSettings();
   const lockNow = useLockNow(openSettings);
+  const shortcuts = useShortcutBindings();
   const name = account?.name || 'You';
   const avatar = account?.avatar;
 
@@ -452,7 +454,7 @@ function ProfileFooter() {
           <Icon icon={ChevronDown} className="text-fg-muted" />
         </MenuTrigger>
         <MenuContent side="top" align="start" className="w-56">
-          <MenuItem icon={SettingsIcon} shortcut={isMac ? '⌘,' : 'Ctrl+,'} onClick={() => openSettings()}>
+          <MenuItem icon={SettingsIcon} shortcut={shortcutText(shortcuts.settings)} onClick={() => openSettings()}>
             Settings
           </MenuItem>
           <MenuSeparator />
@@ -469,7 +471,7 @@ function ProfileFooter() {
           <MenuSeparator />
           {/* On this computer there is no sign-in to leave; the screen lock takes its place. */}
           {isLocal() ? (
-            <MenuItem icon={Lock} shortcut={isMac ? '⇧⌘L' : 'Ctrl+Shift+L'} onClick={lockNow}>
+            <MenuItem icon={Lock} shortcut={shortcutText(shortcuts.lock)} onClick={lockNow}>
               Lock Atelier
             </MenuItem>
           ) : (

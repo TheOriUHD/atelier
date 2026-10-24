@@ -12,7 +12,7 @@ import { homedir, networkInterfaces } from 'node:os';
 import { basename, join, normalize, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { APP, artifactRuntimeCsp } from '@atelier/protocol';
+import { APP, artifactRuntimeCsp, shortcutBindings, ShortcutPrefs, toAccelerator, type ShortcutBindings, type ShortcutId } from '@atelier/protocol';
 import type { BackendToMain, MainToBackend, MenuCommand } from './bridge.ts';
 
 import { BROWSER_PARTITION, attachGuest, fetchFavicon, hardenWebview, prepareBrowserSession, type BrowserEvents } from './browser.ts';
@@ -71,6 +71,9 @@ let linkProblem: LinkProblem | null = null;
 let device: Device;
 /** This computer's 12- or 24-hour clock, for the times the page shows; null when it can't tell (clock.ts). */
 let hourCycle: HourCycle | null = null;
+/** The keyboard shortcuts the page says are in force (Settings › Keyboard shortcuts); the menu's accelerators follow them. */
+let shortcuts: ShortcutBindings = shortcutBindings(undefined);
+const accelerator = (id: ShortcutId) => toAccelerator(shortcuts[id]);
 /** Read while Electron starts up; the backend and its runners use it to find programs (see shell-path.ts). */
 const shellPath = loginShellPath();
 let path = process.env.PATH;
@@ -387,7 +390,7 @@ function buildMenu(): void {
             submenu: [
               { role: 'about' as const },
               { type: 'separator' as const },
-              { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => sendMenu('settings') },
+              { label: 'Settings…', accelerator: accelerator('settings'), click: () => sendMenu('settings') },
               { type: 'separator' as const },
               { role: 'services' as const },
               { type: 'separator' as const },
@@ -403,19 +406,19 @@ function buildMenu(): void {
     {
       label: 'File',
       submenu: [
-        { label: 'New Chat', accelerator: 'CmdOrCtrl+N', click: () => sendMenu('new-chat') },
-        { label: 'New Temporary Chat', accelerator: 'CmdOrCtrl+Shift+N', click: () => sendMenu('new-temporary-chat') },
+        { label: 'New Chat', accelerator: accelerator('new-chat'), click: () => sendMenu('new-chat') },
+        { label: 'New Temporary Chat', accelerator: accelerator('new-temporary-chat'), click: () => sendMenu('new-temporary-chat') },
         // Only the built-in backend has a screen lock; a server's sign-in is its own.
-        ...(connection?.mode === 'local' ? [{ type: 'separator' as const }, { label: 'Lock Atelier', accelerator: 'CmdOrCtrl+Shift+L', click: () => sendMenu('lock') }] : []),
-        ...(isMac ? [] : [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => sendMenu('settings') }, { type: 'separator' as const }, { role: 'quit' as const }]),
+        ...(connection?.mode === 'local' ? [{ type: 'separator' as const }, { label: 'Lock Atelier', accelerator: accelerator('lock'), click: () => sendMenu('lock') }] : []),
+        ...(isMac ? [] : [{ label: 'Settings…', accelerator: accelerator('settings'), click: () => sendMenu('settings') }, { type: 'separator' as const }, { role: 'quit' as const }]),
       ],
     },
     { role: 'editMenu' },
     {
       label: 'View',
       submenu: [
-        { label: 'Toggle Sidebar', accelerator: 'CmdOrCtrl+B', click: () => sendMenu('toggle-sidebar') },
-        { label: 'Search', accelerator: 'CmdOrCtrl+K', click: () => sendMenu('command-palette') },
+        { label: 'Toggle Sidebar', accelerator: accelerator('toggle-sidebar'), click: () => sendMenu('toggle-sidebar') },
+        { label: 'Search', accelerator: accelerator('search'), click: () => sendMenu('command-palette') },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
@@ -445,6 +448,15 @@ const FileAnswer = z.object({ id: z.number().int().positive(), dataBase64: z.str
 
 function registerIpc(): void {
   ipcMain.on('connect-backend', (event) => connectRenderer(event.sender));
+  // Settings › Keyboard shortcuts changed (or a window opened): the menu takes the page's bindings.
+  ipcMain.on('menu:shortcuts', (_e, input: unknown) => {
+    const parsed = ShortcutPrefs.safeParse(input);
+    if (!parsed.success) return;
+    const next = shortcutBindings(parsed.data);
+    if (JSON.stringify(next) === JSON.stringify(shortcuts)) return;
+    shortcuts = next;
+    buildMenu();
+  });
   ipcMain.on('theme', (event, input: unknown) => {
     const theme = Theme.safeParse(input);
     const win = BrowserWindow.fromWebContents(event.sender);

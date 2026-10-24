@@ -2,21 +2,19 @@
  * The effort control in the composer footer (design/components.md › EffortControl): a chip with the level's name next to
  * the model, opening a popover with the level, a (?) help, "Faster"/"Smarter" and the slider. In Code its last stop is
  * Ultracode, with a violet name and the charged field in the slider; a provider's last stop can be drawn the same way
- * (`effortStops[].featured`, ChatGPT Chat's Pro). Cmd/Ctrl+Shift+E opens it.
+ * (`effortStops[].featured`, ChatGPT Chat's Pro). Cmd/Ctrl+Shift+E (or the person's own shortcut) opens it.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { CircleHelp, TriangleAlert } from 'lucide-react';
 import { effortChoices, recommendedEffort, shownEffort, type Effort, type Mode, type ModelInfo } from '@atelier/protocol';
 import { Icon, Popover, PopoverContent, PopoverTrigger, Switch, Tooltip, cn } from '../../components/ui/index.ts';
 import { prefersReducedMotion } from '../../lib/motion.ts';
-import { isMac } from '../../lib/platform.ts';
+import { ariaKeysOf, pressIs, shortcutText, useShortcut } from '../../lib/shortcuts.ts';
 import { EffortSlider } from './effort-slider.tsx';
 import { EFFORT_LABELS, effortHelp } from './models.ts';
 import { UltracodeField, useFieldSlot } from './ultracode-field.tsx';
 import { useIsActiveCell } from '../../lib/split-cell.tsx';
 import './effort.css';
-
-const SHORTCUT = isMac ? '⌘⇧E' : 'Ctrl+Shift+E';
 
 /** Levels that cost much more: a warning mark next to their name, here in the chip, with this text in the popover. */
 const WARNINGS: Partial<Record<Effort, string>> = {
@@ -64,16 +62,17 @@ export function EffortControl({ model, mode, effort, onChange, ultracode = true,
   const featuredLevel = last && (last === 'ultracode' || (stops?.length === levels.length && stops.at(-1)?.featured)) ? last : null;
 
   const activeCell = useIsActiveCell();
+  const shortcut = useShortcut('effort');
   useEffect(() => {
-    if (!enabled || !activeCell) return;
+    if (!enabled || !activeCell || !shortcut) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'e' || !e.shiftKey || !(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
+      if (!pressIs(shortcut, e)) return;
       e.preventDefault();
       setOpen(true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [enabled, activeCell]);
+  }, [enabled, activeCell, shortcut]);
 
   if (levels.length === 0 || !current) return null;
   // The popover's name is the level in force, or the one being dragged to; hovering never changes it.
@@ -101,11 +100,11 @@ export function EffortControl({ model, mode, effort, onChange, ultracode = true,
         setPreview(null);
       }}
     >
-      <Tooltip content={`Effort  ${SHORTCUT}`} disabled={open}>
+      <Tooltip content={shortcut ? `Effort  ${shortcutText(shortcut)}` : 'Effort'} disabled={open}>
         <PopoverTrigger
           disabled={!enabled}
           aria-label={`Effort: ${name}${warning ? ', high usage' : ''}`}
-          aria-keyshortcuts={isMac ? 'Meta+Shift+E' : 'Control+Shift+E'}
+          aria-keyshortcuts={ariaKeysOf(shortcut)}
           className="flex h-6 min-w-0 shrink-0 items-center gap-1 rounded-sm px-2 text-control-sm outline-none focus-ring hover:bg-fill-ghost-hover disabled:opacity-40 data-popup-open:bg-fill-ghost-hover"
         >
           <span className={cn('truncate', current === featuredLevel ? 'font-medium text-pro' : 'text-fg-muted')}>{name}</span>

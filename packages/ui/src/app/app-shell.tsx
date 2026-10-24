@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { Outlet } from '@tanstack/react-router';
 import { useAppearance } from '../lib/appearance.ts';
-import { desktop, isMac, type MenuCommand } from '../lib/platform.ts';
+import type { ShortcutId } from '@atelier/protocol';
+import { desktop, type MenuCommand } from '../lib/platform.ts';
+import { pressIs, useShortcutBindings } from '../lib/shortcuts.ts';
 import { SidebarToggle, trafficLightInset, useSidebarHidden } from './chrome.tsx';
 import { useNarrow } from '../lib/narrow.ts';
 import { useLiveQueries, usePrefs } from '../lib/queries.ts';
@@ -23,7 +25,7 @@ export function AppShell() {
   useLiveQueries();
   const { prefs } = usePrefs();
   useAppearance(prefs);
-  useShortcuts();
+  useAppShortcuts();
   useTaskNotifications();
   const narrow = useNarrow();
   const sidebarHidden = useSidebarHidden();
@@ -49,17 +51,29 @@ export function AppShell() {
   );
 }
 
-const KEYS: Record<string, MenuCommand> = { k: 'command-palette', ',': 'settings', b: 'toggle-sidebar', n: 'new-chat' };
-const SHIFT_KEYS: Record<string, MenuCommand> = { n: 'new-temporary-chat' };
+/** The app's shortcuts and the menu command each one sends. The screen lock is the desktop's ("Run on this computer"). */
+const APP_SHORTCUTS: [ShortcutId, MenuCommand][] = [
+  ['new-chat', 'new-chat'],
+  ['new-temporary-chat', 'new-temporary-chat'],
+  ['search', 'command-palette'],
+  ['settings', 'settings'],
+  ['toggle-sidebar', 'toggle-sidebar'],
+];
 
-/** App shortcuts. On desktop the native menu owns the accelerators and forwards them here. */
-function useShortcuts(): void {
+/**
+ * App shortcuts, as the person set them (Settings › Keyboard shortcuts). On desktop the native menu owns the
+ * accelerators and forwards them here; the page tells it the bindings.
+ */
+function useAppShortcuts(): void {
   const newChat = useNewChat();
   const newTemporaryChat = useNewTemporaryChat();
   const openSettings = useOpenSettings();
   const toggleSidebar = useUi((s) => s.toggleSidebar);
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
   const lockNow = useLockNow(openSettings);
+  const bindings = useShortcutBindings();
+
+  useEffect(() => desktop?.setShortcuts?.(bindings), [bindings]);
 
   useEffect(() => {
     const run = (command: MenuCommand) => {
@@ -72,13 +86,12 @@ function useShortcuts(): void {
     };
     if (desktop) return desktop.onMenu(run);
     const onKey = (e: KeyboardEvent) => {
-      if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
-      const command = (e.shiftKey ? SHIFT_KEYS : KEYS)[e.key.toLowerCase()];
+      const command = APP_SHORTCUTS.find(([id]) => pressIs(bindings[id], e))?.[1];
       if (!command) return;
       e.preventDefault();
       run(command);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [newChat, newTemporaryChat, openSettings, toggleSidebar, setPaletteOpen, lockNow]);
+  }, [newChat, newTemporaryChat, openSettings, toggleSidebar, setPaletteOpen, lockNow, bindings]);
 }

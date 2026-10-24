@@ -24,6 +24,13 @@ see are hidden in the app.
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |
 
+## Settings › Keyboard shortcuts
+
+| Setting | What it does |
+|---|---|
+| **App shortcuts** | New chat, search, Settings, the sidebar and the screen lock. Change the keys or turn one off. |
+| **Message box shortcuts** | Upload or add files and change effort. Send, new line, stop, / and @ always work the same. |
+
 ## Settings › Account
 
 | Setting | What it does |

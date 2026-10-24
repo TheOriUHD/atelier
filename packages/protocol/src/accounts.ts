@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Mode, SignupPolicy, type SafeguardCategories, type SafeguardsSettings } from './settings.ts';
 import { TemporaryMode } from './domain.ts';
 import { SshConnection } from './ssh.ts';
+import { ShortcutPrefs } from './shortcuts.ts';
 
 export const UserRole = z.enum(['admin', 'user', 'pending']);
 export type UserRole = z.infer<typeof UserRole>;
@@ -313,6 +314,8 @@ export const UserPrefs = z.object({
   ssh: z.object({ connections: z.array(SshConnection).default([]) }).default({ connections: [] }),
   /** The "What's new" dialog: the version whose release notes this person last saw (null: none yet). */
   whatsNew: z.object({ seen: z.string().max(40).nullable().default(null) }).default({ seen: null }),
+  /** Keyboard shortcuts this person changed (Settings › Keyboard shortcuts); null turns one off. */
+  shortcuts: ShortcutPrefs.default({}),
 });
 export type UserPrefs = z.infer<typeof UserPrefs>;
 

@@ -3,8 +3,18 @@ title: Keyboard shortcuts
 description: Every keyboard shortcut, slash command and menu accelerator in Atelier, on macOS and on Windows and Linux.
 ---
 
-This page lists every key Atelier binds. **Keyboard shortcuts** under **More** in the sidebar opens a short version of the
-first two tables inside the app.
+This page lists every key Atelier binds, with its default. **Keyboard shortcuts** under **More** in the sidebar opens a
+short version of the first two tables inside the app, with the keys you set.
+
+## Changing a shortcut
+
+**Settings › Keyboard shortcuts** changes the keys of the shortcuts in the first table and of **Upload or add files**
+and **Change effort**. **Change** waits for the new combination (Esc cancels), **Turn off** removes a shortcut and
+**Reset** brings back its default; **Reset all** does that for every one. A shortcut needs ⌘ or ⌃ (Ctrl on Windows and
+Linux), unless it is a function key such as F6. Atelier refuses a combination another of its shortcuts already has
+and one the system or the text box uses (⌘C, ⌘V, ⌘Z, ⌘Q, ⌘W and the like), and says why. Send, new line, Stop, `/`,
+`@` and the other keys of the message box can't be changed. Your shortcuts belong to your account, so they follow
+you to every device you sign in on; in the desktop app the menu bar shows them too.
 
 Keys are given for macOS, then Windows and Linux: ⌘ becomes **Ctrl**, ⇧ becomes **Shift**, and
 ↵ is Enter. Where one column is given, the key is the same everywhere.
@@ -159,7 +169,8 @@ Ctrl is needed.
 
 ## The desktop menu
 
-The desktop app has a menu bar. Its own items:
+The desktop app has a menu bar. Its own items, with their default keys (the menu shows the ones you set in
+**Settings › Keyboard shortcuts**):
 
 | Menu | Item | macOS | Windows / Linux |
 |---|---|---|---|

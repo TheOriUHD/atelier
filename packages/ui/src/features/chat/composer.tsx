@@ -2,7 +2,8 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type
 import { ArrowUp, CornerDownLeft, FileText, Paperclip, Square, Telescope, TriangleAlert, X } from 'lucide-react';
 import type { McpServerStatus, ModelInfo } from '@atelier/protocol';
 import { Badge, Button, Dialog, DialogContent, Icon, Lightbox, Spinner, Tooltip, cn } from '../../components/ui/index.ts';
-import { blobUrl, isMac, saveBlob } from '../../lib/platform.ts';
+import { blobUrl, saveBlob } from '../../lib/platform.ts';
+import { pressIs, useShortcut } from '../../lib/shortcuts.ts';
 import { useComposerMenu, type SlashCommand } from './composer-menu.tsx';
 import { leadingCommand } from './command-text.tsx';
 import { PlusMenu } from './plus-menu.tsx';
@@ -132,18 +133,20 @@ export function Composer({
     if (autoFocus) input.current?.focus();
   }, [autoFocus, draftKey]);
 
-  // ⌘U / Ctrl+U: upload or add files, wherever the focus is on the page (in a split view: in the cell you are working in).
+  // ⌘U / Ctrl+U (or the person's own): upload or add files, wherever the focus is on the page (in a split view: in the
+  // cell you are working in).
   const activeCell = useIsActiveCell();
+  const upload = useShortcut('upload');
   useEffect(() => {
-    if (!activeCell) return;
+    if (!activeCell || !upload) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'u' || !(isMac ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (!pressIs(upload, e)) return;
       e.preventDefault();
       fileInput.current?.click();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [activeCell]);
+  }, [activeCell, upload]);
 
   const lead = leadingCommand(text);
   const mirror = useRef<HTMLDivElement>(null);

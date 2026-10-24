@@ -124,5 +124,6 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     return () => ipcRenderer.off('menu', listener);
   },
   setTheme: (theme: 'light' | 'dark') => ipcRenderer.send('theme', theme),
+  setShortcuts: (bindings: Record<string, string | null>) => ipcRenderer.send('menu:shortcuts', bindings),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
 });

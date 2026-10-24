@@ -26,6 +26,7 @@ import { searchSettings, type SettingEntry } from './search-index.ts';
 import { SecretsPage } from './secrets-page.tsx';
 import { ServerPage } from './server-page.tsx';
 import { SettingsFileErrors } from './settings-errors.tsx';
+import { ShortcutsPage } from './shortcuts-page.tsx';
 import { DeveloperPage } from './developer-page.tsx';
 import { SkillsPage } from './skills-page.tsx';
 import { SystemPage } from './system-page.tsx';
@@ -34,6 +35,7 @@ import { UsersPage } from './users-page.tsx';
 
 const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   general: GeneralPage,
+  shortcuts: ShortcutsPage,
   account: AccountPage,
   privacy: PrivacyPage,
   memory: MemoryPage,

@@ -79,6 +79,20 @@ export const SETTINGS_INDEX = [
     keywords: ['notifications', 'alert', 'permission', 'question', 'input', 'work'],
   },
   {
+    id: 'shortcuts.app',
+    page: 'shortcuts',
+    label: 'App shortcuts',
+    description: 'New chat, search, Settings, the sidebar and the screen lock. Change the keys or turn one off.',
+    keywords: ['keyboard', 'hotkey', 'keybinding', 'rebind', 'key', 'new chat', 'temporary chat', 'search', 'command palette', 'sidebar', 'lock'],
+  },
+  {
+    id: 'shortcuts.messageBox',
+    page: 'shortcuts',
+    label: 'Message box shortcuts',
+    description: 'Upload or add files and change effort. Send, new line, stop, / and @ always work the same.',
+    keywords: ['keyboard', 'hotkey', 'keybinding', 'rebind', 'key', 'upload', 'attach', 'effort', 'composer'],
+  },
+  {
     id: 'profile.avatar',
     page: 'account',
     label: 'Profile photo',
