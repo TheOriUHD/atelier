@@ -1,4 +1,4 @@
-import { Clock, Cpu, ListX, MessagesSquare, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Timer, type LucideIcon } from 'lucide-react';
+import { Clock, Cpu, Gauge, Keyboard, ListX, MessagesSquare, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,33 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.2.6',
+    intro: 'Your ChatGPT plan’s limits everywhere, answers from another model, replies read aloud and shortcuts of your own.',
+    highlights: [
+      {
+        icon: Gauge,
+        title: 'Plan limits in Chat and Cowork',
+        body: 'Click the context ring under the message box: it shows how full the conversation is and, with ChatGPT Plan, how much of your 5-hour and weekly limits you have used. From 90% a line above the message box says so. Click “Resets in …” to see the time it resets instead, on your computer’s 12- or 24-hour clock.',
+      },
+      {
+        icon: Repeat2,
+        title: 'Retry with another model',
+        body: 'Click the model name under a reply and pick another model: it answers the same message again as a new version of the reply, and the conversation goes on with it. The arrows switch between the versions.',
+      },
+      {
+        icon: Volume2,
+        title: 'Read aloud',
+        body: 'The speaker button under a reply reads it with one of your computer’s own voices, so nothing is sent anywhere. Code blocks and link addresses are skipped, and a German reply gets a German voice.',
+      },
+      {
+        icon: Keyboard,
+        title: 'Your own keyboard shortcuts',
+        body: 'Settings › Keyboard shortcuts changes the keys for a new chat, search, settings, the sidebar, uploads and more, or turns one off. Keys already in use are refused with the reason, and the menu bar shows yours.',
+      },
+    ],
+    also: [],
+  },
   {
     version: '0.2.5',
     intro: 'ChatGPT Chat lists its models on every system language, and a security update.',
