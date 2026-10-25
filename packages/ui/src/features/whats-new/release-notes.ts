@@ -1,4 +1,4 @@
-import { Clock, Cpu, Gauge, Keyboard, ListX, MessagesSquare, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessagesSquare, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,33 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.2.8',
+    intro: 'Connected to a server, the desktop app keeps what it does on your computer: the server keeps your chats and settings in sync, and your computer lends the rest.',
+    highlights: [
+      {
+        icon: Server,
+        title: 'SSH hosts and No folder on a server',
+        body: 'Code sessions on an SSH host go out from your computer, with its ssh, keys and known hosts, and a session without a folder gets one made on your computer. Each needs your say-so once on that computer; Settings › System lists what it lends, with Remove.',
+      },
+      {
+        icon: Blocks,
+        title: 'Your own connectors',
+        body: 'Customize › Connectors › Your connectors: anyone can add connectors only they use, with keys only they give. One that runs a program runs it on your computer, and only the exact command you allowed there. Import from Claude Code works there too.',
+      },
+      {
+        icon: FileText,
+        title: 'Your computer’s config in Code',
+        body: 'A Code session in a folder on your computer gets your ~/.claude and ~/.atelier instructions, skills, commands, agents and Claude Code plugins from that computer, as when it runs on its own. Customize lists them “From” that computer.',
+      },
+      {
+        icon: Cpu,
+        title: 'Models on your computers',
+        body: 'Settings › Your models adds the Ollama, llama.cpp or LM Studio on your computer, or its ChatGPT Chat. Only you see them, under your computer’s name in the model menu, while that computer is connected.',
+      },
+    ],
+    also: ['Settings › Admin › Models: the list of models in use is now called Enabled, next to Browse catalog.'],
+  },
   {
     version: '0.2.7',
     intro: 'Calmer focus rings, and a tidier Settings list.',
