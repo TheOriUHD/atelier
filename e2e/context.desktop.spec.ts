@@ -70,7 +70,9 @@ test('desktop Code: live output tokens, auto-compaction on a small window and th
     await page.evaluate(() => (location.hash = '#/code'));
     await box.fill(Array.from({ length: 8 }, () => call('Read', { file_path: join(repo, 'build.log') })).join('\n'));
     await box.press('Enter');
-    await expect(page.getByText(/^Tool result: /)).toBeVisible({ timeout: 120_000 });
+    // Its answer: with the last read's result, or (when a compaction came right after that read) from the summary, which
+    // the scripted model can only echo. Where the compactions fall depends on how long the prompt is.
+    await expect(page.getByText(/^(Tool result: |You said: This conversation was compacted)/).last()).toBeVisible({ timeout: 120_000 });
     expect(await page.getByRole('button', { name: /^Compacted session/ }).count()).toBeGreaterThanOrEqual(2);
     await expect(page.getByText(/could not be summarized/)).toHaveCount(0);
   } finally {
