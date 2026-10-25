@@ -21,6 +21,7 @@ import { PaneMessage } from './file-tree.tsx';
 import { formatTokenCount, liveContext, liveStatus } from './live-context.ts';
 import { PaneFrame, PaneTitle, type PaneFrameState } from './pane-dock.tsx';
 import { GroupedActivity, SubagentTranscript, taskOutcome } from './tool-cards.tsx';
+import { CommandCode } from './command-code.tsx';
 
 /** How often a shown command's output is read while it runs (only while it is open). */
 const OUTPUT_POLL_MS = 1000;
@@ -482,7 +483,7 @@ function CommandView({ sessionId, task }: { sessionId: string; task: BackgroundT
       >
         <pre className="shrink-0 px-3 py-2 break-words whitespace-pre-wrap text-fg">
           <span className="text-fg-muted select-none">$ </span>
-          {task.command}
+          <CommandCode command={task.command ?? ''} />
         </pre>
         {output.error ? (
           <p className="border-t border-line px-3 py-2 font-sans text-footnote text-fg-muted">{output.error}</p>

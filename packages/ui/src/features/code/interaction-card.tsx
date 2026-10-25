@@ -22,6 +22,7 @@ import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts'
 import { useAppInfo } from '../../lib/queries.ts';
 import { describeError, errorCode, rpc } from '../../lib/rpc.ts';
 import { Markdown } from '../chat/markdown.tsx';
+import { CommandCode } from './command-code.tsx';
 import { DiffCard, editRows, writeRows } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
 import { planComments, revisionMessage, usePlanComments } from './plan-comments.ts';
@@ -251,7 +252,9 @@ function CallPreview({ request }: { request: PermissionRequest }) {
       return (
         <div className="flex flex-col gap-1.5">
           {request.agent && str(input.description) && <p className="text-body text-fg-secondary">{str(input.description)}</p>}
-          <pre className={box}>{str(input.command)}</pre>
+          <pre className={box}>
+            <CommandCode command={str(input.command)} />
+          </pre>
         </div>
       );
     case 'Edit':

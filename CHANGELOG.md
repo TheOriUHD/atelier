@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Commands are color-coded:** the commands the assistant runs, in Code and Cowork steps, in Background tasks and in the "Allow Atelier to run …?" prompt, are highlighted like code blocks in your syntax themes (Settings › Code). Bash by default, PowerShell when the command reads like it (cmdlets such as `Get-ChildItem`, `$env:`), and a here-document's body in its own language: `python3 - <<'EOF' … EOF` as Python, `node <<EOF` as JavaScript, `cat > app.ts <<'EOF'` by the file's extension.
+
 ## [0.2.9] — 2026-10-25
 
 - **Give the assistant an MCP server and it can use it:** paste an address like `http://127.0.0.1:27182/mcp` (Fusion 360's) into any conversation and the assistant asks to add it with the new AddConnector tool, on a card that shows the address. **Add connector** puts it with your connectors and its tools work in the same conversation from the next step. On a server it becomes one of your own connectors, and an address on your computer is reached through the desktop app where you clicked Add; on "Run on this computer" it joins Settings › Connectors. Before, the assistant could only try WebFetch, which refuses local addresses ("127.0.0.1 resolves to this machine"). WebFetch now points to AddConnector for addresses ending in `/mcp` or `/sse`.

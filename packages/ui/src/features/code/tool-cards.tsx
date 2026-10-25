@@ -19,6 +19,7 @@ import { SESSION_ROUTE } from '../../app/navigation.ts';
 import { SearchResults } from './search-results.tsx';
 import { WithViewedImages } from '../chat/images.tsx';
 import { parseSearchResult } from './search-result.ts';
+import { CommandCode } from './command-code.tsx';
 import { MEMORY_TOOLS, MemoryStep } from '../chat/memory-steps.tsx';
 
 export type ToolStep = Extract<ActivityStepView, { kind: 'tool' }>;
@@ -664,7 +665,7 @@ function CommandBlock({ command, output, live, split }: { command: string; outpu
   const line = (
     <pre className="px-3 py-2 break-words whitespace-pre-wrap text-fg">
       <span className="text-fg-muted select-none">$ </span>
-      {command}
+      <CommandCode command={command} />
     </pre>
   );
   if (split)
