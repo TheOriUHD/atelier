@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.9] — 2026-10-25
+
 - **Give the assistant an MCP server and it can use it:** paste an address like `http://127.0.0.1:27182/mcp` (Fusion 360's) into any conversation and the assistant asks to add it with the new AddConnector tool, on a card that shows the address. **Add connector** puts it with your connectors and its tools work in the same conversation from the next step. On a server it becomes one of your own connectors, and an address on your computer is reached through the desktop app where you clicked Add; on "Run on this computer" it joins Settings › Connectors. Before, the assistant could only try WebFetch, which refuses local addresses ("127.0.0.1 resolves to this machine"). WebFetch now points to AddConnector for addresses ending in `/mcp` or `/sse`.
 
 - **A connector that can't be reached says why:** "Can't reach 127.0.0.1:27182: nothing answers there (connection refused)." instead of "Version negotiation probe failed: fetch failed", also for one reached through a desktop app. On a server, an admin connector at `localhost` or `127.0.0.1` adds that this address is the server itself and points to Your connectors, and the URL field in Settings › Admin › Connectors says so while you type it. The server's log no longer writes `"error":"undefined"`.
