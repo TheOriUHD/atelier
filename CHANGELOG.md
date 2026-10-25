@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.10] — 2026-10-25
+
 - **Commands are color-coded:** the commands the assistant runs, in Code and Cowork steps, in Background tasks and in the "Allow Atelier to run …?" prompt, are highlighted like code blocks in your syntax themes (Settings › Code). Bash by default, PowerShell when the command reads like it (cmdlets such as `Get-ChildItem`, `$env:`), and a here-document's body in its own language: `python3 - <<'EOF' … EOF` as Python, `node <<EOF` as JavaScript, `cat > app.ts <<'EOF'` by the file's extension.
 
 ## [0.2.9] — 2026-10-25
