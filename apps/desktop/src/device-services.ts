@@ -15,6 +15,7 @@ import {
   homeFs,
   importClaudeCode,
   interpolate,
+  networkCode,
   plainHttpFetch,
   probeSsh,
   programChannel,
@@ -273,7 +274,9 @@ export function deviceServices(o: DeviceServicesOptions) {
           emit({ head: { status: response.status, headers } });
           if (response.body) for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) emit({ chunk: Buffer.from(chunk).toString('base64') });
         } catch (e) {
-          if (!abort.signal.aborted) emit({ error: e instanceof Error ? e.message : String(e) });
+          // The code (ECONNREFUSED …) lets the server say what went wrong in words.
+          const code = networkCode(e);
+          if (!abort.signal.aborted) emit({ error: e instanceof Error ? e.message : String(e), ...(code ? { code } : {}) });
         } finally {
           end();
         }

@@ -31,6 +31,7 @@ import type { BlobStore } from '../store/blobs.ts';
 import { textOutput, type Tool, type ToolContext, type ToolOutput } from '../tools/types.ts';
 import { escapeTags } from '../prompts/escape.ts';
 import { interpolate } from '../util/interpolate.ts';
+import { networkFailure } from '../util/network-error.ts';
 import { CLIENT_METADATA_PATH, loadCredentials, loopbackCallback, OAUTH_CALLBACK_PATH, oauthSecretId, PendingSignIn, saveCredentials, StoredSignIn, type OAuthSecrets } from './oauth.ts';
 import { toOutput } from './output.ts';
 
@@ -63,6 +64,8 @@ export interface McpManagerDeps {
   signInSecret?(name: string): string;
   /** A stdio server's `${ENV}` references are left as written, for the computer its program runs on to fill in. */
   deferEnv?: boolean;
+  /** What to add when nothing could be reached at `host` (on a server: that `127.0.0.1` is the server itself). */
+  unreachable?(host: string): string | undefined;
 }
 
 /** A tool call in flight, so that a server's question during it reaches the right person. */
@@ -392,7 +395,7 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
         this.note(server, `Connected (${server.era ?? 'modern'} protocol${server.sse ? ', SSE' : ''}), ${server.tools.length} tools.`);
         this.publish();
       },
-      (error: unknown) => this.failed(server, errorMessage(error), error instanceof SignInNeeded || !!server.auth?.signedOut),
+      (error: unknown) => this.failed(server, this.connectFailure(server, error), error instanceof SignInNeeded || !!server.auth?.signedOut),
     );
     server.connecting = run.finally(() => (server.connecting = null));
     return server.connecting;
@@ -467,6 +470,18 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     client.setRequestHandler('elicitation/create', (request, ctx) => this.elicit(server, request.params, ctx.mcpReq.signal));
     client.onclose = () => this.dropped(server, client, 'The connection closed.');
     return client;
+  }
+
+  /**
+   * Why a connect failed, as the person reads it. A network failure says where and what ("Can't reach
+   * 127.0.0.1:27182: nothing answers there") instead of the SDK's "Version negotiation probe failed: fetch failed".
+   */
+  private connectFailure(server: Server, error: unknown): string {
+    const failure = networkFailure(error);
+    const url = server.config.type === 'stdio' ? null : URL.parse(server.config.url ?? '');
+    if (!failure || !url) return errorMessage(error);
+    const hint = this.deps.unreachable?.(url.hostname.replace(/^\[|\]$/g, ''));
+    return `Can't reach ${url.host}: ${failure}.${hint ? ` ${hint}` : ''}`;
   }
 
   /** A live connection ended without being closed here. */
@@ -691,3 +706,4 @@ async function connected(client: Client, transport: Transport, options: ConnectO
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+

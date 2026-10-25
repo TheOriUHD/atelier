@@ -18,6 +18,8 @@ import type {
 } from '@atelier/protocol';
 import { Badge, Button, Field, Icon, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, TextField, cn, toast } from '../../components/ui/index.ts';
 import { desktop, isMac, openExternal } from '../../lib/platform.ts';
+import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts';
+import { useAppInfo } from '../../lib/queries.ts';
 import { describeError, errorCode, rpc } from '../../lib/rpc.ts';
 import { Markdown } from '../chat/markdown.tsx';
 import { DiffCard, editRows, writeRows } from './inline-diff.tsx';
@@ -63,6 +65,8 @@ export function InteractionCard({
       <ElicitationCard request={pending.payload as ElicitationRequest} sending={sending} respond={respond} />
     ) : request.toolName === 'ChangeDirectory' ? (
       <FolderRequest request={request} sending={sending} respond={respond} />
+    ) : request.toolName === 'AddConnector' ? (
+      <ConnectorRequest request={request} sending={sending} respond={respond} />
     ) : request.toolName === 'ExitPlanMode' ? (
       <PlanApproval sessionId={sessionId} request={request} sending={sending} respond={respond} onOpenPlan={onOpenPlan} />
     ) : (
@@ -377,6 +381,55 @@ function FolderRequest({ request, sending, respond }: { request: PermissionReque
           )}
           <Action primary label="Move here" caps={[MOD, ENTER]} disabled={sending || !path.trim()} onClick={() => move(path)} />
         </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * AddConnector: the assistant wants an MCP server the person gave it among their connectors. On a server, an address on
+ * this computer's network is allowed here first (this desktop lends it under the connector's id), so the server reaches
+ * it through this desktop; a browser can't, and the card says where it can be.
+ */
+function ConnectorRequest({ request, sending, respond }: { request: PermissionRequest; sending: boolean; respond: Respond }) {
+  const input = asRecord(request.input);
+  const [id, name, url, reason] = [str(input.id), str(input.name), str(input.url), str(input.reason)];
+  const { data: app } = useAppInfo();
+  const lending = useLending();
+  const [allowing, setAllowing] = useState(false);
+  const server = app?.surface === 'web';
+  const local = server && isLocalAddress(url);
+  const here = local && lending.lends('http');
+  const host = URL.parse(url)?.host ?? url;
+  const busy = sending || allowing;
+  const add = async () => {
+    if (busy) return;
+    setAllowing(true);
+    try {
+      if (here) await changeLending({ kind: 'http', id, baseUrl: new URL(url).origin, allowed: true });
+      respond({ behavior: 'allow' });
+    } catch (e) {
+      toast.error(describeError(e).message);
+    } finally {
+      setAllowing(false);
+    }
+  };
+  const skip = () => !busy && respond({ behavior: 'deny' });
+  const where = !server
+    ? 'It joins Settings › Connectors on this computer'
+    : here
+      ? `It joins your connectors, reached through this computer: ${host} is on its network`
+      : local
+        ? `It joins your connectors. ${host} is on a computer’s network: allow it in Customize › Connectors in the Atelier desktop app on that computer`
+        : 'It joins your connectors';
+  return (
+    <Card title={`Add ${name} to your connectors?`} keys={{ escape: skip, mod: () => void add(), digit: (n) => (n === 1 ? skip() : n === 2 ? void add() : undefined) }}>
+      {reason && <p className="text-body text-fg-secondary">{reason}</p>}
+      <pre className="rounded-lg bg-code-background px-3 py-2 font-mono text-code break-all whitespace-pre-wrap text-fg inset-ring inset-ring-line">{url}</pre>
+      <p className="text-footnote text-fg-muted">{where}, and its tools can be used in this conversation.</p>
+      <div className="@container flex flex-wrap items-center justify-between gap-2">
+        <Action label="Don’t add" caps={['1', 'Esc']} disabled={busy} onClick={skip} />
+        <Action primary label="Add connector" caps={['2', MOD, ENTER]} disabled={busy} onClick={() => void add()} />
       </div>
     </Card>
   );

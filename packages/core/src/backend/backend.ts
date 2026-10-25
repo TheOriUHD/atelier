@@ -19,6 +19,8 @@ import {
   LOCKED_PROCEDURES,
   PROVIDER_LABELS,
   PUBLIC_PROCEDURES,
+  isLoopbackHost,
+  mcpToolName,
   isPersonalProviderId,
   LocalServer,
   parseModelRef,
@@ -48,6 +50,7 @@ import { ScreenLock, ScreenLockError } from '../accounts/screen-lock.ts';
 import { importClaudeCode } from '../mcp/import.ts';
 import { McpManager } from '../mcp/manager.ts';
 import { PersonalConnectorError, PersonalConnectors } from '../mcp/personal.ts';
+import { assertPublicHost } from '../tools/address-guard.ts';
 import { connectorContext } from '../permissions/engine.ts';
 import { hostRunnerBinary } from '../workspaces/runner-client.ts';
 import { codeContext } from '../workspaces/code-context.ts';
@@ -189,6 +192,10 @@ interface Connection {
   origin: string | undefined;
 }
 
+/** Said when a shared connector at a loopback address can't be reached: on a server that address is the server itself. */
+const LOOPBACK_ON_SERVER =
+  'That address is the Atelier server itself. A connector on your own computer goes under Customize › Connectors › Your connectors, added in the desktop app on that computer.';
+
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
 const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'chatgptChat'];
 
@@ -235,6 +242,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   /** A device's name, for what its person reads ("offline on MacBook", "from MacBook"). */
   const deviceName = async (userId: string, deviceId: string) => (await devices.list(userId, null, () => false)).find((d) => d.id === deviceId)?.name ?? 'your computer';
   const deviceHomes = new DeviceHomes(links, deviceName);
+  /** Waits up to three seconds for one of the person's desktops to allow the address it lends as `id`. */
+  const lentSoon = async (userId: string, id: string) => {
+    for (let i = 0; i < 30; i++) {
+      if (links.devices(userId).some((d) => links.info(userId, d)?.lending.http.some((a) => a.id === id))) return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  };
   const github = new GitHub({ fetch: httpFetch, secrets, clientId: () => settings.effective.cloud.github.clientId ?? null });
   const codespaces = new Codespaces({ fetch: httpFetch, github, ...(platform.env.ATELIER_GH ? { gh: platform.env.ATELIER_GH } : {}) });
   const sandboxReach = sandboxShell(platform.env, platform.dataDir);
@@ -441,6 +455,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     logger: platform.logger,
     elicit: (sessionId, request, signal) => chat.elicit(sessionId, request, signal),
     fetch: (url, init) => httpFetch(String(url), init ?? {}),
+    // The admin's connectors run on the server: there, 127.0.0.1 is the server, not the computer in front of someone.
+    ...(platform.surface === 'web' ? { unreachable: (host: string) => (isLoopbackHost(host) ? LOOPBACK_ON_SERVER : undefined) } : {}),
   });
   settings.on('change', () => mcp.sync());
   /** Regular users see which connectors exist and the tools they may use, never their errors, URLs or commands. */
@@ -890,6 +906,28 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       // The shared connectors, then the person's own (on a server), switched off for the session the same way.
       const [shared, own] = await Promise.all([mcp.tools(off), session.userId && platform.surface === 'web' ? personal.tools(session.userId, off) : []]);
       return [...shared, ...own];
+    },
+    // AddConnector, once the person agreed: one of their own connectors on a server, Settings › Connectors on a desktop.
+    addConnector: async (session, c) => {
+      const toolNames = (status: McpServerStatus) => status.tools.filter((t) => t.enabled).map((t) => mcpToolName(c.name, t.name));
+      if (platform.surface === 'web') {
+        const userId = session.userId;
+        if (!userId) throw new Error('This conversation has no account to add it to.');
+        const input = { id: c.id, name: c.name, type: c.type, url: c.url, args: [], env: {}, headers: {}, enabled: true, disabledTools: [] };
+        await personal.save(userId, input, true).catch((e: unknown) => {
+          throw e instanceof PersonalConnectorError ? new Error(e.message) : e;
+        });
+        // A desktop that agreed allows its address over its own link, which may arrive a moment after the answer.
+        if (!(await assertPublicHost(new URL(c.url).hostname, false).then(() => true, () => false))) await lentSoon(userId, c.id);
+        const status = await personal.test(userId, c.id);
+        return { where: 'their own connectors (Customize › Connectors › Your connectors)', state: status.state, ...(status.error ? { error: status.error } : {}), tools: toolNames(status) };
+      }
+      if (Object.hasOwn(settings.effective.mcpServers, c.name)) throw new Error(`A connector called ${c.name} exists already: choose another name.`);
+      await writeSettings(() => settings.set('global', ['mcpServers', c.name], { type: c.type, url: c.url }));
+      mcp.sync();
+      const status = await mcp.test(c.name);
+      if (!status) throw new Error('It was added, but the connectors did not reload.');
+      return { where: 'Settings › Connectors', state: status.state, ...(status.error ? { error: status.error } : {}), tools: toolNames(status) };
     },
     hookError: (sessionId, message) => platform.logger.error(`hook failed in session ${sessionId}: ${message}`),
     codeContext: async (session) => {

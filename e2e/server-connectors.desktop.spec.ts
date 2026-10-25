@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type ElectronApplication } from '@playwright/test';
 import { launchDesktop, PASSWORD } from './desktop-app.ts';
-import { tempConfigDir } from './fixtures.ts';
-import { SERVER_URL, signedInClient, startServer, stopServer } from './server-mode.ts';
+import { sendWhenIdle, tempConfigDir } from './fixtures.ts';
+import { connectDesktop, SERVER_URL, signedInClient, startMcpMock, startServer, stopServer } from './server-mode.ts';
 
 /** The MCP mock server the core tests use, over stdio. */
 const MOCK_SERVER = fileURLToPath(new URL('../packages/core/src/mcp/__fixtures__/stdio-server.ts', import.meta.url));
@@ -29,13 +29,7 @@ test("desktop signed in to a server: a person's own connector runs on it, and it
     // The connector's `${E2E_MOCK_TOKEN}` comes from the desktop's environment, which the server never has.
     app = await launchDesktop(configDir, { HOME: home, E2E_MOCK_TOKEN: 'desktop-only-token' });
     const page = await app.firstWindow();
-    await page.getByRole('button', { name: 'Connect to a server' }).click();
-    await page.getByRole('textbox', { name: 'Server URL' }).fill(SERVER_URL);
-    await page.getByRole('button', { name: 'Connect', exact: true }).click();
-    await page.getByLabel('Username', { exact: true }).fill('admin');
-    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    await connectDesktop(page);
 
     const rpc = await signedInClient('admin', PASSWORD);
     const { id: deviceId } = JSON.parse(await readFile(join(configDir, 'chromium', 'device.json'), 'utf8')) as { id: string };
@@ -80,5 +74,46 @@ test("desktop signed in to a server: a person's own connector runs on it, and it
     await stopServer(server);
     const retry = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 };
     for (const dir of [configDir, dataDir, home, work]) await rm(dir, retry);
+  }
+});
+
+test('desktop signed in to a server: the assistant adds an MCP server on this computer that the person gave it', async () => {
+  test.setTimeout(180_000);
+  const dataDir = await tempConfigDir();
+  const configDir = await tempConfigDir();
+  // An MCP server on this computer that asks for no credentials, like Fusion 360's.
+  const mock = await startMcpMock({ MOCK_OPEN: '1' });
+  const server = await startServer(dataDir);
+  let app: ElectronApplication | undefined;
+  try {
+    app = await launchDesktop(configDir);
+    const page = await app.firstWindow();
+    await connectDesktop(page);
+    const rpc = await signedInClient('admin', PASSWORD);
+    const { id: deviceId } = JSON.parse(await readFile(join(configDir, 'chromium', 'device.json'), 'utf8')) as { id: string };
+    await expect.poll(async () => (await rpc.call('account.devices', {})).find((d) => d.id === deviceId)?.services).toEqual(expect.arrayContaining(['http']));
+
+    // Given the address in a chat, the model adds it; the person agrees in this window, which allows it on this computer.
+    const box = page.getByRole('textbox', { name: 'Message' });
+    await box.fill(`call AddConnector ${JSON.stringify({ name: 'fusion', url: mock.url })}`);
+    await sendWhenIdle(page);
+    const card = page.getByRole('region', { name: 'Add fusion to your connectors?' });
+    await expect(card).toContainText('reached through this computer');
+    await card.getByRole('button', { name: 'Add connector' }).click();
+    await expect(page.getByText('Tool result: Added fusion to their own connectors')).toBeVisible({ timeout: 30_000 });
+    const lending = JSON.parse(await readFile(join(configDir, 'chromium', 'lending.json'), 'utf8')) as Record<string, { http: { baseUrl: string }[] }>;
+    expect(lending[SERVER_URL]?.http).toEqual([expect.objectContaining({ baseUrl: new URL(mock.url).origin })]);
+
+    // Its tools work in the same conversation, reached through this desktop.
+    await rpc.call('prefs.set', { path: ['permissions', 'allow'], value: ['mcp__fusion__echo'] });
+    await box.fill('call mcp__fusion__echo {"text":"from this computer"}');
+    await sendWhenIdle(page);
+    await expect(page.getByText('Tool result: from this computer')).toBeVisible({ timeout: 30_000 });
+  } finally {
+    await app?.close();
+    await stopServer(server);
+    mock.process.kill();
+    const retry = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 };
+    for (const dir of [configDir, dataDir]) await rm(dir, retry);
   }
 });

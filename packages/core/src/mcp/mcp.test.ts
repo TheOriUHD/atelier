@@ -287,6 +287,17 @@ describe('MCP connections', () => {
     expect(JSON.stringify([logs, m.status()])).not.toMatch(new RegExp(`${TOKEN}|wrong-literal-token`));
   });
 
+  it('says in words why an HTTP server could not be reached, with what the backend adds about that address', async () => {
+    // A port nothing listens on any more.
+    const probe = createServer().listen(0, '127.0.0.1');
+    await once(probe, 'listening');
+    const { port } = probe.address() as AddressInfo;
+    await new Promise((r) => probe.close(r));
+    const m = manager({ gone: { type: 'http', url: `http://127.0.0.1:${port}/mcp` } }, { unreachable: (host) => (host === '127.0.0.1' ? 'That address is the server itself.' : undefined) });
+    await m.test('gone');
+    expect(m.status()[0]).toMatchObject({ state: 'error', error: `Can't reach 127.0.0.1:${port}: nothing answers there (connection refused). That address is the server itself.` });
+  });
+
   it('speaks the 2025 protocol to older servers, remembers that, and starts a new session when one expires', async () => {
     const legacy = await legacyMock();
     const m = manager({ mock: { type: 'http', url: legacy.url } });

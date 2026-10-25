@@ -55,7 +55,7 @@ Brave for that, see [Web search](/web-search/#use-my-own-search-service).
 |---|---|
 | **Name** | 1 to 64 letters, digits, `-` and `_`. Errors: "Give it a name.", "Use up to 64 letters, digits, - and _.", "There is a connector with this name already." |
 | **Connects over** | **HTTP** (the current MCP transport; if a server only speaks the older HTTP+SSE protocol, Atelier switches to it), **SSE** (that older streaming transport, chosen outright) or **stdio** (Atelier starts the server as a program; desktop app only, greyed out on a server). |
-| **URL** (HTTP, SSE) | The server's address, such as `https://example.com/mcp`. |
+| **URL** (HTTP, SSE) | The server's address, such as `https://example.com/mcp`. On an Atelier server these connectors run on the server, so `localhost` and `127.0.0.1` mean the server itself, and the field says so: a connector on your own computer (an app's local MCP server) goes under [Your own connectors](#your-own-connectors-on-a-server). |
 | **Sign in with OAuth** (HTTP, SSE) | For servers you sign in to instead of giving them a token; signing in starts once it is added. |
 | **Command** and **Arguments** (stdio) | For example `npx` and `-y`, `@scope/mcp-server`, one argument per line. |
 | **Headers** (HTTP, SSE) or **Environment variables** (stdio) | Name and value pairs. A value is plain text, a reference to a stored secret (`${secret:id}`) or to an environment variable of the backend (`${NAME}`), filled in only when connecting. The lock beside a value moves it into **Keys & secrets** when you save; names that look like credentials (token, key, secret, password, credential, auth) are locked automatically. `Authorization: Bearer …` keeps its scheme and stores only the token. |
@@ -148,6 +148,22 @@ stays in your connector's log.
 **Import from Claude Code** is offered in the desktop app signed in to a server: it reads Claude Code's connectors on
 that computer (as above), shows each one's exact command line, and adds the ones you choose as yours, allowed on that
 computer. The server can read those settings only for two minutes after you open the import there.
+
+## Let the assistant add one
+
+Give the assistant an MCP server's address in any conversation ("use the Fusion 360 MCP server at
+`http://127.0.0.1:27182/mcp`") and it asks to add it with **AddConnector**. The card shows the address and where it
+goes; **Add connector** adds it, **Don't add** (or Esc) doesn't. It always asks, in every permission mode, Bypass
+included. Once added, its tools work in the same conversation from the assistant's next step, and the connector stays
+with your others, where you can switch it per conversation, edit it or remove it.
+
+| Where you are | Where it goes |
+|---|---|
+| The desktop app on **Run on this computer** | **Settings › Connectors** on this computer. |
+| Signed in to a server, in the desktop app | **Your connectors**. An address on this computer or its network is reached through this desktop app, which allows it when you click **Add connector**. |
+| Signed in to a server, in a browser | **Your connectors**. An address on a computer's network can't be reached from a browser: allow it in **Customize › Connectors** in the desktop app on that computer. |
+
+It adds connectors without credentials: for a server that needs a key or a sign-in, add the key with **Edit** afterwards.
 
 ## Sign in with OAuth
 
@@ -276,6 +292,7 @@ connectors and extensions**, which reconnects every connector.
 |---|---|
 | `Missing the secret "mcp-github".` or `Missing the environment variable NAME.` | The settings refer to a secret or variable that doesn't exist. Add it in **Keys & secrets**, or fix the reference. |
 | `This server runs a program on this machine (stdio), which only the desktop app does. …` | Use the service's HTTP address instead, or run the desktop app. |
+| `Can't reach 127.0.0.1:27182: nothing answers there (connection refused).` | Nothing listens at that address where the connector runs: start the app or server behind it, or check the port. On an Atelier server an admin connector runs on the server, where `127.0.0.1` is the server itself; the message says so, and a connector on your own computer belongs under [Your own connectors](#your-own-connectors-on-a-server). Other endings: the name doesn't resolve, the host or network is unreachable, it took too long, its certificate isn't trusted. |
 | `The github connector is not connected: …` | It dropped. Atelier reconnects by itself; open its page and choose **Test connection** to try now. |
 | `The wiki connector is signed out. An admin needs to sign in to it again in Settings › Admin › Connectors.` | Its sign-in was revoked or expired. |
 | `The tool did not finish within 60 seconds and was cancelled.` | The server was too slow. Try a smaller request. |

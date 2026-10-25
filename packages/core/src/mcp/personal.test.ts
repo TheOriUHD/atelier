@@ -178,6 +178,14 @@ describe('personal connectors', () => {
     expect(started.at(-1)).toMatchObject({ kind: 'http', target: saved.id, url: 'http://192.168.1.20:8080/mcp' });
   });
 
+  it('creates one under an id chosen first (AddConnector), and only a new one', async () => {
+    const input = { id: 'abc123def4567890', name: 'lan', type: 'http' as const, url: 'http://192.168.1.20:8080/mcp', args: [], env: {}, headers: {}, enabled: true, disabledTools: [] };
+    // Without `create`, an id is for changing one that exists.
+    await expect(people.save('u1', input)).rejects.toThrow(/no longer exists/);
+    expect(await people.save('u1', input, true)).toMatchObject({ id: 'abc123def4567890', name: 'lan' });
+    await expect(people.save('u1', { ...input, name: 'other' }, true)).rejects.toThrow(/exists already/);
+  });
+
   it('forgets the values and the sign-in of one removed', async () => {
     const saved = await people.save('u1', { name: 'remote', type: 'http', url: 'https://mcp.example.com/mcp', auth: 'oauth', args: [], env: {}, headers: { 'X-Key': 'k' }, enabled: true, disabledTools: [] });
     vault.set('mcp-oauth-user-u1-remote', '{}');

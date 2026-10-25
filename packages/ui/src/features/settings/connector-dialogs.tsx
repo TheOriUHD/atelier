@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { CONNECTOR_PRESETS, type ConnectorPreset, type McpServerConfig, type McpTransport } from '@atelier/protocol';
+import { CONNECTOR_PRESETS, isLoopbackHost, type ConnectorPreset, type McpServerConfig, type McpTransport } from '@atelier/protocol';
 import {
   Badge,
   Button,
@@ -35,7 +35,7 @@ import {
   toast,
 } from '../../components/ui/index.ts';
 import { openExternal } from '../../lib/platform.ts';
-import { keys } from '../../lib/queries.ts';
+import { keys, useAppInfo } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import {
   connectorFormErrors,
@@ -298,6 +298,10 @@ function ConnectorEditor({
   const shown = attempted && !written ? errors : {};
   const update = (patch: Partial<ConnectorForm>) => setForm((f) => ({ ...f, ...patch }));
   const stdio = form.type === 'stdio';
+  // On a server these run there: localhost is the server, not the computer of whoever adds it.
+  const { data: app } = useAppInfo();
+  const host = URL.parse(form.url.trim())?.hostname;
+  const onServer = app?.surface === 'web' && !!host && isLoopbackHost(host);
 
   const save = async () => {
     setAttempted(true);
@@ -352,7 +356,11 @@ function ConnectorEditor({
         </>
       ) : (
         <>
-          <Field label="URL" error={shown.url}>
+          <Field
+            label="URL"
+            error={shown.url}
+            description={onServer ? `${host} is the Atelier server itself: this connector runs there. One on your own computer goes under Customize › Connectors › Your connectors, added in the desktop app there.` : undefined}
+          >
             <TextField value={form.url} placeholder="https://example.com/mcp" inputMode="url" spellCheck={false} onChange={(e) => update({ url: e.target.value })} />
           </Field>
           <div className="flex items-start justify-between gap-4">

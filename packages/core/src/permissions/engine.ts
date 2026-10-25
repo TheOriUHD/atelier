@@ -50,8 +50,11 @@ const PROTECTED_FILES =
 const BROAD_RULE = /^(Bash|PowerShell)(\((\*|:\*|(python3?|node|ruby|perl|php|bash|sh|zsh|deno|bun|npx|pnpx|bunx|uv run|(npm|pnpm|yarn|bun) run)[ :]?\*)\))?$|^(Agent|Task)$/;
 /** Tools that only touch the session itself (an artifact is the app's data, not the workspace's): allowed in plan mode too. */
 const PLAN_TOOLS = new Set(['ExitPlanMode', 'TodoWrite', 'AskUser', 'artifact', 'inline_visual']);
-/** Tools that always ask the person themselves, with their own card: no second, generic prompt in front (a `path` that is outside the workspace is the point). */
-const ASKS_ITSELF = new Set(['ChangeDirectory']);
+/**
+ * Tools that always ask the person themselves, with their own card: no second, generic prompt in front (a `path` that
+ * is outside the workspace is ChangeDirectory's point; AddConnector adds to the person's setup).
+ */
+const ASKS_ITSELF = new Set(['ChangeDirectory', 'AddConnector']);
 /** Where a command's deletions are ordinary scratch work in Auto mode (never the folders themselves, never a glob). */
 const SCRATCH_DIRS = ['/tmp', '/private/tmp', '/var/tmp', '/private/var/tmp', '/var/folders', '/private/var/folders'];
 /** Generated or disposable folders and files: clearing them is routine cleanup, however many at once, however often. */

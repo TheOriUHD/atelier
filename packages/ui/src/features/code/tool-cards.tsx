@@ -337,6 +337,8 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return plural(n, 'stopped a background task', 'stopped # background tasks');
       case 'ChangeDirectory':
         return 'changed folder';
+      case 'AddConnector':
+        return plural(n, 'added a connector', 'added # connectors');
       case 'SendMessage':
         return n === 1 ? `messaged ${messageTargetKind(str(asRecord(list[0]!.input).to))}` : `sent ${n} messages`;
       case 'ListSessions':
@@ -462,6 +464,8 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
     }
     case 'ChangeDirectory':
       return { verb: 'Moved to', target: str(input.path) || 'another folder' };
+    case 'AddConnector':
+      return { verb: 'Added connector', target: str(input.name) || str(input.url) };
     case 'WebFetch':
       return { verb: 'Fetched', target: str(input.url) };
     case 'WebSearch': {

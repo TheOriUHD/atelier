@@ -111,6 +111,12 @@ export type PersonalConnectorInput = z.infer<typeof PersonalConnectorInput>;
 export const PersonalConnectorView = z.object({ connector: PersonalConnector, clash: z.boolean() });
 export type PersonalConnectorView = z.infer<typeof PersonalConnectorView>;
 
+/** Whether a host is the machine itself (`localhost`, `127.x.x.x`, `::1`): on a server, that is the server, not someone's computer. */
+export function isLoopbackHost(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  return h === 'localhost' || h.endsWith('.localhost') || h === '::1' || h === '0.0.0.0' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+}
+
 /**
  * The model-facing name of a server's tool, built as Claude Code builds it so its permission rules apply:
  * `mcp__<server>__<tool>`, other characters replaced by `_`, at most 64 characters.

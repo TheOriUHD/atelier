@@ -364,6 +364,7 @@ interface ProviderAdapter {
 | TodoWrite, Agent (subagents, also in the background), AskUser | – | ✓ | ✓ |
 | SendMessage, ListSessions (messages between sessions; sub-agents get SendMessage to their parent) | – | ✓ (not compact tier) | ✓ (not compact tier) |
 | TaskStop; ChangeDirectory (local and SSH folders only) | – | ✓ (not compact tier) | ✓ (not compact tier) |
+| AddConnector (an MCP server the person gave by its address, after asking; not sub-agents) | ✓ | ✓ | ✓ |
 | ExitPlanMode | – | – | ✓ (plan mode) |
 
 A sub-agent gets the file and shell tools, TodoWrite, SendMessage (to its parent), Skill, the web tools and connectors, narrowed by its definition's `tools` and `disallowedTools`. The compact tier also drops MemoryView and ChatRead.
@@ -395,6 +396,14 @@ A sub-agent gets the file and shell tools, TodoWrite, SendMessage (to its parent
   also trusts the folder), the session's `workspaceId` changes and its frozen system prompt is cleared so the next turn
   names the new folder and carries its instruction files; this turn's result says what the folder holds. Not offered to
   compact-tier models, sub-agents, codespaces or lent device folders.
+- **AddConnector** (`tools/add-connector.ts`). Given an MCP server's address, a top-level session asks to add it: the
+  tool picks the connector's id first and puts the address on a card of its own (`ASKS_ITSELF`, so in every mode, Bypass
+  included). Once the person agrees, `ChatServiceDeps.addConnector` saves it and connects: on a server as one of their
+  own connectors (`PersonalConnectors.save(…, create)`), on the desktop's backend in Settings › Connectors. On a server,
+  the card in the desktop app first lends an address on that computer's network under the connector's id
+  (`lending.http`), so the server reaches it through that desktop (§21); the backend waits up to 3 s for that lending
+  to arrive over the device link before it tests. The new tools are in the session's tool list from the next step.
+  WebFetch's refusal of a private address points to it when the path ends in `/mcp` or `/sse`.
 - **SSH connections (desktop).** The person's own list (`prefs.ssh.connections`: name, host, port, key file, folder; a saved
   password is a personal secret `ssh-user-<user>-<connection>`). `SshAccess` probes a host once per backend process with the system
   `ssh` and an SSH_ASKPASS script that logs what ssh asks and answers from the environment: an unknown host key becomes a

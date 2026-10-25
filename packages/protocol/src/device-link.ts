@@ -123,7 +123,8 @@ const HeaderMap = z.record(z.string().max(256), z.string().max(16_384));
  *
  * `http` is one request from the device to an address it lent (`lending.http`, by `target`), at or below its base URL.
  * The device's lines are JSON: `{"head":{"status","headers"}}` first, then `{"chunk":"<base64>"}` for the body as it
- * arrives; the channel closing ends the body. `{"error":"<why>"}` says the request failed there.
+ * arrives; the channel closing ends the body. `{"error":"<why>","code":"ECONNREFUSED"}` says the request failed there (`code`
+ * when it was the network).
  * `mcp` runs a personal connector's program on the device; its lines are the program's MCP JSON-RPC lines.
  */
 export const DeviceStart = z.discriminatedUnion('kind', [

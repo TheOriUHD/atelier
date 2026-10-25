@@ -119,7 +119,7 @@ asking, and one who sets it to **Plan** stops Cowork from changing anything (it 
 | Delegating | **Agent** (sub-agents, also in the background), **SendMessage** and **ListSessions** (to your other sessions), **TaskStop** (one, several or all background tasks) |
 | Clock and limits | **Time** (the date and time), **Usage** (plan limits or API cost, where the provider has them) |
 | Moving | **ChangeDirectory** asks to continue in another folder on this computer or an SSH host; you correct the path or stay |
-| Knowledge | **Skill**, **WebSearch** and **WebFetch** (when an admin has them on), memory and past-chat search, tools of your [connectors](/connectors/) |
+| Knowledge | **Skill**, **WebSearch** and **WebFetch** (when an admin has them on), memory and past-chat search, tools of your [connectors](/connectors/), and **AddConnector** for an MCP server you give it |
 | Showing | **inline_visual** (a small explainer in the conversation) |
 
 There is no `artifact` tool in Cowork: the deliverable is a file in the folder. Every tool, with its

@@ -396,6 +396,12 @@ describe('decide', () => {
     expect(decide(move, ctx({ ask: ['ChangeDirectory'] })).behavior).toBe('ask');
   });
 
+  it('leaves adding a connector to AddConnector, which always asks the person itself, in every mode', () => {
+    const add = { name: 'AddConnector', input: { name: 'fusion', url: 'http://127.0.0.1:27182/mcp' } };
+    for (const mode of ['default', 'auto', 'plan', 'acceptEdits', 'bypassPermissions'] as const) expect(decide(add, ctx({}, mode)).behavior, mode).toBe('allow');
+    expect(decide(add, ctx({ deny: ['AddConnector'] })).behavior).toBe('deny');
+  });
+
   it('follows the mode defaults', () => {
     const edit = { name: 'Edit', input: { file_path: '/work/app/src/a.ts', old_string: 'a', new_string: 'b' } };
     expect(decide({ name: 'Read', input: { file_path: 'a.ts' } }, ctx()).behavior).toBe('allow');

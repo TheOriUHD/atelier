@@ -33,7 +33,7 @@ const logger = {
   info: (message: string, data?: Record<string, unknown>) => console.log(JSON.stringify({ level: 'info', message, ...data })),
   warn: (message: string, data?: Record<string, unknown>) => console.warn(JSON.stringify({ level: 'warn', message, ...data })),
   error: (message: string, error?: unknown) =>
-    console.error(JSON.stringify({ level: 'error', message, error: error instanceof Error ? error.message : String(error) })),
+    console.error(JSON.stringify({ level: 'error', message, ...(error === undefined ? {} : { error: error instanceof Error ? error.message : String(error) }) })),
 };
 
 const key = await loadServerKey(join(dataDir, 'secret.key'), env.ATELIER_SECRET_KEY);

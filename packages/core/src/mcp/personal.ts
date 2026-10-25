@@ -97,10 +97,15 @@ export class PersonalConnectors {
   }
 
   /** Adds or changes one; values left null keep what was saved. */
-  async save(userId: string, input: PersonalConnectorInput): Promise<PersonalConnector> {
+  /**
+   * Adds or changes one of the person's connectors. With `create`, `input.id` is the id a new one gets (chosen before
+   * it exists, so that a desktop could allow its address under it first).
+   */
+  async save(userId: string, input: PersonalConnectorInput, create = false): Promise<PersonalConnector> {
     const list = await this.deps.connectors(userId);
     const existing = input.id ? list.find((c) => c.id === input.id) : undefined;
-    if (input.id && !existing) throw new PersonalConnectorError('not_found', 'That connector no longer exists.');
+    if (input.id && !existing && !create) throw new PersonalConnectorError('not_found', 'That connector no longer exists.');
+    if (create && existing) throw new PersonalConnectorError('invalid_request', 'That connector exists already.');
     if (!existing && list.length >= PERSONAL_CONNECTOR_LIMIT) throw new PersonalConnectorError('limit', `You can have up to ${PERSONAL_CONNECTOR_LIMIT} connectors.`);
     if (list.some((c) => c.name === input.name && c !== existing)) throw new PersonalConnectorError('invalid_request', `You have a connector called ${input.name} already.`);
     if (Object.hasOwn(this.deps.shared(), input.name)) throw new PersonalConnectorError('invalid_request', `An admin's connector is called ${input.name}: choose another name.`);
@@ -111,7 +116,7 @@ export class PersonalConnectors {
       if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:')) throw new PersonalConnectorError('invalid_request', 'Use an http or https URL.');
     }
     const parsed = PersonalConnector.safeParse({
-      id: existing?.id ?? randomBytes(8).toString('hex'),
+      id: existing?.id ?? input.id ?? randomBytes(8).toString('hex'),
       name: input.name,
       type: input.type,
       ...(input.type === 'stdio' ? { command: input.command, args: input.args ?? [] } : { url: input.url, ...(input.auth ? { auth: input.auth } : {}) }),

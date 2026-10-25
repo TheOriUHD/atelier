@@ -30,7 +30,7 @@ import {
   TextField,
   toast,
 } from '../../components/ui/index.ts';
-import { changeLending, useLending } from '../../lib/lending.ts';
+import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts';
 import { desktop, openExternal } from '../../lib/platform.ts';
 import { keys, useAppInfo, useMcpStatus } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
@@ -41,13 +41,6 @@ import { SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
 
 const LIST = ['connectors.list'] as const;
-
-/** An address on this computer or its network, which the server reaches through the desktop. */
-export function isLocalAddress(url: string): boolean {
-  const host = URL.parse(url)?.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (!host) return false;
-  return host === 'localhost' || host === '::1' || host.endsWith('.local') || host.endsWith('.localhost') || !host.includes('.') || /^(127|10)\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\.|^169\.254\.|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) || /^f[cd]/.test(host);
-}
 
 /** Lets this computer run (or reach) the connector for the server, as the person just chose it here. */
 async function allowHere(connector: PersonalConnector): Promise<void> {

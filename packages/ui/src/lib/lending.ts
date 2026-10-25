@@ -38,6 +38,13 @@ export function useLending(): Lending {
   return { server, ssh: can('ssh'), scratch: can('scratch'), lends: can, allowed: allowed ?? null };
 }
 
+/** An address on this computer or its network, which the server reaches through the desktop. */
+export function isLocalAddress(url: string): boolean {
+  const host = URL.parse(url)?.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host) return false;
+  return host === 'localhost' || host === '::1' || host.endsWith('.local') || host.endsWith('.localhost') || !host.includes('.') || /^(127|10)\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\.|^169\.254\.|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) || /^f[cd]/.test(host);
+}
+
 /** Changes what this computer lends the server; nothing outside server mode. */
 export async function changeLending(change: LendingChange): Promise<DeviceLending | null> {
   if (!desktop?.lending) return null;

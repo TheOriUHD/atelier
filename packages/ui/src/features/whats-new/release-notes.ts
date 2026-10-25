@@ -1,4 +1,4 @@
-import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessagesSquare, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessagesSquare, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,23 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.2.9',
+    intro: 'Give the assistant an MCP server and it can use it, and connectors that can’t be reached say why.',
+    highlights: [
+      {
+        icon: Blocks,
+        title: 'Hand the assistant an MCP server',
+        body: 'Paste an MCP server’s address, like Fusion 360’s http://127.0.0.1:27182/mcp, into any conversation: the assistant asks to add it, and once you click Add connector its tools work right away in that conversation. On a server it becomes one of your own connectors, reached through the desktop app where you clicked Add.',
+      },
+      {
+        icon: Plug,
+        title: 'Clear connector errors',
+        body: 'A connector that can’t be reached now says where and why, like “Can’t reach 127.0.0.1:27182: nothing answers there”, instead of “fetch failed”. On a server, an admin connector at localhost explains that this address is the server itself and points to Your connectors.',
+      },
+    ],
+    also: [],
+  },
   {
     version: '0.2.8',
     intro: 'Connected to a server, the desktop app keeps what it does on your computer: the server keeps your chats and settings in sync, and your computer lends the rest.',

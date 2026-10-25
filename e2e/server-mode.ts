@@ -1,5 +1,7 @@
 /** Helpers for desktop tests against their own Atelier server (server mode, the device link). */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { expect, type Page } from '@playwright/test';
 import { APP, contract, createRpcClient, type RpcMessage } from '../packages/protocol/src/index.ts';
 import { PASSWORD } from './desktop-app.ts';
 import { WEB_PORT } from './fixtures.ts';
@@ -56,6 +58,27 @@ export async function startServer(dataDir: string, env: Record<string, string> =
   });
   if (setup.status !== 200) throw new Error(`setup failed: ${setup.status}`);
   return server;
+}
+
+/** Connects the desktop window to the test server and signs in as its admin. */
+export async function connectDesktop(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Connect to a server' }).click();
+  await page.getByRole('textbox', { name: 'Server URL' }).fill(SERVER_URL);
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await page.getByLabel('Username', { exact: true }).fill('admin');
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+}
+
+/** Core's mock MCP server over Streamable HTTP on this computer, with `env` (MOCK_OPEN, MOCK_TOKEN); its URL once it listens. */
+export async function startMcpMock(env: Record<string, string>): Promise<{ url: string; process: ChildProcess }> {
+  const mock = spawn(process.execPath, ['packages/core/src/mcp/__fixtures__/http-server.ts'], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const url = await new Promise<string>((resolve, reject) => {
+    createInterface({ input: mock.stdout! }).once('line', resolve);
+    mock.once('exit', (code) => reject(new Error(`The mock MCP server exited (${code}).`)));
+  });
+  return { url, process: mock };
 }
 
 /** Stops the server and waits for it: Windows won't delete a database file something still has open. */

@@ -7,11 +7,14 @@
 import { z } from 'zod';
 import type { DeviceLinks } from './device-links.ts';
 
-/** What the device sends in an `http` channel: the head, then body chunks; `error` when the request failed there. */
+/**
+ * What the device sends in an `http` channel: the head, then body chunks; `error` when the request failed there, with
+ * the network error's `code` (`ECONNREFUSED` …) when there was one.
+ */
 const Message = z.union([
   z.object({ head: z.object({ status: z.number().int().min(100).max(599), headers: z.record(z.string(), z.string()) }) }),
   z.object({ chunk: z.string() }),
-  z.object({ error: z.string() }),
+  z.object({ error: z.string(), code: z.string().max(64).optional() }),
 ]);
 
 /** Statuses whose responses have no body (the Response constructor refuses one). */
@@ -64,7 +67,7 @@ export function deviceFetch(links: Pick<DeviceLinks, 'start'>, userId: string, d
           resolve(new Response(empty ? null : stream, { status: message.head.status, headers: message.head.headers }));
         } else if ('chunk' in message) {
           if (headed && !done) controller.enqueue(Buffer.from(message.chunk, 'base64'));
-        } else end(failed(message.error));
+        } else end(failed(Object.assign(new Error(message.error), message.code ? { code: message.code } : {})));
       });
       void channel.closed.then(() => end());
       signal?.addEventListener(

@@ -1,7 +1,8 @@
 /**
  * The mock server over Streamable HTTP on a free port, run by Node directly (the web E2E starts it). It answers
  * only with `Authorization: Bearer $MOCK_TOKEN`, or, with MOCK_OAUTH set, behind its own OAuth authorization server
- * (`oauth-server.ts`). It prints its URL as the first line on stdout.
+ * (`oauth-server.ts`), or, with MOCK_OPEN set, to anyone (a local app's server, like Fusion 360's). It prints its URL as
+ * the first line on stdout.
  */
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -14,7 +15,11 @@ const state = { added: false, log: () => {} };
 const handler = createMcpHandler(() => mockServer(state));
 const oauth = process.env.MOCK_OAUTH ? oauthMock(state) : null;
 const handle = (request: Request) =>
-  oauth ? oauth.handle(request) : request.headers.get('authorization') === `Bearer ${process.env.MOCK_TOKEN}` ? handler.fetch(request) : Promise.resolve(new Response('Unauthorized', { status: 401 }));
+  oauth
+    ? oauth.handle(request)
+    : process.env.MOCK_OPEN || request.headers.get('authorization') === `Bearer ${process.env.MOCK_TOKEN}`
+      ? handler.fetch(request)
+      : Promise.resolve(new Response('Unauthorized', { status: 401 }));
 
 const server = createServer(async (req, res) => {
   const gone = new AbortController();

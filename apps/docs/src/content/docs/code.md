@@ -138,6 +138,7 @@ The model gets these tools. [Reference › Tools](/reference/tools/) lists each 
 | **WebSearch**, **WebFetch** | Search the web, fetch a page as Markdown. Each can be switched off in **Settings › Admin › Capabilities** ([Web search](/web-search/)). | No. |
 | **artifact** | Shows a file in the Artifact pane. | No. |
 | **ChangeDirectory** | Moves the session to another folder after you agree. Local and SSH folders only. | Always, with its own card. |
+| **AddConnector** | Adds an MCP server you gave it by its address to your [connectors](/connectors/#let-the-assistant-add-one), after you agree; its tools work from the next step. | Always, with its own card. |
 | Connector tools (`mcp__server__tool`) | Whatever your [connectors](/connectors/) provide. | Yes, until a rule says otherwise. |
 
 On Windows, **Bash** runs commands with Git Bash when it is installed, else PowerShell. Code sessions don't use [memory](/memory/).

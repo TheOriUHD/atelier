@@ -82,6 +82,7 @@ import type { BackgroundCommands } from '../tools/code/bash.ts';
 import { BackgroundTasks } from './background-tasks.ts';
 import { Loops, type LoopTick } from './loops.ts';
 import { approvedMode, createExitPlanModeTool } from '../tools/exit-plan-mode.ts';
+import { createAddConnectorTool, type AddedConnector, type NewConnector } from '../tools/add-connector.ts';
 import { createChangeDirectoryTool } from '../tools/change-directory.ts';
 import { createTaskStopTool } from '../tools/task-stop.ts';
 import { createTimeTool } from '../tools/time.ts';
@@ -191,6 +192,8 @@ export interface ChatServiceDeps {
   extensions?(session: SessionRow): Promise<ExtensionCatalog>;
   /** Tools of the enabled MCP connectors, offered in every mode (ARCHITECTURE §9-B). */
   mcpTools?(session: SessionRow): Promise<Tool[]>;
+  /** Adds an MCP server the person agreed to (AddConnector) to their connectors and connects to it; without it the tool isn't offered. */
+  addConnector?(session: SessionRow, connector: NewConnector): Promise<AddedConnector>;
   /** File pre-images for Rewind; without it Write and Edit keep none. */
   checkpoints?: Checkpoints;
   /** Code and Work sessions: the session's running workspace, for the code tools; null without one. */
@@ -435,6 +438,7 @@ export class ChatService {
   private readonly sendToParent: Tool;
   private readonly listSessions: Tool;
   private readonly changeDirectory: Tool;
+  private readonly addConnector: Tool;
   private readonly askUser: Tool;
   private readonly exitPlanMode: Tool;
   private readonly skill: Tool;
@@ -520,6 +524,10 @@ export class ChatService {
         return { root: ws?.root ?? '', host: ws?.host ?? null };
       },
       move: (sessionId, path) => this.moveSession(sessionId, path),
+    });
+    this.addConnector = createAddConnectorTool({
+      approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
+      add: async (sessionId, connector) => this.deps.addConnector!(await this.requireSession(sessionId), connector),
     });
     this.skill = createSkillTool(async (sessionId, name, args) => {
       const session = await this.requireSession(sessionId);
@@ -1682,12 +1690,14 @@ export class ChatService {
     const catalog = await this.deps.extensions?.(session);
     const skills = catalog?.skills.some((s) => !s.disableModelInvocation) ? [this.skill] : [];
     const mcp = (await this.deps.mcpTools?.(session)) ?? [];
+    // Adding a connector asks the person, which a sub-agent can't.
+    const connect = this.deps.addConnector && !session.parentSessionId ? [this.addConnector] : [];
     const memory = this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? [];
     const inlineVisual = !session.parentSessionId && (session.mode === 'chat' || session.mode === 'work') ? [createInlineVisualTool()] : [];
     // The clock for everyone; the usage figures only where the model's provider has limits or a cost, and not for sub-agents.
     const modelRef = session.parentSessionId ? undefined : await this.modelRef(session);
     const usage = modelRef && this.deps.usage?.offered(modelRef) ? [this.usage] : [];
-    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...memory, ...mcp];
+    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
     if (workspace) {
@@ -1715,7 +1725,7 @@ export class ChatService {
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));
     const moveSession = movable ? [this.changeDirectory] : [];
-    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...web, ...memory, ...mcp];
+    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...web, ...connect, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */

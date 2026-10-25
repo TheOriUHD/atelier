@@ -45,7 +45,7 @@ export function describeTool(tool: Tool, ctx: DescribeContext): DescribedTool {
  * Built-in tools in the order every request lists them, so the tools array (the start of the provider's cache prefix)
  * is the same for every session with the same tool set. Connector tools follow, sorted by name.
  */
-export const BUILTIN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'BashOutput', 'KillShell', 'TaskStop', 'ChangeDirectory', 'TodoWrite', 'AskUser', 'Agent', 'SendMessage', 'ListSessions', 'Time', 'Usage', 'Skill', 'ExitPlanMode', 'WebSearch', 'WebFetch', 'MemorySearch', 'MemoryView', 'MemoryUpdate', 'ChatSearch', 'ChatRead', 'artifact', 'inline_visual'] as const;
+export const BUILTIN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'BashOutput', 'KillShell', 'TaskStop', 'ChangeDirectory', 'TodoWrite', 'AskUser', 'Agent', 'SendMessage', 'ListSessions', 'Time', 'Usage', 'Skill', 'ExitPlanMode', 'WebSearch', 'WebFetch', 'AddConnector', 'MemorySearch', 'MemoryView', 'MemoryUpdate', 'ChatSearch', 'ChatRead', 'artifact', 'inline_visual'] as const;
 
 export function orderTools<T extends Pick<Tool, 'name'>>(tools: T[]): T[] {
   const rank = (name: string) => {

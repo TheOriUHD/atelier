@@ -13,3 +13,4 @@ export { programChannel } from './mcp/line-transport.ts';
 export { importClaudeCode } from './mcp/import.ts';
 export { homeFs, scanHome, watchHome } from './extensions/home.ts';
 export { interpolate } from './util/interpolate.ts';
+export { networkCode } from './util/network-error.ts';

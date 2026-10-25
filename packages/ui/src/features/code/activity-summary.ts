@@ -62,6 +62,8 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
       return 'Stopping a background task';
     case 'ChangeDirectory':
       return 'Changing folder';
+    case 'AddConnector':
+      return `Adding ${text(args.name) || 'a connector'}`;
     case 'SendMessage':
       return `Messaging ${messageTargetKind(text(args.to))}`;
     case 'ListSessions':

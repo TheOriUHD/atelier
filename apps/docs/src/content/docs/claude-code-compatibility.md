@@ -352,7 +352,7 @@ agent `tools` lists. The complete list with every description and parameter is i
 | `artifact` | Lowercase and not the same tool as Claude Code's `Artifact`: it creates, updates or rewrites a page shown in Atelier's artifact panel (`command`: `create`, `update`, `rewrite`). In Code it shows a file instead. |
 | `BashOutput`, `KillShell` | Read the output of, and stop, a background command started with `run_in_background`. |
 | `SendMessage`, `ListSessions` | Messages between your own sessions and sub-agents. |
-| `ChangeDirectory`, `MemorySearch`, `MemoryView`, `MemoryUpdate`, `ChatSearch`, `ChatRead`, `inline_visual` | Atelier's own. |
+| `ChangeDirectory`, `AddConnector`, `MemorySearch`, `MemoryView`, `MemoryUpdate`, `ChatSearch`, `ChatRead`, `inline_visual` | Atelier's own. |
 
 Atelier has no tool named `MultiEdit`, `NotebookEdit`, `PowerShell`, `EnterPlanMode`, `EnterWorktree`,
 `ExitWorktree`, `LSP`, `Monitor`, the `Cron*` tools, `TaskCreate`, `TaskGet`, `TaskList` or `TaskUpdate`. Rules and

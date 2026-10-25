@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ElicitationRequest, PendingInteraction, PermissionRequest, QuestionRequest } from '@atelier/protocol';
@@ -69,6 +70,41 @@ describe('changing folder', () => {
     render(<InteractionCard sessionId="s" pending={folder({ host: 'devbox', path: '~/api' })} />);
     expect(screen.getByRole('textbox', { name: 'Folder on devbox' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Browse…' })).toBeNull();
+  });
+});
+
+describe('adding a connector', () => {
+  const add = (input: Record<string, unknown> = {}) =>
+    permission({
+      toolName: 'AddConnector',
+      input: { id: 'abc123', name: 'fusion', url: 'http://127.0.0.1:27182/mcp', type: 'http', reason: 'Fusion 360 on this computer.', ...input },
+      reason: 'The assistant wants to add a connector.',
+      suggestedRule: '',
+    });
+  const show = (pending: PendingInteraction, surface: 'desktop' | 'web') => {
+    resetBackend({ 'chat.respond': () => ({ ok: true }), 'app.info': () => ({ surface }) });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <InteractionCard sessionId="s" pending={pending} />
+      </QueryClientProvider>,
+    );
+    return screen.getByRole('region', { name: 'Add fusion to your connectors?' });
+  };
+
+  it('shows the address and what it is for, and adds it to this computer’s connectors', async () => {
+    const card = show(add(), 'desktop');
+    expect(card.textContent).toContain('Fusion 360 on this computer.');
+    expect(card.textContent).toContain('http://127.0.0.1:27182/mcp');
+    await waitFor(() => expect(card.textContent).toContain('It joins Settings › Connectors on this computer'));
+    fireEvent.click(within(card).getByRole('button', { name: 'Add connector' }));
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'allow' }]));
+  });
+
+  it('says in a browser that an address on a computer’s network is allowed in the desktop app there, and can be declined', async () => {
+    const card = show(add(), 'web');
+    await waitFor(() => expect(card.textContent).toContain('127.0.0.1:27182 is on a computer’s network: allow it in Customize › Connectors in the Atelier desktop app on that computer'));
+    fireEvent.click(within(card).getByRole('button', { name: 'Don’t add' }));
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny' }]));
   });
 });
 
