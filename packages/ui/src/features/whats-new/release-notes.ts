@@ -1,4 +1,4 @@
-import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessagesSquare, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessagesSquare, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,18 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.2.10',
+    intro: 'The commands the assistant runs are color-coded.',
+    highlights: [
+      {
+        icon: SquareTerminal,
+        title: 'Color-coded commands',
+        body: 'Commands in Code and Cowork steps, in Background tasks and in the “Allow Atelier to run …?” prompt are highlighted like code blocks, in your syntax themes: bash, PowerShell when a command reads like it, and a here-document in its own language, so a Python script passed to python3 reads as Python.',
+      },
+    ],
+    also: [],
+  },
   {
     version: '0.2.9',
     intro: 'Give the assistant an MCP server and it can use it, and connectors that can’t be reached say why.',
