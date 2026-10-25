@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.8] — 2026-10-25
+
 - **Connected to a server, the desktop app keeps your computer's SSH hosts and No folder:** the server keeps your chats, settings and permissions; your computer lends the rest to your sessions there. SSH hosts are reached with this computer's `ssh`, keys, agent and known hosts (Atelier puts its runner on the host from here; password and host-key questions show in the app and in the browser), and a session started without a folder gets one made on this computer. The server may reach an SSH host from here once you chose it here, and make folders here once you allowed it ("Make folders on this computer?"); Settings › System lists both, with Remove. Another computer's SSH folder shows under Remote Control. The device link speaks version 2 (`hello`, `start`, requests); older desktop apps and servers keep working as before.
 
 - **Your own connectors on a server:** everyone can add their own connectors in Customize › Connectors › Your connectors, not just the admin. A connector that runs a program runs on your computer through the desktop app, and only exactly the command you allowed there (a changed command, argument or variable name needs your say-so again; variables like `PATH`, `NODE_OPTIONS` or `LD_PRELOAD` are refused). Its keys are kept for you alone, `${VAR}` is filled in from your computer's environment, and Import from Claude Code reads `~/.claude.json` there. One at an address on your network is reached through your computer; the admin's connectors stay shared and run on the server, and their name wins.
