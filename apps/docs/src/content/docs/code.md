@@ -182,7 +182,7 @@ If a reply is cut off because Atelier restarted, the end of the conversation say
 
 ### Suggested replies
 
-When a reply ends, the empty message box shows a short guess at what you'll send next in grey, such as "push it and release 0.2.11" when that's what you usually say once the work is done. **Tab** puts it in the box as your own text, to send as it is or change; typing anything sets it aside until the next reply. The small model writes it from your recent messages and the reply (the conversation's model when no small model is set), at the lowest priority, so it never holds up a reply. Turn it off in **Settings › Code › Suggested replies**. Cowork has it too; Chat and temporary sessions don't.
+When a reply ends, the empty message box shows a short guess at what you'll send next in grey, such as "push it and release 0.2.11" when that's what you usually say once the work is done. **Tab** puts it in the box as your own text, to send as it is or change; it steps aside while you type and comes back whenever the box is empty again, until you send a message. The small model writes it from your recent messages and the reply (the conversation's model when no small model is set), at the lowest priority, so it never holds up a reply. Turn it off in **Settings › Code › Suggested replies**. Cowork has it too; Chat and temporary sessions don't.
 
 ### Reading the transcript
 

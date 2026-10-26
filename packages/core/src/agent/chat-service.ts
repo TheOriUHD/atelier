@@ -2533,7 +2533,8 @@ export class ChatService {
         onUsage: (usage) => this.deps.recordUsage({ model: model.info, sessionId, userId: session.userId, mode: session.mode, usage }),
       });
       const suggestion = sanitizeSuggestion(text);
-      if (!suggestion || controller.signal.aborted || this.runs.has(sessionId)) return;
+      // A new turn aborts this request (`dropSuggestion`); the turn that asked for it may still be finishing.
+      if (!suggestion || controller.signal.aborted) return;
       this.suggestions.set(sessionId, suggestion);
       this.emit(sessionId, { type: 'suggestion', text: suggestion });
     } catch {

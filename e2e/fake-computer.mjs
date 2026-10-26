@@ -19,7 +19,7 @@ const apps = [
   app('com.apple.TextEdit', 'TextEdit', true),
   app('com.apple.Safari', 'Safari'),
   app('com.apple.Terminal', 'Terminal'),
-  app('com.apple.mail', 'Mail'),
+  app('com.apple.mail', 'Mail', true),
   app('com.1password.1password', '1Password'),
 ];
 let frontmost = apps[0];

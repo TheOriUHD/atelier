@@ -85,9 +85,12 @@ test('desktop: computer use is turned on in Settings, the person allows apps and
     await expect.poll(async () => (await helperLog(log)).map((e) => e.method)).toEqual(expect.arrayContaining(['control.begin', 'mouse.click', 'key.type', 'control.end']));
     const typed = (await helperLog(log)).find((e) => e.method === 'key.type');
     expect(typed?.text).toBe('hello');
-    // The turn is over: the mouse and keyboard went back.
+    // The turn is over: the mouse and keyboard went back, and Mail (running, not allowed) was hidden meanwhile and shown again.
     const methods = (await helperLog(log)).map((e) => e.method);
     expect(methods.lastIndexOf('control.end')).toBeGreaterThan(methods.lastIndexOf('key.type'));
+    const entries = await helperLog(log);
+    expect(entries.find((e) => e.method === 'apps.hide')?.ids).toEqual(['com.apple.mail']);
+    expect(entries.find((e) => e.method === 'apps.unhide')?.ids).toEqual(['com.apple.mail']);
 
     // Holding Esc stops it while it works: the run ends and nothing more reaches the computer.
     await box.fill(call('ComputerAction', { actions: [{ action: 'wait', duration: 8 }, { action: 'left_click', coordinate: [200, 200] }] }));

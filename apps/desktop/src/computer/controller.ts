@@ -449,7 +449,11 @@ export class ComputerController {
     // Only the allowed apps stay in view; the others step aside until it's done.
     const allowed = new Set(this.grants(backend, sessionId, settings).map((g) => g.app.id));
     const others = (await helper.call('apps.list', { installed: false })).apps.filter((a) => a.running && !a.hidden && !allowed.has(a.id) && appCategory(a.id) !== 'system');
-    if (others.length) control.hidden = (await helper.call('apps.hide', { ids: others.map((a) => a.id) })).ids;
+    // Every app it asked to hide is shown again afterwards, whatever the hide call reported.
+    if (others.length) {
+      control.hidden = others.map((a) => a.id);
+      await helper.call('apps.hide', { ids: control.hidden });
+    }
     this.deps.windows.hide();
     this.deps.overlay.show();
     this.deps.changed();

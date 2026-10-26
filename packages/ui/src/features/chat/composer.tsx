@@ -104,8 +104,8 @@ export function Composer({
   suggestion,
 }: ComposerProps) {
   const [text, setText] = useDraft(draftKey);
-  const [setAside, setSetAside] = useState<string | null>(null);
-  const suggested = suggestion && suggestion !== setAside && text === '' && !streaming ? suggestion : null;
+  // Offered whenever the box is empty, until the next message is sent (the backend then drops it).
+  const suggested = suggestion && text === '' && !streaming ? suggestion : null;
   const [caret, setCaret] = useState(0);
   // Where the caret goes once the text a menu pick (or a rewind) put in has rendered.
   const placeCaret = useRef<number | null>(null);
@@ -258,7 +258,6 @@ export function Composer({
             placeholder={suggested ?? placeholder ?? (variant === 'new' ? 'How can I help you today?' : 'Reply')}
             {...(suggested ? { 'aria-description': `Suggested: ${suggested}. Press Tab to use it.` } : {})}
             onChange={(e) => {
-              if (suggestion && e.target.value !== '') setSetAside(suggestion);
               setText(e.target.value);
               setCaret(e.target.selectionStart);
             }}
@@ -279,7 +278,6 @@ export function Composer({
               // Tab takes the suggestion as the person's own text, to send, change or delete.
               if (e.key === 'Tab' && !e.shiftKey && suggested && !e.nativeEvent.isComposing) {
                 e.preventDefault();
-                setSetAside(suggested);
                 setText(suggested);
                 setCaret(suggested.length);
                 return;

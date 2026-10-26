@@ -28,9 +28,14 @@ test('desktop Code: after a reply the box suggests the next message, and Tab put
     await expect(box).toHaveAttribute('placeholder', 'commit it');
     await box.press('Tab');
     await expect(box).toHaveValue('commit it');
-    // Typing sets it aside: emptied, the box shows its usual prompt.
+    // Emptied again, it is offered again; sending a message drops it until the next reply brings one.
     await box.fill('');
+    await expect(box).toHaveAttribute('placeholder', 'commit it');
+    await box.fill('and the other typo');
+    await box.press('Enter');
     await expect(box).not.toHaveAttribute('placeholder', 'commit it');
+    await expect(page.getByText('You said: and the other typo')).toBeVisible();
+    await expect(box).toHaveAttribute('placeholder', 'commit it', { timeout: 30_000 });
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });

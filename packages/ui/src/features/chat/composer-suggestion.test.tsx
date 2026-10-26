@@ -35,20 +35,26 @@ describe('a suggested reply', () => {
     expect(input().getAttribute('aria-description')).toBe('Suggested: push it and release 0.2.11. Press Tab to use it.');
     fireEvent.keyDown(input(), { key: 'Tab' });
     expect(input().value).toBe('push it and release 0.2.11');
-    // Once in, it is the person's text: emptied again, the box doesn't offer the same suggestion twice.
+    // Emptied again, the box offers it again, and Tab puts it back in.
     fireEvent.change(input(), { target: { value: '' } });
-    expect(input().placeholder).toBe('Reply');
+    expect(input().placeholder).toBe('push it and release 0.2.11');
+    fireEvent.keyDown(input(), { key: 'Tab' });
+    expect(input().value).toBe('push it and release 0.2.11');
   });
 
-  it('is set aside once the person types, until the next one comes', () => {
+  it('steps aside while the person types and comes back when the box is empty, until the next one replaces it', () => {
     const { input, next } = box('run the tests');
     fireEvent.change(input(), { target: { value: 'n' } });
-    fireEvent.change(input(), { target: { value: '' } });
-    expect(input().placeholder).toBe('Reply');
-    // Tab is Tab again (no suggestion in the way).
+    expect(input().placeholder).not.toBe('run the tests');
+    // With text in the box, Tab is Tab (no suggestion in the way).
     expect(fireEvent.keyDown(input(), { key: 'Tab' })).toBe(true);
+    fireEvent.change(input(), { target: { value: '' } });
+    expect(input().placeholder).toBe('run the tests');
     next('commit it');
     expect(input().placeholder).toBe('commit it');
+    // Sent: the backend drops it.
+    next(null);
+    expect(input().placeholder).toBe('Reply');
   });
 
   it('is not offered while the agent works', () => {

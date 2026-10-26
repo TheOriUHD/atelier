@@ -71,7 +71,9 @@ export function createOverlay(): Overlay {
         });
         win.setIgnoreMouseEvents(true);
         win.setAlwaysOnTop(true, 'screen-saver');
-        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        // Without skipTransformProcessType, Electron turns the whole app into a UIElement app (no Dock icon, no menu,
+        // its windows gone) and never turns it back.
+        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
         win.setContentProtection(true);
         win.once('ready-to-show', () => win.showInactive());
         void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page(display.id === primary))}`);

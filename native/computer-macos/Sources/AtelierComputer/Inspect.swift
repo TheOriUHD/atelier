@@ -22,9 +22,20 @@ enum Inspect {
     var hit: AXUIElement?
     let status = AXUIElementCopyElementAtPosition(system, Float(params.x), Float(params.y), &hit)
     if status == .apiDisabled { throw RPCError.permission(.accessibility) }
+    let point = CGPoint(x: params.x, y: params.y)
+    var element = (status == .success ? hit : nil).map(read)
+    // The app that started this helper (Atelier) floats its overlay above everything while it has control. Clicks pass
+    // through it, but the hit test doesn't: ask the app whose window is under it instead.
+    let parent = getppid()
+    if element?.pid == parent, let owner = windowOwner(at: point, passingThrough: parent), owner != parent {
+      let app = AXUIElementCreateApplication(owner)
+      AXUIElementSetMessagingTimeout(app, 1.0)
+      var below: AXUIElement?
+      element = AXUIElementCopyElementAtPosition(app, Float(params.x), Float(params.y), &below) == .success ? below.map(read) : nil
+      return await result(element, pid: owner)
+    }
     // No element (an app without accessibility, or one that didn't answer in time): still say whose window it is.
-    let element = (status == .success ? hit : nil).map(read)
-    let pid = element?.pid ?? windowOwner(at: CGPoint(x: params.x, y: params.y))
+    let pid = element?.pid ?? windowOwner(at: point, passingThrough: parent)
     return await result(element, pid: pid)
   }
 
@@ -119,8 +130,9 @@ enum Inspect {
     return (value as! AXUIElement)
   }
 
-  /// The process owning the frontmost window that contains a point (window bounds need no permission).
-  static func windowOwner(at point: CGPoint) -> pid_t? {
+  /// The process owning the frontmost window that contains a point (window bounds need no permission). Floating windows
+  /// of `passingThrough` (above the normal window layer: Atelier's overlay) are looked through; its normal windows aren't.
+  static func windowOwner(at point: CGPoint, passingThrough: pid_t? = nil) -> pid_t? {
     guard
       let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
         as? [[String: Any]]
@@ -131,6 +143,7 @@ enum Inspect {
         let pid = window["kCGWindowOwnerPID"] as? Int
       else { continue }
       if let alpha = window["kCGWindowAlpha"] as? Double, alpha <= 0 { continue }
+      if let passingThrough, pid_t(pid) == passingThrough, (window["kCGWindowLayer"] as? Int ?? 0) > 0 { continue }
       return pid_t(pid)
     }
     return nil

@@ -282,7 +282,8 @@ enum Apps {
   @MainActor
   static func unhide(ids: [String]) {
     for id in ids {
-      for app in NSRunningApplication.runningApplications(withBundleIdentifier: id) where app.isHidden {
+      // Unhiding a shown app does nothing, and this process's idea of which are hidden may lag behind.
+      for app in NSRunningApplication.runningApplications(withBundleIdentifier: id) {
         app.unhide()
       }
     }
