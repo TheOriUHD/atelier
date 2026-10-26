@@ -98,7 +98,7 @@ describe('Run in terminal', () => {
   });
 
   it('knows the shell languages', () => {
-    for (const l of ['bash', 'sh', 'zsh', 'shell', 'Bash']) expect(isShellLanguage(l), l).toBe(true);
+    for (const l of ['bash', 'sh', 'zsh', 'shell', 'Bash', 'powershell', 'pwsh', 'ps1']) expect(isShellLanguage(l), l).toBe(true);
     for (const l of ['python', 'ts', 'json', '']) expect(isShellLanguage(l), l).toBe(false);
   });
 });

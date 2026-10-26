@@ -4,6 +4,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **A session the assistant moved to another folder shows that folder:** after ChangeDirectory, the sidebar listed the session under "Ungrouped", the Terminal said "This session has no folder" and code blocks had no Run button, until the app was restarted: the folder was new to the window's list of folders and nothing told it. The move now sends the updated list, and a window that meets a session in a folder it doesn't know reads its folders again.
+
+- **Run in terminal for PowerShell:** code blocks marked `powershell`, `pwsh` or `ps1` get the Run button too. On Windows the terminal is PowerShell, and that is what models write there; before, only `bash`, `sh`, `zsh` and `fish` blocks had it.
+
 ## [0.2.10] — 2026-10-25
 
 - **Commands are color-coded:** the commands the assistant runs, in Code and Cowork steps, in Background tasks and in the "Allow Atelier to run …?" prompt, are highlighted like code blocks in your syntax themes (Settings › Code). Bash by default, PowerShell when the command reads like it (cmdlets such as `Get-ChildItem`, `$env:`), and a here-document's body in its own language: `python3 - <<'EOF' … EOF` as Python, `node <<EOF` as JavaScript, `cat > app.ts <<'EOF'` by the file's extension.

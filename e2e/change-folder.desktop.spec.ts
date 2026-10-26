@@ -34,7 +34,11 @@ test('desktop Code: the agent asks to move the session to another folder and the
 
     // The same conversation, now in the other folder: the header shows it and the tool's result says what it holds.
     await expect(page.getByText(/^Tool result: The session now works in/)).toBeVisible();
-    await expect(page.getByRole('main').getByText(basename(second), { exact: false }).first()).toBeVisible();
+    // The header's folder and the sidebar's group follow it, though the folder was new to the window's list of folders.
+    await expect(page.getByRole('main').getByText(basename(second), { exact: true })).toBeVisible();
+    const sidebar = page.getByRole('navigation', { name: 'Sidebar' });
+    await expect(sidebar.getByRole('region', { name: basename(second) }).getByRole('link', { name: 'Scripted demo chat' })).toBeVisible();
+    await expect(sidebar.getByText('Ungrouped')).toHaveCount(0);
     // What the result holds, in full in the verbose view: the new folder's own instructions.
     await verboseTranscript(page);
     await expect(page.getByText(/Use tabs, never spaces/)).toBeVisible();

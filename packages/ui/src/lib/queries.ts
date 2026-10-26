@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the RPC contract; backend events keep caches fresh without polling. */
 import { useEffect } from 'react';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { defaultUserPrefs, type DiffCompare, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs } from '@atelier/protocol';
+import { defaultUserPrefs, type DiffCompare, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
 import { setPath } from './json-path.ts';
 import { rpc } from './rpc.ts';
 
@@ -88,6 +88,9 @@ export function useLiveQueries(): void {
           return next;
         });
         void qc.invalidateQueries({ queryKey: ['sessions'] });
+        // A session in a folder these windows don't know yet (one the agent moved it to): read the folders again.
+        const known = qc.getQueryData<WorkspaceSummary[]>(keys.workspaces);
+        if (summary.workspaceId && known && !known.some((w) => w.id === summary.workspaceId)) void qc.invalidateQueries({ queryKey: keys.workspaces });
       }),
       rpc().on('sessions.removed', () => void qc.invalidateQueries({ queryKey: ['sessions'] })),
       rpc().on('groups.changed', (list) => {

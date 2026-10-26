@@ -881,7 +881,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     moveWorkspace: async (session, path) => {
       if (!session.workspaceId || !session.userId) throw new WorkspaceError('This session has no folder to move from.');
-      return workspaceManager.openFrom(session.userId, session.workspaceId, path);
+      const target = await workspaceManager.openFrom(session.userId, session.workspaceId, path);
+      // The folder may be new to the person's list (opening it trusts it): their windows learn of it before the session moves.
+      emitToUser(session.userId, 'workspaces.changed', await workspaceManager.list(session.userId));
+      return target;
     },
     hooks: async (session) => {
       if (session.mode === 'chat' || !session.workspaceId || !session.userId) return null;

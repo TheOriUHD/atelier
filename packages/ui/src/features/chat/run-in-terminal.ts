@@ -7,7 +7,8 @@ import { createContext } from 'react';
 
 export const RunInTerminal = createContext<((command: string) => void) | null>(null);
 
-const SHELLS = new Set(['bash', 'sh', 'shell', 'zsh', 'fish', 'shellscript', 'shell-session']);
+/** Shells' own fences, and PowerShell's: on Windows the terminal is PowerShell, where models write ```powershell. */
+const SHELLS = new Set(['bash', 'sh', 'shell', 'zsh', 'fish', 'shellscript', 'shell-session', 'powershell', 'pwsh', 'ps1', 'ps', 'posh']);
 
 /** Whether a code block's language is a shell script worth running as it is. */
 export const isShellLanguage = (language: string): boolean => SHELLS.has(language.trim().toLowerCase());
