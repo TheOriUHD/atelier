@@ -140,6 +140,13 @@ Desktop app only.
 | **Check for updates automatically** | Atelier asks for the newest version when it starts and every 5 minutes. Off: it only looks when you press Check now. |
 | **Update channel** | Beta gets new versions before they’re released as stable. |
 | **Launch at login** | Open Atelier when you sign in to this computer. |
+| **Enable computer use** *(only where it works)* | Let the assistant in Code and Cowork see and use the apps you allow on this computer. |
+| **Unhide apps when Atelier finishes** *(only where it works)* | Apps hidden while Atelier had full control of your screen come back when it stops. |
+| **How Atelier uses the apps you allow** *(only where it works)* | Background: asks you in each conversation before it takes over your mouse and keyboard. Full control: takes them whenever it acts in an allowed app, without asking again. |
+| **Denied apps** *(only where it works)* | Atelier never uses these apps: asking for them is turned down without a question. |
+| **Apps allowed for good** *(only where it works)* | Apps you allowed with “Always allow on this computer”; every session may use them. |
+| **Accessibility** *(only where it works)* | macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission. |
+| **Screen recording** *(only where it works)* | macOS lets Atelier take screenshots of the apps you allow with this permission. macOS asks again from time to time. |
 | **Folders for sessions without one** *(only where it works)* | The server can make a new, empty folder on this computer for each session you start without a folder. |
 | **SSH hosts reached from here** *(only where it works)* | Hosts the server may connect to from this computer, with its ssh, keys and known hosts. Choosing a host here adds it. |
 | **Connectors that run a program here** *(only where it works)* | Your connectors the server may start on this computer. Adding or importing one here adds it; a changed program asks again. |

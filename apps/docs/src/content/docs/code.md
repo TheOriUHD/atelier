@@ -139,6 +139,8 @@ The model gets these tools. [Reference › Tools](/reference/tools/) lists each 
 | **artifact** | Shows a file in the Artifact pane. | No. |
 | **ChangeDirectory** | Moves the session to another folder after you agree. Local and SSH folders only. | Always, with its own card. |
 | **AddConnector** | Adds an MCP server you gave it by its address to your [connectors](/connectors/#let-the-assistant-add-one), after you agree; its tools work from the next step. | Always, with its own card. |
+| **ComputerAccess**, **FullControl** | Ask to use apps on your computer, and to take over the mouse and keyboard ([Computer use](/computer-use/)). Desktop app with computer use on only. | Always, with its own card. |
+| **Screenshot**, **ComputerAction**, **OpenApp**, **ComputerApps** | See the apps you allowed, click, type and scroll in them, open them, list your apps. | No: the desktop app checks each action against what you allowed. |
 | Connector tools (`mcp__server__tool`) | Whatever your [connectors](/connectors/) provide. | Yes, until a rule says otherwise. |
 
 On Windows, **Bash** runs commands with Git Bash when it is installed, else PowerShell. Code sessions don't use [memory](/memory/).

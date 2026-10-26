@@ -130,6 +130,24 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     change: (change: unknown) => ipcRenderer.invoke('lending:change', change),
     allowImport: () => ipcRenderer.invoke('lending:allowImport'),
   },
+  computer: {
+    status: () => ipcRenderer.invoke('computer:status'),
+    settings: (patch: unknown) => ipcRenderer.invoke('computer:settings', patch),
+    deny: (app: unknown) => ipcRenderer.invoke('computer:deny', app),
+    undeny: (id: string) => ipcRenderer.invoke('computer:undeny', id),
+    revoke: (backend: string, id: string) => ipcRenderer.invoke('computer:revoke', { backend, id }),
+    apps: (query: string) => ipcRenderer.invoke('computer:apps', query),
+    grant: (input: unknown) => ipcRenderer.invoke('computer:grant', input),
+    allowControl: (input: unknown) => ipcRenderer.invoke('computer:allowControl', input),
+    stop: (input: unknown) => ipcRenderer.invoke('computer:stop', input),
+    requestPermission: (kind: string) => ipcRenderer.invoke('computer:requestPermission', kind),
+    openPermissionSettings: (kind: string) => ipcRenderer.invoke('computer:openPermissionSettings', kind),
+    onChanged: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on('computer:changed', handler);
+      return () => ipcRenderer.off('computer:changed', handler);
+    },
+  },
   setShortcuts: (bindings: Record<string, string | null>) => ipcRenderer.send('menu:shortcuts', bindings),
   openExternal: (url: string) => ipcRenderer.send('open-external', url),
 });

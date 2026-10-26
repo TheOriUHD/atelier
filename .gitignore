@@ -16,6 +16,9 @@ playwright-report/
 test-results/
 /e2e/.auth/
 /runner/bin/
+/native/bin/
+/native/computer-macos/.build/
+/native/computer-macos/.swiftpm/
 /setup/bin/
 *.tsbuildinfo
 .explore/

@@ -2,7 +2,7 @@
  * Surface-specific plumbing: how the UI reaches the backend and how blobs are addressed.
  * Desktop talks over a MessagePort brokered by the preload; web uses a reconnecting WebSocket.
  */
-import { APP, type DeviceLending, type RpcMessage, type Transport } from '@atelier/protocol';
+import { APP, type AppTier, type ComputerApp, type ComputerSettings, type ComputerStatus, type DeviceLending, type RpcMessage, type Transport } from '@atelier/protocol';
 
 export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
 
@@ -111,6 +111,24 @@ interface DesktopBridge {
     change(change: LendingChange): Promise<DeviceLending | null>;
     /** The person opened "Import from Claude Code": the server may read its connectors here for a while. Absent in older shells. */
     allowImport?(): Promise<void>;
+  };
+  /**
+   * Computer use on this computer (ARCHITECTURE §22): its settings, and what the person allows on the cards. Only these
+   * windows change it; `backend` is `local` for this computer's own sessions. Absent in desktop shells older than the UI.
+   */
+  computer?: {
+    status(): Promise<ComputerStatus>;
+    settings(patch: Partial<Pick<ComputerSettings, 'enabled' | 'mode' | 'unhideOnFinish'>>): Promise<ComputerSettings>;
+    deny(app: ComputerApp): Promise<ComputerSettings>;
+    undeny(id: string): Promise<ComputerSettings>;
+    revoke(backend: string, id: string): Promise<ComputerSettings>;
+    apps(query: string): Promise<ComputerApp[]>;
+    grant(input: { backend: string; sessionId: string; grants: { id: string; tier: AppTier }[]; always: boolean }): Promise<void>;
+    allowControl(input: { backend: string; sessionId: string; always: boolean }): Promise<void>;
+    stop(input: { backend: string; sessionId: string }): Promise<void>;
+    requestPermission(kind: 'accessibility' | 'screenRecording'): Promise<ComputerStatus>;
+    openPermissionSettings(kind: 'accessibility' | 'screenRecording'): Promise<void>;
+    onChanged(listener: () => void): () => void;
   };
   /**
    * The computer's clock ("h12" 2:25 PM, "h23" 14:25), which the app's language doesn't tell: null when the desktop

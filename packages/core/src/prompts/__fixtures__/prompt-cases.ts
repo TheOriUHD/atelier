@@ -68,6 +68,8 @@ export interface PromptCase {
   overrides?: Overrides;
   /** The person has memory (Settings › Memory) with a few entries; `entries` sets how many topics besides. */
   memory?: { entries?: number; searchChats?: boolean; generate?: boolean };
+  /** Computer use is on in the desktop app running the session. */
+  computer?: boolean;
 }
 
 export interface Assembled {
@@ -283,6 +285,16 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
       mcpTools: async () => connectorTools(c.connectors ?? 0, c.connectorTools),
       workspace: async (s) => (s.mode === 'chat' ? null : workspace),
       chatSandboxAvailable: () => c.sandbox === true,
+      ...(c.computer
+        ? {
+            computer: {
+              available: async () => true,
+              call: async () => {
+                throw new Error('Not in a prompt snapshot.');
+              },
+            },
+          }
+        : {}),
       chatSandbox: async () => workspace,
       codeContext: async () =>
         c.scratch
@@ -471,6 +483,8 @@ export const CASES: Record<string, PromptCase> = {
   'work.full.no-web': { mode: 'work', webSearch: false, webFetch: false, skills: false },
   'work.compact': { mode: 'work', tier: 'compact' },
   'work.full.memory': { mode: 'work', memory: {} },
+  'work.full.computer': { mode: 'work', computer: true },
+  'code.compact.computer': { mode: 'code', tier: 'compact', computer: true },
   'code.full': { mode: 'code' },
   'code.full.plan': { mode: 'code', permissionMode: 'plan' },
   'code.full.scratch': { mode: 'code', scratch: true },

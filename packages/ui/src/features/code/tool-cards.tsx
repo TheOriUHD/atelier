@@ -340,6 +340,20 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return 'changed folder';
       case 'AddConnector':
         return plural(n, 'added a connector', 'added # connectors');
+      case 'ComputerAccess':
+        return 'asked to use apps';
+      case 'ComputerApps':
+        return 'looked up apps';
+      case 'OpenApp':
+        return n === 1 ? `opened ${str(asRecord(list[0]!.input).app)}` : `opened ${n} apps`;
+      case 'Screenshot':
+        return plural(n, 'took a screenshot', 'took # screenshots');
+      case 'FullControl':
+        return list.some((c) => asRecord(c.input).action === 'request') ? 'took over the mouse and keyboard' : 'handed back the mouse and keyboard';
+      case 'ComputerAction': {
+        const actions = list.reduce((sum, c) => sum + computerActions(c.input).length, 0);
+        return plural(actions, 'used the computer once', 'used the computer # times');
+      }
       case 'SendMessage':
         return n === 1 ? `messaged ${messageTargetKind(str(asRecord(list[0]!.input).to))}` : `sent ${n} messages`;
       case 'ListSessions':
@@ -356,6 +370,35 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
   });
   const line = phrases.join(', ');
   return line.charAt(0).toUpperCase() + line.slice(1);
+}
+
+function computerActions(input: unknown): Record<string, unknown>[] {
+  const actions = asRecord(input).actions;
+  return Array.isArray(actions) ? actions.map(asRecord) : [];
+}
+
+const ACTION_WORDS: Record<string, string> = {
+  left_click: 'Clicked',
+  right_click: 'Right-clicked',
+  middle_click: 'Middle-clicked',
+  double_click: 'Double-clicked',
+  triple_click: 'Triple-clicked',
+  mouse_move: 'Moved the pointer',
+  left_click_drag: 'Dragged',
+  scroll: 'Scrolled',
+  type: 'Typed',
+  key: 'Pressed',
+  wait: 'Waited',
+  screenshot: 'Took a screenshot',
+  zoom: 'Zoomed in',
+  cursor_position: 'Checked the pointer',
+};
+
+/** One ComputerAction step in words: its own summary when it gave one, else what it is ("Pressed cmd+s"). */
+function actionWords(action: Record<string, unknown>): string {
+  if (str(action.summary)) return str(action.summary);
+  const words = ACTION_WORDS[str(action.action)] ?? str(action.action);
+  return action.action === 'key' ? `${words} ${str(action.text)}` : words;
 }
 
 /** Lines an Edit or Write call adds and removes. */
@@ -467,6 +510,20 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
       return { verb: 'Moved to', target: str(input.path) || 'another folder' };
     case 'AddConnector':
       return { verb: 'Added connector', target: str(input.name) || str(input.url) };
+    case 'ComputerAccess':
+      return { verb: 'Asked to use', target: (Array.isArray(input.apps) ? input.apps : []).map(str).filter(Boolean).join(', ') };
+    case 'ComputerApps':
+      return { verb: 'Looked up apps', target: str(input.query) };
+    case 'OpenApp':
+      return { verb: 'Opened', target: str(input.app) };
+    case 'Screenshot':
+      return { verb: 'Took a screenshot', target: str(input.display) };
+    case 'FullControl':
+      return input.action === 'release' ? { verb: 'Handed back the mouse and keyboard', target: '' } : { verb: 'Took over the mouse and keyboard', target: '' };
+    case 'ComputerAction': {
+      const actions = computerActions(input);
+      return { verb: actions.length === 1 ? actionWords(actions[0]!) : `${actions.length} actions:`, target: actions.length === 1 ? '' : actions.map(actionWords).join(', ') };
+    }
     case 'WebFetch':
       return { verb: 'Fetched', target: str(input.url) };
     case 'WebSearch': {

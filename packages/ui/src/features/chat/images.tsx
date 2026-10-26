@@ -31,7 +31,7 @@ export interface ViewedImage extends LightboxImage {
 
 /** "Read", "Screenshot", "Take snapshot": a tool's name as the preview's footer shows it. */
 export function toolLabel(name: string): string {
-  if (/screenshot/i.test(name)) return 'Screenshot';
+  if (/screenshot/i.test(name) || name === 'ComputerAction') return 'Screenshot';
   const words = (name.startsWith('mcp__') ? name.slice(name.lastIndexOf('__') + 2) : name).replace(/[_-]+/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

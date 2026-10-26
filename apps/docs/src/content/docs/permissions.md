@@ -50,6 +50,8 @@ A session follows the default mode until you pick one. **Settings › Admin › 
 | TodoWrite, AskUser, ExitPlanMode, show an artifact | Runs | Runs | Runs | Runs | Runs |
 | Move the session to another folder (ChangeDirectory) | Asks | Asks | Asks | Asks | Asks |
 | Add an MCP server it was given to your connectors (AddConnector) | Asks | Asks | Asks | Asks | Asks |
+| Use apps on your computer, take over the mouse and keyboard ([computer use](/computer-use/): ComputerAccess, FullControl) | Asks | Asks | Asks | Asks | Asks |
+| Screenshots and actions in apps you allowed (Screenshot, ComputerAction, OpenApp, ComputerApps) | Runs | Runs | Runs | Screenshots run; actions refused | Runs |
 | Anything a **deny** rule matches | Refused | Refused | Refused | Refused | Refused |
 | Anything an **ask** rule matches | Asks; a dangerous command: Review | Asks | Asks | Asks (only what Plan lets through) | Asks |
 | Anything an **allow** rule matches | Runs, except dangerous or unreadable commands, and broad rules are ignored | Runs, with the same exceptions | Runs, with the same exceptions | Refused if it changes anything | Runs |
@@ -61,13 +63,13 @@ Plan mode refuses every Bash command, `git status` included. Dangerous commands 
 For one tool call the engine checks these in order and stops at the first that decides. Hooks and the Auto reviewer come after it.
 
 1. **Deny rules.** A match refuses the call in every mode, Bypass included. For Bash, every command in the line is checked.
-2. **Plan mode.** Anything that is not read-only (and not TodoWrite, AskUser, ExitPlanMode, artifact, ChangeDirectory or AddConnector) is refused.
+2. **Plan mode.** Anything that is not read-only (and not TodoWrite, AskUser, ExitPlanMode, artifact, ChangeDirectory, AddConnector, ComputerAccess or FullControl) is refused.
 3. **Ask rules.** A match asks you, in every mode. In Auto it asks you, not the reviewer, except for a command on the [dangerous list](#dangerous-commands), which the reviewer decides.
 4. **Commands that can't be judged from their text** (command substitution, `eval`, and the rest of the list under [How commands are read](#how-commands-are-read)) ask, or go to the reviewer in Auto, even when an allow rule matches. Bypass skips this step.
 5. **Allow rules.** A match runs the call. For Bash, every command in the line must be allowed on its own. A dangerous command still asks (or goes to the reviewer) even then. In Auto mode, broad allow rules are set aside first.
 6. **Bypass** runs everything left.
 7. **Auto only:** clearing build output and temp files runs without review ([routine cleanup](#what-runs-unreviewed-in-auto)).
-8. **ChangeDirectory** and **AddConnector** ask for themselves, each with its own card.
+8. **ChangeDirectory**, **AddConnector**, **ComputerAccess** and **FullControl** ask for themselves, each with its own card. Computer use's screenshots and actions run: the desktop app checks each one against the apps you allowed there ([Computer use](/computer-use/)).
 9. **Files outside the folder.** Read-only tools run in Auto (credential-looking paths go to the reviewer); everything else asks, or goes to the reviewer in Auto.
 10. **Read-only tools and the session tools** (TodoWrite, AskUser, ExitPlanMode, artifact) run.
 11. **Accept edits** runs file edits. **Auto** runs file edits too, except protected files, which go to the reviewer.
@@ -253,7 +255,7 @@ Auto mode is the default. Its aim is fewer prompts: instead of asking you about 
 
 ### What always asks you
 
-Even in Auto, these skip the reviewer and ask you: **ask rules** (except on a dangerous command), **deleting outside the folder**, the **ChangeDirectory** and **AddConnector** cards, and a hook that answers `ask`.
+Even in Auto, these skip the reviewer and ask you: **ask rules** (except on a dangerous command), **deleting outside the folder**, the **ChangeDirectory**, **AddConnector** and computer use cards, and a hook that answers `ask`.
 
 ### What the reviewer sees and decides
 

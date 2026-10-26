@@ -402,6 +402,21 @@ describe('decide', () => {
     expect(decide(add, ctx({ deny: ['AddConnector'] })).behavior).toBe('deny');
   });
 
+  it('leaves computer use to the person: its cards ask them, and its actions are gated by the apps they allowed on the computer', () => {
+    for (const name of ['ComputerAccess', 'FullControl']) {
+      for (const mode of ['default', 'auto', 'plan', 'acceptEdits', 'bypassPermissions'] as const) expect(decide({ name, input: {} }, ctx({}, mode)).behavior, `${name} ${mode}`).toBe('allow');
+    }
+    for (const name of ['Screenshot', 'ComputerApps']) {
+      for (const mode of ['default', 'auto', 'acceptEdits', 'bypassPermissions'] as const) expect(decide({ name, input: {} }, ctx({}, mode)).behavior, `${name} ${mode}`).toBe('allow');
+    }
+    const click = { name: 'ComputerAction', input: { actions: [{ action: 'left_click', coordinate: [1, 1] }] } };
+    expect(decide(click, ctx()).behavior).toBe('allow');
+    expect(decide({ name: 'OpenApp', input: { app: 'Notes' } }, ctx()).behavior).toBe('allow');
+    // Plan mode doesn't act; a rule still wins.
+    expect(decide(click, ctx({}, 'plan')).behavior).toBe('deny');
+    expect(decide(click, ctx({ deny: ['ComputerAction'] })).behavior).toBe('deny');
+  });
+
   it('follows the mode defaults', () => {
     const edit = { name: 'Edit', input: { file_path: '/work/app/src/a.ts', old_string: 'a', new_string: 'b' } };
     expect(decide({ name: 'Read', input: { file_path: 'a.ts' } }, ctx()).behavior).toBe('allow');

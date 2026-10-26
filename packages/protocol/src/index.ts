@@ -19,3 +19,5 @@ export * from './versions.ts';
 export * from './inline-visual.ts';
 export * from './shortcuts.ts';
 export * from './personal-providers.ts';
+export * from './computer.ts';
+export * from './computer-apps.ts';

@@ -7,12 +7,13 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, pow
 import { ChatGptChatBrowser } from './chatgpt-chat.ts';
 import { autoUpdater } from 'electron-updater';
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { access, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir, networkInterfaces } from 'node:os';
 import { basename, join, normalize, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { APP, artifactRuntimeCsp, shortcutBindings, ShortcutPrefs, toAccelerator, type ShortcutBindings, type ShortcutId } from '@atelier/protocol';
+import { APP, AppTier, artifactRuntimeCsp, ComputerApp, ComputerMode, shortcutBindings, ShortcutPrefs, toAccelerator, type ControllerMethods, type ShortcutBindings, type ShortcutId } from '@atelier/protocol';
 import type { BackendToMain, MainToBackend, MenuCommand } from './bridge.ts';
 
 import { BROWSER_PARTITION, attachGuest, fetchFavicon, hardenWebview, prepareBrowserSession, type BrowserEvents } from './browser.ts';
@@ -30,6 +31,9 @@ import { loginShellPath, mergePaths } from './shell-path.ts';
 import { parseShortTime, systemHourCycle, type HourCycle } from './clock.ts';
 import { createBundleSwap } from './bundle-swap.ts';
 import { createUpdates, inertUpdater, type Updater } from './updater.ts';
+import { ComputerController } from './computer/controller.ts';
+import { ComputerHelper } from './computer/helper.ts';
+import { createOverlay } from './computer/overlay.ts';
 import {
   clearConnection,
   clearToken,
@@ -44,6 +48,7 @@ import {
   trustedFoldersFile,
   trustFolder,
   lendingFile,
+  computerSettingsFile,
   sshDir,
   workspaceRoot,
   type Device,
@@ -151,6 +156,52 @@ function runnerDir(): string {
   return app.isPackaged ? join(process.resourcesPath, 'runner') : join(import.meta.dirname, '..', '..', '..', 'runner', 'bin');
 }
 
+/** The computer use helper: `native/bin` (from `pnpm computer:build`) in development, a resource when packaged. */
+const computerHelperPath =
+  process.env.ATELIER_COMPUTER_HELPER ??
+  (app.isPackaged ? join(process.resourcesPath, 'computer', 'atelier-computer-darwin') : join(import.meta.dirname, '..', '..', '..', 'native', 'bin', 'atelier-computer-darwin'));
+
+/** A test's stand-in helper answers for macOS's permissions too; the real one is checked against macOS itself. */
+const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COMPUTER_HELPER;
+
+/** Atelier's windows step aside while it has full control of the computer, and come back after. */
+let stepAside: BrowserWindow[] = [];
+const computer = new ComputerController({
+  helper: new ComputerHelper(computerHelperPath, APP.version),
+  // macOS first (ARCHITECTURE §22); a test's stand-in anywhere.
+  hasHelper: !!process.env.ATELIER_COMPUTER_HELPER || (process.platform === 'darwin' && existsSync(computerHelperPath)),
+  settingsPath: computerSettingsFile(),
+  // A test run with hidden windows doesn't light up the screen of the computer running it.
+  overlay: process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {} } : createOverlay(),
+  windows: {
+    hide: () => {
+      stepAside = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isVisible());
+      for (const win of stepAside) win.hide();
+    },
+    restore: () => {
+      for (const win of stepAside) if (!win.isDestroyed()) win.showInactive();
+      stepAside = [];
+    },
+  },
+  event: (backendKey, sessionId, event) => {
+    if (backendKey === 'local') post({ kind: 'computerEvent', sessionId, event });
+  },
+  changed: () => {
+    for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send('computer:changed');
+  },
+  platform: process.platform,
+  // Main's own view of macOS's permissions (the helper keeps the answer it got until it starts again).
+  ...(macPermissions
+    ? { permissions: () => ({ accessibility: systemPreferences.isTrustedAccessibilityClient(false), screenRecording: systemPreferences.getMediaAccessStatus('screen') === 'granted' }) }
+    : {}),
+});
+
+/** Where System Settings shows each permission (macOS). */
+const PERMISSION_PANES = {
+  accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+  screenRecording: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+} as const;
+
 function startBackend(): void {
   if (!connection) return;
   linkProblem = null;
@@ -187,6 +238,15 @@ function startBackend(): void {
     } else if (m.kind === 'trusted') {
       // Only the built-in backend's own folders (a server's sessions never add to this computer's list this way).
       if (connection?.mode === 'local') void trustFolder(m.root).catch((e: unknown) => console.warn('Could not trust a folder:', e));
+    } else if (m.kind === 'req' && m.op === 'computer') {
+      // The desktop's own backend only: a server's sessions reach this computer through the device link.
+      try {
+        if (connection?.mode !== 'local') throw new Error('Computer use is for this computer’s own sessions.');
+        const value = m.method === 'available' ? await computer.available() : await computer.handle('local', m.sessionId, m.method as keyof ControllerMethods, m.params as never);
+        child.postMessage({ kind: 'res', id: m.id, ok: true, value: JSON.stringify(value) } satisfies MainToBackend);
+      } catch (error) {
+        child.postMessage({ kind: 'res', id: m.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies MainToBackend);
+      }
     } else if (m.kind === 'req') {
       try {
         const value =
@@ -465,7 +525,55 @@ const WorkspaceId = z.string().min(1).max(200);
 // base64 of the backend's 16 MiB cap, with room for padding.
 const FileAnswer = z.object({ id: z.number().int().positive(), dataBase64: z.string().max(23_000_000).nullable() });
 
+function registerComputerIpc(): void {
+  // Only this computer's windows change what computer use may do here (cards and Settings › System).
+  const Backend = z.string().min(1).max(2048);
+  const SessionId = z.string().min(1).max(100);
+  ipcMain.handle('computer:status', () => computer.status());
+  ipcMain.handle('computer:settings', (_e, input: unknown) => {
+    const patch = z.object({ enabled: z.boolean().optional(), mode: ComputerMode.optional(), unhideOnFinish: z.boolean().optional() }).strict().parse(input);
+    return computer.settings((s) => ({ ...s, ...patch }));
+  });
+  ipcMain.handle('computer:deny', (_e, input: unknown) => {
+    const denied = ComputerApp.parse(input);
+    return computer.settings((s) => ({ ...s, denied: [...s.denied.filter((d) => d.id !== denied.id), denied] }));
+  });
+  ipcMain.handle('computer:undeny', (_e, input: unknown) => {
+    const id = z.string().min(1).max(300).parse(input);
+    return computer.settings((s) => ({ ...s, denied: s.denied.filter((d) => d.id !== id) }));
+  });
+  ipcMain.handle('computer:revoke', (_e, input: unknown) => {
+    const { backend: key, id } = z.object({ backend: Backend, id: z.string().min(1).max(300) }).parse(input);
+    return computer.settings((s) => ({ ...s, always: { ...s.always, [key]: (s.always[key] ?? []).filter((g) => g.app.id !== id) } }));
+  });
+  ipcMain.handle('computer:apps', (_e, input: unknown) => computer.installed(z.string().max(200).parse(input ?? '')));
+  ipcMain.handle('computer:grant', (_e, input: unknown) => {
+    const g = z.object({ backend: Backend, sessionId: SessionId, grants: z.array(z.object({ id: z.string().min(1).max(300), tier: AppTier })).max(20), always: z.boolean() }).parse(input);
+    return computer.grant(g.backend, g.sessionId, g.grants, g.always);
+  });
+  ipcMain.handle('computer:allowControl', (_e, input: unknown) => {
+    const c = z.object({ backend: Backend, sessionId: SessionId, always: z.boolean() }).parse(input);
+    return computer.allowControl(c.backend, c.sessionId, c.always);
+  });
+  ipcMain.handle('computer:stop', (_e, input: unknown) => {
+    const c = z.object({ backend: Backend, sessionId: SessionId }).parse(input);
+    return computer.stop(c.backend, c.sessionId);
+  });
+  // macOS asks once; after that the switch is in System Settings.
+  ipcMain.handle('computer:requestPermission', async (_e, input: unknown) => {
+    const kind = z.enum(['accessibility', 'screenRecording']).parse(input);
+    if (kind === 'accessibility' && macPermissions) systemPreferences.isTrustedAccessibilityClient(true);
+    else await computer.requestPermission(kind);
+    return computer.status();
+  });
+  ipcMain.handle('computer:openPermissionSettings', (_e, input: unknown) => {
+    const kind = z.enum(['accessibility', 'screenRecording']).parse(input);
+    if (process.platform === 'darwin') void shell.openExternal(PERMISSION_PANES[kind]);
+  });
+}
+
 function registerIpc(): void {
+  registerComputerIpc();
   ipcMain.on('connect-backend', (event) => connectRenderer(event.sender));
   // Settings › Keyboard shortcuts changed (or a window opened): the menu takes the page's bindings. Each window's are
   // kept, so that a window closed while it recorded a shortcut (its menu keys let go) hands the menu back to another's.
@@ -791,5 +899,7 @@ app.on('will-quit', () => updates?.installOnQuit());
 app.on('before-quit', () => {
   quitting = true;
   keepAwake.stop();
+  // Gives back the mouse and keyboard and shows the apps it hid.
+  void computer.dispose();
   post({ kind: 'shutdown' });
 });

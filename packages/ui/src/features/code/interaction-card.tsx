@@ -4,19 +4,24 @@
  * (MCP elicitation, Chat and Code). Answers go back with chat.respond.
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { APP } from '@atelier/protocol';
 import { Check, ChevronDown, ExternalLink, TriangleAlert } from 'lucide-react';
 import type {
+  AppGrant,
+  AppTier,
   ElicitationAnswer,
   ElicitationRequest,
   PendingInteraction,
   PermissionAnswer,
   PermissionRequest,
+  PreparedApp,
   Question,
   QuestionAnswer,
   QuestionRequest,
 } from '@atelier/protocol';
-import { Badge, Button, Field, Icon, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, TextField, cn, toast } from '../../components/ui/index.ts';
+import { Badge, Button, Field, Icon, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Select, TextField, cn, toast } from '../../components/ui/index.ts';
+import { refreshComputer, useComputerHere, useComputerStatus } from '../../lib/computer.ts';
 import { desktop, isMac, openExternal } from '../../lib/platform.ts';
 import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts';
 import { useAppInfo } from '../../lib/queries.ts';
@@ -68,6 +73,10 @@ export function InteractionCard({
       <FolderRequest request={request} sending={sending} respond={respond} />
     ) : request.toolName === 'AddConnector' ? (
       <ConnectorRequest request={request} sending={sending} respond={respond} />
+    ) : request.toolName === 'ComputerAccess' ? (
+      <ComputerAccessRequest sessionId={sessionId} request={request} sending={sending} respond={respond} />
+    ) : request.toolName === 'FullControl' ? (
+      <FullControlRequest sessionId={sessionId} request={request} sending={sending} respond={respond} />
     ) : request.toolName === 'ExitPlanMode' ? (
       <PlanApproval sessionId={sessionId} request={request} sending={sending} respond={respond} onOpenPlan={onOpenPlan} />
     ) : (
@@ -433,6 +442,172 @@ function ConnectorRequest({ request, sending, respond }: { request: PermissionRe
       <div className="@container flex flex-wrap items-center justify-between gap-2">
         <Action label="Don’t add" caps={['1', 'Esc']} disabled={busy} onClick={skip} />
         <Action primary label="Add connector" caps={['2', MOD, ENTER]} disabled={busy} onClick={() => void add()} />
+      </div>
+    </Card>
+  );
+}
+
+const TIER_LABEL: Record<AppTier, string> = { view: 'See only', click: 'See and click', full: 'Full use' };
+const TIER_ORDER: AppTier[] = ['view', 'click', 'full'];
+
+/**
+ * The macOS permissions computer use needs, when one is missing: asked for here so allowing apps isn't the end of it.
+ * Granting Screen recording takes effect once macOS restarts the helper, which main does.
+ */
+function ComputerPermissions() {
+  const status = useComputerStatus();
+  const qc = useQueryClient();
+  const computer = desktop?.computer;
+  if (!computer || status?.platform !== 'darwin') return null;
+  const missing = (['accessibility', 'screenRecording'] as const).filter((kind) => !status.permissions[kind]);
+  if (!missing.length) return null;
+  const names = { accessibility: 'Accessibility', screenRecording: 'Screen recording' };
+  return (
+    <div className="flex flex-col gap-2 rounded-lg bg-warning-subtle px-3 py-2.5">
+      <p className="text-body text-fg">macOS needs {missing.map((k) => names[k]).join(' and ')} for Atelier before it can use apps.</p>
+      <div className="flex flex-wrap gap-2">
+        {missing.map((kind) => (
+          <Button key={kind} size="sm" onClick={() => void refreshComputer(qc, () => computer.requestPermission(kind)).catch((e: unknown) => toast.error(describeError(e).message))}>
+            Grant {names[kind]}…
+          </Button>
+        ))}
+        <Button size="sm" variant="ghost" onClick={() => void computer.openPermissionSettings(missing[0]!)}>
+          Open System Settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ComputerAccess: the assistant wants to use apps on this computer. Each app comes with the most it may do (browsers
+ * see only, terminals and editors see and click, unless the person picks otherwise); allowed for this session or for
+ * good on this computer. Only the desktop app running the session can allow anything: elsewhere the card can only decline.
+ */
+function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessionId: string; request: PermissionRequest; sending: boolean; respond: Respond }) {
+  const input = asRecord(request.input);
+  const apps = (Array.isArray(input.apps) ? input.apps : []) as PreparedApp[];
+  const reason = str(input.reason);
+  const here = useComputerHere();
+  const [tiers, setTiers] = useState<Record<string, AppTier>>(() => Object.fromEntries(apps.map((a) => [a.app.id, a.tier ?? 'view'])));
+  const [allowing, setAllowing] = useState(false);
+  const busy = sending || allowing;
+  const allow = async (always: boolean) => {
+    if (busy || !here) return;
+    setAllowing(true);
+    try {
+      await desktop!.computer!.grant({ backend: here, sessionId, grants: apps.map((a) => ({ id: a.app.id, tier: tiers[a.app.id] ?? 'view' })), always });
+      respond({ behavior: 'allow' });
+    } catch (e) {
+      toast.error(describeError(e).message);
+    } finally {
+      setAllowing(false);
+    }
+  };
+  const deny = () => !busy && respond({ behavior: 'deny' });
+  const title = apps.length === 1 ? `Let ${APP.name} use ${apps[0]!.app.name}?` : `Let ${APP.name} use ${apps.length} apps?`;
+  return (
+    <Card
+      title={title}
+      keys={{
+        escape: deny,
+        mod: here ? () => void allow(false) : undefined,
+        modShift: here ? () => void allow(true) : undefined,
+        digit: (n) => (n === 1 ? deny() : !here ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
+      }}
+    >
+      {reason && <p className="text-body text-fg-secondary">{reason}</p>}
+      {here && <ComputerPermissions />}
+      <ul aria-label="Apps" className="flex flex-col divide-y divide-line-subtle rounded-lg inset-ring inset-ring-line">
+        {apps.map((a) => {
+          const top = a.maxTier ?? 'view';
+          const options = TIER_ORDER.slice(0, TIER_ORDER.indexOf(top) + 1).map((t) => ({ value: t, label: TIER_LABEL[t] }));
+          return (
+            <li key={a.app.id} className="flex items-center justify-between gap-3 px-3 py-1.5">
+              <span className="min-w-0 truncate text-body text-fg">{a.app.name}</span>
+              {here ? (
+                <Select
+                  variant="ghost"
+                  aria-label={`What ${APP.name} may do in ${a.app.name}`}
+                  options={options}
+                  value={tiers[a.app.id] ?? 'view'}
+                  onValueChange={(tier) => setTiers((all) => ({ ...all, [a.app.id]: tier }))}
+                  disabled={busy || options.length === 1}
+                />
+              ) : (
+                <span className="text-body text-fg-muted">{TIER_LABEL[a.tier ?? 'view']}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-footnote text-fg-muted">
+        {here
+          ? `${APP.name} sees only these apps in its screenshots. Taking over your mouse and keyboard asks again, unless Settings › System says otherwise.`
+          : `Allow this in the ${APP.name} desktop app on the computer running this session.`}
+      </p>
+      <div className="@container flex flex-wrap items-center justify-between gap-2">
+        <Action label="Don’t allow" caps={['1', 'Esc']} disabled={busy} onClick={deny} />
+        {here && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Action label="Always allow" caps={['2', SHIFT, MOD, ENTER]} disabled={busy} onClick={() => void allow(true)} />
+            <Action primary label="Allow for this session" caps={['3', MOD, ENTER]} disabled={busy} onClick={() => void allow(false)} />
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * FullControl: the assistant wants the mouse and keyboard. While it has them the other apps are hidden, the screen's
+ * edges glow, and holding Esc for a second takes them back. "Always" switches Settings › System to Full control.
+ */
+function FullControlRequest({ sessionId, request, sending, respond }: { sessionId: string; request: PermissionRequest; sending: boolean; respond: Respond }) {
+  const input = asRecord(request.input);
+  const apps = (Array.isArray(input.apps) ? input.apps : []) as AppGrant[];
+  const reason = str(input.reason);
+  const here = useComputerHere();
+  const [allowing, setAllowing] = useState(false);
+  const busy = sending || allowing;
+  const allow = async (always: boolean) => {
+    if (busy || !here) return;
+    setAllowing(true);
+    try {
+      await desktop!.computer!.allowControl({ backend: here, sessionId, always });
+      respond({ behavior: 'allow' });
+    } catch (e) {
+      toast.error(describeError(e).message);
+    } finally {
+      setAllowing(false);
+    }
+  };
+  const keep = () => !busy && respond({ behavior: 'deny' });
+  return (
+    <Card
+      title={`Let ${APP.name} take over your mouse and keyboard?`}
+      keys={{
+        escape: keep,
+        mod: here ? () => void allow(false) : undefined,
+        modShift: here ? () => void allow(true) : undefined,
+        digit: (n) => (n === 1 ? keep() : !here ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
+      }}
+    >
+      {reason && <p className="text-body text-fg-secondary">{reason}</p>}
+      {here && <ComputerPermissions />}
+      <p className="text-body text-fg-secondary">
+        {apps.length ? `It works in ${apps.map((g) => g.app.name).join(', ')}; other apps are hidden meanwhile. ` : 'Other apps are hidden meanwhile. '}
+        Hold <Kbd>Esc</Kbd> for a second to take your computer back.
+      </p>
+      {!here && <p className="text-footnote text-fg-muted">Allow this in the {APP.name} desktop app on the computer running this session.</p>}
+      <div className="@container flex flex-wrap items-center justify-between gap-2">
+        <Action label="Keep control" caps={['1', 'Esc']} disabled={busy} onClick={keep} />
+        {here && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Action label="Always allow" caps={['2', SHIFT, MOD, ENTER]} disabled={busy} onClick={() => void allow(true)} />
+            <Action primary label="Allow" caps={['3', MOD, ENTER]} disabled={busy} onClick={() => void allow(false)} />
+          </div>
+        )}
       </div>
     </Card>
   );

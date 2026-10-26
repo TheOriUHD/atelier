@@ -20,6 +20,7 @@ import {
   ULTRACODE_MAX_SUBAGENTS,
   type ContextPart,
   type ContextUsage,
+  type ControllerMethods,
   type Effort,
   type EffortOptions,
   type ElicitationAnswer,
@@ -83,6 +84,8 @@ import { BackgroundTasks } from './background-tasks.ts';
 import { Loops, type LoopTick } from './loops.ts';
 import { approvedMode, createExitPlanModeTool } from '../tools/exit-plan-mode.ts';
 import { createAddConnectorTool, type AddedConnector, type NewConnector } from '../tools/add-connector.ts';
+import { createComputerTools, type ComputerCall } from '../tools/computer.ts';
+import { keepRecentScreenshots } from './screenshots.ts';
 import { createChangeDirectoryTool } from '../tools/change-directory.ts';
 import { createTaskStopTool } from '../tools/task-stop.ts';
 import { createTimeTool } from '../tools/time.ts';
@@ -194,6 +197,11 @@ export interface ChatServiceDeps {
   mcpTools?(session: SessionRow): Promise<Tool[]>;
   /** Adds an MCP server the person agreed to (AddConnector) to their connectors and connects to it; without it the tool isn't offered. */
   addConnector?(session: SessionRow, connector: NewConnector): Promise<AddedConnector>;
+  /** Computer use on the person's computer (ARCHITECTURE §22): whether a session can have it, and its controller. */
+  computer?: {
+    available(session: SessionRow): Promise<boolean>;
+    call<M extends keyof ControllerMethods>(session: SessionRow, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']>;
+  };
   /** File pre-images for Rewind; without it Write and Edit keep none. */
   checkpoints?: Checkpoints;
   /** Code and Work sessions: the session's running workspace, for the code tools; null without one. */
@@ -442,6 +450,7 @@ export class ChatService {
   private readonly listSessions: Tool;
   private readonly changeDirectory: Tool;
   private readonly addConnector: Tool;
+  private readonly computerTools: Tool[];
   private readonly askUser: Tool;
   private readonly exitPlanMode: Tool;
   private readonly skill: Tool;
@@ -477,6 +486,8 @@ export class ChatService {
       ...(deps.loopMinIntervalMs ? { minIntervalMs: deps.loopMinIntervalMs } : {}),
     });
     this.interactions = new InteractionBroker(async (sessionId, pending) => {
+      // The person must see the question: a session with the mouse and keyboard gives them back first.
+      if (pending) await this.releaseComputer(sessionId);
       await this.deps.repo.patchQuietly(sessionId, { pending });
       this.emit(sessionId, { type: 'pending', pending });
       // A background sub-agent may ask while its parent is idle: answered, the parent is idle again, and a loop that
@@ -527,6 +538,19 @@ export class ChatService {
         return { root: ws?.root ?? '', host: ws?.host ?? null };
       },
       move: (sessionId, path) => this.moveSession(sessionId, path),
+    });
+    const computerCall: ComputerCall = async (sessionId, method, params) => this.deps.computer!.call(await this.requireSession(sessionId), method, params);
+    this.computerTools = createComputerTools({
+      approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
+      call: computerCall,
+      blobs: this.deps.blobs,
+      // Hosted models take screenshots up to 1280 pixels; small local ones see better at 1024 (and pay less for it).
+      size: async (sessionId) => {
+        const session = await this.requireSession(sessionId);
+        const ref = await this.modelRef(session);
+        const tier = ref ? (await this.deps.models.resolve(ref, session.userId).catch(() => null))?.info.tier : undefined;
+        return tier === 'compact' ? { maxWidth: 1024, maxHeight: 1024 } : { maxWidth: 1280, maxHeight: 1280 };
+      },
     });
     this.addConnector = createAddConnectorTool({
       approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
@@ -1148,6 +1172,8 @@ export class ChatService {
       const asking = this.interactions.asking(sessionId);
       // A turn that ran to its end is news to anyone who isn't looking (cleared when they open the session).
       await this.setStatus(sessionId, asking ? 'waiting' : finalStatus, finalStatus === 'idle' && !asking && !signal.aborted);
+      // The turn is over: the person gets their mouse and keyboard back.
+      await this.releaseComputer(sessionId);
     }
   }
 
@@ -1704,6 +1730,8 @@ export class ChatService {
     const mcp = (await this.deps.mcpTools?.(session)) ?? [];
     // Adding a connector asks the person, which a sub-agent can't.
     const connect = this.deps.addConnector && !session.parentSessionId ? [this.addConnector] : [];
+    // Computer use: top-level Code and Cowork sessions only (a sub-agent can't ask for apps, and several would fight over one mouse).
+    const computer = (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && (await this.deps.computer?.available(session)) ? this.computerTools : [];
     const memory = this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? [];
     const inlineVisual = !session.parentSessionId && (session.mode === 'chat' || session.mode === 'work') ? [createInlineVisualTool()] : [];
     // The clock for everyone; the usage figures only where the model's provider has limits or a cost, and not for sub-agents.
@@ -1737,7 +1765,7 @@ export class ChatService {
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));
     const moveSession = movable ? [this.changeDirectory] : [];
-    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...web, ...connect, ...memory, ...mcp];
+    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...web, ...connect, ...computer, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */
@@ -2144,7 +2172,8 @@ export class ChatService {
       }
       out.push({ ...m, parts });
     }
-    return answerDanglingToolCalls(capToolResults(out, resultChars));
+    // Computer use keeps the newest screenshots only (a compact model sees one).
+    return answerDanglingToolCalls(capToolResults(keepRecentScreenshots(out, info.tier === 'compact' ? 1 : 3), resultChars));
   }
 
   // ------------------------------------------------------- context, compaction, titles
@@ -2514,6 +2543,14 @@ export class ChatService {
     }
   }
 
+  /** Ends a session's full control of the computer, if it has it; best-effort. */
+  private async releaseComputer(sessionId: string): Promise<void> {
+    if (!this.deps.computer) return;
+    const session = await this.deps.repo.getRow(sessionId);
+    if (!session || (session.mode !== 'code' && session.mode !== 'work') || session.parentSessionId) return;
+    await this.deps.computer.call(session, 'turn.end', {}).catch(() => undefined);
+  }
+
   private dropSuggestion(sessionId: string): void {
     this.suggesting.get(sessionId)?.abort();
     this.suggesting.delete(sessionId);
@@ -2579,7 +2616,7 @@ const COMPACT_CONNECTOR_CHARS = 200;
 /** Tools whose path the runner scopes to the workspace's roots. */
 const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
-const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);
+const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'ComputerApps', 'OpenApp', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);
 /** One instruction file of a folder the session moved to, at most this long in the tool's result. */
 const MOVED_INSTRUCTION_CHARS = 8_000;
 

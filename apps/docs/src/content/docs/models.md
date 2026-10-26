@@ -218,7 +218,7 @@ Atelier writes its instructions to the model in two sizes:
 - **Compact** for small and local models: at most twelve short numbered rules, one example call per core tool, and a budget
   of **16,000 characters** for the system prompt and tool list together, because local servers often run with a 4k to 8k
   window. Over the budget, Atelier trims the skill list, then connector tool descriptions, then long instruction files. Eight
-  tools are not offered at all (TaskStop, ChangeDirectory, SendMessage, ListSessions, MemoryView, ChatRead, Time, Usage).
+  tools are not offered at all (TaskStop, ChangeDirectory, SendMessage, ListSessions, MemoryView, ChatRead, Time, Usage), nor computer use's ComputerApps and OpenApp.
 
 The tier is chosen automatically: Anthropic and OpenAI models, ChatGPT Plan, GitHub Copilot and ChatGPT Chat are **Full**.
 Anything else is **Full** only when its id matches a known strong family, and **Compact** otherwise:

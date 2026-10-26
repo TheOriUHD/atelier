@@ -27,6 +27,8 @@ import {
   serveRpc,
   sessionEffort,
   type AppContract,
+  type ControllerEvent,
+  type ControllerMethods,
   type Handlers,
   type McpServerStatus,
   type ModelInfo,
@@ -147,6 +149,15 @@ export interface Platform {
   serverUpdates?: ServerUpdates | null;
   /** The desktop: a folder on this machine became one of the person's, so the app may show and open it (Show in Finder). */
   folderTrusted?(root: string): void;
+  /**
+   * The desktop: computer use on this computer (ARCHITECTURE §22), through the app's main process, which decides what
+   * each session may do there. `onEvent` hears when the person held Esc or took the mouse back.
+   */
+  computer?: {
+    available(): Promise<boolean>;
+    call<M extends keyof ControllerMethods>(sessionId: string, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']>;
+    onEvent(handler: (sessionId: string, event: ControllerEvent) => void): void;
+  };
 }
 
 /** Who is on the other end of a transport, as far as the surface can tell before any RPC. */
@@ -931,6 +942,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const [shared, own] = await Promise.all([mcp.tools(off), session.userId && platform.surface === 'web' ? personal.tools(session.userId, off) : []]);
       return [...shared, ...own];
     },
+    ...(platform.computer
+      ? { computer: { available: () => platform.computer!.available(), call: (session, method, params) => platform.computer!.call(session.id, method, params) } }
+      : {}),
     // AddConnector, once the person agreed: one of their own connectors on a server, Settings › Connectors on a desktop.
     addConnector: async (session, c) => {
       const toolNames = (status: McpServerStatus) => status.tools.filter((t) => t.enabled).map((t) => mcpToolName(c.name, t.name));
@@ -1003,6 +1017,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     fetch: httpFetch,
     resolveRefs: async (value) => (await interpolate(value, { secret: (id) => secrets.forSettings(id), env: (name) => platform.env[name] })).value,
     recordUsage,
+  });
+  // Held Esc on the computer: the session's response stops, as with its Stop button.
+  platform.computer?.onEvent((sessionId, event) => {
+    if (event.type === 'stopped') void chat.stop(sessionId).catch((e: unknown) => platform.logger.error('stopping after Esc failed', e));
   });
 
   await sessions.markRunningAsInterrupted();

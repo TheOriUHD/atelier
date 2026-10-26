@@ -64,6 +64,18 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
       return 'Changing folder';
     case 'AddConnector':
       return `Adding ${text(args.name) || 'a connector'}`;
+    case 'ComputerAccess':
+      return 'Asking to use apps';
+    case 'ComputerApps':
+      return 'Looking up apps';
+    case 'OpenApp':
+      return `Opening ${text(args.app)}`;
+    case 'Screenshot':
+      return 'Taking a screenshot';
+    case 'FullControl':
+      return args.action === 'release' ? 'Handing back the mouse and keyboard' : 'Asking for the mouse and keyboard';
+    case 'ComputerAction':
+      return 'Using your computer';
     case 'SendMessage':
       return `Messaging ${messageTargetKind(text(args.to))}`;
     case 'ListSessions':

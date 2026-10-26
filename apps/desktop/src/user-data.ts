@@ -101,6 +101,9 @@ export const trustedFoldersFile = () => file('trusted-folders.json');
 /** What this computer lets each server do here (`lending.ts`). */
 export const lendingFile = () => file('lending.json');
 
+/** Computer use: on or off, how, denied apps and the apps allowed for good (`computer/store.ts`). */
+export const computerSettingsFile = () => file('computer-use.json');
+
 /** ssh's askpass script and its logs, for SSH hosts reached from here for a server. */
 export const sshDir = () => file('ssh');
 

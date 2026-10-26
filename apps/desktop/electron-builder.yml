@@ -27,6 +27,10 @@ mac:
     - from: ../../runner/bin
       to: runner
       filter: ['atelier-runner-darwin-*', 'atelier-runner-linux-*', 'checksums.json']
+    # The computer use helper (`pnpm computer:build`), started by main so macOS asks for its permissions as Atelier.
+    - from: ../../native/bin
+      to: computer
+      filter: ['atelier-computer-darwin']
     - from: ../../THIRD_PARTY_NOTICES.md
       to: THIRD_PARTY_NOTICES.md
     # On Windows and Linux electron-builder puts these beside the app itself; on macOS it leaves them out.

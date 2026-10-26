@@ -1,10 +1,13 @@
+import type { ControllerEvent } from '@atelier/protocol';
 import type { LinkProblem } from './link-problem.ts';
 
 /** Messages between the Electron main process and the utility process (embedded backend or server relay). */
 export type BackendRequest =
   | { kind: 'req'; id: number; op: 'encrypt'; value: string }
   | { kind: 'req'; id: number; op: 'decrypt'; value: string }
-  | { kind: 'req'; id: number; op: 'chatgptChat'; operation: 'status' | 'open' | 'hide' | 'disconnect' | 'models' | 'start' | 'poll' | 'stop'; value: string };
+  | { kind: 'req'; id: number; op: 'chatgptChat'; operation: 'status' | 'open' | 'hide' | 'disconnect' | 'models' | 'start' | 'poll' | 'stop'; value: string }
+  /** Computer use for a session (`method` of ControllerMethods, or `available`); main answers JSON. */
+  | { kind: 'req'; id: number; op: 'computer'; sessionId: string; method: string; params: unknown };
 
 export type MainResponse = { kind: 'res'; id: number; ok: true; value: string } | { kind: 'res'; id: number; ok: false; error: string };
 
@@ -21,6 +24,8 @@ export type MainToBackend =
   | { kind: 'importing' }
   /** Local mode: the person passed the OS account check (Touch ID), so the screen lock is removed. */
   | { kind: 'removeScreenLock' }
+  /** Local mode: the person held Esc in a session using the computer, or took the mouse back. */
+  | { kind: 'computerEvent'; sessionId: string; event: ControllerEvent }
   | { kind: 'shutdown' };
 
 export type BackendToMain =

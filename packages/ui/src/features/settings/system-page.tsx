@@ -5,6 +5,7 @@ import { Button, Select, Switch, type SelectOption } from '../../components/ui/i
 import { relativeTime } from '../../lib/dates.ts';
 import { changeLending, useConnection, useLending } from '../../lib/lending.ts';
 import { desktop, isMac, openExternal, os, type LendingChange, type UpdateChannel, type UpdateStatus } from '../../lib/platform.ts';
+import { ComputerUseSection } from './computer-use-section.tsx';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useWrite } from './use-setting.ts';
 
@@ -38,6 +39,7 @@ export function SystemPage() {
         <LaunchAtLoginRow />
         <DataFolderRow />
       </SettingsSection>
+      <ComputerUseSection />
       <LentSection />
     </>
   );

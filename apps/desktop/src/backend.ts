@@ -4,7 +4,7 @@
  */
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import type { RpcMessage, Transport } from '@atelier/protocol';
+import type { ControllerEvent, RpcMessage, Transport } from '@atelier/protocol';
 import { createBackend, hostRunnerBinary, type Cipher } from '@atelier/core';
 import type { BackendToMain, MainToBackend } from './bridge.ts';
 import { localConfigDir, localDataDir } from './data-dir.ts';
@@ -22,6 +22,14 @@ const request = (op: 'encrypt' | 'decrypt', value: string) =>
     pending.set(id, { resolve, reject });
     send({ kind: 'req', id, op, value });
   });
+/** Computer use goes through main, which owns the helper and decides what each session may do. */
+const askComputer = (sessionId: string, method: string, params: unknown) =>
+  new Promise<string>((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    send({ kind: 'req', id, op: 'computer', sessionId, method, params });
+  }).then((json) => JSON.parse(json) as unknown);
+const computerEvents = new Set<(sessionId: string, event: ControllerEvent) => void>();
 
 const cipher: Cipher = {
   encrypt: (plaintext) => request('encrypt', plaintext).then((b64) => `ss1:${b64}`),
@@ -48,6 +56,11 @@ const backend = await createBackend({
   ...(hasRunner ? { runnerDir } : {}),
   // Main keeps the folders "Show in Finder" and "Open in" may open: the backend's own, however they were added.
   folderTrusted: (root) => send({ kind: 'trusted', root }),
+  computer: {
+    available: async () => (await askComputer('', 'available', {})) === true,
+    call: async (sessionId, method, params) => (await askComputer(sessionId, method, params)) as never,
+    onEvent: (handler) => void computerEvents.add(handler),
+  },
   env: process.env,
   logger: {
     info: (message, data) => console.log(message, data ?? ''),
@@ -86,6 +99,8 @@ parentPort.on('message', (event: { data: MainToBackend; ports: Electron.MessageP
       (blob) => send(blob ? { kind: 'blob', id: m.id, found: true, bytes: blob.bytes, mime: blob.mime } : { kind: 'blob', id: m.id, found: false }),
       () => send({ kind: 'blob', id: m.id, found: false }),
     );
+  } else if (m.kind === 'computerEvent') {
+    for (const handler of computerEvents) handler(m.sessionId, m.event);
   } else if (m.kind === 'removeScreenLock') {
     void backend.removeScreenLock().catch((e: unknown) => console.error('Removing the screen lock failed:', e instanceof Error ? e.message : e));
   } else if (m.kind === 'shutdown') {

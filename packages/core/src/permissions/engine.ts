@@ -54,7 +54,12 @@ const PLAN_TOOLS = new Set(['ExitPlanMode', 'TodoWrite', 'AskUser', 'artifact', 
  * Tools that always ask the person themselves, with their own card: no second, generic prompt in front (a `path` that
  * is outside the workspace is ChangeDirectory's point; AddConnector adds to the person's setup).
  */
-const ASKS_ITSELF = new Set(['ChangeDirectory', 'AddConnector']);
+const ASKS_ITSELF = new Set(['ChangeDirectory', 'AddConnector', 'ComputerAccess', 'FullControl']);
+/**
+ * Computer use's actions: what they may do is decided on the computer, by the apps the person allowed there and at which
+ * tier (apps/desktop/src/computer/), not by a prompt per click. Plan mode still refuses the ones that act.
+ */
+const GRANT_GATED = new Set(['Screenshot', 'ComputerApps', 'OpenApp', 'ComputerAction']);
 /** Where a command's deletions are ordinary scratch work in Auto mode (never the folders themselves, never a glob). */
 const SCRATCH_DIRS = ['/tmp', '/private/tmp', '/var/tmp', '/private/var/tmp', '/var/folders', '/private/var/folders'];
 /** Generated or disposable folders and files: clearing them is routine cleanup, however many at once, however often. */
@@ -112,6 +117,7 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   if (auto && isBash && !opaque && !warning && routineCleanup(parts, ctx)) return { behavior: 'allow', reason: 'Auto mode: clearing generated or temporary files.' };
 
   if (ASKS_ITSELF.has(call.name)) return { behavior: 'allow', reason: 'It asks the person itself.' };
+  if (GRANT_GATED.has(call.name)) return { behavior: 'allow', reason: 'Decided by the apps allowed on this computer.' };
 
   // A connector describes its own tools: a read-only hint lets a call into plan mode but never skips the prompt,
   // and its paths are the server's, not the workspace's.

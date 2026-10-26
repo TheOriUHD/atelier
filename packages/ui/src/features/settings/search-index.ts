@@ -5,7 +5,7 @@
  */
 import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
-import { desktop } from '../../lib/platform.ts';
+import { desktop, isMac } from '../../lib/platform.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
 
@@ -470,6 +470,63 @@ export const SETTINGS_INDEX = [
     label: 'Launch at login',
     description: 'Open Atelier when you sign in to this computer.',
     keywords: ['startup', 'start automatically', 'autostart', 'login item', 'open at login', 'boot'],
+  },
+  {
+    id: 'system.computerUse',
+    page: 'system',
+    label: 'Enable computer use',
+    description: 'Let the assistant in Code and Cowork see and use the apps you allow on this computer.',
+    keywords: ['computer use', 'control', 'mouse', 'keyboard', 'screen', 'apps', 'automation', 'agent'],
+    available: () => !!desktop?.computer,
+  },
+  {
+    id: 'system.computerUnhide',
+    page: 'system',
+    label: 'Unhide apps when Atelier finishes',
+    description: 'Apps hidden while Atelier had full control of your screen come back when it stops.',
+    keywords: ['computer use', 'hide', 'unhide', 'apps', 'full control'],
+    available: () => !!desktop?.computer,
+  },
+  {
+    id: 'system.computerMode',
+    page: 'system',
+    label: 'How Atelier uses the apps you allow',
+    description:
+      'Background: asks you in each conversation before it takes over your mouse and keyboard. Full control: takes them whenever it acts in an allowed app, without asking again.',
+    keywords: ['computer use', 'background', 'full control', 'mouse', 'keyboard', 'mode'],
+    available: () => !!desktop?.computer,
+  },
+  {
+    id: 'system.computerDenied',
+    page: 'system',
+    label: 'Denied apps',
+    description: 'Atelier never uses these apps: asking for them is turned down without a question.',
+    keywords: ['computer use', 'deny', 'block', 'password manager', 'apps'],
+    available: () => !!desktop?.computer,
+  },
+  {
+    id: 'system.computerAlways',
+    page: 'system',
+    label: 'Apps allowed for good',
+    description: 'Apps you allowed with “Always allow on this computer”; every session may use them.',
+    keywords: ['computer use', 'allow', 'always', 'apps'],
+    available: () => !!desktop?.computer,
+  },
+  {
+    id: 'system.computerAccessibility',
+    page: 'system',
+    label: 'Accessibility',
+    description: 'macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission.',
+    keywords: ['computer use', 'permission', 'privacy', 'mouse', 'keyboard', 'system settings'],
+    available: () => !!desktop?.computer && isMac,
+  },
+  {
+    id: 'system.computerScreen',
+    page: 'system',
+    label: 'Screen recording',
+    description: 'macOS lets Atelier take screenshots of the apps you allow with this permission. macOS asks again from time to time.',
+    keywords: ['computer use', 'permission', 'privacy', 'screenshot', 'screen recording', 'system settings'],
+    available: () => !!desktop?.computer && isMac,
   },
   {
     id: 'system.lendScratch',

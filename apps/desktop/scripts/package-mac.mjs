@@ -73,6 +73,8 @@ function submit() {
   }
 
   run('node', ['scripts/build.mjs']);
+  // The computer use helper (native/computer-macos), for both architectures in one file; electron-builder signs it with the app.
+  run('pnpm', ['--workspace-root', 'computer:build']);
   // Electron's and Chromium's license files go into the app (electron-builder.yml). They come with Electron's own
   // download, which a fresh install (pnpm doesn't run Electron's install script) hasn't made yet.
   if (!existsSync(join(root, 'node_modules/electron/dist/LICENSES.chromium.html'))) run('node', ['node_modules/electron/install.js']);
