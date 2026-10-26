@@ -30,7 +30,7 @@ async function image(deps: ComputerToolDeps, shot: ComputerScreenshot) {
 /** What Full control lets it do, for the model. */
 function fullControlText(denied: string[]): string {
   return [
-    `Full control is on: you may use any app on this computer as the person sees the screen, except Atelier itself, parts of the system${denied.length ? ` and the person's denied apps (${denied.join(', ')})` : ''}. In terminals and code editors you may only click and scroll.`,
+    `Full control is on: you may use any app on this computer as the person sees the screen, except Atelier itself, parts of the system${denied.length ? ` and the person's denied apps (${denied.join(', ')})` : ''}.`,
     'You take over the mouse and keyboard when you act. Start from the screen as it is (Atelier is likely in front): bring the app you need forward with OpenApp (or cmd+tab, cmd+space), then take a Screenshot.',
   ].join(' ');
 }

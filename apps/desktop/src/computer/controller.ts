@@ -70,9 +70,8 @@ interface SessionState {
 }
 
 /**
- * What a session may do in each app. Background: the apps the person allowed it, one by one. Full control: every app as
- * the screen shows it, but for their denied apps, Atelier and the system's own, and only clicks in terminals and editors
- * (typing there would run commands past Atelier's permission prompts).
+ * What a session may do in each app. Background: the apps the person allowed it, one by one. Full control: everything in
+ * every app as the screen shows it, terminals and editors included, but for their denied apps, Atelier and the system's own.
  */
 interface Policy {
   full: boolean;
@@ -568,7 +567,7 @@ export class ComputerController {
   private policy(backend: string, sessionId: string, settings: ComputerSettings): Policy {
     const denied = settings.denied;
     if (settings.mode === 'full') {
-      return { full: true, grants: [], denied, tier: (id) => (settings.denied.some((d) => d.id === id) ? null : maxTier(appCategory(id))) };
+      return { full: true, grants: [], denied, tier: (id) => (settings.denied.some((d) => d.id === id) || !maxTier(appCategory(id)) ? null : 'full') };
     }
     const grants = this.grants(backend, sessionId, settings);
     return { full: false, grants, denied, tier: (id) => grants.find((g) => g.app.id === id)?.tier ?? null };

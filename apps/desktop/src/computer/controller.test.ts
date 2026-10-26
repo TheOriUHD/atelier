@@ -186,7 +186,7 @@ describe('full control', () => {
     const prepared = await ask('access.prepare', { names: ['Safari', 'Terminal', '1Password'] });
     expect(prepared.apps.map((a) => [a.app.name, a.granted])).toEqual([
       ['Safari', 'full'],
-      ['Terminal', 'click'],
+      ['Terminal', 'full'],
       ['1Password', null],
     ]);
     expect(await ask('access.state', {})).toMatchObject({ apps: [], mode: 'full', denied: expect.arrayContaining(['1Password']) });
@@ -204,7 +204,7 @@ describe('full control', () => {
     expect(await batch([{ action: 'key', text: 'cmd+space' }])).toEqual([{ action: 'key', ok: true }]);
     expect(await batch([{ action: 'key', text: 'Command+Tab' }])).toEqual([{ action: 'key', ok: true }]);
     expect(helper.did('key.press').map((c) => c.params)).toEqual([{ keys: ['cmd', 'space'] }, { keys: ['command', 'tab'] }]);
-    // A browser takes clicks and typing; a terminal only clicks; a denied app and Atelier nothing.
+    // A browser and a terminal take clicks and typing; a denied app and Atelier nothing.
     helper.under = { app: APPS[1]! };
     helper.focused = { app: APPS[1]! };
     expect(await batch([{ action: 'left_click', coordinate: [10, 10] }, { action: 'type', text: 'amazon.de' }])).toEqual([
@@ -212,7 +212,11 @@ describe('full control', () => {
       { action: 'type', ok: true },
     ]);
     helper.under = { app: APPS[2]! };
-    expect((await batch([{ action: 'right_click', coordinate: [10, 10] }]))[0]).toMatchObject({ ok: false, note: 'You may only click and scroll in Terminal.' });
+    helper.focused = { app: APPS[2]! };
+    expect(await batch([{ action: 'right_click', coordinate: [10, 10] }, { action: 'type', text: 'ls' }])).toEqual([
+      { action: 'right_click', ok: true },
+      { action: 'type', ok: true },
+    ]);
     helper.under = { app: APPS[5]! };
     expect((await batch([{ action: 'left_click', coordinate: [10, 10] }]))[0]).toMatchObject({ ok: false, note: "1Password is on the person's denied list: never used." });
     helper.under = { app: app('dev.atelier.app', 'Atelier') };

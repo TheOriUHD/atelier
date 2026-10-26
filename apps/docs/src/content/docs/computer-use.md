@@ -37,9 +37,10 @@ Atelier never answers these questions for you.
 **How Atelier uses the apps you allow** in Settings decides how much it asks:
 
 - **Background** (the default): it asks for each app, and before it takes your mouse and keyboard (below).
-- **Full control**: it takes over your computer as it is. No cards: it may use any app except your denied apps,
-  Atelier itself and the parts of macOS that ask for passwords. Terminals and code editors still only get clicks
-  (typing there would run commands past Atelier's permission prompts). Its screenshots show the screen as you see it,
+- **Full control**: it takes over your computer as it is. No cards: it may do anything in any app, terminals and code
+  editors included, except your denied apps, Atelier itself and the parts of macOS that ask for passwords. Typing in a
+  terminal runs commands without Atelier's permission prompts, so use Full control only when you would let it do that.
+  Its screenshots show the screen as you see it,
   with your denied apps left out, and nothing is hidden: it starts from Atelier and brings the app it needs to the
   front itself.
 
