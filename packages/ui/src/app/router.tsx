@@ -37,14 +37,15 @@ const homeRoute = createRoute({
   component: HomePage,
   validateSearch: (search: Record<string, unknown>): { temporary?: boolean } => (search.temporary === true || search.temporary === 'true' ? { temporary: true } : {}),
 });
-const chatRoute = createRoute({ getParentRoute: () => rootRoute, path: '/chat/$sessionId', component: ChatPage });
+/** Each conversation is a page of its own: switching chats must not carry the last one's panels or previews over. */
+const chatRoute = createRoute({ getParentRoute: () => rootRoute, path: '/chat/$sessionId', component: ChatPage, remountDeps: ({ params }) => params.sessionId });
 const folderSearch = (search: Record<string, unknown>): FolderSearch => ({
   ...(typeof search.workspace === 'string' ? { workspace: search.workspace } : {}),
   ...(typeof search.host === 'string' ? { host: search.host } : {}),
   ...(typeof search.group === 'string' ? { group: search.group } : {}),
 });
 const workRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work', component: CoworkHome, validateSearch: folderSearch });
-const workSessionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work/$sessionId', component: WorkPage });
+const workSessionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work/$sessionId', component: WorkPage, remountDeps: ({ params }) => params.sessionId });
 const codeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/code', component: () => <FolderHome mode="code" />, validateSearch: folderSearch });
 /** `?split=<session>`: a second Code session beside this one (split view). */
 const codeSessionRoute = createRoute({

@@ -6,6 +6,22 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 - **A session the assistant moved to another folder shows that folder:** after ChangeDirectory, the sidebar listed the session under "Ungrouped", the Terminal said "This session has no folder" and code blocks had no Run button, until the app was restarted: the folder was new to the window's list of folders and nothing told it. The move now sends the updated list, and a window that meets a session in a folder it doesn't know reads its folders again.
 
+- **Several windows, devices and the browser stay in step** (found by an audit for quirks like the one above, where something changed and a window kept an old copy until a restart):
+  - Switching a reply's branch or rewinding in one window moves every other window on that conversation too; before, they kept the old branch, and the next message there cut the transcript down to that one message.
+  - A deleted conversation says "This conversation was deleted." wherever it is still open (another window, the other half of a split view), instead of failing when you send.
+  - An answered SSH question (host key, password) closes in every window, not only the one that answered.
+  - Side chats started or closed in one window show in the others.
+  - Deleting a project takes its chats out of it everywhere (before, "/clear" in one of them opened the deleted project); a project's chat count no longer counts side chats or archived chats, and follows forks and Continue in Cowork.
+  - A removed device leaves the Devices list in every window; changing someone's role updates their model list and connector details right away; turning a plugin on or off, or Claude Code compatibility, updates every window's skills and `/` menu.
+  - What this computer lends a server, changed in one window, shows in the others (in server mode).
+  - "Keep computer awake" is the same in every window, so closing the window you switched it in no longer lets the computer sleep.
+  - "Change server" reloads every window, not only the one you clicked in; a window closed while it recorded a keyboard shortcut no longer leaves the menu without its shortcuts.
+- **Code and Cowork follow changes they didn't make:** the git bar, Changes, Files and Rewind refresh when a background command or sub-agent ends, when a reply ends, a moment after the Terminal goes quiet (a `git commit`, a checkout) and when the window comes back to the front (an edit in another editor).
+- **Chat and Cowork conversations start fresh when you switch:** the side chat panel and Cowork's file preview no longer carry over from the conversation you were in.
+- **Artifacts:** the Artifacts page opens a Code session's artifact in Code (it opened the Chat view), and follows chats deleted or changed elsewhere.
+- **Show in Finder and Open in Cursor / VS Code work for a folder the agent moved a session to** on "Run on this computer"; before, they said the folder wasn't one you opened, even after a restart.
+- **Server mode:** an account that signs in with a temporary password lends this computer once the new password is set (before, its folders stayed unavailable until the app restarted); a folder already in your list is no longer asked about again ("Trust this workspace?") when you open it from this computer.
+
 - **Run in terminal for PowerShell:** code blocks marked `powershell`, `pwsh` or `ps1` get the Run button too. On Windows the terminal is PowerShell, and that is what models write there; before, only `bash`, `sh`, `zsh` and `fish` blocks had it.
 
 ## [0.2.10] — 2026-10-25

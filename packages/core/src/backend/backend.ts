@@ -67,6 +67,7 @@ import { deviceFetch } from '../workspaces/device-fetch.ts';
 import { findFiles, gitDiff, gitStatus, grepFiles, listDir, readFile as readWorkspaceFile, sessionDiff } from '../workspaces/workspace-view.ts';
 import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
 import { ChatService, type ExtensionCatalog } from '../agent/chat-service.ts';
+import { isSideChat } from '../agent/side-chat.ts';
 import { LoopLimitError } from '../agent/loops.ts';
 import { sessionUsage, statsSummary, usageSummary } from '../usage/usage.ts';
 import { GitHub, GitHubError } from '../cloud/github.ts';
@@ -144,6 +145,8 @@ export interface Platform {
   runnerDir?: string;
   /** The server's own version and updates (Settings › Admin › Server); built from `env` on the web surface when absent. */
   serverUpdates?: ServerUpdates | null;
+  /** The desktop: a folder on this machine became one of the person's, so the app may show and open it (Show in Finder). */
+  folderTrusted?(root: string): void;
 }
 
 /** Who is on the other end of a transport, as far as the surface can tell before any RPC. */
@@ -254,6 +257,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const sandboxReach = sandboxShell(platform.env, platform.dataDir);
   const workspaceManager = new WorkspaceManager({
     db,
+    ...(platform.folderTrusted ? { trusted: platform.folderTrusted } : {}),
     // Only the desktop runs folders on its own machine (and reaches SSH hosts); a server's runner builds go to codespaces.
     runnerBinary: platform.surface === 'desktop' && platform.runnerDir ? hostRunnerBinary(platform.runnerDir) : null,
     runnerDir: platform.runnerDir ?? null,
@@ -268,6 +272,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     links,
     logger: platform.logger,
   });
+  // Folders added before the desktop kept its list in step (an agent's move): it learns of them once, at start.
+  if (platform.folderTrusted) void workspaceManager.localRoots().then((roots) => roots.forEach((root) => platform.folderTrusted!(root)), () => undefined);
   const terminals = new TerminalManager<Connection>({
     data: (owner, terminalId, data) => owner.rpc.emit('terminals.data', { terminalId, data }),
     exit: (owner, terminalId, code) => owner.rpc.emit('terminals.exit', { terminalId, code }),
@@ -459,6 +465,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     ...(platform.surface === 'web' ? { unreachable: (host: string) => (isLoopbackHost(host) ? LOOPBACK_ON_SERVER : undefined) } : {}),
   });
   settings.on('change', () => mcp.sync());
+  // Which plugins are on, and whether Claude Code's folders count, change the skills and commands everyone has.
+  let extensionSettings = JSON.stringify([settings.effective.enabledPlugins, settings.effective.compat.claudeCode]);
+  settings.on('change', () => {
+    const now = JSON.stringify([settings.effective.enabledPlugins, settings.effective.compat.claudeCode]);
+    if (now !== extensionSettings) for (const c of connections) if (c.auth) c.rpc.emit('extensions.changed', {});
+    extensionSettings = now;
+  });
   /** Regular users see which connectors exist and the tools they may use, never their errors, URLs or commands. */
   const mcpStatusFor = (c: Connection, list: McpServerStatus[]): McpServerStatus[] =>
     isAdmin(c)
@@ -805,8 +818,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     sessionChanged: (summary) =>
       void sessions
         .getRow(summary.id)
-        // Sub-agent sessions stay out of Recents; their transcript cards follow them through session events.
-        .then((row) => row && !row.parentSessionId && emitToUser(row.userId, 'sessions.changed', summary))
+        // Sub-agent sessions stay out of Recents; their transcript cards follow them through session events. A side chat's
+        // change reaches its main session's windows as a change to its side chats.
+        .then((row) => {
+          if (!row) return;
+          if (!row.parentSessionId) emitToUser(row.userId, 'sessions.changed', summary);
+          else if (isSideChat(row)) emitToUser(row.userId, 'sideChats.changed', { sessionId: row.parentSessionId });
+        })
         .catch((e: unknown) => platform.logger.error('session update broadcast failed', e)),
     person: async (userId) => {
       if (!userId) return { prefs: await prefs.get(''), name: '', safeguards: 'inherit' };
@@ -850,7 +868,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
           const fresh = await sessions.getRow(session.id);
           if (fresh?.workspaceId) return workspaceManager.open(userId, fresh.workspaceId);
           const folder = await workspaceManager.addChatSandbox(userId);
-          await sessions.update(session.id, { workspaceId: folder.id });
+          const updated = await sessions.update(session.id, { workspaceId: folder.id });
+          // Their windows learn of the new folder before the chat names it.
+          emitToUser(userId, 'workspaces.changed', await workspaceManager.list(userId));
+          if (!updated.temporary) emitToUser(userId, 'sessions.changed', updated);
           return workspaceManager.open(userId, folder.id);
         })();
         sandboxesMaking.set(session.id, made);
@@ -1330,6 +1351,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'account.removeDevice': async ({ id }, ctx) => {
       await devices.remove(me(ctx).id, id);
+      emitToUser(me(ctx).id, 'devices.changed', {});
       return { ok: true as const };
     },
     'devices.register': async (input, ctx) => {
@@ -1351,6 +1373,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const next = await prefs.set(me(ctx).id, path, value);
         emitToUser(me(ctx).id, 'prefs.changed', next);
         if (path[0] === 'remoteControl') await syncRemoteAccess(me(ctx).id);
+        // Their own plugins switched on or off: their skills and commands change.
+        if (path[0] === 'plugins') emitToUser(me(ctx).id, 'extensions.changed', {});
         return next;
       }),
     'prefs.reset': ({ path }, ctx) =>
@@ -1359,6 +1383,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const next = await prefs.reset(me(ctx).id, path);
         emitToUser(me(ctx).id, 'prefs.changed', next);
         if (path[0] === 'remoteControl') await syncRemoteAccess(me(ctx).id);
+        if (path[0] === 'plugins') emitToUser(me(ctx).id, 'extensions.changed', {});
         return next;
       }),
 
@@ -1376,6 +1401,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
           c.rpc.emit('settings.changed', settingsFor(c));
         }
         emitToUser(id, 'account.changed', user);
+        // And which models (admins see hidden ones too) and connector details.
+        sendModels(() => registry.listModels(), (c) => c.auth?.user.id === id);
+        for (const c of connections) if (c.auth?.user.id === id) c.rpc.emit('mcp.changed', connectorsFor(c, mcp.current()));
         return user;
       }),
     'users.resetPassword': ({ id }) =>
@@ -1564,13 +1592,15 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const updated = Object.keys(loud).length ? await sessions.update(id, loud) : (await sessions.get(id))!;
       emitToUser(me(ctx).id, 'sessions.changed', updated);
       if (remoteControl !== undefined) await syncRemoteAccess(me(ctx).id, id);
-      if (updated.projectId !== before.projectId) emitToUser(me(ctx).id, 'projects.changed', {});
+      // A project counts its chats that aren't archived.
+      if (updated.projectId !== before.projectId || (archived !== undefined && updated.projectId)) emitToUser(me(ctx).id, 'projects.changed', {});
       return updated;
     },
     'sessions.fork': async ({ id }, ctx) => {
       await sessionOrThrow(id, ctx);
       const copy = await sessions.fork(id);
       emitToUser(me(ctx).id, 'sessions.changed', copy);
+      if (copy.projectId) emitToUser(me(ctx).id, 'projects.changed', {});
       return copy;
     },
     'sessions.continueInCowork': async ({ id }, ctx) => {
@@ -1579,6 +1609,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (row.temporary) throw appError('unsupported', 'A temporary chat can’t be continued in Cowork.');
       const copy = await sessions.fork(id, 'work');
       emitToUser(me(ctx).id, 'sessions.changed', copy);
+      if (copy.projectId) emitToUser(me(ctx).id, 'projects.changed', {});
       return copy;
     },
     'groups.list': async (_input, ctx) => groups.list(me(ctx).id),
@@ -1679,7 +1710,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'sideChats.start': async ({ sessionId, question }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
       if ((await sessions.getRow(sessionId))?.parentSessionId) throw appError('unsupported', 'Side chats start from a main session.');
-      return chat.startSideChat(sessionId, question);
+      const started = await chat.startSideChat(sessionId, question);
+      emitToUser(me(ctx).id, 'sideChats.changed', { sessionId });
+      return started;
     },
     'sideChats.list': async ({ sessionId }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
@@ -1981,6 +2014,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (!waiting || waiting.userId !== me(ctx).id) throw appError('not_waiting', 'That question was already answered.');
       sshWaiting.delete(answer.id);
       waiting.resolve(answer);
+      // The question showed in all their windows: it goes away in the others too.
+      emitToUser(waiting.userId, 'ssh.promptClosed', { id: answer.id });
       return { ok: true as const };
     },
     'workspaces.addSsh': async ({ host, path }, ctx) => {
@@ -2081,8 +2116,15 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'projects.delete': async ({ id }, ctx) => {
       await projectOrThrow(id, ctx);
+      const inIt = await sessions.list({ userId: me(ctx).id, projectId: id, archived: 'all', limit: 10_000 });
       await projects.delete(id);
       emitToUser(me(ctx).id, 'projects.changed', {});
+      // Its chats leave it (the database clears their project): their windows hear it, as their memory does.
+      for (const { id: sessionId } of inIt) {
+        const summary = await sessions.get(sessionId);
+        if (summary) emitToUser(me(ctx).id, 'sessions.changed', summary);
+      }
+      emitToUser(me(ctx).id, 'memory.changed', {});
       return { ok: true as const };
     },
     'projects.addFile': async ({ projectId, fileId }, ctx) => {

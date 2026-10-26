@@ -65,6 +65,8 @@ export const keys = {
 export function useLiveQueries(): void {
   const qc = useQueryClient();
   useEffect(() => {
+    // Folders read again for a session that named them, once each: a removed folder's sessions keep naming it.
+    const rechecked = new Set<string>();
     const offs = [
       rpc().on('settings.changed', (snapshot) => qc.setQueryData(keys.settings, snapshot)),
       rpc().on('prefs.changed', (prefs) => {
@@ -90,9 +92,20 @@ export function useLiveQueries(): void {
         void qc.invalidateQueries({ queryKey: ['sessions'] });
         // A session in a folder these windows don't know yet (one the agent moved it to): read the folders again.
         const known = qc.getQueryData<WorkspaceSummary[]>(keys.workspaces);
-        if (summary.workspaceId && known && !known.some((w) => w.id === summary.workspaceId)) void qc.invalidateQueries({ queryKey: keys.workspaces });
+        if (summary.workspaceId && known && !known.some((w) => w.id === summary.workspaceId) && !rechecked.has(summary.workspaceId)) {
+          rechecked.add(summary.workspaceId);
+          void qc.invalidateQueries({ queryKey: keys.workspaces });
+        }
+        // Artifacts are listed with the chat they belong to (only read again while the Artifacts page is open).
+        void qc.invalidateQueries({ queryKey: ['artifacts'] });
       }),
-      rpc().on('sessions.removed', () => void qc.invalidateQueries({ queryKey: ['sessions'] })),
+      rpc().on('sessions.removed', () => {
+        void qc.invalidateQueries({ queryKey: ['sessions'] });
+        void qc.invalidateQueries({ queryKey: ['artifacts'] });
+        // It may have been a side chat closed in another window.
+        void qc.invalidateQueries({ queryKey: ['sideChats'] });
+      }),
+      rpc().on('sideChats.changed', ({ sessionId }) => void qc.invalidateQueries({ queryKey: ['sideChats', sessionId] })),
       rpc().on('groups.changed', (list) => {
         qc.setQueryData(keys.groups, list);
         void qc.invalidateQueries({ queryKey: ['sessions'] });
@@ -100,6 +113,8 @@ export function useLiveQueries(): void {
       rpc().on('workspaces.changed', (list) => qc.setQueryData(keys.workspaces, list)),
       rpc().on('devices.changed', () => {
         void qc.invalidateQueries({ queryKey: keys.devices });
+        // What this computer lends may have changed in another of its windows (the server hears it and says so).
+        void qc.invalidateQueries({ queryKey: keys.lending });
         void qc.invalidateQueries({ queryKey: keys.personalProviders });
       }),
       rpc().on('extensions.changed', () => {
@@ -111,7 +126,13 @@ export function useLiveQueries(): void {
         void qc.invalidateQueries({ queryKey: ['project'] });
       }),
     ];
-    return () => offs.forEach((off) => off());
+    // Another app (an editor, a terminal, git) may have changed the folder while this window was in the background.
+    const onFocus = () => void qc.invalidateQueries({ queryKey: ['workspace'] });
+    window.addEventListener('focus', onFocus);
+    return () => {
+      offs.forEach((off) => off());
+      window.removeEventListener('focus', onFocus);
+    };
   }, [qc]);
 }
 

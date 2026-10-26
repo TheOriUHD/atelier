@@ -84,6 +84,8 @@ export function createDeviceLink(options: DeviceLinkOptions) {
   let failures = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let watchdog: ReturnType<typeof setInterval> | undefined;
+  /** The server turned the token down (4401), so the link stopped trying until it is given one again. */
+  let refused = false;
   const runners = new Map<string, Lent>();
   /** How many of those are SSH hosts' runners. */
   let started = 0;
@@ -190,6 +192,7 @@ export function createDeviceLink(options: DeviceLinkOptions) {
 
   const connect = () => {
     if (!token) return;
+    refused = false;
     const ws = (socket = openSocket(url, {
       Authorization: `Bearer ${token}`,
       [DEVICE_HEADERS.id]: options.device.id,
@@ -202,7 +205,10 @@ export function createDeviceLink(options: DeviceLinkOptions) {
       socket = null;
       clearInterval(watchdog);
       stopRunners();
-      if (code === SIGNED_OUT) return;
+      if (code === SIGNED_OUT) {
+        refused = true;
+        return;
+      }
       timer = setTimeout(connect, backoff(++failures));
     };
     ws.onopen = () => {
@@ -230,9 +236,12 @@ export function createDeviceLink(options: DeviceLinkOptions) {
   };
 
   return {
-    /** Signs the link in (or out with null); a changed token reconnects. */
+    /**
+     * Signs the link in (or out with null); a changed token reconnects, and so does the same one the server turned down
+     * before (an account that had to change its password first keeps its token).
+     */
     setToken(next: string | null): void {
-      if (next === token) return;
+      if (next === token && !(next && refused)) return;
       token = next;
       clearTimeout(timer);
       clearInterval(watchdog);

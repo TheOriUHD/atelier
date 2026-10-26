@@ -5,6 +5,7 @@
  * it missed under a dim line.
  */
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { keystrokes } from './terminal-keys.ts';
 import { Terminal, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -13,6 +14,7 @@ import { RotateCw } from 'lucide-react';
 import colors from '../../../theme/colors.json';
 import { Button } from '../../components/ui/index.ts';
 import { getTransport } from '../../lib/platform.ts';
+import { keys } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useResolvedTheme } from '../../lib/theme.ts';
 
@@ -54,6 +56,9 @@ export interface TerminalHandle {
 }
 
 
+/** How long the shell is quiet before the folder's panes and git bar are read again. */
+const SETTLE_MS = 1500;
+
 export default function TerminalPanel({
   workspaceId,
   dir,
@@ -69,6 +74,7 @@ export default function TerminalPanel({
   const host = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const theme = useResolvedTheme();
+  const qc = useQueryClient();
   // Bumped to start a new shell after the last one exited.
   const [run, setRun] = useState(0);
   const [ended, setEnded] = useState<string | null>(null);
@@ -115,9 +121,13 @@ export default function TerminalPanel({
     };
     /** Characters shown so far: where catching up after a reconnect starts. */
     let received = 0;
+    // What runs here changes files and git (a commit, a checkout): once the shell goes quiet, the panes read them again.
+    let quiet: ReturnType<typeof setTimeout> | undefined;
     const show = (data: string) => {
       received += data.length;
       term.write(data);
+      clearTimeout(quiet);
+      quiet = setTimeout(() => void qc.invalidateQueries({ queryKey: keys.workspace(workspaceId) }), SETTLE_MS);
     };
     // Output can arrive before `terminals.open` answers; hold it until the id is known.
     const early: { terminalId: string; data: string }[] = [];
@@ -170,6 +180,7 @@ export default function TerminalPanel({
 
     return () => {
       closed = true;
+      clearTimeout(quiet);
       observer.disconnect();
       offData();
       offExit();
@@ -180,7 +191,7 @@ export default function TerminalPanel({
       term.dispose();
       terminal.current = null;
     };
-  }, [workspaceId, dir, run]);
+  }, [workspaceId, dir, run, qc]);
 
   useEffect(() => {
     if (terminal.current) terminal.current.options.theme = terminalTheme(colors[theme]);

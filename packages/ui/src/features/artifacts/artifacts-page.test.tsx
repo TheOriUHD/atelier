@@ -12,7 +12,7 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
 
-const item = (id: string, type: ArtifactListItem['type'], sessionTitle = 'Charts'): ArtifactListItem => ({
+const item = (id: string, type: ArtifactListItem['type'], sessionTitle = 'Charts', sessionMode: ArtifactListItem['sessionMode'] = 'chat'): ArtifactListItem => ({
   id,
   sessionId: `s-${id}`,
   identifier: id,
@@ -23,13 +23,15 @@ const item = (id: string, type: ArtifactListItem['type'], sessionTitle = 'Charts
   versions: 1,
   updatedAt: Date.now(),
   sessionTitle,
+  sessionMode,
 });
 
 function renderPage() {
   const rootRoute = createRootRoute();
   const page = createRoute({ getParentRoute: () => rootRoute, path: '/artifacts', component: ArtifactsPage });
   const chat = createRoute({ getParentRoute: () => rootRoute, path: '/chat/$sessionId', component: () => null });
-  const router = createRouter({ routeTree: rootRoute.addChildren([page, chat]), history: createMemoryHistory({ initialEntries: ['/artifacts'] }) });
+  const code = createRoute({ getParentRoute: () => rootRoute, path: '/code/$sessionId', component: () => null });
+  const router = createRouter({ routeTree: rootRoute.addChildren([page, chat, code]), history: createMemoryHistory({ initialEntries: ['/artifacts'] }) });
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <RouterProvider router={router} />
@@ -69,6 +71,13 @@ describe('ArtifactsPage', () => {
     fireEvent.click(screen.getByText('Artifact logo'));
     expect(useUi.getState().artifact).toMatchObject({ sessionId: 's-logo', artifactId: 'logo' });
     expect(router.state.location.pathname).toBe('/chat/s-logo');
+  });
+
+  it('opens a Code session’s artifact in Code', async () => {
+    resetBackend({ 'artifacts.listAll': () => ({ items: [item('page', 'html', 'Landing page', 'code')], nextCursor: null }) });
+    const router = renderPage();
+    fireEvent.click(await screen.findByText('Artifact page'));
+    expect(router.state.location.pathname).toBe('/code/s-page');
   });
 
   it('says what will show up here while there is nothing yet', async () => {

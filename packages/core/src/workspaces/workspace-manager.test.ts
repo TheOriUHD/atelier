@@ -63,6 +63,21 @@ describe.skipIf(!built)('WorkspaceManager', () => {
     await expect(manager.openFrom('bob', from.id, '../api')).rejects.toThrow(/no folder to move from/);
   });
 
+  it("tells the desktop about this computer's folders, however they were added, and lists them for it at start", async () => {
+    const trusted: string[] = [];
+    const m = new WorkspaceManager({ db, runnerBinary: binary, trusted: (root) => trusted.push(root), logger: { info: () => {}, error: () => {} } });
+    const app = join(dir, 'app');
+    const api = join(dir, 'api');
+    mkdirSync(app);
+    mkdirSync(api);
+    const from = await m.addLocal('ada', app);
+    // The agent moved the session: the folder was never picked, yet "Show in Finder" must open it.
+    await m.openFrom('ada', from.id, api);
+    expect(trusted).toEqual([app, api]);
+    expect((await m.localRoots()).sort()).toEqual([api, app].sort());
+    await m.disposeAll();
+  });
+
   it('opens a runner once and keeps one shell per session', async () => {
     const ws = await manager.addLocal('ada', dir);
     const a = await manager.open('ada', ws.id);

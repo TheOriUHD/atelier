@@ -410,6 +410,8 @@ export const RunEvent = z.discriminatedUnion('type', [
   /** Summarizing started (true) or ended (false, after `compacted` when it worked). */
   z.object({ type: z.literal('compacting'), active: z.boolean() }),
   z.object({ type: z.literal('compacted'), summaryMessageId: z.string() }),
+  /** The conversation moved to another branch (a switch or a rewind, maybe in another window): load it again. */
+  z.object({ type: z.literal('branch') }),
   /** Waiting for a turn on the model's server with this many ahead (requests, or sub-agents), or no longer (null). */
   z.object({ type: z.literal('queued'), ahead: z.number().int().nonnegative().nullable() }),
   /** The model server is loading the model or reading the prompt (RunPhase), or the reply started or ended (null). */
@@ -520,7 +522,8 @@ export const ArtifactSummary = z.object({
 export type ArtifactSummary = z.infer<typeof ArtifactSummary>;
 
 /** An artifact on the Artifacts page, with the chat it came from (untitled chats have an empty title). */
-export const ArtifactListItem = ArtifactSummary.extend({ sessionTitle: z.string() });
+/** An artifact on the Artifacts page, with its conversation's title and mode (where it opens). */
+export const ArtifactListItem = ArtifactSummary.extend({ sessionTitle: z.string(), sessionMode: z.enum(['chat', 'work', 'code']) });
 export type ArtifactListItem = z.infer<typeof ArtifactListItem>;
 
 export const ArtifactVersion = z.object({

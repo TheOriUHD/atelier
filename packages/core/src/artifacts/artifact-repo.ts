@@ -68,6 +68,7 @@ export class ArtifactRepo {
       .select({
         artifact: artifacts,
         sessionTitle: sessions.title,
+        sessionMode: sessions.mode,
         versions: sql<number | null>`(SELECT MAX(v.version) FROM artifact_versions v WHERE v.artifact_id = "artifacts"."id")`,
       })
       .from(artifacts)
@@ -76,7 +77,7 @@ export class ArtifactRepo {
       .orderBy(desc(artifacts.updatedAt), desc(artifacts.id))
       .limit(page.limit + 1)
       .all();
-    const items = rows.slice(0, page.limit).map(({ artifact: r, sessionTitle, versions }) => ({
+    const items = rows.slice(0, page.limit).map(({ artifact: r, sessionTitle, sessionMode, versions }) => ({
       id: r.id,
       sessionId: r.sessionId,
       identifier: r.identifier,
@@ -87,6 +88,7 @@ export class ArtifactRepo {
       versions: versions ?? 1,
       updatedAt: r.updatedAt,
       sessionTitle,
+      sessionMode,
     }));
     const last = items.at(-1);
     return { items, nextCursor: rows.length > page.limit && last ? `${last.updatedAt}:${last.id}` : null };

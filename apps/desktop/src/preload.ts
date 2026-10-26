@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
   },
   session: {
     save: (token: string) => ipcRenderer.invoke('session:save', token),
+    relink: () => ipcRenderer.invoke('session:relink'),
     clear: () => ipcRenderer.invoke('session:clear'),
   },
   device,

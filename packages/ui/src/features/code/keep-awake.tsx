@@ -55,6 +55,15 @@ export function KeepAwakeSync() {
   const on = useKeepAwake((s) => s.sessions);
   // A deleted session lets go of the switch.
   useEffect(() => rpc().on('sessions.removed', ({ id }) => useKeepAwake.getState().set(id, false)), []);
+  // Every window of the app holds the same list: one switched on in another window keeps the computer awake from here
+  // too, so closing that window doesn't let it sleep, and switching one here doesn't drop the other's.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === KEY) useKeepAwake.setState({ sessions: read() });
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   useEffect(() => {
     if (!on.length) desktop?.keepAwake.set([]);
   }, [on.length]);

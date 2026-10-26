@@ -26,7 +26,8 @@ export class ProjectRepo {
         (this.db.$client.prepare(`SELECT ${column} AS id, COUNT(*) AS n FROM ${table} WHERE ${column} IS NOT NULL AND ${where} GROUP BY ${column}`).all() as { id: string; n: number }[]).map((r) => [r.id, r.n]),
       );
     const fileCounts = counts('files', 'project_id');
-    const sessionCounts = counts('sessions', 'project_id', NOT_TEMPORARY_SQL);
+    // The chats the project lists: not temporary ones, side chats or sub-agents, or archived ones.
+    const sessionCounts = counts('sessions', 'project_id', `${NOT_TEMPORARY_SQL} AND parent_session_id IS NULL AND archived_at IS NULL`);
     return rows.map((r) => ({ ...toProject(r), fileCount: fileCounts.get(r.id) ?? 0, sessionCount: sessionCounts.get(r.id) ?? 0 }));
   }
 

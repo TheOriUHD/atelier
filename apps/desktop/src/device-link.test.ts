@@ -218,6 +218,22 @@ describe('device link', () => {
     expect(sockets[2]!.readyState).toBe(WebSocket.CLOSED);
   });
 
+  it('tries a refused token again when given it again (an account that had to change its password keeps its token)', async () => {
+    vi.useFakeTimers();
+    const l = link();
+    l.setToken('tok');
+    sockets[0]!.close(4401);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sockets).toHaveLength(1);
+    l.setToken('tok');
+    expect(sockets).toHaveLength(2);
+    // A link that is up isn't reconnected by the same token.
+    sockets[1]!.open();
+    l.setToken('tok');
+    expect(sockets).toHaveLength(2);
+    l.close();
+  });
+
   it('answers pings, and drops and reconnects a link the server stopped pinging', async () => {
     vi.useFakeTimers();
     const l = link();

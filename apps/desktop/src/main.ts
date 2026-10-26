@@ -76,6 +76,9 @@ let device: Device;
 let hourCycle: HourCycle | null = null;
 /** The keyboard shortcuts the page says are in force (Settings › Keyboard shortcuts); the menu's accelerators follow them. */
 let shortcuts: ShortcutBindings = shortcutBindings(undefined);
+/** The bindings each window last sent, and which window's the menu uses. */
+const shortcutsByWindow = new Map<number, ShortcutBindings>();
+let shortcutsFrom: number | null = null;
 const accelerator = (id: ShortcutId) => toAccelerator(shortcuts[id]);
 /** Read while Electron starts up; the backend and its runners use it to find programs (see shell-path.ts). */
 const shellPath = loginShellPath();
@@ -181,6 +184,9 @@ function startBackend(): void {
     } else if (m.kind === 'blob') {
       blobWaiters.get(m.id)?.(m);
       blobWaiters.delete(m.id);
+    } else if (m.kind === 'trusted') {
+      // Only the built-in backend's own folders (a server's sessions never add to this computer's list this way).
+      if (connection?.mode === 'local') void trustFolder(m.root).catch((e: unknown) => console.warn('Could not trust a folder:', e));
     } else if (m.kind === 'req') {
       try {
         const value =
@@ -461,14 +467,29 @@ const FileAnswer = z.object({ id: z.number().int().positive(), dataBase64: z.str
 
 function registerIpc(): void {
   ipcMain.on('connect-backend', (event) => connectRenderer(event.sender));
-  // Settings › Keyboard shortcuts changed (or a window opened): the menu takes the page's bindings.
-  ipcMain.on('menu:shortcuts', (_e, input: unknown) => {
-    const parsed = ShortcutPrefs.safeParse(input);
-    if (!parsed.success) return;
-    const next = shortcutBindings(parsed.data);
+  // Settings › Keyboard shortcuts changed (or a window opened): the menu takes the page's bindings. Each window's are
+  // kept, so that a window closed while it recorded a shortcut (its menu keys let go) hands the menu back to another's.
+  const applyShortcuts = (next: ShortcutBindings) => {
     if (JSON.stringify(next) === JSON.stringify(shortcuts)) return;
     shortcuts = next;
     buildMenu();
+  };
+  ipcMain.on('menu:shortcuts', (event, input: unknown) => {
+    const parsed = ShortcutPrefs.safeParse(input);
+    if (!parsed.success) return;
+    const id = event.sender.id;
+    if (!shortcutsByWindow.has(id)) {
+      event.sender.once('destroyed', () => {
+        shortcutsByWindow.delete(id);
+        const other = [...shortcutsByWindow.values()].at(-1);
+        if (shortcutsFrom === id && other) applyShortcuts(other);
+        if (shortcutsFrom === id) shortcutsFrom = null;
+      });
+    }
+    const next = shortcutBindings(parsed.data);
+    shortcutsByWindow.set(id, next);
+    shortcutsFrom = id;
+    applyShortcuts(next);
   });
   ipcMain.on('theme', (event, input: unknown) => {
     const theme = Theme.safeParse(input);
@@ -515,7 +536,7 @@ function registerIpc(): void {
     if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork');
   });
   /** Resolves to an error message for the user, or switches backends and reloads the window. */
-  ipcMain.handle('connection:set', async (event, input: unknown): Promise<string | null> => {
+  ipcMain.handle('connection:set', async (_event, input: unknown): Promise<string | null> => {
     let next: Connection;
     try {
       // A server must answer before the app switches to it; an address without a scheme tries https://, then http://.
@@ -532,7 +553,8 @@ function registerIpc(): void {
     await stopBackend();
     // A second switch may have finished while this one waited; its backend already matches `connection`.
     if (!backend) startBackend();
-    event.sender.reload();
+    // Every window follows the new connection, not only the one that chose it.
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.reload();
     return null;
   });
   /** Settings › Account's "Sign out" / "Change setup…": back to the first-run choice. The built-in backend's data stays. */
@@ -577,6 +599,11 @@ function registerIpc(): void {
     // The check at start skipped a signed-out server.
     void updates.checkAutomatically();
     return { remembered };
+  });
+  // The same sign-in again, after something the server waited for (a temporary password changed): the device link
+  // retries it.
+  ipcMain.handle('session:relink', () => {
+    if (token) post({ kind: 'token', token });
   });
   ipcMain.handle('session:clear', async () => {
     await clearToken();

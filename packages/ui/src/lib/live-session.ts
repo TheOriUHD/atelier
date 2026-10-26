@@ -86,13 +86,19 @@ function wire(): void {
     const entry = entries.get(sessionId);
     if (!entry) return;
     if (entry.buffer) entry.buffer.push({ seq, event });
-    // Compaction can slot its summary in before the newest message: take the backend's view of the branch.
-    else if (event.type === 'compacted') void load(sessionId, entry);
+    // Compaction can slot its summary in before the newest message, a switch or rewind changes the branch, and a message
+    // can follow one this window never had (it moved elsewhere): take the backend's view of the branch.
+    else if (event.type === 'compacted' || event.type === 'branch' || unknownParent(entry.store.getState(), event)) void load(sessionId, entry);
     else if (seq > entry.store.getState().seq) entry.store.setState((s) => ({ ...applyEvent(s, event), seq }));
   });
   rpc().on('sessions.changed', (summary) => {
     const entry = entries.get(summary.id);
     if (entry) entry.store.setState({ session: summary });
+  });
+  // Deleted elsewhere (another window, the other half of a split view, Delete all): say so instead of failing on send.
+  rpc().on('sessions.removed', ({ id }) => {
+    const entry = entries.get(id);
+    if (entry) entry.store.setState({ status: 'error', error: 'This conversation was deleted.' });
   });
   getTransport().onReconnect(() => {
     for (const [id, entry] of entries) void load(id, entry);
@@ -144,6 +150,13 @@ function updateMessage(state: LiveSessionState, id: string, fn: (m: Message) => 
   const messages = state.messages.slice();
   messages[index] = fn(messages[index]!);
   return { ...state, messages };
+}
+
+/** A new message whose parent this window doesn't have: the conversation went on from a branch it never loaded. */
+function unknownParent(state: LiveSessionState, event: RunEvent): boolean {
+  if (event.type !== 'message' || !event.message.parentId || !state.messages.length) return false;
+  const known = (id: string) => state.messages.some((m) => m.id === id);
+  return !known(event.message.id) && !known(event.message.parentId);
 }
 
 export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessionState {
@@ -218,6 +231,8 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
       return { ...state, outbox: event.items };
     case 'compacted':
       return { ...state, context: null };
+    case 'branch':
+      return state;
     case 'todos':
       return { ...state, todos: event.todos };
     case 'tasks':

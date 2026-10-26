@@ -241,12 +241,15 @@ function CodeSession({ sessionId }: { sessionId: string }) {
     [workspace?.root, openPane],
   );
 
-  // Tools change files: after each round of results, refresh what the header, the panes and Rewind show.
+  // Tools change files: after each round of results, when a background command or sub-agent ends and when a reply ends,
+  // refresh what the header, the panes and Rewind show.
   const toolRounds = live.messages.filter((m) => m.role === 'tool').length;
+  const tasksEnded = live.tasks.filter((t) => t.endedAt !== null).length;
+  const replying = session?.status === 'running';
   useEffect(() => {
     if (workspaceId) void qc.invalidateQueries({ queryKey: keys.workspace(workspaceId) });
     void qc.invalidateQueries({ queryKey: checkpointsKey(sessionId) });
-  }, [qc, workspaceId, sessionId, toolRounds]);
+  }, [qc, workspaceId, sessionId, toolRounds, tasksEnded, replying]);
 
   const fail = (e: unknown) => toast.error(describeError(e).message);
   const update = (patch: { model?: string }) =>

@@ -231,7 +231,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
     case 'pending':
       return <PendingScreen onBack={toLogin} />;
     case 'changePassword':
-      return <ChangePasswordScreen user={screen.user} onDone={() => void refresh()} />;
+      return (
+        <ChangePasswordScreen
+          user={screen.user}
+          onDone={() => {
+            // The server refused this computer's device link until now: it lends its folders once it reconnects.
+            void desktop?.session.relink?.().catch(() => undefined);
+            void refresh();
+          }}
+        />
+      );
     case 'login':
       return (
         <LoginScreen

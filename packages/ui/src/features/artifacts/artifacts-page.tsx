@@ -103,7 +103,8 @@ function ArtifactTile({ artifact }: { artifact: ArtifactListItem }) {
   const type = ARTIFACT_TYPES[artifact.type];
   return (
     <Link
-      to="/chat/$sessionId"
+      // Where its conversation lives: a Code session's artifact opens in Code, not in the Chat layout.
+      to={artifact.sessionMode === 'code' ? '/code/$sessionId' : artifact.sessionMode === 'work' ? '/work/$sessionId' : '/chat/$sessionId'}
       params={{ sessionId: artifact.sessionId }}
       onClick={() => openArtifact(artifact.sessionId, artifact.id)}
       className="flex h-[136px] flex-col rounded-2xl border border-line p-4 outline-none transition-colors duration-(--at-duration-fast) focus-ring hover:bg-fill-ghost-hover"

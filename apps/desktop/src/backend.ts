@@ -46,6 +46,8 @@ const backend = await createBackend({
   dataDir: localDataDir(),
   cipher,
   ...(hasRunner ? { runnerDir } : {}),
+  // Main keeps the folders "Show in Finder" and "Open in" may open: the backend's own, however they were added.
+  folderTrusted: (root) => send({ kind: 'trusted', root }),
   env: process.env,
   logger: {
     info: (message, data) => console.log(message, data ?? ''),

@@ -858,11 +858,14 @@ export class ChatService {
     const message = await this.deps.repo.getMessage(messageId);
     if (!message || message.sessionId !== sessionId || message.role !== 'user') throw new Error('Only your messages can be rewound to');
     await this.deps.repo.update(sessionId, { headMessageId: message.parentId });
+    this.emit(sessionId, { type: 'branch' });
   }
 
   async switchBranch(sessionId: string, messageId: string): Promise<SessionSnapshot> {
     if (this.runs.has(sessionId)) throw new Error('Stop the response before switching branches');
     await this.deps.repo.switchBranch(sessionId, messageId);
+    // The person's other windows on this conversation follow.
+    this.emit(sessionId, { type: 'branch' });
     return this.snapshot(sessionId);
   }
 

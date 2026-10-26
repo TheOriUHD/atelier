@@ -53,6 +53,8 @@ export class WorkspaceError extends Error {}
 
 export interface WorkspaceManagerDeps {
   db: Db;
+  /** A folder on this machine became one of the person's (picked, or the agent moved a session there). */
+  trusted?(root: string): void;
   /** The runner build for this machine; absent where this backend must not run commands (the web server). */
   runnerBinary: string | null;
   /** Desktop devices lending their runner; folders on them are workspaces where `runnerBinary` is null. */
@@ -110,6 +112,12 @@ export class WorkspaceManager {
    * Trusts a folder; inside a git repository the repository's top level becomes the root. The folder is on
    * this backend's machine, or (on a server) on `deviceId`, the desktop the request came from.
    */
+  /** Every person's folders on this machine (not scratch ones), for `trusted` at start. */
+  async localRoots(): Promise<string[]> {
+    const rows = await this.deps.db.select({ root: workspaces.root }).from(workspaces).where(and(eq(workspaces.kind, 'local'), isNull(workspaces.deviceId), isNull(workspaces.host), eq(workspaces.scratch, false))).all();
+    return [...new Set(rows.map((r) => r.root))];
+  }
+
   async addLocal(userId: string, path: string, deviceId: string | null = null): Promise<WorkspaceSummary> {
     const device = this.deps.runnerBinary ? null : deviceId;
     if (!this.deps.runnerBinary && !(device && this.deps.links?.online(userId, device))) {
@@ -120,6 +128,7 @@ export class WorkspaceManager {
     const existing = await this.deps.db.select().from(workspaces).where(and(eq(workspaces.userId, userId), eq(workspaces.root, root), sameMachine, isNull(workspaces.host))).get();
     // Opening a scratch folder on purpose makes it one of the person's folders.
     if (existing?.scratch) await this.deps.db.update(workspaces).set({ scratch: false }).where(eq(workspaces.id, existing.id));
+    if (!device) this.deps.trusted?.(root);
     if (existing) return this.summary({ ...existing, scratch: false });
     return this.insert({ userId, kind: 'local', root, deviceId: device, host: null });
   }

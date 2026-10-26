@@ -88,6 +88,8 @@ interface DesktopBridge {
   session: {
     /** `remembered` is false when this computer has no secure storage to keep it in: signed in for this run only. */
     save(token: string): Promise<{ remembered: boolean } | undefined>;
+    /** Connects this computer's device link again with the kept sign-in (after a temporary password was changed). */
+    relink?(): Promise<void>;
     clear(): Promise<void>;
   };
   /**

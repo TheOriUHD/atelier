@@ -45,7 +45,9 @@ export async function trustWorkspace(workspace: WorkspaceSummary): Promise<boole
 export async function chooseLocalFolder(): Promise<string | null> {
   const picked = await desktop!.folders.pick();
   if (!picked) return null;
-  const known = (await rpc().call('workspaces.list', {})).some((w) => w.kind === 'local' && !w.host && !w.deviceId && w.root === picked);
+  // This computer's folders: the backend's own (no device), or on a server lent by this desktop (its device id).
+  const here = (w: WorkspaceSummary) => !w.deviceId || w.deviceId === desktop!.device.id;
+  const known = (await rpc().call('workspaces.list', {})).some((w) => w.kind === 'local' && !w.host && here(w) && w.root === picked);
   if (!known && !(await requestTrust(picked))) return null;
   return desktop!.folders.trust(picked);
 }

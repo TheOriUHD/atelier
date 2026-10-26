@@ -28,6 +28,8 @@ export type BackendToMain =
   | { kind: 'ready' }
   /** Server mode: why the server can't be reached (null: it can). */
   | { kind: 'link'; problem: LinkProblem | null }
+  /** The built-in backend made a folder on this machine one of the person's (the agent moved a session there): main trusts it too. */
+  | { kind: 'trusted'; root: string }
   | { kind: 'blob'; id: number; found: true; bytes: Uint8Array<ArrayBuffer>; mime: string }
   | { kind: 'blob'; id: number; found: false };
 
