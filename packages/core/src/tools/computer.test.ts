@@ -40,7 +40,13 @@ function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof Cont
   return { tool, asked, calls };
 }
 
-const state = (apps: AppGrant[], control = false): ControllerMethods['access.state']['result'] => ({ apps, mode: 'background', control, displays: [{ id: '1', name: 'Main', primary: true }] });
+const state = (apps: AppGrant[], control = false, mode: 'background' | 'full' = 'background'): ControllerMethods['access.state']['result'] => ({
+  apps,
+  mode,
+  denied: ['1Password'],
+  control,
+  displays: [{ id: '1', name: 'Main', primary: true }],
+});
 const textEdit: AppGrant = { app: { id: 'com.example.TextEdit', name: 'TextEdit' }, tier: 'full' };
 
 describe('ComputerAccess', () => {
@@ -131,6 +137,44 @@ describe('ComputerAction', () => {
     const out = await tool('ComputerAction').run({ actions: [{ action: 'fly' }] }, ctx);
     expect(out.isError).toBe(true);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('Full control', () => {
+  it('needs no card for apps, and says what it may use', async () => {
+    const { tool, asked } = setup([], {
+      'access.prepare': () => ({ apps: [prepared('Safari', { granted: 'full' }), prepared('1Password', { denied: true })], unknown: [] }),
+      'access.state': () => state([], false, 'full'),
+    });
+    const out = await tool('ComputerAccess').run({ apps: ['Safari', '1Password'] }, ctx);
+    expect(asked).toEqual([]);
+    expect(text(out)).toContain("Full control is on: you may use any app on this computer as the person sees the screen, except Atelier itself, parts of the system and the person's denied apps (1Password).");
+    expect(text(out)).toContain("1Password is on the person's denied list");
+  });
+
+  it('opens any app it may use by taking the computer first, and acts without apps allowed one by one', async () => {
+    let control = false;
+    const { tool, asked, calls } = setup([], {
+      'access.state': () => state([], control, 'full'),
+      'apps.list': () => ({ apps: [{ app: { id: 'com.google.Chrome', name: 'Google Chrome' }, category: 'browser', running: true, granted: 'full' }] }),
+      'control.request': () => ((control = true), { granted: true }),
+      'apps.open': () => ({}),
+      'control.batch': () => ({ results: [{ action: 'key', ok: true }] }),
+    });
+    expect(text(await tool('OpenApp').run({ app: 'google chrome' }, ctx))).toBe('Opened Google Chrome and brought it to the front.');
+    expect(calls.map((c) => c.method)).toEqual(['access.state', 'apps.list', 'control.request', 'apps.open']);
+    expect(asked).toEqual([]);
+    expect(text(await tool('ComputerAction').run({ actions: [{ action: 'key', text: 'cmd+l' }] }, ctx))).toBe('1. key: done');
+  });
+
+  it("can't open a denied app", async () => {
+    const { tool } = setup([], {
+      'access.state': () => state([], false, 'full'),
+      'apps.list': () => ({ apps: [{ app: { id: 'com.1password.1password', name: '1Password' }, category: 'password-manager', running: true, granted: null }] }),
+    });
+    const out = await tool('OpenApp').run({ app: '1Password' }, ctx);
+    expect(out.isError).toBe(true);
+    expect(text(out)).toBe("You may not use 1Password: it isn't installed, or it is on the person's denied list or part of the system.");
   });
 });
 

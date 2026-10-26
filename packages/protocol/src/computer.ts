@@ -166,6 +166,8 @@ export interface CaptureDisplayParams {
   display: string;
   /** Only these apps' windows (and the desktop); absent: everything but Atelier's own windows. */
   apps?: string[];
+  /** Everything but these apps' windows, Atelier's own included (never its overlay); when `apps` is absent. */
+  exclude?: string[];
   /** Part of the display, in global points; the whole display when absent. */
   region?: ScreenRect;
   /** The image is scaled down to fit these, keeping its aspect ratio. */
@@ -379,8 +381,11 @@ export interface ScreenshotSize {
 export interface ControllerMethods {
   /** The apps an access request names, resolved on this computer. `unknown`: names no app here matches. */
   'access.prepare': { params: { names: string[] }; result: { apps: PreparedApp[]; unknown: string[] } };
-  /** What the session may use now. */
-  'access.state': { params: Record<string, never>; result: { apps: AppGrant[]; mode: ComputerMode; control: boolean; displays: { id: string; name: string; primary: boolean }[] } };
+  /** What the session may use now: the apps allowed one by one (none in Full control, where every app but the denied ones is). */
+  'access.state': {
+    params: Record<string, never>;
+    result: { apps: AppGrant[]; mode: ComputerMode; denied: string[]; control: boolean; displays: { id: string; name: string; primary: boolean }[] };
+  };
   'apps.list': { params: { query?: string }; result: { apps: { app: ComputerApp; category: AppCategory; running: boolean; granted: AppTier | null }[] } };
   'apps.open': { params: { id: string }; result: Record<string, never> };
   /** The display (only the allowed apps, never Atelier); with `region`, part of the latest screenshot at full detail. */

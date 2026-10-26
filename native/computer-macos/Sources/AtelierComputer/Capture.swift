@@ -118,6 +118,16 @@ enum Capture {
           rect: ScreenRect(covered))
       }
       filter = SCContentFilter(display: display, including: windows)
+    } else if let exclude = params.exclude {
+      // The screen as the person sees it (full control), but for the apps left out and Atelier's overlay, which floats
+      // above the normal window level (its content protection alone isn't honoured by every macOS version).
+      let leftOut = Set(exclude)
+      let normal = Int(CGWindowLevelForKey(.normalWindow))
+      let windows = content.windows.filter { window in
+        guard let id = window.owningApplication?.bundleIdentifier else { return false }
+        return leftOut.contains(id) || (isOwn(id) && window.windowLayer > normal)
+      }
+      filter = SCContentFilter(display: display, excludingWindows: windows)
     } else {
       let own = content.applications.filter { isOwn($0.bundleIdentifier) }
       filter = SCContentFilter(display: display, excludingApplications: own, exceptingWindows: [])

@@ -164,10 +164,10 @@ describe('what a session may use', () => {
 });
 
 describe('full control', () => {
-  it('asks the person in background mode, and not again once they agreed or chose Full control', async () => {
+  it('asks the person in background mode, hides what it may not use while it acts, and shows it again', async () => {
     await controller.grant('local', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
     expect(await ask('control.request', {})).toEqual({ granted: false, reason: 'ask' });
-    await controller.settings((s) => ({ ...s, mode: 'full' }));
+    await controller.allowControl('local', 's1', false);
     expect(await ask('control.request', {})).toEqual({ granted: true });
     expect(overlay).toContain('show');
     // Others are hidden while it works (not the allowed app, never the system's).
@@ -177,7 +177,48 @@ describe('full control', () => {
     expect(await ask('control.request', {}, 's2')).toMatchObject({ granted: false, reason: /Another conversation/ });
     await ask('turn.end', {});
     expect(overlay.at(-1)).toBe('hide');
-    expect(helper.did('apps.unhide')).toHaveLength(1);
+    expect(helper.did('apps.unhide')[0]?.params).toEqual({ ids: ['com.apple.Safari', 'com.apple.Terminal', 'com.apple.mail', 'com.apple.Notes', 'com.1password.1password'] });
+  });
+
+  it('takes the computer as it is in Full control: no asking, nothing hidden, every app but the denied ones', async () => {
+    await controller.settings((s) => ({ ...s, mode: 'full' }));
+    // No app allowed one by one, and none needed.
+    const prepared = await ask('access.prepare', { names: ['Safari', 'Terminal', '1Password'] });
+    expect(prepared.apps.map((a) => [a.app.name, a.granted])).toEqual([
+      ['Safari', 'full'],
+      ['Terminal', 'click'],
+      ['1Password', null],
+    ]);
+    expect(await ask('access.state', {})).toMatchObject({ apps: [], mode: 'full', denied: expect.arrayContaining(['1Password']) });
+    expect(await ask('screenshot', { size: SIZE })).toMatchObject({ note: 'The screen as the person sees it; their denied apps are left out.' });
+    expect(helper.did('capture.display').at(-1)?.params).toMatchObject({ exclude: expect.arrayContaining(['com.1password.1password']) });
+    expect(helper.did('capture.display').at(-1)?.params).not.toHaveProperty('apps');
+    expect(await ask('control.request', {})).toEqual({ granted: true });
+    expect(helper.did('apps.hide')).toHaveLength(0);
+    expect(overlay).toEqual(['show']);
+
+    const batch = async (actions: ControllerMethods['control.batch']['params']['actions']) => (await ask('control.batch', { actions, size: SIZE })).results;
+    // Atelier has the keyboard at first: typing is refused, switching apps isn't.
+    helper.focused = { app: app('dev.atelier.app', 'Atelier') };
+    expect((await batch([{ action: 'type', text: 'x' }]))[0]).toMatchObject({ ok: false, note: /Atelier, part of the system or Atelier: never used\. Bring the app you need to the front/ });
+    expect(await batch([{ action: 'key', text: 'cmd+space' }])).toEqual([{ action: 'key', ok: true }]);
+    expect(await batch([{ action: 'key', text: 'Command+Tab' }])).toEqual([{ action: 'key', ok: true }]);
+    expect(helper.did('key.press').map((c) => c.params)).toEqual([{ keys: ['cmd', 'space'] }, { keys: ['command', 'tab'] }]);
+    // A browser takes clicks and typing; a terminal only clicks; a denied app and Atelier nothing.
+    helper.under = { app: APPS[1]! };
+    helper.focused = { app: APPS[1]! };
+    expect(await batch([{ action: 'left_click', coordinate: [10, 10] }, { action: 'type', text: 'amazon.de' }])).toEqual([
+      { action: 'left_click', ok: true },
+      { action: 'type', ok: true },
+    ]);
+    helper.under = { app: APPS[2]! };
+    expect((await batch([{ action: 'right_click', coordinate: [10, 10] }]))[0]).toMatchObject({ ok: false, note: 'You may only click and scroll in Terminal.' });
+    helper.under = { app: APPS[5]! };
+    expect((await batch([{ action: 'left_click', coordinate: [10, 10] }]))[0]).toMatchObject({ ok: false, note: "1Password is on the person's denied list: never used." });
+    helper.under = { app: app('dev.atelier.app', 'Atelier') };
+    expect((await batch([{ action: 'left_click', coordinate: [10, 10] }]))[0]).toMatchObject({ ok: false, note: /part of the system or Atelier/ });
+    await ask('turn.end', {});
+    expect(helper.did('apps.unhide')).toHaveLength(0);
   });
 
   it('needs the Accessibility permission', async () => {

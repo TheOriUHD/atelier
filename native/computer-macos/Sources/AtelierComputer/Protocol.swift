@@ -279,6 +279,8 @@ public struct CaptureDisplayParams: Codable, Sendable {
   public var display: String
   /// Only these apps' windows (and the desktop); absent: everything but Atelier's own windows.
   public var apps: [String]?
+  /// Everything but these apps' windows, Atelier's own included (never its floating overlay); when `apps` is absent.
+  public var exclude: [String]?
   /// Part of the display, in global points; the whole display when absent.
   public var region: ScreenRect?
   /// The image is scaled down to fit these, keeping its aspect ratio.

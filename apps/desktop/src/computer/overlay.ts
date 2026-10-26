@@ -1,17 +1,19 @@
 /**
- * While Atelier has the mouse and keyboard: a glow around the edges of every display, and on the main one a small
- * "Atelier is using your computer · Hold Esc to stop" with a ring that fills while Esc is held. The windows take no
+ * While Atelier has the mouse and keyboard: a soft glow along the edges of every display (no hard line, so it suits
+ * rounded and square screens alike), and on the main one, below the menu bar, a small "Atelier is using your
+ * computer · Hold Esc to stop" with a ring that fills while Esc is held. The windows take no
  * clicks and no focus, sit above everything (full-screen apps too), and are left out of screenshots.
  */
 import { BrowserWindow, screen } from 'electron';
 import type { Overlay } from './controller.ts';
 
-const page = (withPopup: boolean) => `<!doctype html>
+/** `top`: where the popup sits, below the menu bar (and a notch, which sits in it). */
+const page = (withPopup: boolean, top: number) => `<!doctype html>
 <html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;overflow:hidden;background:transparent;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-user-select:none;cursor:default}
-.glow{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 0 3px rgba(217,119,87,.85),inset 0 0 26px 6px rgba(217,119,87,.4);animation:breathe 2.4s ease-in-out infinite}
-@keyframes breathe{50%{box-shadow:inset 0 0 0 3px rgba(217,119,87,1),inset 0 0 40px 12px rgba(217,119,87,.55)}}
-.pill{position:fixed;top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 16px 8px 12px;border-radius:12px;background:rgba(28,28,27,.88);color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.28);-webkit-backdrop-filter:blur(14px)}
+.glow{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 36px 6px rgba(217,119,87,.5),inset 0 0 120px 24px rgba(217,119,87,.26);animation:breathe 3s ease-in-out infinite}
+@keyframes breathe{50%{box-shadow:inset 0 0 48px 10px rgba(217,119,87,.62),inset 0 0 160px 36px rgba(217,119,87,.34)}}
+.pill{position:fixed;top:${top}px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 16px 8px 12px;border-radius:12px;background:rgba(28,28,27,.88);color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.28);-webkit-backdrop-filter:blur(14px)}
 .pill b{display:block;font-size:14px;line-height:20px;font-weight:600}
 .pill span{display:block;font-size:12px;line-height:16px;opacity:.72}
 .ring{width:18px;height:18px;flex:none;border-radius:50%;background:conic-gradient(#D97757 var(--p,0%),rgba(255,255,255,.22) 0)}
@@ -76,7 +78,9 @@ export function createOverlay(): Overlay {
         win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
         win.setContentProtection(true);
         win.once('ready-to-show', () => win.showInactive());
-        void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page(display.id === primary))}`);
+        // The menu bar's height (the work area starts below it), plus a little air.
+        const top = Math.max(0, display.workArea.y - display.bounds.y) + 10;
+        void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page(display.id === primary, top))}`);
         windows.push(win);
       }
     },

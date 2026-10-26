@@ -106,3 +106,50 @@ test('desktop: computer use is turned on in Settings, the person allows apps and
     await rm(configDir, { recursive: true, force: true });
   }
 });
+
+test('desktop: in Full control the assistant takes the computer as it is, without cards, hiding nothing', async () => {
+  test.setTimeout(120_000);
+  const configDir = await tempConfigDir({ models: { overrides: { 'fake/fake-chat:8b': { promptTier: 'full' } } } });
+  const repo = await tempRepo();
+  const log = join(configDir, 'computer.log');
+  const app = await launchDesktop(configDir, { ATELIER_COMPUTER_HELPER: resolve('e2e/fake-computer.mjs'), FAKE_COMPUTER_LOG: log });
+  try {
+    await app.evaluate(({ dialog }, path) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [path] })) as typeof dialog.showOpenDialog;
+    }, repo);
+    const page = await app.firstWindow();
+    await setUpLocal(page);
+    await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+    await page.evaluate(() => (location.hash = '#/?settings=system'));
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('switch', { name: 'Enable computer use' }).click();
+    await settings.getByRole('radio', { name: 'Full control' }).click();
+    await expect(settings.getByRole('radio', { name: 'Full control' })).toHaveAttribute('aria-checked', 'true');
+    await settings.getByRole('button', { name: 'Close' }).click();
+
+    await openFolder(page, repo);
+    const box = page.getByRole('textbox', { name: 'Message', exact: true });
+    await box.fill(
+      [
+        call('OpenApp', { app: 'Safari' }),
+        call('Screenshot', {}),
+        call('ComputerAction', { actions: [{ action: 'left_click', coordinate: [100, 100] }, { action: 'type', text: 'amazon.de' }] }),
+      ].join('\n'),
+    );
+    await box.press('Enter');
+    await expect(page.getByText(/^Tool result: 1\. left_click: done/)).toBeVisible();
+    await expect(page.getByRole('region', { name: /^Let Atelier/ })).toHaveCount(0);
+    const entries = await helperLog(log);
+    // Opened in front, under control; nothing hidden; the screenshot shows the screen but for the denied apps.
+    expect(entries.find((e) => e.method === 'apps.open')).toMatchObject({ id: 'com.apple.Safari', activate: true });
+    expect(entries.some((e) => e.method === 'apps.hide')).toBe(false);
+    const shot = entries.find((e) => e.method === 'capture.display');
+    expect(shot).toMatchObject({ apps: null });
+    expect(shot?.exclude).toContain('com.1password.1password');
+    expect(entries.find((e) => e.method === 'key.type')).toMatchObject({ text: 'amazon.de' });
+    expect(entries.map((e) => e.method)).toContain('control.end');
+  } finally {
+    await app.close();
+    await rm(configDir, { recursive: true, force: true });
+  }
+});

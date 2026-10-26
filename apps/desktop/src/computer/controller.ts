@@ -13,6 +13,7 @@ import {
   type AppTier,
   type ComputerActionItem,
   type ComputerActionResult,
+  type ComputerApp,
   type ComputerNotification,
   type ComputerSettings,
   type ComputerStatus,
@@ -68,6 +69,21 @@ interface SessionState {
   frame: Frame | null;
 }
 
+/**
+ * What a session may do in each app. Background: the apps the person allowed it, one by one. Full control: every app as
+ * the screen shows it, but for their denied apps, Atelier and the system's own, and only clicks in terminals and editors
+ * (typing there would run commands past Atelier's permission prompts).
+ */
+interface Policy {
+  full: boolean;
+  /** The most it may do in an app; null where it may do nothing. */
+  tier(id: string): AppTier | null;
+  /** The apps allowed one by one (Background); empty in Full control. */
+  grants: AppGrant[];
+  /** The person's denied apps. */
+  denied: ComputerApp[];
+}
+
 interface Control {
   key: string;
   backend: string;
@@ -94,6 +110,10 @@ const NEEDS: Partial<Record<ComputerActionItem['action'], AppTier>> = {
   middle_click: 'full',
   left_click_drag: 'full',
 };
+
+/** Keys that switch apps rather than type into one: fine whatever app has the keyboard (Full control). */
+const SWITCH_KEYS = new Set(['cmd+tab', 'cmd+shift+tab', 'cmd+space']);
+const KEY_ALIASES: Record<string, string> = { command: 'cmd', meta: 'cmd', super: 'cmd', option: 'alt', opt: 'alt', control: 'ctrl' };
 
 /** What the model hears when the mouse and keyboard went back in the middle of its actions. */
 const ENDED = {
@@ -232,11 +252,10 @@ export class ComputerController {
   private methods(backend: string, sessionId: string, settings: ComputerSettings) {
     const key = keyOf(backend, sessionId);
     const state = () => this.session(backend, sessionId);
-    const grants = () => this.grants(backend, sessionId, settings);
+    const policy = this.policy(backend, sessionId, settings);
     return {
       'access.prepare': async ({ names }: ControllerMethods['access.prepare']['params']): Promise<ControllerMethods['access.prepare']['result']> => {
         const installed = await this.appList();
-        const have = grants();
         const apps: PreparedApp[] = [];
         const unknown: string[] = [];
         for (const name of names) {
@@ -253,40 +272,46 @@ export class ComputerController {
             tier: defaultTier(category),
             maxTier: maxTier(category),
             denied: settings.denied.some((d) => d.id === app.id),
-            granted: have.find((g) => g.app.id === app.id)?.tier ?? null,
+            // In Full control every app it may use is allowed already: no card.
+            granted: policy.tier(app.id),
           });
         }
         return { apps, unknown };
       },
       'access.state': async (): Promise<ControllerMethods['access.state']['result']> => {
         const { displays } = await this.deps.helper.call('displays.list', {});
-        return { apps: grants(), mode: settings.mode, control: this.control?.key === key, displays: displays.map((d) => ({ id: d.id, name: d.name, primary: d.primary })) };
+        return {
+          apps: policy.grants,
+          mode: settings.mode,
+          denied: policy.denied.map((d) => d.name),
+          control: this.control?.key === key,
+          displays: displays.map((d) => ({ id: d.id, name: d.name, primary: d.primary })),
+        };
       },
       'apps.list': async ({ query }: ControllerMethods['apps.list']['params']): Promise<ControllerMethods['apps.list']['result']> => {
-        const have = grants();
         const q = query?.trim().toLowerCase();
         const list = (await this.appList()).filter((a) => !q || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q));
         list.sort((a, b) => Number(b.running) - Number(a.running) || a.name.localeCompare(b.name));
-        return { apps: list.slice(0, 100).map((a) => ({ app: { id: a.id, name: a.name }, category: appCategory(a.id), running: a.running, granted: have.find((g) => g.app.id === a.id)?.tier ?? null })) };
+        return { apps: list.slice(0, 100).map((a) => ({ app: { id: a.id, name: a.name }, category: appCategory(a.id), running: a.running, granted: policy.tier(a.id) })) };
       },
       'apps.open': async ({ id }: ControllerMethods['apps.open']['params']) => {
-        if (!grants().some((g) => g.app.id === id)) throw new Error('That app isn’t one you may use.');
+        if (!policy.tier(id)) throw new Error('That app isn’t one you may use.');
         await this.deps.helper.call('apps.open', { id, activate: this.control?.key === key });
         this.apps = null;
         return {};
       },
       screenshot: async ({ display, size }: ControllerMethods['screenshot']['params']): Promise<ControllerMethods['screenshot']['result']> => {
-        const have = grants();
-        if (!have.length) throw new Error('You may use no apps yet: ask with ComputerAccess first.');
+        if (!policy.full && !policy.grants.length) throw new Error('You may use no apps yet: ask with ComputerAccess first.');
         const target = await this.display(display);
-        const shot = await this.capture(target, have, size).catch((e: unknown) => Promise.reject(new Error(helperMessage(e))));
+        const shot = await this.capture(target, policy, size).catch((e: unknown) => Promise.reject(new Error(helperMessage(e))));
         state().frame = { rect: shot.rect, width: shot.width, height: shot.height };
-        return { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height, display: target.name, note: 'Only the apps you may use are shown.' };
+        const note = policy.full ? 'The screen as the person sees it; their denied apps are left out.' : 'Only the apps you may use are shown.';
+        return { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height, display: target.name, note };
       },
       'control.request': async (): Promise<ControllerMethods['control.request']['result']> => {
         if (this.control?.key === key) return { granted: true };
         if (this.control) return { granted: false, reason: 'Another conversation is using the mouse and keyboard right now.' };
-        if (!grants().length) return { granted: false, reason: 'You may use no apps yet: ask with ComputerAccess first.' };
+        if (!policy.full && !policy.grants.length) return { granted: false, reason: 'You may use no apps yet: ask with ComputerAccess first.' };
         if (state().yielded || (settings.mode !== 'full' && !state().control)) return { granted: false, reason: 'ask' };
         const permissions = await this.permissions();
         if (!permissions.accessibility) return { granted: false, reason: 'Atelier needs the Accessibility permission to use the mouse and keyboard: the person turns it on in Settings › System › Computer use.' };
@@ -302,7 +327,7 @@ export class ComputerController {
             results.push({ action: item.action, ok: false, note: ENDED[control.endedBy ?? 'other'] });
             break;
           }
-          const result = await this.act(backend, sessionId, item, size, grants()).catch((e: unknown) => ({ action: item.action, ok: false, note: helperMessage(e) }));
+          const result = await this.act(backend, sessionId, item, size, policy).catch((e: unknown) => ({ action: item.action, ok: false, note: helperMessage(e) }));
           results.push(result);
           if (!result.ok) break;
         }
@@ -321,7 +346,7 @@ export class ComputerController {
 
   // ---------------------------------------------------------------- acting
 
-  private async act(backend: string, sessionId: string, item: ComputerActionItem, size: ScreenshotSize, grants: AppGrant[]): Promise<ComputerActionResult> {
+  private async act(backend: string, sessionId: string, item: ComputerActionItem, size: ScreenshotSize, policy: Policy): Promise<ComputerActionResult> {
     const helper = this.deps.helper;
     const state = this.session(backend, sessionId);
     const done = (note?: string): ComputerActionResult => ({ action: item.action, ok: true, ...(note ? { note } : {}) });
@@ -338,12 +363,13 @@ export class ComputerController {
       const id = under.app?.id;
       if (!id) return 'Nothing you may use is there.';
       const category = appCategory(id);
-      const grant = grants.find((g) => g.app.id === id);
-      if (category === 'system') return `${under.app!.name} is part of the system or Atelier: never used.`;
-      if (!grant) return `${under.app!.name} is there, which you may not use.`;
-      if (!atLeast(grant.tier, need)) return `You may only ${grant.tier === 'view' ? 'look at' : 'click and scroll in'} ${grant.app.name}.`;
+      const name = under.app!.name;
+      const tier = policy.tier(id);
+      if (category === 'system') return `${name} is part of the system or Atelier: never used.`;
+      if (!tier) return policy.full ? `${name} is on the person's denied list: never used.` : `${name} is there, which you may not use.`;
+      if (!atLeast(tier, need)) return `You may only ${tier === 'view' ? 'look at' : 'click and scroll in'} ${name}.`;
       if (under.link !== null && linkSensitive(category) && item.action !== 'mouse_move' && item.action !== 'scroll') {
-        return `That's a link in ${grant.app.name}${under.link ? ` (${under.link})` : ''}: links in mail and messages aren't clicked. Check it with WebFetch, or ask the person.`;
+        return `That's a link in ${name}${under.link ? ` (${under.link})` : ''}: links in mail and messages aren't clicked. Check it with WebFetch, or ask the person.`;
       }
       return null;
     };
@@ -352,10 +378,13 @@ export class ComputerController {
       if (this.secureInput) return 'A password field has the keyboard (secure input is on): nothing is typed.';
       const focused = await helper.call('inspect.focused', {});
       const id = focused.app?.id;
-      const grant = id ? grants.find((g) => g.app.id === id) : undefined;
-      if (!id || !grant) return `The keyboard goes to ${focused.app?.name ?? 'an app'} you may not use.`;
-      if (appCategory(id) === 'system') return `${focused.app!.name} is part of the system or Atelier: never used.`;
-      if (grant.tier !== 'full') return `You may not type in ${grant.app.name}.`;
+      const tier = id ? policy.tier(id) : null;
+      const name = focused.app?.name ?? 'an app';
+      if (id && appCategory(id) === 'system') {
+        return `The keyboard goes to ${name}, part of the system or Atelier: never used.${policy.full ? ' Bring the app you need to the front first (OpenApp, or cmd+tab).' : ''}`;
+      }
+      if (!id || !tier) return `The keyboard goes to ${name}, which you may not use.`;
+      if (tier !== 'full') return `You may not type in ${name}.`;
       if (focused.secure) return 'That is a password field: you never type passwords.';
       return null;
     };
@@ -363,7 +392,7 @@ export class ComputerController {
     switch (item.action) {
       case 'screenshot': {
         const target = await this.display();
-        const shot = await this.capture(target, grants, size);
+        const shot = await this.capture(target, policy, size);
         state.frame = { rect: shot.rect, width: shot.width, height: shot.height };
         return { action: item.action, ok: true, screenshot: { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height } };
       }
@@ -374,7 +403,7 @@ export class ComputerController {
         const a = point([Math.min(x0, x1), Math.min(y0, y1)]);
         const b = point([Math.max(x0, x1), Math.max(y0, y1)]);
         const target = await this.display();
-        const shot = await helper.call('capture.display', { display: target.id, apps: grants.map((g) => g.app.id), region: { x: a.x, y: a.y, width: Math.max(1, b.x - a.x), height: Math.max(1, b.y - a.y) }, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'png' });
+        const shot = await helper.call('capture.display', { display: target.id, ...this.shows(policy), region: { x: a.x, y: a.y, width: Math.max(1, b.x - a.x), height: Math.max(1, b.y - a.y) }, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'png' });
         // The zoom is for reading; coordinates stay those of the screenshot it came from.
         return { action: item.action, ok: true, note: 'Coordinates still refer to the screenshot before.', screenshot: { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height } };
       }
@@ -397,7 +426,8 @@ export class ComputerController {
       case 'key': {
         const keys = parseKeys(item.text ?? '');
         if (!keys.length) return refuse('Which keys? Like "cmd+s" or "return".');
-        const why = await checkKeys();
+        const switching = policy.full && SWITCH_KEYS.has(keys.map((k) => KEY_ALIASES[k] ?? k).join('+'));
+        const why = switching ? null : await checkKeys();
         if (why) return refuse(why);
         await helper.call('key.press', { keys, ...(item.amount ? { repeat: item.amount } : {}) });
         return done();
@@ -446,7 +476,11 @@ export class ComputerController {
     this.control = control;
     await helper.call('control.resume', {});
     await helper.call('control.begin', {});
-    // Only the allowed apps stay in view; the others step aside until it's done.
+    this.deps.overlay.show();
+    this.deps.changed();
+    // Full control takes the computer as it is. In Background only the allowed apps stay in view, and Atelier's own
+    // windows too step aside, until it's done.
+    if (settings.mode === 'full') return;
     const allowed = new Set(this.grants(backend, sessionId, settings).map((g) => g.app.id));
     const others = (await helper.call('apps.list', { installed: false })).apps.filter((a) => a.running && !a.hidden && !allowed.has(a.id) && appCategory(a.id) !== 'system');
     // Every app it asked to hide is shown again afterwards, whatever the hide call reported.
@@ -455,8 +489,6 @@ export class ComputerController {
       await helper.call('apps.hide', { ids: control.hidden });
     }
     this.deps.windows.hide();
-    this.deps.overlay.show();
-    this.deps.changed();
   }
 
   /**
@@ -533,8 +565,23 @@ export class ComputerController {
     return found;
   }
 
-  private capture(display: HelperDisplay, grants: AppGrant[], size: ScreenshotSize) {
-    return this.deps.helper.call('capture.display', { display: display.id, apps: grants.map((g) => g.app.id), maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8 });
+  private policy(backend: string, sessionId: string, settings: ComputerSettings): Policy {
+    const denied = settings.denied;
+    if (settings.mode === 'full') {
+      return { full: true, grants: [], denied, tier: (id) => (settings.denied.some((d) => d.id === id) ? null : maxTier(appCategory(id))) };
+    }
+    const grants = this.grants(backend, sessionId, settings);
+    return { full: false, grants, denied, tier: (id) => grants.find((g) => g.app.id === id)?.tier ?? null };
+  }
+
+  /** What a screenshot shows: the allowed apps (Background), or the screen but for the denied apps (Full control). */
+  private shows(policy: Policy): { apps: string[] } | { exclude: string[] } {
+    if (!policy.full) return { apps: policy.grants.map((g) => g.app.id) };
+    return { exclude: policy.denied.map((d) => d.id) };
+  }
+
+  private capture(display: HelperDisplay, policy: Policy, size: ScreenshotSize) {
+    return this.deps.helper.call('capture.display', { display: display.id, ...this.shows(policy), maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8 });
   }
 
   private write<T>(run: () => Promise<T>): Promise<T> {

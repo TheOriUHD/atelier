@@ -492,7 +492,7 @@ export const SETTINGS_INDEX = [
     page: 'system',
     label: 'How Atelier uses the apps you allow',
     description:
-      'Background: asks you in each conversation before it takes over your mouse and keyboard. Full control: takes them whenever it acts in an allowed app, without asking again.',
+      'Background: asks you for each app, and before it takes over your mouse and keyboard. Full control: takes over your computer as it is, any app but your denied ones, without asking.',
     keywords: ['computer use', 'background', 'full control', 'mouse', 'keyboard', 'mode'],
     available: () => !!desktop?.computer,
   },

@@ -27,6 +27,14 @@ async function image(deps: ComputerToolDeps, shot: ComputerScreenshot) {
   return { type: 'image' as const, mime: shot.mime, blob: sha256 };
 }
 
+/** What Full control lets it do, for the model. */
+function fullControlText(denied: string[]): string {
+  return [
+    `Full control is on: you may use any app on this computer as the person sees the screen, except Atelier itself, parts of the system${denied.length ? ` and the person's denied apps (${denied.join(', ')})` : ''}. In terminals and code editors you may only click and scroll.`,
+    'You take over the mouse and keyboard when you act. Start from the screen as it is (Atelier is likely in front): bring the app you need forward with OpenApp (or cmd+tab, cmd+space), then take a Screenshot.',
+  ].join(' ');
+}
+
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function describeAccess({ tier }: DescribeContext): string {
@@ -102,12 +110,9 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
           }
         }
         const state = await deps.call(ctx.sessionId, 'access.state', {});
+        if (state.mode === 'full') return textOutput([fullControlText(state.denied), ...notes].join('\n'));
         if (!state.apps.length) return textOutput(['You may use no apps on this computer.', ...notes].join('\n'), true);
-        const how =
-          state.mode === 'full'
-            ? 'You take over the mouse and keyboard when you act (ComputerAction).'
-            : 'Taking over the mouse and keyboard (ComputerAction) asks the person first.';
-        return textOutput([`You may use: ${grantsText(state.apps)}. ${how} Take a Screenshot to see them.`, ...notes].join('\n'));
+        return textOutput([`You may use: ${grantsText(state.apps)}. Taking over the mouse and keyboard (ComputerAction) asks the person first. Take a Screenshot to see them.`, ...notes].join('\n'));
       } catch (e) {
         return textOutput(`Computer use isn't available: ${errorText(e)}`, true);
       }
@@ -138,10 +143,23 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
     async run({ app }, ctx) {
       try {
         const state = await deps.call(ctx.sessionId, 'access.state', {});
-        const grant = state.apps.find((g) => g.app.name.toLowerCase() === app.trim().toLowerCase() || g.app.id === app.trim());
-        if (!grant) return textOutput(`You may not use ${app}: ask with ComputerAccess first.`, true);
-        await deps.call(ctx.sessionId, 'apps.open', { id: grant.app.id });
-        return textOutput(`Opened ${grant.app.name}.`);
+        const wanted = app.trim().toLowerCase();
+        let target = state.apps.find((g) => g.app.name.toLowerCase() === wanted || g.app.id.toLowerCase() === wanted)?.app;
+        if (!target && state.mode === 'full') {
+          const { apps: found } = await deps.call(ctx.sessionId, 'apps.list', { query: app.trim() });
+          const usable = found.filter((a) => a.granted);
+          target = (usable.find((a) => a.app.name.toLowerCase() === wanted || a.app.id.toLowerCase() === wanted) ?? usable[0])?.app;
+        }
+        if (!target) {
+          return textOutput(state.mode === 'full' ? `You may not use ${app}: it isn't installed, or it is on the person's denied list or part of the system.` : `You may not use ${app}: ask with ComputerAccess first.`, true);
+        }
+        // Full control: opening an app takes the computer, so the app comes to the front.
+        if (state.mode === 'full' && !state.control) {
+          const refused = await takeControl(ctx.sessionId, ctx.callId, `Open ${target.name}`, ctx.signal);
+          if (refused) return textOutput(refused, true);
+        }
+        await deps.call(ctx.sessionId, 'apps.open', { id: target.id });
+        return textOutput(`Opened ${target.name}${state.mode === 'full' ? ' and brought it to the front' : ''}.`);
       } catch (e) {
         return textOutput(errorText(e), true);
       }
@@ -226,7 +244,7 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
         const parsed = ComputerActionItem.array().min(1).max(20).safeParse(actions);
         if (!parsed.success) return textOutput(`Not a list of actions: ${parsed.error.issues[0]?.message ?? 'invalid'}.`, true);
         const state = await deps.call(ctx.sessionId, 'access.state', {});
-        if (!state.apps.length) return textOutput('You may use no apps yet: ask with ComputerAccess first.', true);
+        if (state.mode !== 'full' && !state.apps.length) return textOutput('You may use no apps yet: ask with ComputerAccess first.', true);
         if (!state.control) {
           const refused = await takeControl(ctx.sessionId, ctx.callId, parsed.data.find((a) => a.summary)?.summary ?? '', ctx.signal);
           if (refused) return textOutput(refused, true);

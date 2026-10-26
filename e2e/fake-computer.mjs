@@ -132,13 +132,13 @@ const methods = {
     log({ method: 'apps.unhide', ids });
     return {};
   },
-  'capture.display': ({ region, maxWidth, maxHeight, apps: only }) => {
+  'capture.display': ({ region, maxWidth, maxHeight, apps: only, exclude }) => {
     needs('screenRecording');
     const rect = region ?? SCREEN;
     const scale = Math.min(1, maxWidth / rect.width, maxHeight / rect.height);
     const width = Math.max(1, Math.round(rect.width * scale));
     const height = Math.max(1, Math.round(rect.height * scale));
-    log({ method: 'capture.display', apps: only ?? null, width, height });
+    log({ method: 'capture.display', apps: only ?? null, exclude: exclude ?? null, width, height });
     return { data: png(width, height).toString('base64'), mime: 'image/png', width, height, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
   },
   // The pretend screen: whatever app is in front fills it; its lower edge holds a password field and a link.

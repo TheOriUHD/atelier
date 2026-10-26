@@ -34,6 +34,17 @@ Atelier never answers these questions for you.
 
 ## Allowing apps
 
+**How Atelier uses the apps you allow** in Settings decides how much it asks:
+
+- **Background** (the default): it asks for each app, and before it takes your mouse and keyboard (below).
+- **Full control**: it takes over your computer as it is. No cards: it may use any app except your denied apps,
+  Atelier itself and the parts of macOS that ask for passwords. Terminals and code editors still only get clicks
+  (typing there would run commands past Atelier's permission prompts). Its screenshots show the screen as you see it,
+  with your denied apps left out, and nothing is hidden: it starts from Atelier and brings the app it needs to the
+  front itself.
+
+### Allowing apps (Background)
+
 When the assistant needs an app, it asks with a card: **Let Atelier use TextEdit?**, with the reason it gave. Each app
 comes with what Atelier may do there:
 
@@ -60,17 +71,15 @@ start. **Add app** picks any installed app; **Remove** takes one off. Denying an
 
 Acting in an app means taking your mouse and keyboard. While Atelier has them:
 
-- a clay glow runs around the edges of every screen, and a small panel at the top says **Atelier is using your
-  computer · Hold Esc to stop**;
-- apps it wasn't allowed are hidden, and so are Atelier's own windows; **Unhide apps when Atelier finishes** (on by
-  default) shows them again afterwards;
+- a soft clay glow runs along the edges of every screen, and a small panel below the menu bar says **Atelier is using
+  your computer · Hold Esc to stop**;
+- in Background, apps it wasn't allowed are hidden, and so are Atelier's own windows; **Unhide apps when Atelier
+  finishes** (on by default) shows them again afterwards. Full control hides nothing;
 - it gives them back when the reply ends, when it waits for you, or when it says it is done.
 
-**How Atelier uses the apps you allow** decides when it may take them:
-
-- **Background** (the default): the first time in a conversation, a card asks **Let Atelier take over your mouse and
-  keyboard?** **Allow** is for this conversation; **Always allow** switches the setting to Full control.
-- **Full control**: it takes them whenever it acts in an allowed app, without asking again.
+In **Background**, the first time in a conversation a card asks **Let Atelier take over your mouse and keyboard?**
+**Allow** is for this conversation; **Always allow** switches the setting to Full control. In **Full control** it takes
+them whenever it acts, without asking.
 
 ### Taking your computer back
 
