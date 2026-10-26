@@ -379,6 +379,8 @@ export const SessionSnapshot = z.object({
   /** What a local model server is doing before the reply's first token (RunPhase), null otherwise. */
   phase: RunPhase.nullable(),
   retryAttempt: z.number().int().min(1).max(10).optional(),
+  /** The guess at the person's next message, while it stands (the `suggestion` run event). */
+  suggestion: z.string().max(200).nullable().optional(),
   /** Messages sent while the agent worked that it hasn't taken yet, oldest first. */
   outbox: z.array(OutboxMessage),
   seq: z.number().int().nonnegative(),
@@ -412,6 +414,8 @@ export const RunEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('compacted'), summaryMessageId: z.string() }),
   /** The conversation moved to another branch (a switch or a rewind, maybe in another window): load it again. */
   z.object({ type: z.literal('branch') }),
+  /** A short guess at the person's next message, shown in the message box (Tab puts it in); null takes it back. */
+  z.object({ type: z.literal('suggestion'), text: z.string().max(200).nullable() }),
   /** Waiting for a turn on the model's server with this many ahead (requests, or sub-agents), or no longer (null). */
   z.object({ type: z.literal('queued'), ahead: z.number().int().nonnegative().nullable() }),
   /** The model server is loading the model or reading the prompt (RunPhase), or the reply started or ended (null). */

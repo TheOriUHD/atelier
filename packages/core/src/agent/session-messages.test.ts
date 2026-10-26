@@ -13,6 +13,8 @@ import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/typ
 import type { Tool } from '../tools/types.ts';
 import { ChatService, MAX_MESSAGE_CHAIN, type ChatServiceDeps } from './chat-service.ts';
 
+const quietPrefs = () => { const prefs = defaultUserPrefs(); return { ...prefs, code: { ...prefs.code, suggestions: false } }; };
+
 const info: ModelInfo = {
   ref: 'fake/m',
   providerId: 'fake',
@@ -79,7 +81,8 @@ function service(reply: (sessionId: string, req: ChatRequest, n: number) => Stre
     sessionEvent: () => {},
     sessionChanged: () => {},
     recordUsage: () => {},
-    person: async () => ({ prefs: defaultUserPrefs(), name: 'Tester', safeguards: 'inherit' as const }),
+    // Suggested replies would add a request after every Code turn: off unless a test is about them.
+    person: async () => ({ prefs: quietPrefs(), name: 'Tester', safeguards: 'inherit' as const }),
     fetch: async () => new Response('offline', { status: 503 }),
     resolveRefs: async (v) => v,
     now: () => new Date('2026-10-13T12:00:00Z'),

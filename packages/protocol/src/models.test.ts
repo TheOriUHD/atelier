@@ -30,7 +30,7 @@ describe('settings schema', () => {
     expect(p.appearance.theme).toBe('system');
     expect(p.appearance.chatFont).toBe('serif');
     expect(p.appearance.interfaceFont).toBe('sans');
-    expect(p.code).toEqual({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal' });
+    expect(p.code).toEqual({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true });
     expect(UserPrefs.safeParse({ appearance: { theme: 'neon' } }).success).toBe(false);
     // Stored before these keys existed: defaults fill in.
     expect(UserPrefs.parse({ appearance: { theme: 'dark' }, code: { font: 'Fira Code' } }).code.syntaxTheme.dark).toBe('atelier-dark');

@@ -30,7 +30,7 @@ const asked = (text: string) => message('user', [{ type: 'text', text }]);
 function show(messages: Message[]) {
   const live = {
     session: { id: 's', mode: 'code', workspaceId: null, permissionMode: null, title: 'Code', projectId: null, model: null, effort: null, connectorsOff: [], research: false, status: 'idle', pinnedAt: null, createdAt: 0, updatedAt: 0 },
-    messages, siblings: {}, streamingMessageId: null, pending: null, todos: [], tasks: [], toolOutput: {}, context: null, compacting: false, queued: null, phase: null, outbox: [], seq: 1, status: 'ready', error: null, toolInputs: {}, artifacts: {},
+    messages, siblings: {}, streamingMessageId: null, pending: null, todos: [], tasks: [], toolOutput: {}, suggestion: null, context: null, compacting: false, queued: null, phase: null, outbox: [], seq: 1, status: 'ready', error: null, toolInputs: {}, artifacts: {},
   } as LiveSessionState;
   const view = render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>

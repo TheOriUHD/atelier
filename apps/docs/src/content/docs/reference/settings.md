@@ -92,6 +92,7 @@ see are hidden in the app.
 | **Always-allowed actions** | What you approved with “Always allow” in a permission prompt. These rules apply in your Code and Cowork sessions and to connector tools in chats, on top of the rules your admin set. |
 | **Code appearance** | Syntax highlighting for code: one theme for the light app theme, one for the dark. |
 | **Default transcript view** | How Code sessions open: tool calls as usual, with thinking expanded, or with every call’s details expanded. Each session can switch in its header. |
+| **Suggested replies** | After a reply in Code or Cowork, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply. |
 | **Code font** | A monospace font installed on your computer, for code and diffs. |
 | **Commit author name** | Used for commits you make from the Code view. Empty uses the repository’s git config. |
 | **Commit author email** | Used for commits you make from the Code view. Empty uses the repository’s git config. |

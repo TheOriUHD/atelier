@@ -61,6 +61,11 @@ export interface ComposerProps {
   dock?: ReactNode;
   /** A temporary chat: the box gets a dashed border, so the state is clear where the person types. */
   temporary?: boolean;
+  /**
+   * A short guess at the person's next message (Code and Cowork): shown in place of the prompt while the box is empty,
+   * Tab puts it in. Typing anything, or putting it in, sets it aside until the next one.
+   */
+  suggestion?: string | null;
 }
 
 export interface ConnectorSwitches {
@@ -96,8 +101,11 @@ export function Composer({
   onAddFolder,
   dock,
   temporary,
+  suggestion,
 }: ComposerProps) {
   const [text, setText] = useDraft(draftKey);
+  const [setAside, setSetAside] = useState<string | null>(null);
+  const suggested = suggestion && suggestion !== setAside && text === '' && !streaming ? suggestion : null;
   const [caret, setCaret] = useState(0);
   // Where the caret goes once the text a menu pick (or a rewind) put in has rendered.
   const placeCaret = useRef<number | null>(null);
@@ -247,8 +255,10 @@ export function Composer({
             value={text}
             aria-label="Message"
             {...menu.inputProps}
-            placeholder={placeholder ?? (variant === 'new' ? 'How can I help you today?' : 'Reply')}
+            placeholder={suggested ?? placeholder ?? (variant === 'new' ? 'How can I help you today?' : 'Reply')}
+            {...(suggested ? { 'aria-description': `Suggested: ${suggested}. Press Tab to use it.` } : {})}
             onChange={(e) => {
+              if (suggestion && e.target.value !== '') setSetAside(suggestion);
               setText(e.target.value);
               setCaret(e.target.selectionStart);
             }}
@@ -266,6 +276,14 @@ export function Composer({
             onKeyDown={(e) => {
               onKeyDown?.(e);
               if (e.defaultPrevented) return;
+              // Tab takes the suggestion as the person's own text, to send, change or delete.
+              if (e.key === 'Tab' && !e.shiftKey && suggested && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                setSetAside(suggested);
+                setText(suggested);
+                setCaret(suggested.length);
+                return;
+              }
               menu.onKeyDown(e);
               if (e.defaultPrevented) return;
               // Escape interrupts the agent while the box is empty (with text it is left alone).

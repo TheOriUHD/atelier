@@ -35,6 +35,8 @@ export interface LiveSessionState {
   tasks: BackgroundTask[];
   /** Live output of running tool calls (Bash), by call id; cleared when the results arrive. */
   toolOutput: Record<string, string>;
+  /** A short guess at the person's next message (Code and Cowork): the message box shows it while empty. */
+  suggestion: string | null;
   seq: number;
 }
 
@@ -66,6 +68,7 @@ const initial: LiveSessionState = {
   todos: [],
   tasks: [],
   toolOutput: {},
+  suggestion: null,
   seq: 0,
 };
 
@@ -140,6 +143,7 @@ function fromSnapshot(s: SessionSnapshot, artifacts: ArtifactSummary[]): LiveSes
     todos: s.todos,
     tasks: s.tasks,
     toolOutput: s.toolOutput,
+    suggestion: s.suggestion ?? null,
     seq: s.seq,
   };
 }
@@ -233,6 +237,8 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
       return { ...state, context: null };
     case 'branch':
       return state;
+    case 'suggestion':
+      return { ...state, suggestion: event.text };
     case 'todos':
       return { ...state, todos: event.todos };
     case 'tasks':

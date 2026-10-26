@@ -155,6 +155,7 @@ export function WorkPage() {
                   <Composer
                     ref={composer}
                     variant="reply"
+                    suggestion={live.suggestion}
                     draftKey={draftKeys.session(sessionId)}
                     connectors={connectors}
                     autoFocus

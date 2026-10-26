@@ -28,7 +28,7 @@ prompts or replies.
 | [`chat.full.organization`](/prompts/assembled/chat.full.organization.txt) | Chat with an administrator’s instructions for everyone. | 24 KB |
 | [`chat.full.personality-technical`](/prompts/assembled/chat.full.personality-technical.txt) | Chat with a built-in personality selected (technical and earnest). | 24 KB |
 | [`code.compact.personality-relaxed`](/prompts/assembled/code.compact.personality-relaxed.txt) | Code, compact tier, with a built-in personality selected (relaxed, more emoji). | 22 KB |
-| [`work.full.personality-custom`](/prompts/assembled/work.full.personality-custom.txt) | Cowork with a custom personality and a concise response style. | 41 KB |
+| [`work.full.personality-custom`](/prompts/assembled/work.full.personality-custom.txt) | Cowork with a custom personality and a concise response style. | 42 KB |
 | [`chat.full.personalization`](/prompts/assembled/chat.full.personalization.txt) | Chat with a name, a response style and the person’s own instructions. | 23 KB |
 | [`chat.compact`](/prompts/assembled/chat.compact.txt) | Chat, compact tier. | 9 KB |
 | [`chat.compact.prompted`](/prompts/assembled/chat.compact.prompted.txt) | Chat, compact tier, for a model that calls tools through text (prompted tool calls). | 7 KB |

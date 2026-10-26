@@ -13,7 +13,9 @@ import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/typ
 import type { Tool } from '../tools/types.ts';
 import { requestChars, requestSize } from './context.ts';
 import { REPEAT_NUDGE, REPEAT_STOP } from './loop.ts';
-import { answerDanglingToolCalls, ChatService, collectText, MAX_BACKGROUND_AGENTS, MAX_WAKES, ModelUnavailableError, sanitizeTitle, stepCap, withQuotes, type ChatServiceDeps, type ExtensionCatalog, type ModelResolver } from './chat-service.ts';
+import { answerDanglingToolCalls, ChatService, collectText, sanitizeSuggestion, MAX_BACKGROUND_AGENTS, MAX_WAKES, ModelUnavailableError, sanitizeTitle, stepCap, withQuotes, type ChatServiceDeps, type ExtensionCatalog, type ModelResolver } from './chat-service.ts';
+
+const quietPrefs = () => { const prefs = defaultUserPrefs(); return { ...prefs, code: { ...prefs.code, suggestions: false } }; };
 
 const info: ModelInfo = {
   ref: 'fake/m',
@@ -118,7 +120,8 @@ function service(resolver?: Partial<ModelResolver>, adapter?: ProviderAdapter, e
     sessionEvent: (sessionId, seq, event) => events.push({ sessionId, seq, event }),
     sessionChanged: () => {},
     recordUsage: () => {},
-    person: async () => ({ prefs: defaultUserPrefs(), name: 'Tester', safeguards: 'inherit' as const }),
+    // Suggested replies would add a request after every Code turn: off unless a test is about them.
+    person: async () => ({ prefs: quietPrefs(), name: 'Tester', safeguards: 'inherit' as const }),
     fetch: async () => new Response('offline', { status: 503 }),
     resolveRefs: async (v) => v,
     now: () => new Date('2026-10-13T12:00:00Z'),
@@ -242,6 +245,58 @@ describe('ChatService', () => {
     await chat.send(s.id, [{ type: 'text', text: 'Thanks' }]);
     await chat.settle(s.id);
     expect(seen[4]!.tools!.some(t => t.name === 'mcp__docs__tool_7')).toBe(true);
+  });
+
+  it('guesses the next message after a Code turn from the person\'s habits, and takes it back when they send', async () => {
+    const asked: ChatRequest[] = [];
+    const echo = echoAdapter(seen, 'Built and tested it.');
+    const adapter: ProviderAdapter = {
+      ...echo,
+      async *stream(req) {
+        if (!req.system.some((b) => b.text.includes("Guess the person's next message"))) return yield* echo.stream(req);
+        asked.push(req);
+        yield { type: 'text', delta: '"push it and release 0.3.1"' };
+        yield { type: 'finish', reason: 'end' };
+      },
+    };
+    const chat = service(undefined, adapter, { person: async () => ({ prefs: defaultUserPrefs(), name: 'Tester', safeguards: 'inherit' as const }) });
+    const s = await repo.create({ mode: 'code' });
+    await chat.send(s.id, [{ type: 'text', text: 'fix the build, then push it' }]);
+    await chat.settle(s.id);
+    await until(() => events.some((e) => e.event.type === 'suggestion'));
+    expect(events.find((e) => e.event.type === 'suggestion')!.event).toEqual({ type: 'suggestion', text: 'push it and release 0.3.1' });
+    expect((await chat.snapshot(s.id)).suggestion).toBe('push it and release 0.3.1');
+    // It is guessed from what the person said and the reply, in the background.
+    expect(asked[0]!.messages[0]!.parts[0]).toMatchObject({ text: expect.stringContaining('- fix the build, then push it') });
+    expect(asked[0]!.messages[0]!.parts[0]).toMatchObject({ text: expect.stringContaining('Built and tested it.') });
+    expect(asked[0]!.queue).toMatchObject({ priority: 'background' });
+
+    await chat.send(s.id, [{ type: 'text', text: 'push it' }]);
+    expect(events.some((e) => e.event.type === 'suggestion' && e.event.text === null)).toBe(true);
+    expect((await chat.snapshot(s.id)).suggestion).toBeNull();
+    await chat.settle(s.id);
+
+    // A chat, and a person who turned them off, get none.
+    asked.length = 0;
+    const off = defaultUserPrefs();
+    off.code.suggestions = false;
+    const quiet = service(undefined, adapter, { person: async () => ({ prefs: off, name: 'Tester', safeguards: 'inherit' as const }) });
+    const t = await repo.create({ mode: 'code' });
+    await quiet.send(t.id, [{ type: 'text', text: 'hi' }]);
+    await quiet.settle(t.id);
+    const c = await repo.create({ mode: 'chat' });
+    await chat.send(c.id, [{ type: 'text', text: 'hi' }]);
+    await chat.settle(c.id);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(asked).toEqual([]);
+  });
+
+  it('keeps suggested replies to one plain line', () => {
+    expect(sanitizeSuggestion('"Push it and release 0.2.11"\n')).toBe('Push it and release 0.2.11');
+    expect(sanitizeSuggestion('NONE')).toBeNull();
+    expect(sanitizeSuggestion('none.')).toBeNull();
+    expect(sanitizeSuggestion('')).toBeNull();
+    expect(sanitizeSuggestion('x'.repeat(121))).toBeNull();
   });
 
   it('runs a turn, titles the session and emits monotonic seqs', async () => {

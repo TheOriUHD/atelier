@@ -38,6 +38,7 @@ function live(messages: Message[]): LiveSessionState {
     todos: [],
     tasks: [],
     toolOutput: {},
+    suggestion: null,
     context: null,
     compacting: false,
     queued: null,

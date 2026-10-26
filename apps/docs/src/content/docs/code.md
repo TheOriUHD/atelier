@@ -178,6 +178,10 @@ You can type while the agent works. Your message appears under the conversation 
 
 If a reply is cut off because Atelier restarted, the end of the conversation says **Atelier restarted and cut off this reply.** with **Continue**.
 
+### Suggested replies
+
+When a reply ends, the empty message box shows a short guess at what you'll send next in grey, such as "push it and release 0.2.11" when that's what you usually say once the work is done. **Tab** puts it in the box as your own text, to send as it is or change; typing anything sets it aside until the next reply. The small model writes it from your recent messages and the reply (the conversation's model when no small model is set), at the lowest priority, so it never holds up a reply. Turn it off in **Settings › Code › Suggested replies**. Cowork has it too; Chat and temporary sessions don't.
+
 ### Reading the transcript
 
 Reads and searches appear as one-line summaries, edits as inline diffs, commands with live output and exit status, sub-agents with their own transcript. The **Transcript view** button in the header picks how much is expanded, and **Settings › Code › Default transcript view** sets the default:
@@ -341,6 +345,7 @@ More about permission messages is on [Permissions](/permissions/#when-something-
 | | |
 |---|---|
 | Switch permission mode (empty message box) | Shift+Tab |
+| Use the suggested reply (empty message box) | Tab |
 | Stop while it works (empty message box) | Esc |
 | Effort | ⌘⇧E / Ctrl+Shift+E |
 | Upload or add files | ⌘U / Ctrl+U |

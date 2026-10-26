@@ -180,7 +180,7 @@ describe('TaskCard for loops and background sub-agents', () => {
 describe('agentFacts', () => {
   it('waits for approval when the sub-agent does', () => {
     const snapshot = childSnapshot();
-    const state = { ...snapshot, status: 'ready' as const, error: null, toolInputs: {}, artifacts: {}, session: { ...snapshot.session, status: 'waiting' as const } };
+    const state = { ...snapshot, suggestion: null, status: 'ready' as const, error: null, toolInputs: {}, artifacts: {}, session: { ...snapshot.session, status: 'waiting' as const } };
     expect(agentFacts(state)).toMatchObject({ toolUses: 4, tokens: 1500, activity: 'Waiting for your approval', model: 'fake/fake-chat:8b' });
   });
 });

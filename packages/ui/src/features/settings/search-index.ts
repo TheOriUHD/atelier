@@ -340,6 +340,14 @@ export const SETTINGS_INDEX = [
     keywords: ['verbose', 'thinking', 'expand', 'details', 'tool calls', 'appearance'],
   },
   {
+    id: 'code.suggestions',
+    page: 'code',
+    label: 'Suggested replies',
+    description:
+      'After a reply in Code or Cowork, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply.',
+    keywords: ['suggestion', 'autocomplete', 'tab', 'next message', 'prompt suggestion'],
+  },
+  {
     id: 'code.font',
     page: 'code',
     label: 'Code font',

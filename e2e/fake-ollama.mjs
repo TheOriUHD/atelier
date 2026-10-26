@@ -16,7 +16,8 @@
  *   only a note that a background sub-agent ended → "Heard back from <task>: <its first words>."
  *   anything else → a short echo
  * `<context-update>` notes in front of the message are ignored (only "request?" and the background note read them), and
- * so is a loop's note after it. Title requests (system prompt asks for a title) get a fixed title. Compaction requests (a `<transcript>` or
+ * so is a loop's note after it. Title requests (system prompt asks for a title) get a fixed title, suggested-reply requests
+ * "commit it". Compaction requests (a `<transcript>` or
  * `<partial-summaries>` message) get a summary saying how many tool calls are done, so a scripted task carries on
  * after it. Prompt token counts are the request's size at four characters a token.
  *
@@ -121,6 +122,10 @@ async function chat(req, res) {
     }
     send({ content: JSON.stringify({ ops: said ? [{ op: 'update', section: 'preferences', details: `- ${said}` }] : [] }) });
     return done(20);
+  }
+  if (/next message in this conversation/i.test(system)) {
+    send({ content: 'commit it' });
+    return done(4);
   }
   if (/short title/i.test(system)) {
     send({ content: /markdown/i.test(lastUser) ? 'Sorting algorithms compared' : 'Scripted demo chat' });

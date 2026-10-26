@@ -400,6 +400,9 @@ export class ChatService {
   private budgets = new Map<string, { subagents: number }>();
   /** Sessions whose title is being written: a second turn before it lands doesn't ask again. */
   private titling = new Set<string>();
+  /** The guess at each session's next message while it stands, and the requests still working one out. */
+  private suggestions = new Map<string, string>();
+  private suggesting = new Map<string, AbortController>();
   /** Running sub-agents' own stop (the Background tasks pane's), which also reaches one still waiting for its turn. */
   private agentStops = new Map<string, AbortController>();
   /** Counts events that reflect stored changes (everything but streaming output), so snapshots can detect races. */
@@ -615,6 +618,7 @@ export class ChatService {
         queued: this.queued.get(sessionId) ?? null,
         phase: this.phases.get(sessionId) ?? null,
         retryAttempt: this.retryAttempts.get(sessionId),
+        suggestion: this.suggestions.get(sessionId) ?? null,
         outbox: [...(this.outboxes.get(sessionId) ?? [])],
         seq: this.seqs.get(sessionId) ?? 0,
       };
@@ -955,6 +959,8 @@ export class ChatService {
   private start(sessionId: string, submitted = false, opts: { before?(): Promise<void>; wake?: boolean } = {}): Promise<void> {
     if (this.runs.has(sessionId)) return Promise.reject(new Error('A response is still being generated'));
     const controller = new AbortController();
+    // A new turn makes the guess at the next message moot, and the request still working one out gives way.
+    this.dropSuggestion(sessionId);
     // This turn picks up the ends waiting for it at its first request; if it fails before that, the next turn does.
     for (const notice of this.notices.get(sessionId) ?? []) notice.wake = false;
     // A woken turn continues the chain of the messages it picks up (`deliverNotices`); any other starts a new one.
@@ -1130,6 +1136,9 @@ export class ChatService {
       // The row as it is now: a title written while this turn ran counts.
       if (!this.titling.has(sessionId) && !(await this.deps.repo.getRow(sessionId))?.title) void this.generateTitle(sessionId, resolved);
       if (!session.parentSessionId && !signal.aborted) this.deps.memory?.turnEnded(session);
+      if (!session.parentSessionId && !signal.aborted && result.stopReason === 'end' && (session.mode === 'code' || session.mode === 'work') && !session.temporary) {
+        void this.suggestReply(sessionId, resolved);
+      }
     } catch (error) {
       finalStatus = 'error';
       await this.failWithoutModel(sessionId, error);
@@ -2467,6 +2476,50 @@ export class ChatService {
     return { request: request ? messageText(request.parts) : null, todos: session.todos as Todo[], files: [...files].slice(-50), skills: [...skills] };
   }
 
+  /**
+   * A short guess at the person's next message after a turn in Code or Cowork (their prefs' `code.suggestions`), from
+   * what they usually say at this point and the reply: the small model's, or the conversation's own. Best-effort, at
+   * background priority; a new turn cancels it.
+   */
+  private async suggestReply(sessionId: string, current: ResolvedModel): Promise<void> {
+    const controller = new AbortController();
+    this.suggesting.get(sessionId)?.abort();
+    this.suggesting.set(sessionId, controller);
+    try {
+      const session = await this.requireSession(sessionId);
+      if (!(await this.deps.person(session.userId)).prefs.code.suggestions) return;
+      const { messages } = await this.deps.repo.branch(sessionId);
+      const said = messages.flatMap((m) => (m.role === 'user' && m.kind === 'normal' ? [messageText(m.parts).trim()] : [])).filter(Boolean).slice(-SUGGESTION_HISTORY);
+      const reply = messages.findLast((m) => m.role === 'assistant' && messageText(m.parts).trim());
+      if (!said.length || !reply) return;
+      const model = (await this.smallModel(current.info.ref)) ?? current;
+      // Browser chat has one conversation slot, which the person's next message needs.
+      if (model.adapter.type === 'chatgpt-chat') return;
+      const text = await collectText(model, {
+        system: [{ text: template('suggestion', this.deps.promptOverrides()) }],
+        user: `The person's messages so far, oldest first:\n${said.map((m) => `- ${m.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}\n\nThe assistant's last reply:\n${messageText(reply.parts).slice(-3000)}`,
+        maxOutputTokens: 300,
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(2 * 60_000)]),
+        queue: { priority: 'background', timeoutMs: 60_000, owner: sessionId },
+        onUsage: (usage) => this.deps.recordUsage({ model: model.info, sessionId, userId: session.userId, mode: session.mode, usage }),
+      });
+      const suggestion = sanitizeSuggestion(text);
+      if (!suggestion || controller.signal.aborted || this.runs.has(sessionId)) return;
+      this.suggestions.set(sessionId, suggestion);
+      this.emit(sessionId, { type: 'suggestion', text: suggestion });
+    } catch {
+      // Suggestions are best-effort: the box keeps its usual placeholder.
+    } finally {
+      if (this.suggesting.get(sessionId) === controller) this.suggesting.delete(sessionId);
+    }
+  }
+
+  private dropSuggestion(sessionId: string): void {
+    this.suggesting.get(sessionId)?.abort();
+    this.suggesting.delete(sessionId);
+    if (this.suggestions.delete(sessionId)) this.emit(sessionId, { type: 'suggestion', text: null });
+  }
+
   private async generateTitle(sessionId: string, current: ResolvedModel): Promise<void> {
     this.titling.add(sessionId);
     try {
@@ -2668,6 +2721,16 @@ export function withQuotes(parts: Part[]): Part[] {
       .join('\n');
     return [{ type: 'context', text: `The person is replying to this passage from earlier in the conversation:\n${block}`, notice: { kind: 'quote', text: quoted } }];
   });
+}
+
+/** The person's own messages a suggestion is guessed from, at most (their habits show in the recent ones). */
+const SUGGESTION_HISTORY = 12;
+
+/** A suggested next message as the box shows it: one line, no quotes, at most 120 characters; NONE is none. */
+export function sanitizeSuggestion(raw: string): string | null {
+  const line = (raw.split('\n').map((l) => l.trim()).find(Boolean) ?? '').replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '').trim();
+  if (!line || /^none\.?$/i.test(line) || line.length > 120) return null;
+  return line;
 }
 
 export function sanitizeTitle(raw: string): string {

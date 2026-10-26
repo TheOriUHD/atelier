@@ -35,6 +35,7 @@ const base: LiveSessionState = {
   todos: [],
   tasks: [],
   toolOutput: {},
+  suggestion: null,
   seq: 3,
 };
 

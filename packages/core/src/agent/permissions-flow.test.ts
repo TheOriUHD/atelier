@@ -18,6 +18,8 @@ import { textOutput, type Tool } from '../tools/types.ts';
 import type { Workspace } from '../workspaces/workspace.ts';
 import { ChatService, type ChatServiceDeps } from './chat-service.ts';
 
+const quietPrefs = () => { const prefs = defaultUserPrefs(); return { ...prefs, code: { ...prefs.code, suggestions: false } }; };
+
 const info: ModelInfo = {
   ref: 'fake/m',
   providerId: 'fake',
@@ -257,7 +259,8 @@ function service(
     sessionEvent: (_s, _seq, event) => events.push(event),
     sessionChanged: () => {},
     recordUsage: () => {},
-    person: async () => ({ prefs: defaultUserPrefs(), name: 'Tester', safeguards: 'inherit' as const }),
+    // Suggested replies would add a request after every Code turn: off unless a test is about them.
+    person: async () => ({ prefs: quietPrefs(), name: 'Tester', safeguards: 'inherit' as const }),
     permissionContext: async (session) => ({ ...gate, rules: { ...gate.rules, ...rules }, mode: (session.permissionMode as PermissionMode | null) ?? 'default' }),
     ...(sessionHooks ? { hooks: sessionHooks } : {}),
     ...extra,

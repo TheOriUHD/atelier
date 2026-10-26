@@ -4,6 +4,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Suggested replies in Code and Cowork:** when a reply ends, the empty message box shows a short guess at your next message in grey (what you usually say at that point, an answer to the reply's question, or the next step it offered). **Tab** puts it in as your own text; typing anything sets it aside. The small model writes it at the lowest priority, so it never delays a reply. Settings › Code › Suggested replies turns it off.
+
+- **The agent does the work it is asked for, also when the request is a question:** "Can you start?" or "can't you look at the plugin?" now get the work done, not an answer saying it could; a "yes" or "go" is the go-ahead, and a turn no longer ends on "the next step is …" when the agent could take that step, or on an apology and a plan after the person says the result falls short. GPT models (GPT-6 Astra in a long Code session) read the old wording as "answer questions, act on orders" and kept stopping to explain.
+
 - **A session the assistant moved to another folder shows that folder:** after ChangeDirectory, the sidebar listed the session under "Ungrouped", the Terminal said "This session has no folder" and code blocks had no Run button, until the app was restarted: the folder was new to the window's list of folders and nothing told it. The move now sends the updated list, and a window that meets a session in a folder it doesn't know reads its folders again.
 
 - **Several windows, devices and the browser stay in step** (found by an audit for quirks like the one above, where something changed and a window kept an old copy until a restart):

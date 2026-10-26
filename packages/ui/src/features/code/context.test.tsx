@@ -78,6 +78,7 @@ function snapshot(id: string, extra: Partial<SessionSnapshot> = {}): SessionSnap
     todos: [],
     tasks: [],
     toolOutput: {},
+    suggestion: null,
     context: CONTEXT,
     compacting: false,
     queued: null,
@@ -538,7 +539,7 @@ describe('NewSessionContextButton', () => {
 describe('Transcript', () => {
   it('shows one status while a request waits behind others, not the reply’s dots as well', async () => {
     const snap = snapshot('s-queued', { streamingMessageId: null, messages: [message('u1', 'user', { parts: [{ type: 'text', text: 'Hi' }] }), message('a1', 'assistant')], queued: 1 });
-    const live: LiveSessionState = { ...snap, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
+    const live: LiveSessionState = { ...snap, suggestion: null, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
     show('s-queued', snap, <Transcript sessionId="s-queued" live={live} />);
     await settle();
     expect(screen.getByText(/Waiting in line for the model · 1 request ahead/)).toBeTruthy();
@@ -554,7 +555,7 @@ describe('Transcript', () => {
   it('shows a /compact the person ran as their own message', async () => {
     const echo = message('c1', 'user', { kind: 'context', parts: [{ type: 'context', text: '', notice: { kind: 'command', command: '/compact decisions' } }] });
     const snap = snapshot('s-echo', { streamingMessageId: null, messages: [message('u1', 'user', { parts: [{ type: 'text', text: 'Next step' }] }), echo] });
-    const live: LiveSessionState = { ...snap, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
+    const live: LiveSessionState = { ...snap, suggestion: null, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
     show('s-echo', snap, <Transcript sessionId="s-echo" live={live} />);
     await settle();
     // The command is blue, its argument as typed.
@@ -572,7 +573,7 @@ describe('Transcript', () => {
       ],
     });
     const snap = snapshot('s-saved', { streamingMessageId: null, messages: [message('u1', 'user', { parts: [{ type: 'text', text: 'Next step' }] }), summary] });
-    const live: LiveSessionState = { ...snap, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
+    const live: LiveSessionState = { ...snap, suggestion: null, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
     show('s-saved', snap, <Transcript sessionId="s-saved" live={live} />);
     await settle();
     const line = screen.getByRole('button', { name: 'Compacted session · saved 666.2k tokens' });
@@ -585,7 +586,7 @@ describe('Transcript', () => {
 
   it('says the conversation is being compacted, in Chat and Cowork too', async () => {
     const snap = snapshot('s-chat', { streamingMessageId: null, messages: [message('u1', 'user', { parts: [{ type: 'text', text: 'Next step' }] })], compacting: true });
-    const live: LiveSessionState = { ...snap, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
+    const live: LiveSessionState = { ...snap, suggestion: null, status: 'ready', error: null, toolInputs: {}, artifacts: {} };
     show('s-chat', snap, <Transcript sessionId="s-chat" live={live} />);
     await settle();
     expect(screen.getByText('Compacting conversation…')).toBeTruthy();

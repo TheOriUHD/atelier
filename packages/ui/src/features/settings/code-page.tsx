@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { TranscriptView, UserPrefs } from '@atelier/protocol';
-import { SegmentedControl, Select, TextField, cn, type SegmentedControlItem, type SelectOption } from '../../components/ui/index.ts';
+import { SegmentedControl, Select, Switch, TextField, cn, type SegmentedControlItem, type SelectOption } from '../../components/ui/index.ts';
 import { CodeLines, useHighlightedLines } from '../chat/code-block.tsx';
 import { TRANSCRIPT_VIEWS } from '../chat/parts.tsx';
 import { SYNTAX_THEMES, resolveThemes, themeColors } from '../chat/highlighter.ts';
@@ -24,6 +24,7 @@ export function CodePage() {
   const fontDraft = useDraftText(font);
   const interfaceFont = usePref<InterfaceFont>(['appearance', 'interfaceFont']);
   const transcriptView = usePref<TranscriptView>(['code', 'transcriptView']);
+  const suggestions = usePref<boolean>(['code', 'suggestions']);
   const allow = usePref<string[]>(['permissions', 'allow']);
   const authorName = usePref<string>(['git', 'authorName']);
   const authorNameDraft = useDraftText(authorName);
@@ -50,6 +51,9 @@ export function CodePage() {
           {(label) => (
             <SegmentedControl {...label} items={TRANSCRIPT_VIEWS} value={transcriptView.value} onValueChange={(v) => void transcriptView.set(v)} />
           )}
+        </SettingRow>
+        <SettingRow id="code.suggestions" setting={suggestions}>
+          {(label) => <Switch {...label} checked={suggestions.value} onCheckedChange={(v) => void suggestions.set(v)} />}
         </SettingRow>
       </SettingsSection>
       <SettingsSection title="Permissions">

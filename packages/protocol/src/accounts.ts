@@ -257,8 +257,10 @@ export const UserPrefs = z.object({
         .default({ light: 'atelier-light', dark: 'atelier-dark' }),
       /** How Code sessions open: tool cards as usual, thinking expanded too, or every call's details expanded. */
       transcriptView: TranscriptView.default('normal'),
+      /** After a reply in Code and Cowork, a short guess at the next message shows in the message box (Tab puts it in). */
+      suggestions: z.boolean().default(true),
     })
-    .default({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal' }),
+    .default({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true }),
   sidebar: SidebarView.default({
     status: 'active',
     environments: ['local', 'cloud', 'remote', 'ssh'],

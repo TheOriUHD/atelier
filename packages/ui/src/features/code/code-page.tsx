@@ -382,6 +382,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                       <Composer
                         ref={composer}
                         variant="reply"
+                        suggestion={live.suggestion}
                         draftKey={draftKeys.session(sessionId)}
                         compact
                         connectors={connectors}
