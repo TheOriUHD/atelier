@@ -23,6 +23,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:transparent;font-famil
 ${withPopup ? '<div class="pill" role="status"><div class="ring" id="ring"></div><div><b id="title">Atelier is using your computer</b><span id="hint">Hold Esc to stop</span></div></div>' : ''}
 <script>
 let timer = null;
+function paused(on) {
+  const title = document.getElementById('title');
+  if (!title || title.textContent === 'Stopped') return;
+  title.textContent = on ? 'Waiting while you use your computer' : 'Atelier is using your computer';
+}
 function esc(phase) {
   const ring = document.getElementById('ring');
   if (!ring) return;
@@ -86,6 +91,9 @@ export function createOverlay(): Overlay {
     },
     hide() {
       if (!closing) close();
+    },
+    paused(on) {
+      for (const win of windows) if (!win.isDestroyed()) void win.webContents.executeJavaScript(`paused(${on})`).catch(() => undefined);
     },
     esc(phase) {
       for (const win of windows) if (!win.isDestroyed()) void win.webContents.executeJavaScript(`esc(${JSON.stringify(phase)})`).catch(() => undefined);

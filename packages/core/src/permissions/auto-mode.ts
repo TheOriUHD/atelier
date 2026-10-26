@@ -9,7 +9,7 @@ export const BLOCKS_IN_A_ROW = 3;
 export const BLOCKS_TOTAL = 20;
 
 /** Calls that only look: left out of the review's history, as they change nothing. */
-const LOOKUPS = new Set(['Read', 'Glob', 'Grep', 'LS', 'TodoWrite', 'BashOutput', 'WebSearch', 'Time', 'Usage']);
+const LOOKUPS = new Set(['Read', 'Glob', 'Grep', 'LS', 'TodoWrite', 'BashOutput', 'WebSearch', 'Time', 'Usage', 'Screenshot', 'ComputerApps']);
 const REQUESTS = 10;
 const ACTIONS = 30;
 

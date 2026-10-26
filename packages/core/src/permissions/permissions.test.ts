@@ -402,19 +402,22 @@ describe('decide', () => {
     expect(decide(add, ctx({ deny: ['AddConnector'] })).behavior).toBe('deny');
   });
 
-  it('leaves computer use to the person: its cards ask them, and its actions are gated by the apps they allowed on the computer', () => {
+  it('leaves computer use to its cards and to the mode: looking runs, acting is reviewed, asked or run like any action', () => {
     for (const name of ['ComputerAccess', 'FullControl']) {
       for (const mode of ['default', 'auto', 'plan', 'acceptEdits', 'bypassPermissions'] as const) expect(decide({ name, input: {} }, ctx({}, mode)).behavior, `${name} ${mode}`).toBe('allow');
     }
-    for (const name of ['Screenshot', 'ComputerApps']) {
-      for (const mode of ['default', 'auto', 'acceptEdits', 'bypassPermissions'] as const) expect(decide({ name, input: {} }, ctx({}, mode)).behavior, `${name} ${mode}`).toBe('allow');
-    }
-    const click = { name: 'ComputerAction', input: { actions: [{ action: 'left_click', coordinate: [1, 1] }] } };
-    expect(decide(click, ctx()).behavior).toBe('allow');
-    expect(decide({ name: 'OpenApp', input: { app: 'Notes' } }, ctx()).behavior).toBe('allow');
-    // Plan mode doesn't act; a rule still wins.
+    const look = { name: 'ComputerAction', input: { actions: [{ action: 'scroll', coordinate: [1, 1] }, { action: 'screenshot' }] } };
+    const click = { name: 'ComputerAction', input: { actions: [{ action: 'left_click', coordinate: [1, 1] }, { action: 'screenshot' }] } };
+    for (const mode of ['default', 'auto', 'acceptEdits', 'bypassPermissions'] as const) expect(decide(look, ctx({}, mode)).behavior, mode).toBe('allow');
+    expect(decide(click, ctx({}, 'auto')).behavior).toBe('review');
+    expect(decide(click, ctx()).behavior).toBe('ask');
+    expect(decide(click, ctx({}, 'acceptEdits')).behavior).toBe('ask');
+    expect(decide(click, ctx({}, 'bypassPermissions')).behavior).toBe('allow');
+    expect(decide({ name: 'OpenApp', input: { app: 'Notes' } }, ctx({}, 'auto')).behavior).toBe('review');
+    // Plan mode doesn't act; a rule wins.
     expect(decide(click, ctx({}, 'plan')).behavior).toBe('deny');
-    expect(decide(click, ctx({ deny: ['ComputerAction'] })).behavior).toBe('deny');
+    expect(decide(click, ctx({ deny: ['ComputerAction'] }, 'bypassPermissions')).behavior).toBe('deny');
+    expect(decide(click, ctx({ allow: ['ComputerAction'] })).behavior).toBe('allow');
   });
 
   it('follows the mode defaults', () => {

@@ -34,6 +34,8 @@ export interface Overlay {
   show(): void;
   hide(): void;
   esc(phase: 'down' | 'up' | 'stopped'): void;
+  /** Its actions wait while the person uses the mouse or keyboard. */
+  paused(on: boolean): void;
 }
 
 export interface ControllerDeps {
@@ -64,8 +66,6 @@ interface SessionState {
   grants: Map<string, AppGrant>;
   /** The person let this session take the mouse and keyboard (for the rest of it). */
   control: boolean;
-  /** The person took the mouse and keyboard back by using them: the next time asks again, whatever the mode. */
-  yielded: boolean;
   frame: Frame | null;
 }
 
@@ -89,9 +89,18 @@ interface Control {
   sessionId: string;
   /** Apps this control hid, shown again when it ends. */
   hidden: string[];
-  /** Why it ended, when the person ended it: held Esc, or used the mouse or keyboard themselves. */
-  endedBy: 'esc' | 'input' | null;
+  /** The person held Esc to end it. */
+  stopped: boolean;
+  /** When the person last used the mouse or keyboard themselves: its actions wait until they stop. */
+  lastInput: number;
+  /** The app that had the keyboard when a permission card came up (Full control): in front again before it acts. */
+  front: string | null;
 }
+
+/** How long the person's own mouse and keyboard must be still before its next action. */
+const IDLE_MS = 1200;
+/** How long it waits for the person to stop before it goes on regardless (they can hold Esc to stop it). */
+const IDLE_WAIT_MAX_MS = 5 * 60_000;
 
 const TIER_RANK: Record<AppTier, number> = { view: 0, click: 1, full: 2 };
 const atLeast = (have: AppTier, need: AppTier) => TIER_RANK[have] >= TIER_RANK[need];
@@ -117,9 +126,9 @@ const KEY_ALIASES: Record<string, string> = { command: 'cmd', meta: 'cmd', super
 /** What the model hears when the mouse and keyboard went back in the middle of its actions. */
 const ENDED = {
   esc: 'The person took the computer back (held Esc). Stop and ask before going on.',
-  input: 'The person used the mouse or keyboard themselves, so you gave them back. Ask before going on.',
   other: 'You no longer have the mouse and keyboard.',
 } as const;
+const MEANWHILE = 'Not done: the person used the mouse or keyboard meanwhile, so the screen may have changed. Take a Screenshot, then go on.';
 
 /** "cmd+shift+t" → ['cmd', 'shift', 't']. */
 export const parseKeys = (combo: string): string[] =>
@@ -220,7 +229,6 @@ export class ComputerController {
   async allowControl(backend: string, sessionId: string, always: boolean): Promise<void> {
     const state = this.session(backend, sessionId);
     state.control = true;
-    state.yielded = false;
     if (always) await this.settings((s) => ({ ...s, mode: 'full' }));
   }
 
@@ -311,7 +319,7 @@ export class ComputerController {
         if (this.control?.key === key) return { granted: true };
         if (this.control) return { granted: false, reason: 'Another conversation is using the mouse and keyboard right now.' };
         if (!policy.full && !policy.grants.length) return { granted: false, reason: 'You may use no apps yet: ask with ComputerAccess first.' };
-        if (state().yielded || (settings.mode !== 'full' && !state().control)) return { granted: false, reason: 'ask' };
+        if (settings.mode !== 'full' && !state().control) return { granted: false, reason: 'ask' };
         const permissions = await this.permissions();
         if (!permissions.accessibility) return { granted: false, reason: 'Atelier needs the Accessibility permission to use the mouse and keyboard: the person turns it on in Settings › System › Computer use.' };
         await this.begin(backend, sessionId, settings);
@@ -321,9 +329,21 @@ export class ComputerController {
         const control = this.control;
         if (control?.key !== key) throw new Error('You don’t have the mouse and keyboard: take them with FullControl first.');
         const results: ComputerActionResult[] = [];
+        // The person may be using the computer (answering a card, say): it waits until they stop, then puts the app it
+        // was working in back in front if Atelier took the keyboard meanwhile.
+        await this.whenIdle(control);
+        await this.refront(control);
+        const started = Date.now();
         for (const item of actions) {
+          if (this.control === control && control.lastInput > started) {
+            await this.whenIdle(control);
+            if (this.control === control) {
+              results.push({ action: item.action, ok: false, note: MEANWHILE });
+              break;
+            }
+          }
           if (this.control !== control) {
-            results.push({ action: item.action, ok: false, note: ENDED[control.endedBy ?? 'other'] });
+            results.push({ action: item.action, ok: false, note: ENDED[control.stopped ? 'esc' : 'other'] });
             break;
           }
           const result = await this.act(backend, sessionId, item, size, policy).catch((e: unknown) => ({ action: item.action, ok: false, note: helperMessage(e) }));
@@ -338,6 +358,19 @@ export class ComputerController {
       },
       'turn.end': async () => {
         if (this.control?.key === key) await this.end(this.control);
+        return {};
+      },
+      'turn.wait': async ({ kind }: ControllerMethods['turn.wait']['params']) => {
+        const control = this.control;
+        if (control?.key !== key) return {};
+        // Full control keeps the computer through a permission card (Atelier stays on screen there); anything else the
+        // person must answer, and Background (its windows stepped aside), hands it back.
+        if (settings.mode === 'full' && kind === 'permission') {
+          const { app } = await this.deps.helper.call('apps.frontmost', {});
+          control.front = app && appCategory(app.id) !== 'system' ? app.id : null;
+          return {};
+        }
+        await this.end(control);
         return {};
       },
     };
@@ -440,7 +473,8 @@ export class ComputerController {
         return done();
       }
       case 'scroll': {
-        const at = point(item.coordinate);
+        // Without a coordinate it scrolls where the pointer is.
+        const at = item.coordinate ? point(item.coordinate) : await helper.call('cursor.position', {});
         const why = await check(at, 'click');
         if (why) return refuse(why);
         const amount = item.amount ?? 3;
@@ -471,7 +505,7 @@ export class ComputerController {
 
   private async begin(backend: string, sessionId: string, settings: ComputerSettings): Promise<void> {
     const helper = this.deps.helper;
-    const control: Control = { key: keyOf(backend, sessionId), backend, sessionId, hidden: [], endedBy: null };
+    const control: Control = { key: keyOf(backend, sessionId), backend, sessionId, hidden: [], stopped: false, lastInput: 0, front: null };
     this.control = control;
     await helper.call('control.resume', {});
     await helper.call('control.begin', {});
@@ -513,19 +547,39 @@ export class ComputerController {
       this.secureInput = n.params.on;
       return;
     }
-    if (!control || control.endedBy) return;
+    if (!control || control.stopped) return;
     if (n.method === 'control.userInput') {
-      // They reached for the mouse or keyboard: theirs at once, and asked again before it's taken.
-      control.endedBy = 'input';
-      this.session(control.backend, control.sessionId).yielded = true;
-      void this.end(control).then(() => this.deps.event(control.backend, control.sessionId, { type: 'released', reason: 'person' }));
+      // They reached for the mouse or keyboard: its actions wait until they stop. Holding Esc is how they end it.
+      control.lastInput = Date.now();
     } else if (n.method === 'control.esc') {
       this.deps.overlay.esc(n.params.phase);
       if (n.params.phase === 'stopped') {
-        control.endedBy = 'esc';
+        control.stopped = true;
         void this.end(control).then(() => this.deps.event(control.backend, control.sessionId, { type: 'stopped' }));
       }
     }
+  }
+
+  /** Waits while the person uses the mouse or keyboard (the popup says so), at most a few minutes. */
+  private async whenIdle(control: Control): Promise<void> {
+    const since = Date.now();
+    let paused = false;
+    while (this.control === control && Date.now() - control.lastInput < IDLE_MS && Date.now() - since < IDLE_WAIT_MAX_MS) {
+      if (!paused) this.deps.overlay.paused(true);
+      paused = true;
+      await sleep(150);
+    }
+    if (paused) this.deps.overlay.paused(false);
+  }
+
+  /** After a permission card: the app it was working in goes back in front when Atelier (or the system) took it. */
+  private async refront(control: Control): Promise<void> {
+    const front = control.front;
+    control.front = null;
+    if (!front || this.control !== control) return;
+    const { app } = await this.deps.helper.call('apps.frontmost', {});
+    if (app && appCategory(app.id) !== 'system') return;
+    await this.deps.helper.call('apps.open', { id: front, activate: true }).catch(() => undefined);
   }
 
   // ---------------------------------------------------------------- helpers
@@ -534,7 +588,7 @@ export class ComputerController {
     const key = keyOf(backend, sessionId);
     let state = this.sessions.get(key);
     if (!state) {
-      state = { grants: new Map(), control: false, yielded: false, frame: null };
+      state = { grants: new Map(), control: false, frame: null };
       this.sessions.set(key, state);
     }
     return state;

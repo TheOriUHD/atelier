@@ -56,10 +56,13 @@ const PLAN_TOOLS = new Set(['ExitPlanMode', 'TodoWrite', 'AskUser', 'artifact', 
  */
 const ASKS_ITSELF = new Set(['ChangeDirectory', 'AddConnector', 'ComputerAccess', 'FullControl']);
 /**
- * Computer use's actions: what they may do is decided on the computer, by the apps the person allowed there and at which
- * tier (apps/desktop/src/computer/), not by a prompt per click. Plan mode still refuses the ones that act.
+ * Computer use's steps that only look (apps/desktop/src/computer/ decides where it may act at all): a ComputerAction of
+ * nothing else runs like a read. Clicks, typing and keys go through the mode like any other action: Auto's reviewer,
+ * the person in Ask, nothing in Bypass.
  */
-const GRANT_GATED = new Set(['Screenshot', 'ComputerApps', 'OpenApp', 'ComputerAction']);
+const LOOKING = new Set(['screenshot', 'zoom', 'scroll', 'wait', 'mouse_move', 'cursor_position']);
+const onlyLooks = (input: Record<string, unknown>) =>
+  Array.isArray(input.actions) && input.actions.length > 0 && input.actions.every((a) => LOOKING.has(String((a as { action?: unknown })?.action)));
 /** Where a command's deletions are ordinary scratch work in Auto mode (never the folders themselves, never a glob). */
 const SCRATCH_DIRS = ['/tmp', '/private/tmp', '/var/tmp', '/private/var/tmp', '/var/folders', '/private/var/folders'];
 /** Generated or disposable folders and files: clearing them is routine cleanup, however many at once, however often. */
@@ -117,7 +120,7 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   if (auto && isBash && !opaque && !warning && routineCleanup(parts, ctx)) return { behavior: 'allow', reason: 'Auto mode: clearing generated or temporary files.' };
 
   if (ASKS_ITSELF.has(call.name)) return { behavior: 'allow', reason: 'It asks the person itself.' };
-  if (GRANT_GATED.has(call.name)) return { behavior: 'allow', reason: 'Decided by the apps allowed on this computer.' };
+  if (call.name === 'ComputerAction' && onlyLooks(call.input)) return { behavior: 'allow', reason: 'It only looks at the screen.' };
 
   // A connector describes its own tools: a read-only hint lets a call into plan mode but never skips the prompt,
   // and its paths are the server's, not the workspace's.

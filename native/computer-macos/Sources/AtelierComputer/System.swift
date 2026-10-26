@@ -262,8 +262,30 @@ enum Apps {
       if Date() >= deadline { break }
       try? await Task.sleep(nanoseconds: 100_000_000)
     }
-    guard let found else { throw RPCError.notFound("\(id) didn't start within 10 s") }
+    guard var found else { throw RPCError.notFound("\(id) didn't start within 10 s") }
+    if activate, await bringToFront(pid: found.pid) {
+      found.active = true
+    }
     return helperApp(found)
+  }
+
+  /// Makes an app the active one. macOS 14+ ignores activation asked by a background process like this one, so it goes
+  /// through Accessibility (the app's AXFrontmost), which works from a trusted process, and checks that it took.
+  static func bringToFront(pid: pid_t) async -> Bool {
+    for _ in 0..<15 {
+      let front = await MainActor.run { () -> pid_t? in
+        NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateAllWindows])
+        return NSWorkspace.shared.frontmostApplication?.processIdentifier
+      }
+      if front == pid { return true }
+      if AXIsProcessTrusted() {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 1.0)
+        AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+      }
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    return await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier == pid }
   }
 
   @MainActor

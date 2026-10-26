@@ -172,7 +172,7 @@ const computer = new ComputerController({
   hasHelper: !!process.env.ATELIER_COMPUTER_HELPER || (process.platform === 'darwin' && existsSync(computerHelperPath)),
   settingsPath: computerSettingsFile(),
   // A test run with hidden windows doesn't light up the screen of the computer running it.
-  overlay: process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {} } : createOverlay(),
+  overlay: process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {} } : createOverlay(),
   windows: {
     hide: () => {
       stepAside = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isVisible());

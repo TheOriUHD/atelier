@@ -76,7 +76,9 @@ Acting in an app means taking your mouse and keyboard. While Atelier has them:
   your computer · Hold Esc to stop**;
 - in Background, apps it wasn't allowed are hidden, and so are Atelier's own windows; **Unhide apps when Atelier
   finishes** (on by default) shows them again afterwards. Full control hides nothing;
-- it gives them back when the reply ends, when it waits for you, or when it says it is done.
+- it keeps them for the whole task and gives them back when it is done (as it writes its reply), when it asks you a
+  question, or when you stop it. In Full control a permission prompt doesn't end it: it waits for your answer and
+  carries on. In Background any card hands them back.
 
 In **Background**, the first time in a conversation a card asks **Let Atelier take over your mouse and keyboard?**
 **Allow** is for this conversation; **Always allow** switches the setting to Full control. In **Full control** it takes
@@ -85,8 +87,9 @@ them whenever it acts, without asking.
 ### Taking your computer back
 
 - **Hold Esc for a second.** The ring in the panel fills; when it is full the panel says **Stopped** and the reply stops.
-- **Use the mouse or keyboard yourself.** Atelier lets go at once and tells the assistant to ask before going on; the
-  next time it needs them it asks again, also in Full control.
+- **Press Stop** in Atelier, or send a message.
+- **Using the mouse or keyboard yourself** doesn't stop it: it waits until you have stopped for a moment (the panel says
+  **Waiting while you use your computer**), then looks at the screen again and carries on.
 - **Turn computer use off** in Settings: whatever it was doing ends.
 
 ## What it won't do
@@ -108,6 +111,11 @@ model with each request; the conversation keeps them all.
 
 ## Permissions and modes
 
-The cards ask in every [permission mode](/permissions/), Bypass included. Screenshots and actions don't add prompts of
-their own: what you allowed on the card is what decides. Plan mode lets the assistant look (screenshots, the app list)
-but not act.
+Computer use follows the [permission mode](/permissions/) like everything else the assistant does:
+
+- **Looking** (screenshots, scrolling, waiting, the app list) never asks.
+- **Clicking, typing, pressing keys and opening apps** go through the mode. **Bypass** runs them; **Auto** has its
+  reviewer watch them, letting ordinary use through and stopping only for what matters (a purchase or payment, sending a
+  message, deleting something, accepting terms, changing account or security settings, typing a password); **Ask** and
+  **Accept edits** ask each time, listing the steps and what would be typed; **Plan** only looks.
+- The cards for apps and for taking over (Background) ask in every mode, Bypass included.

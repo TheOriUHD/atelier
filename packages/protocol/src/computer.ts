@@ -332,7 +332,7 @@ export const ComputerActionItem = z.object({
   text: z.string().max(10_000).optional(),
   direction: z.enum(['up', 'down', 'left', 'right']).optional(),
   /** Scroll lines, or how many times a key is pressed. */
-  amount: z.number().int().min(1).max(50).optional(),
+  amount: z.number().int().min(1).max(200).optional(),
   /** Seconds, for `wait`. */
   duration: z.number().min(0).max(10).optional(),
   /** `zoom`: the part of the latest screenshot to show at full detail, `[x0, y0, x1, y1]`. */
@@ -394,9 +394,11 @@ export interface ControllerMethods {
   'control.request': { params: Record<string, never>; result: { granted: boolean; reason?: string } };
   'control.batch': { params: { actions: ComputerActionItem[]; size: ScreenshotSize }; result: { results: ComputerActionResult[] } };
   'control.release': { params: Record<string, never>; result: Record<string, never> };
-  /** The turn ended, or waits on the person: full control ends (the person must be able to answer). */
+  /** The turn ended: control ends. */
   'turn.end': { params: Record<string, never>; result: Record<string, never> };
+  /** The turn waits on the person: control ends, but for a permission card in Full control, where it stays. */
+  'turn.wait': { params: { kind: 'permission' | 'question' | 'elicitation' }; result: Record<string, never> };
 }
 
-/** What the controller tells a backend about a session: the person held Esc, or took over the mouse or keyboard. */
-export type ControllerEvent = { type: 'stopped' } | { type: 'released'; reason: 'person' | 'finished' };
+/** What the controller tells a backend about a session: the person held Esc. */
+export type ControllerEvent = { type: 'stopped' };

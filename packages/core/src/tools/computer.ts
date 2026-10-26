@@ -225,7 +225,7 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
               start: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2, description: 'left_click_drag: where the drag starts.' },
               text: { type: 'string', description: 'type: the text; key: the keys, like "cmd+s".' },
               direction: { type: 'string', enum: ['up', 'down', 'left', 'right'] },
-              amount: { type: 'integer', description: 'scroll: lines; key: how many times.' },
+              amount: { type: 'integer', description: 'scroll: lines (at most 200); key: how many times.' },
               duration: { type: 'number', description: 'wait: seconds, at most 10.' },
               region: { type: 'array', items: { type: 'integer' }, minItems: 4, maxItems: 4, description: 'zoom: [x0, y0, x1, y1] of the latest screenshot.' },
               summary: { type: 'string', description: 'What it does, in a few words.' },

@@ -102,7 +102,7 @@ Skills hold instructions for specific tasks. When a request matches one, load it
 
 # Notes on the first message: 0
 
-# Tools: 26, 29172 characters of JSON
+# Tools: 26, 29186 characters of JSON
 
 [
   {
@@ -831,7 +831,7 @@ Skills hold instructions for specific tasks. When a request matches one, load it
               },
               "amount": {
                 "type": "integer",
-                "description": "scroll: lines; key: how many times."
+                "description": "scroll: lines (at most 200); key: how many times."
               },
               "duration": {
                 "type": "number",

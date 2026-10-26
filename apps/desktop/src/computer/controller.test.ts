@@ -24,6 +24,7 @@ class FakeHelper {
   under: Partial<InspectPointResult> & { app: HelperApp | null } = { app: APPS[0]!, secure: false, link: null };
   focused: Partial<InspectPointResult> & { app: HelperApp | null } = { app: APPS[0]!, secure: false, link: null };
   permissions = { accessibility: true, screenRecording: true };
+  front: HelperApp | null = null;
   private listeners = new Set<(n: ComputerNotification) => void>();
 
   onNotification(listener: (n: ComputerNotification) => void) {
@@ -45,6 +46,8 @@ class FakeHelper {
           return { displays: [{ id: '1', name: 'Main', x: 0, y: 0, width: 1000, height: 500, scale: 2, primary: true }] };
         case 'apps.list':
           return { apps: APPS };
+        case 'apps.frontmost':
+          return { app: this.front };
         case 'apps.hide':
           return { ids: (params as { ids: string[] }).ids };
         case 'capture.display':
@@ -83,7 +86,7 @@ beforeEach(async () => {
     helper: helper as unknown as ComputerHelper,
     hasHelper: true,
     settingsPath,
-    overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`) },
+    overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`), paused: (on) => overlay.push(`paused:${on}`) },
     windows: { hide() {}, restore() {} },
     event: (_backend, sessionId, event) => events.push({ sessionId, event }),
     changed() {},
@@ -292,19 +295,40 @@ describe('full control', () => {
     // Taking it again lifts the stop.
     expect(await ask('control.request', {})).toEqual({ granted: true });
     expect(helper.did('control.resume')).toHaveLength(2);
-    // The person reaching for the mouse ends it at once, mid-batch, and the next take asks again, even in Full control.
+    // The person reaching for the mouse pauses it: the rest of the batch waits, then stops so it looks again; control stays.
     await controller.settings((s) => ({ ...s, mode: 'full' }));
     const batch = ask('control.batch', { actions: [{ action: 'wait', duration: 0.2 }, { action: 'left_click', coordinate: [1, 1] }], size: SIZE });
-    await expect.poll(() => helper.did('control.begin').length).toBe(2);
     setTimeout(() => helper.notify({ method: 'control.userInput', params: { kind: 'mouse' } }), 50);
     expect((await batch).results).toEqual([
       { action: 'wait', ok: true },
-      { action: 'left_click', ok: false, note: 'The person used the mouse or keyboard themselves, so you gave them back. Ask before going on.' },
+      { action: 'left_click', ok: false, note: 'Not done: the person used the mouse or keyboard meanwhile, so the screen may have changed. Take a Screenshot, then go on.' },
     ]);
-    expect(events.at(-1)).toEqual({ sessionId: 's1', event: { type: 'released', reason: 'person' } });
-    expect(await ask('control.request', {})).toEqual({ granted: false, reason: 'ask' });
-    await controller.allowControl('local', 's1', false);
+    expect(overlay.slice(-2)).toEqual(['paused:true', 'paused:false']);
+    expect(events).toEqual([{ sessionId: 's1', event: { type: 'stopped' } }]);
+    expect(helper.did('control.end')).toHaveLength(1);
+    expect(await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }], size: SIZE })).toEqual({ results: [{ action: 'left_click', ok: true }] });
+  });
+
+  it('keeps the computer through a permission card in Full control, and puts the app it worked in back in front', async () => {
+    await controller.settings((s) => ({ ...s, mode: 'full' }));
+    await ask('screenshot', { size: SIZE });
     expect(await ask('control.request', {})).toEqual({ granted: true });
+    helper.front = APPS[1]!;
+    await ask('turn.wait', { kind: 'permission' });
+    expect(helper.did('control.end')).toHaveLength(0);
+    // The person answers the card in Atelier, which takes the keyboard; the next batch brings Safari back first.
+    helper.front = app('dev.atelier.app', 'Atelier');
+    await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }], size: SIZE });
+    expect(helper.did('apps.open').at(-1)?.params).toEqual({ id: 'com.apple.Safari', activate: true });
+    // A question ends it: the person answers, the agent waits.
+    await ask('turn.wait', { kind: 'question' });
+    expect(helper.did('control.end')).toHaveLength(1);
+  });
+
+  it('hands the computer back for any card in Background', async () => {
+    await ready([{ id: 'com.apple.TextEdit', tier: 'full' }]);
+    await ask('turn.wait', { kind: 'permission' });
+    expect(helper.did('control.end')).toHaveLength(1);
   });
 });
 

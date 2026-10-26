@@ -486,8 +486,9 @@ export class ChatService {
       ...(deps.loopMinIntervalMs ? { minIntervalMs: deps.loopMinIntervalMs } : {}),
     });
     this.interactions = new InteractionBroker(async (sessionId, pending) => {
-      // The person must see the question: a session with the mouse and keyboard gives them back first.
-      if (pending) await this.releaseComputer(sessionId);
+      // The person must be able to answer: a session with the mouse and keyboard gives them back first (Full control
+      // keeps them through a permission card, which it waits on).
+      if (pending) await this.releaseComputer(sessionId, pending.kind);
       await this.deps.repo.patchQuietly(sessionId, { pending });
       this.emit(sessionId, { type: 'pending', pending });
       // A background sub-agent may ask while its parent is idle: answered, the parent is idle again, and a loop that
@@ -2544,12 +2545,13 @@ export class ChatService {
     }
   }
 
-  /** Ends a session's full control of the computer, if it has it; best-effort. */
-  private async releaseComputer(sessionId: string): Promise<void> {
+  /** Ends a session's control of the computer, if it has it, as its turn ends or waits on the person; best-effort. */
+  private async releaseComputer(sessionId: string, waiting?: PendingInteraction['kind']): Promise<void> {
     if (!this.deps.computer) return;
     const session = await this.deps.repo.getRow(sessionId);
     if (!session || (session.mode !== 'code' && session.mode !== 'work') || session.parentSessionId) return;
-    await this.deps.computer.call(session, 'turn.end', {}).catch(() => undefined);
+    const done = waiting ? this.deps.computer.call(session, 'turn.wait', { kind: waiting }) : this.deps.computer.call(session, 'turn.end', {});
+    await done.catch(() => undefined);
   }
 
   private dropSuggestion(sessionId: string): void {

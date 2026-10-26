@@ -51,7 +51,8 @@ A session follows the default mode until you pick one. **Settings › Admin › 
 | Move the session to another folder (ChangeDirectory) | Asks | Asks | Asks | Asks | Asks |
 | Add an MCP server it was given to your connectors (AddConnector) | Asks | Asks | Asks | Asks | Asks |
 | Use apps on your computer, take over the mouse and keyboard ([computer use](/computer-use/): ComputerAccess, FullControl) | Asks | Asks | Asks | Asks | Asks |
-| Screenshots and actions in apps you allowed (Screenshot, ComputerAction, OpenApp, ComputerApps) | Runs | Runs | Runs | Screenshots run; actions refused | Runs |
+| Look at the screen: screenshots, scrolling, the app list ([computer use](/computer-use/)) | Runs | Runs | Runs | Screenshots run; scrolling refused | Runs |
+| Click, type, press keys, open apps (ComputerAction, OpenApp) | Review | Asks | Asks | Refused | Runs |
 | Anything a **deny** rule matches | Refused | Refused | Refused | Refused | Refused |
 | Anything an **ask** rule matches | Asks; a dangerous command: Review | Asks | Asks | Asks (only what Plan lets through) | Asks |
 | Anything an **allow** rule matches | Runs, except dangerous or unreadable commands, and broad rules are ignored | Runs, with the same exceptions | Runs, with the same exceptions | Refused if it changes anything | Runs |
@@ -69,7 +70,7 @@ For one tool call the engine checks these in order and stops at the first that d
 5. **Allow rules.** A match runs the call. For Bash, every command in the line must be allowed on its own. A dangerous command still asks (or goes to the reviewer) even then. In Auto mode, broad allow rules are set aside first.
 6. **Bypass** runs everything left.
 7. **Auto only:** clearing build output and temp files runs without review ([routine cleanup](#what-runs-unreviewed-in-auto)).
-8. **ChangeDirectory**, **AddConnector**, **ComputerAccess** and **FullControl** ask for themselves, each with its own card. Computer use's screenshots and actions run: the desktop app checks each one against the apps you allowed there ([Computer use](/computer-use/)).
+8. **ChangeDirectory**, **AddConnector**, **ComputerAccess** and **FullControl** ask for themselves, each with its own card. A computer use step that only looks (screenshots, scrolling, waiting) runs; clicks, typing, keys and opening apps continue below like any other action ([Computer use](/computer-use/)).
 9. **Files outside the folder.** Read-only tools run in Auto (credential-looking paths go to the reviewer); everything else asks, or goes to the reviewer in Auto.
 10. **Read-only tools and the session tools** (TodoWrite, AskUser, ExitPlanMode, artifact) run.
 11. **Accept edits** runs file edits. **Auto** runs file edits too, except protected files, which go to the reviewer.

@@ -31,7 +31,7 @@ import { CommandCode } from './command-code.tsx';
 import { DiffCard, editRows, writeRows } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
 import { planComments, revisionMessage, usePlanComments } from './plan-comments.ts';
-import { WorkspaceRoot, asRecord, str, summarize } from './tool-cards.tsx';
+import { WorkspaceRoot, actionWords, asRecord, computerActions, str, summarize } from './tool-cards.tsx';
 
 type Respond = (answer: PermissionAnswer | QuestionAnswer | ElicitationAnswer) => void;
 
@@ -246,6 +246,10 @@ function permissionTitle(request: PermissionRequest, root: string | null): strin
       const verb = request.toolName === 'Edit' ? 'edit' : 'write';
       return `Allow ${who} to ${verb} ${displayPath(str(input.file_path), root)}?`;
     }
+    case 'ComputerAction':
+      return `Allow ${who} to use your computer?`;
+    case 'OpenApp':
+      return `Allow ${who} to open ${str(input.app) || 'an app'}?`;
     default:
       return `Allow ${who} to use ${request.toolName}?`;
   }
@@ -272,6 +276,19 @@ function CallPreview({ request }: { request: PermissionRequest }) {
       const rows = request.toolName === 'Edit' ? editRows(str(input.old_string), str(input.new_string)) : writeRows(str(input.content));
       return <DiffCard rows={rows} language={languageOf(path)} lineNumbers={request.toolName === 'Write'} limit={20} />;
     }
+    case 'ComputerAction':
+      // Each step as it says it, with what it would type or press spelled out: that is what is approved.
+      return (
+        <ol aria-label="Steps" className={cn(box, 'list-inside list-decimal font-sans')}>
+          {computerActions(input).map((a, i) => (
+            <li key={i}>
+              {actionWords(a, true)}
+              {a.action === 'type' && str(a.summary) ? ` (types “${str(a.text)}”)` : a.action === 'type' ? ` “${str(a.text)}”` : ''}
+              {a.action === 'key' && str(a.summary) ? ` (${str(a.text)})` : ''}
+            </li>
+          ))}
+        </ol>
+      );
     default: {
       // A connector's tool shows every argument: approving it approves all of them.
       const { verb, target } = summarize({ name: request.toolName, input }, null, root);

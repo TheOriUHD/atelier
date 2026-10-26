@@ -72,7 +72,12 @@ test('desktop: computer use is turned on in Settings, the person allows apps and
     await expect(access.getByRole('combobox', { name: 'What Atelier may do in TextEdit' })).toContainText('Full use');
     await access.getByRole('button', { name: 'Allow for this session' }).click();
 
-    // The screenshot shows the allowed apps only. Then, in background mode, taking the mouse and keyboard asks first.
+    // The screenshot shows the allowed apps only. Ask mode asks for clicking and typing like any action, each step
+    // spelled out; then, in Background, taking the mouse and keyboard asks too.
+    const prompt = page.getByRole('region', { name: 'Allow Atelier to use your computer?' });
+    await expect(prompt.getByRole('list', { name: 'Steps' })).toContainText('Clicks into the document');
+    await expect(prompt.getByRole('list', { name: 'Steps' })).toContainText('Type “hello”');
+    await prompt.getByRole('button', { name: 'Allow once' }).click();
     const control = page.getByRole('region', { name: 'Let Atelier take over your mouse and keyboard?' });
     await expect(control).toContainText('Clicks into the document');
     await expect(control).toContainText('TextEdit, Safari');
@@ -95,6 +100,7 @@ test('desktop: computer use is turned on in Settings, the person allows apps and
     // Holding Esc stops it while it works: the run ends and nothing more reaches the computer.
     await box.fill(call('ComputerAction', { actions: [{ action: 'wait', duration: 8 }, { action: 'left_click', coordinate: [200, 200] }] }));
     await sendWhenIdle(page);
+    await prompt.getByRole('button', { name: 'Allow once' }).click();
     await expect.poll(async () => (await helperLog(log)).filter((e) => e.method === 'control.begin').length).toBe(2);
     await writeFile(`${log}.esc`, '');
     await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, { timeout: 15_000 });
@@ -137,9 +143,17 @@ test('desktop: in Full control the assistant takes the computer as it is, withou
       ].join('\n'),
     );
     await box.press('Enter');
+    // Ask mode asks for opening the app and for acting, as for any action; Full control itself asks nothing.
+    await page.getByRole('region', { name: 'Allow Atelier to open Safari?' }).getByRole('button', { name: 'Allow once' }).click();
+    const prompt = page.getByRole('region', { name: 'Allow Atelier to use your computer?' });
+    await expect(prompt).toBeVisible();
+    // It keeps the computer while the prompt is up: no popping in and out.
+    expect((await helperLog(log)).map((e) => e.method)).not.toContain('control.end');
+    await prompt.getByRole('button', { name: 'Allow once' }).click();
     await expect(page.getByText(/^Tool result: 1\. left_click: done/)).toBeVisible();
     await expect(page.getByRole('region', { name: /^Let Atelier/ })).toHaveCount(0);
     const entries = await helperLog(log);
+    expect(entries.filter((e) => e.method === 'control.begin')).toHaveLength(1);
     // Opened in front, under control; nothing hidden; the screenshot shows the screen but for the denied apps.
     expect(entries.find((e) => e.method === 'apps.open')).toMatchObject({ id: 'com.apple.Safari', activate: true });
     expect(entries.some((e) => e.method === 'apps.hide')).toBe(false);
@@ -147,7 +161,8 @@ test('desktop: in Full control the assistant takes the computer as it is, withou
     expect(shot).toMatchObject({ apps: null });
     expect(shot?.exclude).toContain('com.1password.1password');
     expect(entries.find((e) => e.method === 'key.type')).toMatchObject({ text: 'amazon.de' });
-    expect(entries.map((e) => e.method)).toContain('control.end');
+    // Done: the turn ends and the computer goes back.
+    await expect.poll(async () => (await helperLog(log)).map((e) => e.method)).toContain('control.end');
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });

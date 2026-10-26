@@ -81,7 +81,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 20, 14117 characters of JSON
+# Tools: 20, 14131 characters of JSON
 
 [
   {
@@ -718,7 +718,7 @@ Recent commit subjects:
               },
               "amount": {
                 "type": "integer",
-                "description": "scroll: lines; key: how many times."
+                "description": "scroll: lines (at most 200); key: how many times."
               },
               "duration": {
                 "type": "number",

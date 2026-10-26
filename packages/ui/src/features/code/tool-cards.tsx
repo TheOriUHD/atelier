@@ -372,7 +372,7 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
   return line.charAt(0).toUpperCase() + line.slice(1);
 }
 
-function computerActions(input: unknown): Record<string, unknown>[] {
+export function computerActions(input: unknown): Record<string, unknown>[] {
   const actions = asRecord(input).actions;
   return Array.isArray(actions) ? actions.map(asRecord) : [];
 }
@@ -394,10 +394,30 @@ const ACTION_WORDS: Record<string, string> = {
   cursor_position: 'Checked the pointer',
 };
 
-/** One ComputerAction step in words: its own summary when it gave one, else what it is ("Pressed cmd+s"). */
-function actionWords(action: Record<string, unknown>): string {
+const ACTION_WORDS_AHEAD: Record<string, string> = {
+  left_click: 'Click',
+  right_click: 'Right-click',
+  middle_click: 'Middle-click',
+  double_click: 'Double-click',
+  triple_click: 'Triple-click',
+  mouse_move: 'Move the pointer',
+  left_click_drag: 'Drag',
+  scroll: 'Scroll',
+  type: 'Type',
+  key: 'Press',
+  wait: 'Wait',
+  screenshot: 'Take a screenshot',
+  zoom: 'Zoom in',
+  cursor_position: 'Check the pointer',
+};
+
+/**
+ * One ComputerAction step in words: its own summary when it gave one, else what it is, done ("Pressed cmd+s") or, on a
+ * prompt, ahead ("Press cmd+s").
+ */
+export function actionWords(action: Record<string, unknown>, ahead = false): string {
   if (str(action.summary)) return str(action.summary);
-  const words = ACTION_WORDS[str(action.action)] ?? str(action.action);
+  const words = (ahead ? ACTION_WORDS_AHEAD : ACTION_WORDS)[str(action.action)] ?? str(action.action);
   return action.action === 'key' ? `${words} ${str(action.text)}` : words;
 }
 
@@ -522,7 +542,7 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
       return input.action === 'release' ? { verb: 'Handed back the mouse and keyboard', target: '' } : { verb: 'Took over the mouse and keyboard', target: '' };
     case 'ComputerAction': {
       const actions = computerActions(input);
-      return { verb: actions.length === 1 ? actionWords(actions[0]!) : `${actions.length} actions:`, target: actions.length === 1 ? '' : actions.map(actionWords).join(', ') };
+      return { verb: actions.length === 1 ? actionWords(actions[0]!) : `${actions.length} actions:`, target: actions.length === 1 ? '' : actions.map((a) => actionWords(a)).join(', ') };
     }
     case 'WebFetch':
       return { verb: 'Fetched', target: str(input.url) };
