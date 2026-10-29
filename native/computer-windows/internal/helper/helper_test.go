@@ -44,6 +44,31 @@ type fakeSystem struct {
 	sender  *fakeSender
 	hooks   *fakeHooks
 	capture CaptureRequest
+
+	mu         sync.Mutex
+	window     WindowCaptureRequest
+	background []string // the bg.* input calls that reached the system, in order
+	click      BgClickRequest
+}
+
+func (f *fakeSystem) record(call string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.background = append(f.background, call)
+}
+
+func (f *fakeSystem) calls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.background)
+}
+
+// fakeWindow is the one window the fake knows, "4242".
+func fakeWindow(id string) error {
+	if id != "4242" {
+		return rpc.NotFound("no window %s", id)
+	}
+	return nil
 }
 
 func (f *fakeSystem) Displays() ([]proto.Display, error) {
@@ -65,10 +90,56 @@ func (f *fakeSystem) InspectPoint(x, y float64) (proto.InspectResult, error) {
 	return proto.InspectResult{}, nil
 }
 func (f *fakeSystem) InspectFocused() (proto.InspectResult, error) { return proto.InspectResult{}, nil }
-func (f *fakeSystem) Sender() input.Sender                         { return f.sender }
-func (f *fakeSystem) Layout() keys.Layout                          { return nil }
-func (f *fakeSystem) Hooks() control.Hooks                         { return f.hooks }
-func (f *fakeSystem) EscapeDown() bool                             { return false }
+func (f *fakeSystem) WindowCapture(req WindowCaptureRequest) (proto.WindowCaptureResult, error) {
+	f.mu.Lock()
+	f.window = req
+	f.mu.Unlock()
+	if req.App != "notepad.exe" {
+		return proto.WindowCaptureResult{}, rpc.NotFound("%s has no window", req.App)
+	}
+	return proto.WindowCaptureResult{CaptureResult: proto.CaptureResult{Mime: "image/png", Width: 1, Height: 1}, Window: "4242"}, nil
+}
+func (f *fakeSystem) BgInspect(window string, x, y float64) (proto.InspectResult, error) {
+	return proto.InspectResult{}, fakeWindow(window)
+}
+func (f *fakeSystem) BgFocused(window string) (proto.InspectResult, error) {
+	return proto.InspectResult{}, fakeWindow(window)
+}
+func (f *fakeSystem) BgClick(ready func() error, req BgClickRequest) error {
+	if err := fakeWindow(req.Window); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	f.click = req
+	f.mu.Unlock()
+	f.record("click")
+	return ready()
+}
+func (f *fakeSystem) BgScroll(ready func() error, window string, at proto.Point, dx, dy float64) error {
+	if err := fakeWindow(window); err != nil {
+		return err
+	}
+	f.record("scroll")
+	return ready()
+}
+func (f *fakeSystem) BgKey(ready func() error, window string, names []string, repeat int) error {
+	if err := fakeWindow(window); err != nil {
+		return err
+	}
+	f.record("key " + strings.Join(names, "+"))
+	return ready()
+}
+func (f *fakeSystem) BgType(ready func() error, window string, text string) error {
+	if err := fakeWindow(window); err != nil {
+		return err
+	}
+	f.record("type " + text)
+	return ready()
+}
+func (f *fakeSystem) Sender() input.Sender { return f.sender }
+func (f *fakeSystem) Layout() keys.Layout  { return nil }
+func (f *fakeSystem) Hooks() control.Hooks { return f.hooks }
+func (f *fakeSystem) EscapeDown() bool     { return false }
 
 type lines struct {
 	mu  sync.Mutex
@@ -155,7 +226,7 @@ func TestInitialize(t *testing.T) {
 		t.Errorf("initialize: %v", r)
 	}
 	s := r["supports"].(map[string]any)
-	if s["background"] != false || s["fullControl"] != true || s["filter"] != true {
+	if s["background"] != true || s["fullControl"] != true || s["filter"] != true {
 		t.Errorf("supports: %v", s)
 	}
 	if code := errorCode(call(t, h, l, strings.Replace(initialize, `"init"`, `"again"`, 1))); code != proto.InvalidRequest {

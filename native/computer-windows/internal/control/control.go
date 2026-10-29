@@ -103,25 +103,27 @@ func ms(v float64) int { return max(0, int(math.Round(v))) }
 
 // ---------------------------------------------------------------- the person's own input
 
-// IntervalMs: at most one control.userInput per 500 ms.
+// IntervalMs: at most one control.userInput of each kind per 500 ms.
 const IntervalMs = 500.0
 
 // MoveTolerance: pointer moves within 24 px of where the helper last put it are the helper's.
 const MoveTolerance = 24.0
 
-// UserInputFilter throttles control.userInput.
+// UserInputFilter throttles control.userInput, each kind on its own: a stream of moves never hides a button or a key
+// that follows it (main ignores moves and waits only after `mouse` and `key`).
 type UserInputFilter struct {
-	sent   bool
-	lastAt float64
+	lastAt map[string]float64
 }
 
-// Admit is true when a notification may go out now.
-func (f *UserInputFilter) Admit(now float64) bool {
-	if f.sent && now-f.lastAt < IntervalMs {
+// Admit is true when a notification of that kind may go out now.
+func (f *UserInputFilter) Admit(kind string, now float64) bool {
+	if last, sent := f.lastAt[kind]; sent && now-last < IntervalMs {
 		return false
 	}
-	f.sent = true
-	f.lastAt = now
+	if f.lastAt == nil {
+		f.lastAt = map[string]float64{}
+	}
+	f.lastAt[kind] = now
 	return true
 }
 
@@ -286,17 +288,19 @@ func (m *Monitor) Handle(s Sample) {
 	case SampleEscUp:
 		m.emit(m.esc.KeyUp(s.Time))
 	case SampleKeyDown:
-		if m.userInput.Admit(s.Time) {
-			m.notify(proto.NControlUserInput, proto.UserInputParams{Kind: "key"})
-		}
+		m.userInputOf(proto.UserInputKey, s.Time)
 	case SampleMouseDown:
-		if m.userInput.Admit(s.Time) {
-			m.notify(proto.NControlUserInput, proto.UserInputParams{Kind: "mouse"})
-		}
+		m.userInputOf(proto.UserInputMouse, s.Time)
 	case SampleMoved:
-		if IsPersonMove(s.At, m.input.LastPointer()) && m.userInput.Admit(s.Time) {
-			m.notify(proto.NControlUserInput, proto.UserInputParams{Kind: "mouse"})
+		if IsPersonMove(s.At, m.input.LastPointer()) {
+			m.userInputOf(proto.UserInputMove, s.Time)
 		}
+	}
+}
+
+func (m *Monitor) userInputOf(kind string, now float64) {
+	if m.userInput.Admit(kind, now) {
+		m.notify(proto.NControlUserInput, proto.UserInputParams{Kind: kind})
 	}
 }
 

@@ -35,6 +35,26 @@ type CaptureRequest struct {
 	Quality    float64
 }
 
+// WindowCaptureRequest is window.capture's params, checked.
+type WindowCaptureRequest struct {
+	App       string
+	MaxWidth  int
+	MaxHeight int
+	Format    string
+	Quality   float64
+}
+
+// BgClickRequest is bg.click's params, checked: MK is the modifiers' MK_* flags (ctrl and shift; the others can't go
+// with a background click).
+type BgClickRequest struct {
+	Window    string
+	At        proto.Point
+	Button    input.Button
+	Count     int
+	Modifiers []keys.Modifier
+	MK        uint32
+}
+
 // System is the OS: everything but the protocol, the input bookkeeping and the control decisions.
 type System interface {
 	Displays() ([]proto.Display, error)
@@ -47,6 +67,17 @@ type System interface {
 	Capture(req CaptureRequest) (proto.CaptureResult, error)
 	InspectPoint(x, y float64) (proto.InspectResult, error)
 	InspectFocused() (proto.InspectResult, error)
+
+	// Background mode: one app's window, without the person's mouse and keyboard. A window is window.capture's id; one
+	// that names no window (anymore) is NotFound. The input methods call ready (the Esc stop's check) before they send
+	// anything, and again between the pieces of a long one.
+	WindowCapture(req WindowCaptureRequest) (proto.WindowCaptureResult, error)
+	BgInspect(window string, x, y float64) (proto.InspectResult, error)
+	BgFocused(window string) (proto.InspectResult, error)
+	BgClick(ready func() error, req BgClickRequest) error
+	BgScroll(ready func() error, window string, at proto.Point, dx, dy float64) error
+	BgKey(ready func() error, window string, names []string, repeat int) error
+	BgType(ready func() error, window string, text string) error
 
 	// Sender sends input (SendInput).
 	Sender() input.Sender
@@ -133,7 +164,7 @@ func (h *Helper) register() {
 		}
 		return proto.InitializeResult{
 			ProtocolVersion: proto.ProtocolVersion, HelperVersion: proto.HelperVersion, Platform: proto.Platform,
-			Supports: proto.Supports{Background: false, FullControl: true, Filter: true},
+			Supports: proto.Supports{Background: true, FullControl: true, Filter: true},
 		}, nil
 	})
 
@@ -409,6 +440,8 @@ func (h *Helper) register() {
 		return proto.Empty{}, nil
 	})
 
+	h.registerBackground()
+
 	s.Register(proto.MControlBegin, rpc.Inline, func(rpc.Params) (any, error) {
 		if err := h.monitor.Begin(); err != nil {
 			return nil, rpc.Internal("could not watch the keyboard and mouse: %v", err)
@@ -495,31 +528,8 @@ func captureRequest(p rpc.Params) (CaptureRequest, error) {
 			}
 		}
 	}
-	maxWidth, err := p.Float("maxWidth")
-	if err != nil {
+	if req.MaxWidth, req.MaxHeight, req.Format, req.Quality, err = imageParams(p); err != nil {
 		return req, err
-	}
-	maxHeight, err := p.Float("maxHeight")
-	if err != nil {
-		return req, err
-	}
-	if req.Format, err = p.Enum("format", "jpeg", "png"); err != nil {
-		return req, err
-	}
-	quality, hasQuality, err := p.OptFloat("quality")
-	if err != nil {
-		return req, err
-	}
-	if !finite(maxWidth) || !finite(maxHeight) || maxWidth < 1 || maxHeight < 1 || maxWidth > 16384 || maxHeight > 16384 {
-		return req, rpc.InvalidParams("maxWidth and maxHeight must be between 1 and 16384")
-	}
-	req.MaxWidth, req.MaxHeight = int(maxWidth), int(maxHeight)
-	req.Quality = 0.8
-	if hasQuality {
-		if !finite(quality) || quality < 0 || quality > 1 {
-			return req, rpc.InvalidParams("quality must be 0–1")
-		}
-		req.Quality = quality
 	}
 	if hasRegion {
 		if !finite(r.X) || !finite(r.Y) || !finite(r.Width) || !finite(r.Height) || r.Width <= 0 || r.Height <= 0 {
@@ -528,4 +538,34 @@ func captureRequest(p rpc.Params) (CaptureRequest, error) {
 		req.Region = &r
 	}
 	return req, nil
+}
+
+// imageParams are a capture's maxWidth, maxHeight, format and quality (0.8 when absent).
+func imageParams(p rpc.Params) (maxWidth, maxHeight int, format string, quality float64, err error) {
+	w, err := p.Float("maxWidth")
+	if err != nil {
+		return 0, 0, "", 0, err
+	}
+	h, err := p.Float("maxHeight")
+	if err != nil {
+		return 0, 0, "", 0, err
+	}
+	if format, err = p.Enum("format", "jpeg", "png"); err != nil {
+		return 0, 0, "", 0, err
+	}
+	q, hasQuality, err := p.OptFloat("quality")
+	if err != nil {
+		return 0, 0, "", 0, err
+	}
+	if !finite(w) || !finite(h) || w < 1 || h < 1 || w > 16384 || h > 16384 {
+		return 0, 0, "", 0, rpc.InvalidParams("maxWidth and maxHeight must be between 1 and 16384")
+	}
+	quality = 0.8
+	if hasQuality {
+		if !finite(q) || q < 0 || q > 1 {
+			return 0, 0, "", 0, rpc.InvalidParams("quality must be 0–1")
+		}
+		quality = q
+	}
+	return int(w), int(h), format, quality, nil
 }

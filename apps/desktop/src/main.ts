@@ -197,7 +197,7 @@ const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COM
 /** Atelier's windows step aside while it has full control of the computer, and come back after. */
 let stepAside: BrowserWindow[] = [];
 // A test run with hidden windows doesn't light up the screen of the computer running it.
-const screenOverlay: ScreenOverlay = process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {}, owns: () => false } : createOverlay();
+const screenOverlay: ScreenOverlay = process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {}, working() {}, owns: () => false } : createOverlay();
 /** Atelier's own windows (not the overlay's), the one used last first. */
 let usedLast: BrowserWindow | null = null;
 app.on('browser-window-focus', (_event, win) => {

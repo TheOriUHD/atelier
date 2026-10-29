@@ -65,12 +65,21 @@ enum Capture {
     ownBundleIDs.contains { bundleID == $0 || bundleID.hasPrefix($0 + ".") }
   }
 
-  static func display(_ params: CaptureDisplayParams) async throws -> CaptureResult {
-    guard params.maxWidth.isFinite, params.maxHeight.isFinite, params.maxWidth >= 1, params.maxHeight >= 1,
-      params.maxWidth <= 16384, params.maxHeight <= 16384
+  /// The image a screenshot is asked for, checked: at most `maxWidth`×`maxHeight` pixels, and the JPEG quality
+  /// (0.8 unless given).
+  static func output(maxWidth: Double, maxHeight: Double, quality: Double?) throws -> (
+    maxWidth: Int, maxHeight: Int, quality: Double
+  ) {
+    guard maxWidth.isFinite, maxHeight.isFinite, maxWidth >= 1, maxHeight >= 1, maxWidth <= 16384, maxHeight <= 16384
     else { throw RPCError.invalidParams("maxWidth and maxHeight must be between 1 and 16384") }
-    let quality = params.quality ?? 0.8
+    let quality = quality ?? 0.8
     guard quality.isFinite, (0...1).contains(quality) else { throw RPCError.invalidParams("quality must be 0–1") }
+    return (Int(maxWidth), Int(maxHeight), quality)
+  }
+
+  static func display(_ params: CaptureDisplayParams) async throws -> CaptureResult {
+    let (maxWidth, maxHeight, quality) = try output(
+      maxWidth: params.maxWidth, maxHeight: params.maxHeight, quality: params.quality)
     if let region = params.region {
       guard [region.x, region.y, region.width, region.height].allSatisfy(\.isFinite), region.width > 0,
         region.height > 0
@@ -111,7 +120,7 @@ enum Capture {
         let scale = Displays.pixelScale(displayID)
         let size = CaptureGeometry.fit(
           width: covered.width * scale, height: covered.height * scale,
-          maxWidth: Int(params.maxWidth), maxHeight: Int(params.maxHeight))
+          maxWidth: maxWidth, maxHeight: maxHeight)
         let data = try ImageEncoder.encode(blank(width: size.width, height: size.height), format: params.format, quality: quality)
         return CaptureResult(
           data: data.base64EncodedString(), mime: params.format.mime, width: size.width, height: size.height,
@@ -136,7 +145,7 @@ enum Capture {
     let scale = Double(filter.pointPixelScale)
     let size = CaptureGeometry.fit(
       width: covered.width * scale, height: covered.height * scale,
-      maxWidth: Int(params.maxWidth), maxHeight: Int(params.maxHeight))
+      maxWidth: maxWidth, maxHeight: maxHeight)
     let configuration = SCStreamConfiguration()
     if params.region != nil { configuration.sourceRect = CaptureGeometry.displayLocal(covered, display: bounds) }
     configuration.width = size.width
@@ -153,6 +162,81 @@ enum Capture {
     return CaptureResult(
       data: data.base64EncodedString(), mime: params.format.mime, width: image.width, height: image.height,
       rect: ScreenRect(covered))
+  }
+
+  /// `window.capture`: the app's frontmost normal window as it is, covered or not (ScreenCaptureKit captures the window
+  /// by itself). When none is on screen, a minimized one is restored through Accessibility, without activating the
+  /// app. `rect` is the window's frame in global points, the space of `capture.display`.
+  static func window(_ params: WindowCaptureParams) async throws -> WindowCaptureResult {
+    let (maxWidth, maxHeight, quality) = try output(
+      maxWidth: params.maxWidth, maxHeight: params.maxHeight, quality: params.quality)
+    guard !params.app.isEmpty, params.app.count <= 300 else { throw RPCError.invalidParams("app must be an app id") }
+    guard CGPreflightScreenCaptureAccess() else { throw RPCError.permission(.screenRecording) }
+
+    let processes = await MainActor.run {
+      NSRunningApplication.runningApplications(withBundleIdentifier: params.app).filter { !$0.isTerminated }.map {
+        (pid: $0.processIdentifier, hidden: $0.isHidden, name: $0.localizedName)
+      }
+    }
+    guard !processes.isEmpty else {
+      throw RPCError.noWindow("\(params.app) isn't running", reason: "notRunning")
+    }
+    let name = processes.compactMap(\.name).first ?? params.app
+    let pids = Set(processes.map(\.pid))
+    var chosen = Windows.frontmost(pids: pids)
+    if chosen == nil {
+      if processes.allSatisfy(\.hidden) {
+        throw RPCError.noWindow("\(name) is hidden: apps.unhide shows it", reason: "hidden")
+      }
+      if try Windows.restoreMinimized(pids: processes.map(\.pid)) {
+        chosen = await Windows.waitForWindow(pids: pids, timeout: 2)
+      }
+    }
+    guard let window = chosen else {
+      throw RPCError.noWindow(
+        "\(name) has no window on screen: none is open, or they are on another Space or in full screen", reason: "noWindow")
+    }
+
+    let content: SCShareableContent
+    do {
+      content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+    } catch {
+      throw mapError(error)
+    }
+    guard let shareable = content.windows.first(where: { $0.windowID == window.id }) else {
+      throw RPCError.noWindow("\(name)'s window closed", reason: "gone")
+    }
+    let filter = SCContentFilter(desktopIndependentWindow: shareable)
+    let rect = window.bounds
+    let scale = Double(filter.pointPixelScale)
+    let size = CaptureGeometry.fit(
+      width: rect.width * scale, height: rect.height * scale, maxWidth: maxWidth, maxHeight: maxHeight)
+    let configuration = SCStreamConfiguration()
+    configuration.width = size.width
+    configuration.height = size.height
+    // The window's frame exactly, so image pixels map onto `rect`: no shadow, not clipped where it leaves the screen,
+    // its see-through corners white. The cursor is the person's, not part of the window.
+    configuration.ignoreShadowsSingleWindow = true
+    configuration.ignoreGlobalClipSingleWindow = true
+    configuration.shouldBeOpaque = true
+    configuration.showsCursor = false
+
+    let image: CGImage
+    do {
+      image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+    } catch {
+      throw mapError(error)
+    }
+    let data = try ImageEncoder.encode(image, format: params.format, quality: quality)
+    return WindowCaptureResult(
+      data: data.base64EncodedString(), mime: params.format.mime, width: image.width, height: image.height,
+      rect: ScreenRect(rect), window: String(window.id), title: windowTitle(shareable.title))
+  }
+
+  /// A window title for the wire: trimmed, at most 200 characters, nil when empty.
+  static func windowTitle(_ title: String?) -> String? {
+    guard let text = title?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+    return String(text.prefix(200))
   }
 
   /// A black image (CGContext memory starts zeroed, and the alpha is skipped).

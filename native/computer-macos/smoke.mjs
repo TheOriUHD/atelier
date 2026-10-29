@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 // Smoke test for the built macOS helper (native/bin/atelier-computer-darwin, from `pnpm computer:build`): speaks
 // computer protocol v1 to it over stdio and checks the shape of each answer. Read-only: it never moves the mouse,
-// types, hides or opens apps, asks for permissions or starts control. With Screen Recording granted it takes a
-// screenshot only when run with --capture (and prints just its size).
+// types, hides or opens apps, asks for permissions or starts control, and never calls the background input methods
+// (bg.click, bg.scroll, bg.key, bg.type). With Screen Recording granted it takes screenshots (of the display, and with
+// window.capture of one app's window) only when run with --capture, and prints just their size.
 //
-//   node native/computer-macos/smoke.mjs [--capture] [path/to/binary]
-import { spawn } from 'node:child_process';
+// The background checks use an app that has a window on screen already (so window.capture never restores a minimized
+// one): a common app from the list below, or the one named with --window-app=<bundle id>.
+//
+//   node native/computer-macos/smoke.mjs [--capture] [--window-app=<bundle id>] [path/to/binary]
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -13,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
 const capture = args.includes('--capture');
+const windowApp = args.find((a) => a.startsWith('--window-app='))?.slice('--window-app='.length);
 const binary =
   args.find((a) => !a.startsWith('--')) ??
   join(dirname(fileURLToPath(import.meta.url)), '../bin/atelier-computer-darwin');
@@ -58,6 +63,45 @@ function inspectProblems(result) {
   if (!isBool(result?.secure)) problems.push('secure');
   if (!isNullOr(isStr)(result?.link)) problems.push('link');
   return problems;
+}
+
+/** Apps whose windows the background checks may look at, in order: the first with a window on screen is used. */
+const WINDOW_APPS = [
+  'com.apple.finder',
+  'com.apple.Terminal',
+  'com.apple.Safari',
+  'com.apple.dt.Xcode',
+  'com.apple.TextEdit',
+  'com.apple.Notes',
+  'com.apple.ActivityMonitor',
+  'com.apple.Console',
+  'com.apple.systempreferences',
+  'com.googlecode.iterm2',
+  'com.mitchellh.ghostty',
+  'dev.warp.Warp-Stable',
+  'com.microsoft.VSCode',
+  'com.anthropic.claudefordesktop',
+  'dev.atelier.app',
+];
+
+/**
+ * The windows on screen that the helper counts as normal (layer 0, not transparent, at least 40x40 points), front to
+ * back, as the window server lists them (no permission needed). Read-only.
+ */
+function normalWindows() {
+  const script = `
+    ObjC.import('CoreGraphics');
+    const list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(
+      $.kCGWindowListOptionOnScreenOnly | $.kCGWindowListExcludeDesktopElements, $.kCGNullWindowID)));
+    JSON.stringify(list
+      .filter((w) => w.kCGWindowLayer === 0 && (w.kCGWindowAlpha ?? 1) > 0 && w.kCGWindowBounds.Width >= 40 && w.kCGWindowBounds.Height >= 40)
+      .map((w) => ({ id: w.kCGWindowNumber, pid: w.kCGWindowOwnerPID, x: w.kCGWindowBounds.X, y: w.kCGWindowBounds.Y,
+        width: w.kCGWindowBounds.Width, height: w.kCGWindowBounds.Height })));`;
+  try {
+    return JSON.parse(execFileSync('osascript', ['-l', 'JavaScript', '-e', script], { encoding: 'utf8' }));
+  } catch {
+    return null;
+  }
 }
 
 /** Starts the helper; `call` sends a request and resolves with the whole response message. */
@@ -129,7 +173,7 @@ async function main() {
       r.protocolVersion === 1 &&
       isStr(r.helperVersion) &&
       r.platform === 'darwin' &&
-      r.supports?.background === false &&
+      r.supports?.background === true &&
       r.supports?.fullControl === true &&
       r.supports?.filter === true,
     `initialize (helper ${r?.helperVersion})`,
@@ -211,6 +255,120 @@ async function main() {
 
   const unknown = await call('no.such.method', {});
   check(errorCode(unknown) === -32601, 'an unknown method is MethodNotFound (-32601)', unknown);
+
+  console.log('background (read-only)');
+  const malformed = await call('bg.inspect', { window: 'abc', x: 0, y: 0 });
+  check(errorCode(malformed) === -32602, 'bg.inspect with a malformed window is InvalidParams (-32602)', malformed);
+  const goneInspect = await call('bg.inspect', { window: '4294967295', x: 0, y: 0 });
+  check(
+    errorCode(goneInspect) === -32033 && goneInspect.error.data?.reason === 'gone',
+    'bg.inspect on an unknown window is NotFound (-32033, gone)',
+    goneInspect,
+  );
+  const goneFocused = await call('bg.focused', { window: '4294967295' });
+  check(
+    errorCode(goneFocused) === -32033 && goneFocused.error.data?.reason === 'gone',
+    'bg.focused on an unknown window is NotFound (-32033, gone)',
+    goneFocused,
+  );
+  const badSize = await call('window.capture', { app: 'com.apple.finder', maxWidth: 0, maxHeight: 200, format: 'jpeg' });
+  check(errorCode(badSize) === -32602, 'window.capture with maxWidth 0 is InvalidParams (-32602)', badSize);
+  const noApp = await call('window.capture', {
+    app: 'dev.atelier.smoke.no-such-app',
+    maxWidth: 320,
+    maxHeight: 200,
+    format: 'jpeg',
+  });
+  if (granted.screenRecording)
+    check(
+      errorCode(noApp) === -32033 && noApp.error.data?.reason === 'notRunning',
+      'window.capture of an app that isn\'t running is NotFound (-32033, notRunning)',
+      noApp,
+    );
+  else
+    check(
+      errorCode(noApp) === -32030 && noApp.error.data?.permission === 'screenRecording',
+      'window.capture without Screen Recording: -32030 {permission: screenRecording}',
+      noApp,
+    );
+
+  // A window that is on screen already, of a common app (or the one asked for).
+  const windows = normalWindows();
+  const running = all.filter((a) => a.running && a.pid !== null);
+  const wanted = windowApp ? [windowApp] : WINDOW_APPS;
+  let target = null;
+  for (const id of wanted) {
+    const pids = new Set(running.filter((a) => a.id === id).map((a) => a.pid));
+    const window = windows?.find((w) => pids.has(w.pid));
+    if (window) {
+      target = { id, window };
+      break;
+    }
+  }
+  if (!windows) console.log('  skip  the window list could not be read (osascript)');
+  else if (!target)
+    console.log(
+      `  skip  ${windowApp ? `${windowApp} has` : 'none of the common apps has'} a window on screen: pass --window-app=<bundle id>`,
+    );
+  else {
+    const { id: appId, window: w } = target;
+    const center = { x: w.x + w.width / 2, y: w.y + w.height / 2 };
+    const windowId = String(w.id);
+    console.log(`        using ${appId}'s frontmost window (${w.width}x${w.height} pt)`);
+    const inspect = await call('bg.inspect', { window: windowId, ...center });
+    const focusedIn = await call('bg.focused', { window: windowId });
+    const outside = await call('bg.inspect', { window: windowId, x: w.x - 5, y: w.y - 5 });
+    const notANumber = await call('bg.inspect', { window: windowId, x: 'left', y: center.y });
+    if (granted.accessibility) {
+      check(
+        ok(inspect) && inspectProblems(inspect.result).length === 0 && inspect.result.app?.id === appId,
+        `bg.inspect at the window's center: role ${inspect.result?.role ?? 'none'}`,
+        inspect.error ?? inspectProblems(inspect.result),
+      );
+      check(
+        ok(focusedIn) && inspectProblems(focusedIn.result).length === 0 && focusedIn.result.app?.id === appId,
+        `bg.focused: role ${focusedIn.result?.role ?? 'none'}`,
+        focusedIn.error ?? inspectProblems(focusedIn.result),
+      );
+    } else {
+      check(
+        errorCode(inspect) === -32030 && inspect.error.data?.permission === 'accessibility',
+        'bg.inspect without Accessibility is -32030',
+        inspect,
+      );
+    }
+    check(errorCode(outside) === -32602, 'bg.inspect at a point outside the window is InvalidParams (-32602)', outside);
+    check(errorCode(notANumber) === -32602, 'bg.inspect with a bad x is InvalidParams (-32602)', notANumber);
+
+    if (granted.screenRecording && capture) {
+      const shot = await call('window.capture', { app: appId, maxWidth: 640, maxHeight: 400, format: 'jpeg', quality: 0.5 });
+      const s = shot.result ?? {};
+      const bytes = Buffer.from(s.data ?? '', 'base64');
+      const title = s.title;
+      check(
+        ok(shot) &&
+          s.mime === 'image/jpeg' &&
+          bytes.subarray(0, 3).toString('hex') === 'ffd8ff' &&
+          s.width <= 640 &&
+          s.height <= 400 &&
+          /^\d+$/.test(s.window) &&
+          [s.rect?.x, s.rect?.y, s.rect?.width, s.rect?.height].every(isNum) &&
+          (title === null || (isStr(title) && title.length > 0 && title.length <= 200)),
+        `window.capture: ${s.width}x${s.height} px for ${s.rect?.width}x${s.rect?.height} pt, title ${title === null ? 'none' : `${title?.length} characters`}`,
+        shot.error,
+      );
+      check(
+        s.window === windowId && s.rect?.x === w.x && s.rect?.y === w.y && s.rect?.width === w.width && s.rect?.height === w.height,
+        'window.capture took the frontmost window, its rect the window frame in global points',
+        { window: s.window, expected: windowId },
+      );
+      check(
+        Math.abs(s.width / s.height - s.rect?.width / s.rect?.height) < 0.02,
+        'window.capture keeps the window\'s aspect ratio',
+      );
+      shot.result = undefined; // the image isn't kept
+    } else if (granted.screenRecording) console.log('  skip  pass --capture to take a test window.capture');
+  }
 
   console.log('capture.display');
   const primary = list?.find((d) => d.primary);

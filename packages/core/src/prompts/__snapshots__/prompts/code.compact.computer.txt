@@ -81,7 +81,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 20, 14163 characters of JSON
+# Tools: 20, 14435 characters of JSON
 
 [
   {
@@ -617,13 +617,17 @@ Recent commit subjects:
   },
   {
     "name": "Screenshot",
-    "description": "Shows the screen: only the apps you may use (and the desktop), never others. Coordinates for ComputerAction are pixels of this image.",
+    "description": "Shows the screen (Full control), or in the background one app’s window as it is, even where others cover it. Coordinates for ComputerAction are pixels of this image.",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "app": {
+          "type": "string",
+          "description": "Background: the app whose window to see and work in from now on (one at a time)."
+        },
         "display": {
           "type": "string",
-          "description": "Another display by name; the main one by default."
+          "description": "Full control: another display by name; the main one by default."
         }
       },
       "additionalProperties": false
@@ -706,6 +710,10 @@ Recent commit subjects:
               "text": {
                 "type": "string",
                 "description": "type: the text; key: the keys, like \"cmd+s\" (macOS) or \"ctrl+s\" (Windows)."
+              },
+              "replace": {
+                "type": "boolean",
+                "description": "type: replace what the field holds instead of adding to it."
               },
               "direction": {
                 "type": "string",

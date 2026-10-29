@@ -41,7 +41,10 @@ Windows asks for nothing. Two things work differently there:
 
 **How Atelier uses the apps you allow** in Settings decides how much it asks:
 
-- **Background** (the default): it asks for each app, and before it takes your mouse and keyboard (below).
+- **Background** (the default): it asks for each app, then works in one app at a time **in the background**: it sees
+  that app's window as it is (even when other windows cover it) and clicks, types and scrolls in it without moving your
+  pointer or bringing it forward, while you keep working. A small note below the menu bar says **Atelier is working in
+  …**. Dragging and zooming in need Full control; it asks for that with a card when it needs it.
 - **Full control**: it takes over your computer as it is. No cards: it may do anything in any app, terminals and code
   editors included, except your denied apps, Atelier itself and the parts of macOS that ask for passwords. Typing in a
   terminal runs commands without Atelier's permission prompts, so use Full control only when you would let it do that.
@@ -56,16 +59,19 @@ comes with what Atelier may do there:
 
 | Choice | What it allows | Default for |
 |---|---|---|
-| **See only** | Screenshots of the app | Browsers |
+| **See only** | Screenshots of the app | — |
 | **See and click** | Screenshots, left clicks and scrolling, no typing | Terminals and code editors (the most they can get) |
-| **Full use** | Everything: clicks, typing, keys, dragging | Every other app |
+| **Full use** | Everything: clicks, typing, keys, dragging | Every other app, browsers included |
+
+You can lower any of them on the card. When the assistant needs more in an app than it was given, it asks again, and
+the card offers the app once more.
 
 **Allow for this session** lets this conversation use them until it ends. **Always allow** lets every conversation on
 this computer use them; they are listed under **Apps allowed for good** in Settings, with **Remove**. **Don't allow**
 tells the assistant to go on without them.
 
 Some apps are never used: Atelier itself, System Settings, the login window and the other parts of macOS that ask for
-passwords. Screenshots show only the apps you allowed (and the desktop); every other window is left out.
+passwords. In the background its screenshots show only the window of the app it works in.
 
 ### Denied apps
 
@@ -75,26 +81,30 @@ start. **Add app** picks any installed app; **Remove** takes one off. Denying an
 
 ## The mouse and keyboard
 
-Acting in an app means taking your mouse and keyboard. While Atelier has them:
+In **Full control** (or when it asks for it in Background), acting means taking your mouse and keyboard. While Atelier
+has them:
 
 - a soft clay glow runs along the edges of every screen, and a small panel below the menu bar says **Atelier is using
   your computer · Hold Esc to stop**;
-- in Background, apps it wasn't allowed are hidden, and so are Atelier's own windows; **Unhide apps when Atelier
-  finishes** (on by default) shows them again afterwards. Full control hides nothing;
+- when it took them from Background, apps it wasn't allowed are hidden, and so are Atelier's own windows; **Unhide
+  apps when Atelier finishes** (on by default) shows them again afterwards. Full control hides nothing;
 - it keeps them for the whole task and gives them back when it is done (as it writes its reply), when it asks you a
   question, or when you stop it. When it is done or asks you something, Atelier comes back to the front. In Full control a permission prompt doesn't end it: it waits for your answer and
   carries on. In Background any card hands them back.
 
-In **Background**, the first time in a conversation a card asks **Let Atelier take over your mouse and keyboard?**
-**Allow** is for this conversation; **Always allow** switches the setting to Full control. In **Full control** it takes
-them whenever it acts, without asking.
+In **Background** it only takes them for what can't be done in the background, after a card asks **Let Atelier take
+over your mouse and keyboard?** **Allow** is for this conversation; **Always allow** switches the setting to Full
+control. In **Full control** it takes them whenever it acts, without asking.
 
 ### Taking your computer back
 
-- **Hold Esc for a second.** The ring in the panel fills; when it is full the panel says **Stopped** and the reply stops.
-- **Press Stop** in Atelier, or send a message.
-- **Using the mouse or keyboard yourself** doesn't stop it: it waits until you have stopped for a moment (the panel says
-  **Waiting while you use your computer**), then looks at the screen again and carries on.
+- **Hold Esc for a second.** The ring in the panel fills; when it is full the panel says **Stopped** and you have the
+  computer back. The assistant hears it: it doesn't use the computer again in that reply, finishes another way if it
+  can, or tells you what it couldn't do and why.
+- **Press Stop** in Atelier, or send a message: that stops the reply itself.
+- **Using the mouse or keyboard yourself** doesn't stop it. Moving the pointer changes nothing; when you click or type it
+  waits until you have stopped for a moment (the panel says **Waiting while you use your computer**) and carries on.
+  Only when you brought another app to the front does it look at the screen again before going on.
 - **Turn computer use off** in Settings: whatever it was doing ends.
 
 ## What it won't do

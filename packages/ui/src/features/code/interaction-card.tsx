@@ -284,6 +284,7 @@ function CallPreview({ request }: { request: PermissionRequest }) {
             <li key={i}>
               {actionWords(a, true)}
               {a.action === 'type' && str(a.summary) ? ` (types “${str(a.text)}”)` : a.action === 'type' ? ` “${str(a.text)}”` : ''}
+              {a.action === 'type' && a.replace === true ? ', replacing what the field holds' : ''}
               {a.action === 'key' && str(a.summary) ? ` (${str(a.text)})` : ''}
             </li>
           ))}
@@ -506,6 +507,8 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
   const apps = (Array.isArray(input.apps) ? input.apps : []) as PreparedApp[];
   const reason = str(input.reason);
   const here = useComputerHere();
+  const status = useComputerStatus();
+  const background = status?.settings.mode === 'background' && status.background;
   const [tiers, setTiers] = useState<Record<string, AppTier>>(() => Object.fromEntries(apps.map((a) => [a.app.id, a.tier ?? 'view'])));
   const [allowing, setAllowing] = useState(false);
   const busy = sending || allowing;
@@ -560,7 +563,9 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
       </ul>
       <p className="text-footnote text-fg-muted">
         {here
-          ? `${APP.name} sees only these apps in its screenshots. Taking over your mouse and keyboard asks again, unless Settings › System says otherwise.`
+          ? background
+            ? `${APP.name} works in these apps in the background, one at a time, without your mouse and keyboard, and sees only their windows.`
+            : `${APP.name} sees only these apps in its screenshots. Taking over your mouse and keyboard asks again, unless Settings › System says otherwise.`
           : `Allow this in the ${APP.name} desktop app on the computer running this session.`}
       </p>
       <div className="@container flex flex-wrap items-center justify-between gap-2">

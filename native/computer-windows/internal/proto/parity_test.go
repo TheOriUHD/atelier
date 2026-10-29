@@ -92,3 +92,17 @@ func TestNotifications(t *testing.T) {
 		t.Errorf("notifications differ\n go: %v\n ts: %v", got, want)
 	}
 }
+
+func TestUserInputKinds(t *testing.T) {
+	m := regexp.MustCompile(`method: 'control\.userInput'; params: \{ kind: ([^}]+) \}`).FindStringSubmatch(contract(t))
+	if m == nil {
+		t.Fatal("no control.userInput in ComputerNotification")
+	}
+	var kinds []string
+	for _, k := range regexp.MustCompile(`'([a-z]+)'`).FindAllStringSubmatch(m[1], -1) {
+		kinds = append(kinds, k[1])
+	}
+	if got, want := sorted(UserInputKinds), sorted(kinds); !slices.Equal(got, want) {
+		t.Errorf("control.userInput kinds differ\n go: %v\n ts: %v", got, want)
+	}
+}

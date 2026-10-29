@@ -36,6 +36,8 @@ export interface Overlay {
   esc(phase: 'down' | 'up' | 'stopped'): void;
   /** Its actions wait while the person uses the mouse or keyboard. */
   paused(on: boolean): void;
+  /** Background: a small note that it works in an app (null: none). */
+  working(app: string | null): void;
 }
 
 export interface ControllerDeps {
@@ -65,6 +67,8 @@ interface Frame {
   rect: ScreenRect;
   width: number;
   height: number;
+  /** Background: the window it showed, which actions go to, and its app. */
+  window?: { id: string; app: string; name: string };
 }
 
 interface SessionState {
@@ -72,6 +76,10 @@ interface SessionState {
   /** The person let this session take the mouse and keyboard (for the rest of it). */
   control: boolean;
   frame: Frame | null;
+  /** Background: the app it works in (one at a time). */
+  target: string | null;
+  /** The person held Esc: the computer is theirs until this turn ends. */
+  takenBack: boolean;
 }
 
 /**
@@ -137,11 +145,16 @@ function comboOf(keys: string[], platform: NodeJS.Platform): string {
 }
 
 /** What the model hears when the mouse and keyboard went back in the middle of its actions. */
+/** After the person held Esc: the computer is theirs for the rest of the turn. */
+const TAKEN_BACK =
+  'The person took the computer back (held Esc). Don’t use the computer again in this turn: finish another way if you can, or stop and tell them what you couldn’t do and why.';
 const ENDED = {
-  esc: 'The person took the computer back (held Esc). Stop and ask before going on.',
+  esc: TAKEN_BACK,
   other: 'You no longer have the mouse and keyboard.',
 } as const;
-const MEANWHILE = 'Not done: the person used the mouse or keyboard meanwhile, so the screen may have changed. Take a Screenshot, then go on.';
+/** What the computer is used through (refused after Esc, until the turn ends). */
+const USES_COMPUTER = new Set<string>(['screenshot', 'apps.open', 'control.request', 'control.batch']);
+const switchedTo = (app: string) => `Not done: the person brought ${app} to the front meanwhile. Take a Screenshot, then go on.`;
 
 /** "cmd+shift+t" → ['cmd', 'shift', 't']. */
 export const parseKeys = (combo: string): string[] =>
@@ -155,6 +168,8 @@ export class ComputerController {
   private control: Control | null = null;
   private apps: { at: number; list: HelperApp[] } | null = null;
   private writes: Promise<unknown> = Promise.resolve();
+  /** The session whose background note shows. */
+  private working: string | null = null;
   /** Secure input is on (a password field somewhere): typing is refused, the Esc watch is blind. */
   private secureInput = false;
 
@@ -202,7 +217,7 @@ export class ComputerController {
       available: this.deps.hasHelper,
       platform,
       permissions,
-      background: false,
+      background: await this.background(),
       settings,
       control: this.control ? { sessionId: this.control.sessionId, paused: false } : null,
     };
@@ -256,6 +271,11 @@ export class ComputerController {
   async handle<M extends keyof ControllerMethods>(backend: string, sessionId: string, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']> {
     const settings = await readComputerSettings(this.deps.settingsPath);
     if (!this.deps.hasHelper || !settings.enabled) throw new Error('Computer use is off on this computer: turn it on in Settings › System.');
+    // After Esc the computer is the person's until the turn ends: nothing more is looked at or done.
+    if (USES_COMPUTER.has(method) && this.session(backend, sessionId).takenBack) {
+      if (method === 'control.request') return { granted: false, reason: TAKEN_BACK } as ControllerMethods[M]['result'];
+      throw new Error(TAKEN_BACK);
+    }
     const run = this.methods(backend, sessionId, settings) as unknown as Record<string, (p: unknown) => Promise<unknown>>;
     const handler = run[method];
     if (!handler) throw new Error(`Unknown computer use request ${method}.`);
@@ -304,6 +324,7 @@ export class ComputerController {
           apps: policy.grants,
           platform: this.deps.platform === 'win32' ? 'win32' : this.deps.platform === 'linux' ? 'linux' : 'darwin',
           mode: settings.mode,
+          background: await this.background(),
           denied: policy.denied.map((d) => d.name),
           control: this.control?.key === key,
           displays: displays.map((d) => ({ id: d.id, name: d.name, primary: d.primary })),
@@ -319,10 +340,13 @@ export class ComputerController {
         if (!policy.tier(id)) throw new Error('That app isn’t one you may use.');
         await this.deps.helper.call('apps.open', { id, activate: this.control?.key === key });
         this.apps = null;
+        // Background: the app it opens is the one it works in (its window is picked at the next screenshot).
+        if (!policy.full) state().target = id;
         return {};
       },
-      screenshot: async ({ display, size }: ControllerMethods['screenshot']['params']): Promise<ControllerMethods['screenshot']['result']> => {
+      screenshot: async ({ display, app, size }: ControllerMethods['screenshot']['params']): Promise<ControllerMethods['screenshot']['result']> => {
         if (!policy.full && !policy.grants.length) throw new Error('You may use no apps yet: ask with ComputerAccess first.');
+        if (!policy.full && this.control?.key !== key && (await this.background())) return this.windowShot(backend, sessionId, policy, app, size);
         const target = await this.display(display);
         const shot = await this.capture(target, policy, size).catch((e: unknown) => Promise.reject(new Error(helperMessage(e))));
         state().frame = { rect: shot.rect, width: shot.width, height: shot.height };
@@ -341,18 +365,27 @@ export class ComputerController {
       },
       'control.batch': async ({ actions, size }: ControllerMethods['control.batch']['params']): Promise<ControllerMethods['control.batch']['result']> => {
         const control = this.control;
-        if (control?.key !== key) throw new Error('You don’t have the mouse and keyboard: take them with FullControl first.');
+        if (control?.key !== key) {
+          if (!policy.full && (await this.background())) return { results: await this.inBackground(backend, sessionId, actions, size, policy) };
+          throw new Error('You don’t have the mouse and keyboard: take them with FullControl first.');
+        }
         const results: ComputerActionResult[] = [];
         // The person may be using the computer (answering a card, say): it waits until they stop, then puts the app it
         // was working in back in front if Atelier took the keyboard meanwhile.
         await this.whenIdle(control);
         await this.refront(control);
-        const started = Date.now();
+        let checked = Date.now();
+        const front = async () => (await this.deps.helper.call('apps.frontmost', {}).catch(() => ({ app: null }))).app;
+        const before = await front();
         for (const item of actions) {
-          if (this.control === control && control.lastInput > started) {
+          // The person clicked or typed meanwhile: it waits until they stop, and goes on unless they changed the app in
+          // front (moving the pointer alone changes nothing).
+          if (this.control === control && control.lastInput > checked) {
             await this.whenIdle(control);
-            if (this.control === control) {
-              results.push({ action: item.action, ok: false, note: MEANWHILE });
+            checked = Date.now();
+            const now = await front();
+            if (this.control === control && now && now.id !== before?.id) {
+              results.push({ action: item.action, ok: false, note: switchedTo(now.name) });
               break;
             }
           }
@@ -373,6 +406,8 @@ export class ComputerController {
       },
       'turn.end': async () => {
         if (this.control?.key === key) await this.end(this.control, { focus: true });
+        this.notWorking(key);
+        state().takenBack = false;
         return {};
       },
       'turn.wait': async ({ kind }: ControllerMethods['turn.wait']['params']) => {
@@ -390,6 +425,7 @@ export class ComputerController {
         await this.end(control, { focus: true });
         return {};
       },
+      // (A background session has nothing to hand back: its note goes when the turn ends.)
     };
   }
 
@@ -416,7 +452,7 @@ export class ComputerController {
       const tier = policy.tier(id);
       if (category === 'system') return `${name} is part of the system or Atelier: never used.`;
       if (!tier) return policy.full ? `${name} is on the person's denied list: never used.` : `${name} is there, which you may not use.`;
-      if (!atLeast(tier, need)) return `You may only ${tier === 'view' ? 'look at' : 'click and scroll in'} ${name}.`;
+      if (!atLeast(tier, need)) return `You may only ${tier === 'view' ? 'look at' : 'click and scroll in'} ${name}. Ask with ComputerAccess for more: the person can allow it on the card.`;
       if (under.link !== null && linkSensitive(category) && item.action !== 'mouse_move' && item.action !== 'scroll') {
         return `That's a link in ${name}${under.link ? ` (${under.link})` : ''}: links in mail and messages aren't clicked. Check it with WebFetch, or ask the person.`;
       }
@@ -433,7 +469,7 @@ export class ComputerController {
         return `The keyboard goes to ${name}, part of the system or Atelier: never used.${policy.full ? ' Bring the app you need to the front first (OpenApp, or cmd+tab).' : ''}`;
       }
       if (!id || !tier) return `The keyboard goes to ${name}, which you may not use.`;
-      if (tier !== 'full') return `You may not type in ${name}.`;
+      if (tier !== 'full') return `You may not type in ${name}. Ask with ComputerAccess for more: the person can allow it on the card.`;
       if (focused.secure) return 'That is a password field: you never type passwords.';
       return null;
     };
@@ -456,9 +492,13 @@ export class ComputerController {
         // The zoom is for reading; coordinates stay those of the screenshot it came from.
         return { action: item.action, ok: true, note: 'Coordinates still refer to the screenshot before.', screenshot: { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height } };
       }
-      case 'wait':
-        await sleep(Math.min(10, item.duration ?? 1) * 1000);
+      case 'wait': {
+        // Ends early when control does (Esc), so the agent hears it at once.
+        const until = Date.now() + Math.min(10, item.duration ?? 1) * 1000;
+        const holding = this.control;
+        while (Date.now() < until && this.control === holding) await sleep(Math.min(100, until - Date.now()));
         return done();
+      }
       case 'cursor_position': {
         const at = await helper.call('cursor.position', {});
         const frame = state.frame;
@@ -469,6 +509,8 @@ export class ComputerController {
         if (!item.text) return refuse('Nothing to type.');
         const why = await checkKeys();
         if (why) return refuse(why);
+        // `replace`: what the field holds is selected first, so the text takes its place instead of joining it.
+        if (item.replace) await helper.call('key.press', { keys: this.deps.platform === 'darwin' ? ['cmd', 'a'] : ['ctrl', 'a'] });
         await helper.call('key.type', { text: item.text });
         return done();
       }
@@ -577,15 +619,167 @@ export class ComputerController {
     }
     if (!control || control.stopped) return;
     if (n.method === 'control.userInput') {
-      // They reached for the mouse or keyboard: its actions wait until they stop. Holding Esc is how they end it.
-      control.lastInput = Date.now();
+      // A click or a key: its actions wait until they stop. Moving the pointer changes nothing; holding Esc ends it.
+      if (n.params.kind !== 'move') control.lastInput = Date.now();
     } else if (n.method === 'control.esc') {
       this.deps.overlay.esc(n.params.phase);
       if (n.params.phase === 'stopped') {
         control.stopped = true;
+        // The turn goes on without the computer: the agent hears it and finishes another way or says why it can't.
+        this.session(control.backend, control.sessionId).takenBack = true;
         void this.end(control).then(() => this.deps.event(control.backend, control.sessionId, { type: 'stopped' }));
       }
     }
+  }
+
+  // ---------------------------------------------------------------- background
+
+  /** The helper can work in a window without the mouse and keyboard. */
+  private async background(): Promise<boolean> {
+    if (!this.deps.hasHelper) return false;
+    return (await this.deps.helper.start().catch(() => null))?.supports.background ?? false;
+  }
+
+  /**
+   * Background screenshot: the window of `app` (or of the app it works in, or of the only app it may use) as it is,
+   * covered or not. That app is the one it works in from then on.
+   */
+  private async windowShot(backend: string, sessionId: string, policy: Policy, app: string | undefined, size: ScreenshotSize): Promise<ControllerMethods['screenshot']['result']> {
+    const state = this.session(backend, sessionId);
+    const wanted = app?.trim().toLowerCase().replace(/\.app$/, '');
+    const named = wanted
+      ? (policy.grants.find((g) => g.app.id.toLowerCase() === wanted || g.app.name.toLowerCase() === wanted) ?? policy.grants.find((g) => g.app.name.toLowerCase().startsWith(wanted)))
+      : undefined;
+    if (app?.trim() && !named) throw new Error(`You may not use ${app}: ask with ComputerAccess first.`);
+    const grant = named ?? policy.grants.find((g) => g.app.id === state.target) ?? (policy.grants.length === 1 ? policy.grants[0] : undefined);
+    if (!grant) throw new Error(`Say which app to look at: Screenshot with \`app\` (in the background you work in one app at a time). You may use ${policy.grants.map((g) => g.app.name).join(', ')}.`);
+    const capture = () => this.deps.helper.call('window.capture', { app: grant.app.id, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8 });
+    const shot = await capture()
+      .catch(async (e: unknown) => {
+        // A hidden app (macOS) is shown again, without being brought forward, and looked at once more.
+        if (e instanceof HelperError && e.data?.reason === 'hidden') {
+          await this.deps.helper.call('apps.unhide', { ids: [grant.app.id] });
+          return capture();
+        }
+        throw e;
+      })
+      .catch((e: unknown) => Promise.reject(new Error(e instanceof HelperError && e.code === -32033 ? `${grant.app.name} has no window open: open it with OpenApp first.` : helperMessage(e))));
+    state.target = grant.app.id;
+    state.frame = { rect: shot.rect, width: shot.width, height: shot.height, window: { id: shot.window, app: grant.app.id, name: grant.app.name } };
+    this.workingIn(keyOf(backend, sessionId), grant.app.name);
+    return {
+      data: shot.data,
+      mime: shot.mime,
+      width: shot.width,
+      height: shot.height,
+      display: `${grant.app.name}’s window${shot.title ? ` “${shot.title}”` : ''}`,
+      note: 'Only this window, as it is, even where others cover it. Your actions go to it; coordinates are pixels of this image.',
+    };
+  }
+
+  /** Background actions: into the window of the latest screenshot, the cursor unmoved, the app left where it is. */
+  private async inBackground(backend: string, sessionId: string, actions: ComputerActionItem[], size: ScreenshotSize, policy: Policy): Promise<ComputerActionResult[]> {
+    const state = this.session(backend, sessionId);
+    const results: ComputerActionResult[] = [];
+    for (const item of actions) {
+      const result = await this.actInBackground(backend, sessionId, state, item, size, policy).catch((e: unknown) => ({ action: item.action, ok: false, note: backgroundMessage(e) }));
+      results.push(result);
+      if (!result.ok) break;
+    }
+    return results;
+  }
+
+  private async actInBackground(backend: string, sessionId: string, state: SessionState, item: ComputerActionItem, size: ScreenshotSize, policy: Policy): Promise<ComputerActionResult> {
+    const helper = this.deps.helper;
+    const done = (note?: string): ComputerActionResult => ({ action: item.action, ok: true, ...(note ? { note } : {}) });
+    const refuse = (note: string): ComputerActionResult => ({ action: item.action, ok: false, note });
+    if (item.action === 'wait') {
+      await sleep(Math.min(10, item.duration ?? 1) * 1000);
+      return done();
+    }
+    if (item.action === 'screenshot') {
+      const shot = await this.windowShot(backend, sessionId, policy, undefined, size);
+      return { action: item.action, ok: true, screenshot: { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height } };
+    }
+    const frame = state.frame;
+    const window = frame?.window;
+    if (!frame || !window) return refuse('Take a Screenshot of the app first: in the background your actions go to its window.');
+    const tier = policy.tier(window.app);
+    if (!tier) return refuse(`You may not use ${window.name}: ask with ComputerAccess first.`);
+    const point = (c: [number, number] | undefined) => {
+      if (!c) throw new Error('It needs a coordinate.');
+      return { x: frame.rect.x + (c[0] * frame.rect.width) / frame.width, y: frame.rect.y + (c[1] * frame.rect.height) / frame.height };
+    };
+    const more = 'Ask with ComputerAccess for more: the person can allow it on the card.';
+    const check = async (p: { x: number; y: number }, need: AppTier): Promise<string | null> => {
+      if (!atLeast(tier, need)) return `You may only ${tier === 'view' ? 'look at' : 'click and scroll in'} ${window.name}. ${more}`;
+      const under = await helper.call('bg.inspect', { window: window.id, ...p });
+      if (under.link !== null && linkSensitive(appCategory(window.app))) {
+        return `That's a link in ${window.name}${under.link ? ` (${under.link})` : ''}: links in mail and messages aren't clicked. Check it with WebFetch, or ask the person.`;
+      }
+      return null;
+    };
+    const checkKeys = async (): Promise<string | null> => {
+      if (tier !== 'full') return `You may not type in ${window.name}. ${more}`;
+      const focused = await helper.call('bg.focused', { window: window.id });
+      if (focused.secure) return 'That is a password field: you never type passwords.';
+      return null;
+    };
+    switch (item.action) {
+      case 'type': {
+        if (!item.text) return refuse('Nothing to type.');
+        const why = await checkKeys();
+        if (why) return refuse(why);
+        if (item.replace) await helper.call('bg.key', { window: window.id, keys: this.deps.platform === 'darwin' ? ['cmd', 'a'] : ['ctrl', 'a'] });
+        await helper.call('bg.type', { window: window.id, text: item.text });
+        return done();
+      }
+      case 'key': {
+        const keys = parseKeys(item.text ?? '');
+        if (!keys.length) return refuse('Which keys? Like "cmd+s" or "return".');
+        const why = await checkKeys();
+        if (why) return refuse(why);
+        await helper.call('bg.key', { window: window.id, keys, ...(item.amount ? { repeat: item.amount } : {}) });
+        return done();
+      }
+      case 'scroll': {
+        const at = item.coordinate ? point(item.coordinate) : { x: frame.rect.x + frame.rect.width / 2, y: frame.rect.y + frame.rect.height / 2 };
+        const why = await check(at, 'click');
+        if (why) return refuse(why);
+        const amount = item.amount ?? 3;
+        const d = item.direction ?? 'down';
+        await helper.call('bg.scroll', { window: window.id, ...at, dx: d === 'right' ? amount : d === 'left' ? -amount : 0, dy: d === 'down' ? amount : d === 'up' ? -amount : 0 });
+        return done();
+      }
+      case 'mouse_move':
+      case 'cursor_position':
+        return done('The pointer isn’t used in the background.');
+      case 'left_click_drag':
+      case 'zoom':
+        return refuse(`${item.action === 'zoom' ? 'Zooming' : 'Dragging'} needs Full control: ask with FullControl, or take a Screenshot instead.`);
+      default: {
+        const at = point(item.coordinate);
+        const why = await check(at, NEEDS[item.action] ?? 'full');
+        if (why) return refuse(why);
+        const button = item.action === 'right_click' ? 'right' : item.action === 'middle_click' ? 'middle' : 'left';
+        const count = item.action === 'double_click' ? 2 : item.action === 'triple_click' ? 3 : 1;
+        await helper.call('bg.click', { window: window.id, ...at, button, count, modifiers: [] });
+        await sleep(150);
+        return done();
+      }
+    }
+  }
+
+  /** The note that a session works in an app, in the background (one at a time: the latest). */
+  private workingIn(key: string, app: string): void {
+    this.working = key;
+    this.deps.overlay.working(app);
+  }
+
+  private notWorking(key: string): void {
+    if (this.working !== key) return;
+    this.working = null;
+    this.deps.overlay.working(null);
   }
 
   /** Waits while the person uses the mouse or keyboard (the popup says so), at most a few minutes. */
@@ -616,7 +810,7 @@ export class ComputerController {
     const key = keyOf(backend, sessionId);
     let state = this.sessions.get(key);
     if (!state) {
-      state = { grants: new Map(), control: false, frame: null };
+      state = { grants: new Map(), control: false, frame: null, target: null, takenBack: false };
       this.sessions.set(key, state);
     }
     return state;
@@ -681,6 +875,13 @@ export function matchApp(apps: HelperApp[], name: string): HelperApp | undefined
     apps.find((a) => a.name.toLowerCase().startsWith(n)) ??
     apps.find((a) => a.name.toLowerCase().includes(n))
   );
+}
+
+/** What a helper error in the background means for the model: an app that won't take it may need Full control. */
+function backgroundMessage(e: unknown): string {
+  if (e instanceof HelperError && e.code === -32032) return `${e.message} This app may need Full control: ask with FullControl.`;
+  if (e instanceof HelperError && e.code === -32033) return 'The window is gone: take a Screenshot of the app again.';
+  return helperMessage(e);
 }
 
 /** What a helper error means for the model. */

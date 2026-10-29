@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Smoke test for the built Windows helper (native/bin/atelier-computer-windows-<arch>.exe, from `pnpm computer:build`):
 // speaks computer protocol v1 to it over stdio and checks the shape of each answer. Read-only: it never moves the
-// mouse, types, holds keys, hides, opens or activates apps, or starts control. It takes screenshots (and prints only
-// their size) unless run with --no-capture.
+// mouse, types, holds keys, hides, opens or activates apps, or starts control; Background mode's input methods (bg.*)
+// are only sent with params they refuse before anything reaches a window. It takes screenshots (and prints only their
+// size) unless run with --no-capture; window.capture only of a window that isn't minimized (it would restore one).
 //
 //   node native/computer-windows/smoke.mjs [--no-capture] [--verbose] [path\to\atelier-computer-windows-x64.exe]
 import { spawn } from 'node:child_process';
@@ -190,7 +191,7 @@ async function main() {
       r.protocolVersion === 1 &&
       isStr(r.helperVersion) &&
       r.platform === 'win32' &&
-      r.supports?.background === false &&
+      r.supports?.background === true &&
       r.supports?.fullControl === true &&
       r.supports?.filter === true,
     `initialize (helper ${r?.helperVersion}, ${init.ms} ms)`,
@@ -383,6 +384,89 @@ async function main() {
       );
     }
   } else console.log('  skip  --no-capture');
+
+  console.log('background (nothing is clicked, scrolled or typed)');
+  const image = { maxWidth: 320, maxHeight: 200, format: 'jpeg' };
+  const noApp = await call('window.capture', { app: 'no-such-app-atelier-smoke.exe', ...image });
+  check(errorCode(noApp) === -32033, 'window.capture of an app that has no window is NotFound (-32033)', noApp);
+  for (const [label, method, params, code] of [
+    ['window.capture without app', 'window.capture', image, -32602],
+    ['window.capture with an empty app', 'window.capture', { app: '', ...image }, -32602],
+    ['window.capture with maxWidth 0', 'window.capture', { app: 'notepad.exe', ...image, maxWidth: 0 }, -32602],
+    ['window.capture as gif', 'window.capture', { app: 'notepad.exe', ...image, format: 'gif' }, -32602],
+    ['window.capture with quality 2', 'window.capture', { app: 'notepad.exe', ...image, quality: 2 }, -32602],
+    ["bg.inspect of a window that isn't one", 'bg.inspect', { window: '1', x: 0, y: 0 }, -32033],
+    ['bg.inspect of a window id that is no handle', 'bg.inspect', { window: 'no-window', x: 0, y: 0 }, -32033],
+    ["bg.focused of a window that isn't one", 'bg.focused', { window: '1' }, -32033],
+    ['bg.focused of a window id that is no handle', 'bg.focused', { window: 'no-window' }, -32033],
+    ['bg.inspect with a number for window', 'bg.inspect', { window: 1, x: 0, y: 0 }, -32602],
+    ['bg.inspect with an empty window', 'bg.inspect', { window: '', x: 0, y: 0 }, -32602],
+    ['bg.inspect with a bad x', 'bg.inspect', { window: '1', x: 'left', y: 0 }, -32602],
+    ['bg.focused without window', 'bg.focused', {}, -32602],
+    // Input refused by its params, before any window is looked at.
+    ['bg.click with count 4', 'bg.click', { window: '1', x: 0, y: 0, button: 'left', count: 4, modifiers: [] }, -32602],
+    [
+      'bg.click with an unknown modifier',
+      'bg.click',
+      { window: '1', x: 0, y: 0, button: 'left', count: 1, modifiers: ['hyper'] },
+      -32602,
+    ],
+    [
+      'bg.click with alt (no background alt-click)',
+      'bg.click',
+      { window: '1', x: 0, y: 0, button: 'left', count: 1, modifiers: ['alt'] },
+      -32032,
+    ],
+    ['bg.scroll of 20000 lines', 'bg.scroll', { window: '1', x: 0, y: 0, dx: 0, dy: 20_000 }, -32602],
+    ['bg.key without keys', 'bg.key', { window: '1', keys: [] }, -32602],
+    ['bg.key with an unknown key', 'bg.key', { window: '1', keys: ['ctrl', 'nosuchkey'] }, -32602],
+    ['bg.key repeated 101 times', 'bg.key', { window: '1', keys: ['return'], repeat: 101 }, -32602],
+    ['bg.key ctrl+s (no background shortcut)', 'bg.key', { window: '1', keys: ['ctrl', 's'] }, -32032],
+    ['bg.type with a number', 'bg.type', { window: '1', text: 5 }, -32602],
+  ])
+    check(errorCode(await call(method, params)) === code, `${label}: ${code}`);
+  // A window to look at (not to touch): the first running app's, unless all its windows are minimized.
+  const shown = (runningOnly.result?.apps ?? []).find((a) => !a.hidden);
+  if (capture && shown) {
+    const shot = await call('window.capture', { app: shown.id, maxWidth: 640, maxHeight: 640, format: 'png' });
+    if (check(ok(shot), `window.capture of ${shown.id} (${shot.ms} ms)`, shot.error)) {
+      const res = shot.result;
+      const decoded = decodeImage(Buffer.from(res.data, 'base64'), res.mime);
+      check(
+        !decoded.error &&
+          decoded.width === res.width &&
+          decoded.height === res.height &&
+          res.width <= 640 &&
+          res.height <= 640 &&
+          /^[1-9][0-9]*$/.test(res.window) &&
+          (res.title === null || isStr(res.title)) &&
+          [res.rect.x, res.rect.y, res.rect.width, res.rect.height].every(isNum),
+        `window ${res.window} "${res.title}": ${res.width}x${res.height} for ${res.rect.width}x${res.rect.height} at ${res.rect.x},${res.rect.y}, decodes`,
+        decoded.error ?? res,
+      );
+      const centre = {
+        x: res.rect.x + Math.floor(res.rect.width / 2),
+        y: res.rect.y + Math.floor(res.rect.height / 2),
+      };
+      const at = await call('bg.inspect', { window: res.window, ...centre });
+      check(
+        ok(at) && inspectProblems(at.result).length === 0,
+        `bg.inspect at its centre (${at.ms} ms): ${JSON.stringify({ app: at.result?.app?.id ?? null, role: at.result?.role })}`,
+        at,
+      );
+      const outside = await call('bg.inspect', { window: res.window, x: res.rect.x - 5, y: res.rect.y - 5 });
+      check(errorCode(outside) === -32602, 'bg.inspect outside the window is InvalidParams (-32602)', outside);
+      const focus = await call('bg.focused', { window: res.window });
+      check(
+        ok(focus) && inspectProblems(focus.result).length === 0,
+        `bg.focused (${focus.ms} ms): ${JSON.stringify({ app: focus.result?.app?.id ?? null, role: focus.result?.role, secure: focus.result?.secure })}`,
+        focus,
+      );
+    }
+  } else
+    console.log(
+      `  skip  window.capture of a real window: ${capture ? 'no running app with a window shown' : '--no-capture'}`,
+    );
 
   console.log('shutdown');
   const bye = await call('shutdown', {});

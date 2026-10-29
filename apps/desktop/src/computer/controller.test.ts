@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { ComputerMethods, ComputerNotification, ControllerEvent, HelperApp, InspectPointResult } from '@atelier/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ComputerController, matchApp, parseKeys } from './controller.ts';
-import type { ComputerHelper } from './helper.ts';
+import { HelperError, type ComputerHelper } from './helper.ts';
 import { changeComputerSettings, readComputerSettings } from './store.ts';
 
 const app = (id: string, name: string, running = true): HelperApp => ({ id, name, path: null, pid: running ? 1 : null, running, active: false, hidden: false, category: null });
@@ -25,6 +25,11 @@ class FakeHelper {
   focused: Partial<InspectPointResult> & { app: HelperApp | null } = { app: APPS[0]!, secure: false, link: null };
   permissions = { accessibility: true, screenRecording: true };
   front: HelperApp | null = null;
+  /** Whether it can work in a window without the mouse and keyboard. */
+  background = false;
+  async start() {
+    return { protocolVersion: 1, helperVersion: 'fake', platform: 'darwin' as const, supports: { background: this.background, fullControl: true, filter: true } };
+  }
   private listeners = new Set<(n: ComputerNotification) => void>();
 
   onNotification(listener: (n: ComputerNotification) => void) {
@@ -48,6 +53,13 @@ class FakeHelper {
           return { apps: APPS };
         case 'apps.frontmost':
           return { app: this.front };
+        case 'window.capture':
+          if ((params as { app: string }).app === 'com.apple.Notes') return Promise.reject(new HelperError('no window', -32033));
+          return { data: 'BBBB', mime: 'image/jpeg', width: 400, height: 300, rect: { x: 100, y: 50, width: 800, height: 600 }, window: '42', title: 'Untitled' };
+        case 'bg.inspect':
+          return { role: null, title: null, secure: false, link: null, ...this.under };
+        case 'bg.focused':
+          return { role: null, title: null, secure: false, link: null, ...this.focused };
         case 'apps.hide':
           return { ids: (params as { ids: string[] }).ids };
         case 'capture.display':
@@ -86,7 +98,7 @@ beforeEach(async () => {
     helper: helper as unknown as ComputerHelper,
     hasHelper: true,
     settingsPath,
-    overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`), paused: (on) => overlay.push(`paused:${on}`) },
+    overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`), paused: (on) => overlay.push(`paused:${on}`), working: (app) => overlay.push(`working:${app}`) },
     windows: { hide() {}, restore() {}, focus: () => overlay.push('focus') },
     event: (_backend, sessionId, event) => events.push({ sessionId, event }),
     changed() {},
@@ -128,7 +140,7 @@ describe('what a session may use', () => {
     const { apps, unknown } = await ask('access.prepare', { names: ['Safari', 'terminal', '1Password', 'System Settings', 'Nope'] });
     expect(unknown).toEqual(['Nope']);
     const by = Object.fromEntries(apps.map((a) => [a.app.name, a]));
-    expect(by.Safari).toMatchObject({ category: 'browser', tier: 'view', maxTier: 'full', denied: false });
+    expect(by.Safari).toMatchObject({ category: 'browser', tier: 'full', maxTier: 'full', denied: false });
     expect(by.Terminal).toMatchObject({ category: 'terminal', tier: 'click', maxTier: 'click' });
     expect(by['1Password']).toMatchObject({ denied: true });
     expect(by['System Settings']).toMatchObject({ tier: null, maxTier: null });
@@ -249,7 +261,7 @@ describe('full control', () => {
     // Safari may only be looked at.
     helper.under = { app: APPS[1]! };
     expect((await batch([{ action: 'left_click', coordinate: [10, 10] }, { action: 'left_click', coordinate: [20, 20] }])).results).toEqual([
-      { action: 'left_click', ok: false, note: 'You may only look at Safari.' },
+      { action: 'left_click', ok: false, note: 'You may only look at Safari. Ask with ComputerAccess for more: the person can allow it on the card.' },
     ]);
     // An app it wasn't given, or the system, is never clicked.
     helper.under = { app: APPS[3]! };
@@ -268,7 +280,7 @@ describe('full control', () => {
     helper.focused = { app: APPS[0]!, secure: true };
     expect(await type()).toMatchObject({ ok: false, note: /password field/ });
     helper.focused = { app: APPS[2]! };
-    expect(await type()).toMatchObject({ ok: false, note: 'You may not type in Terminal.' });
+    expect(await type()).toMatchObject({ ok: false, note: /^You may not type in Terminal\. Ask with ComputerAccess for more/ });
     helper.focused = { app: APPS[0]! };
     helper.notify({ method: 'control.secureInput', params: { on: true } });
     expect(await type()).toMatchObject({ ok: false, note: /secure input/ });
@@ -285,30 +297,58 @@ describe('full control', () => {
     expect(helper.did('mouse.click')).toHaveLength(0);
   });
 
-  it('stops when the person holds Esc, and gives the computer back when they use it', async () => {
+  it('hands the computer back when the person holds Esc, and keeps it from the agent until the turn ends', async () => {
     await ready([{ id: 'com.apple.TextEdit', tier: 'full' }]);
-    helper.notify({ method: 'control.esc', params: { phase: 'down', heldMs: 0 } });
-    helper.notify({ method: 'control.esc', params: { phase: 'stopped', heldMs: 1000 } });
-    await expect.poll(() => events).toEqual([{ sessionId: 's1', event: { type: 'stopped' } }]);
-    expect(overlay).toEqual(['show', 'esc:down', 'esc:stopped', 'hide']);
-    expect(helper.did('control.end')).toHaveLength(1);
-    await expect(ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }], size: SIZE })).rejects.toThrow(/FullControl/);
-
-    // Taking it again lifts the stop.
-    expect(await ask('control.request', {})).toEqual({ granted: true });
-    expect(helper.did('control.resume')).toHaveLength(2);
-    // The person reaching for the mouse pauses it: the rest of the batch waits, then stops so it looks again; control stays.
-    await controller.settings((s) => ({ ...s, mode: 'full' }));
-    const batch = ask('control.batch', { actions: [{ action: 'wait', duration: 0.2 }, { action: 'left_click', coordinate: [1, 1] }], size: SIZE });
-    setTimeout(() => helper.notify({ method: 'control.userInput', params: { kind: 'mouse' } }), 50);
+    const batch = ask('control.batch', { actions: [{ action: 'wait', duration: 5 }, { action: 'left_click', coordinate: [1, 1] }], size: SIZE });
+    setTimeout(() => {
+      helper.notify({ method: 'control.esc', params: { phase: 'down', heldMs: 0 } });
+      helper.notify({ method: 'control.esc', params: { phase: 'stopped', heldMs: 1000 } });
+    }, 50);
+    const started = Date.now();
+    // The wait ends at once, and the agent hears that the computer is the person's for this turn.
     expect((await batch).results).toEqual([
       { action: 'wait', ok: true },
-      { action: 'left_click', ok: false, note: 'Not done: the person used the mouse or keyboard meanwhile, so the screen may have changed. Take a Screenshot, then go on.' },
+      { action: 'left_click', ok: false, note: expect.stringMatching(/^The person took the computer back \(held Esc\)\. Don’t use the computer again in this turn/) },
     ]);
-    expect(overlay.slice(-2)).toEqual(['paused:true', 'paused:false']);
+    expect(Date.now() - started).toBeLessThan(2000);
     expect(events).toEqual([{ sessionId: 's1', event: { type: 'stopped' } }]);
+    expect(overlay).toEqual(['show', 'esc:down', 'esc:stopped', 'hide']);
     expect(helper.did('control.end')).toHaveLength(1);
-    expect(await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }], size: SIZE })).toEqual({ results: [{ action: 'left_click', ok: true }] });
+    // Until the turn ends nothing more is looked at or done; then it may again.
+    expect(await ask('control.request', {})).toMatchObject({ granted: false, reason: expect.stringMatching(/took the computer back/) });
+    await expect(ask('screenshot', { size: SIZE })).rejects.toThrow(/took the computer back/);
+    await ask('turn.end', {});
+    expect(await ask('control.request', {})).toEqual({ granted: true });
+    expect(helper.did('control.resume')).toHaveLength(2);
+  });
+
+  it('goes on when the person moves the pointer, waits while they click or type, and stops only when they switch apps', async () => {
+    await controller.settings((s) => ({ ...s, mode: 'full' }));
+    await ask('screenshot', { size: SIZE });
+    expect(await ask('control.request', {})).toEqual({ granted: true });
+    helper.front = APPS[0]!;
+    const run = (actions: ControllerMethods['control.batch']['params']['actions']) => ask('control.batch', { actions, size: SIZE });
+    // Moving the pointer: nothing waits, nothing stops.
+    let batch = run([{ action: 'wait', duration: 0.2 }, { action: 'left_click', coordinate: [1, 1] }]);
+    setTimeout(() => helper.notify({ method: 'control.userInput', params: { kind: 'move' } }), 50);
+    expect((await batch).results.map((r) => r.ok)).toEqual([true, true]);
+    expect(overlay).not.toContain('paused:true');
+    // A click in the same app: it waits until they stop, then goes on.
+    batch = run([{ action: 'wait', duration: 0.2 }, { action: 'left_click', coordinate: [1, 1] }]);
+    setTimeout(() => helper.notify({ method: 'control.userInput', params: { kind: 'mouse' } }), 50);
+    expect((await batch).results.map((r) => r.ok)).toEqual([true, true]);
+    expect(overlay.slice(-2)).toEqual(['paused:true', 'paused:false']);
+    // They switch apps: the rest stops, and it looks again.
+    batch = run([{ action: 'wait', duration: 0.2 }, { action: 'left_click', coordinate: [1, 1] }]);
+    setTimeout(() => {
+      helper.front = APPS[4]!;
+      helper.notify({ method: 'control.userInput', params: { kind: 'key' } });
+    }, 50);
+    expect((await batch).results).toEqual([
+      { action: 'wait', ok: true },
+      { action: 'left_click', ok: false, note: 'Not done: the person brought Notes to the front meanwhile. Take a Screenshot, then go on.' },
+    ]);
+    expect(helper.did('control.end')).toHaveLength(0);
   });
 
   it('keeps the computer through a permission card in Full control, and puts the app it worked in back in front', async () => {
@@ -337,13 +377,59 @@ describe('full control', () => {
   });
 });
 
+describe('in the background', () => {
+  it('works in one app’s window without taking the mouse and keyboard, and refuses what needs Full control', async () => {
+    helper.background = true;
+    await controller.grant('local', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }, { id: 'com.apple.Safari', tier: 'click' }], false);
+    expect(await ask('access.state', {})).toMatchObject({ mode: 'background', background: true });
+    // Two apps: it must say which.
+    await expect(ask('screenshot', { size: SIZE })).rejects.toThrow(/Say which app to look at/);
+    const shot = await ask('screenshot', { app: 'textedit', size: SIZE });
+    expect(shot).toMatchObject({ width: 400, height: 300, display: 'TextEdit’s window “Untitled”' });
+    expect(helper.did('window.capture').at(-1)?.params).toMatchObject({ app: 'com.apple.TextEdit' });
+    expect(overlay).toEqual(['working:TextEdit']);
+    // Image pixels map onto the window's rect; nothing takes the mouse.
+    const batch = async (actions: ControllerMethods['control.batch']['params']['actions']) => (await ask('control.batch', { actions, size: SIZE })).results;
+    expect(await batch([{ action: 'left_click', coordinate: [200, 150] }, { action: 'type', text: 'hi', replace: true }, { action: 'scroll', direction: 'down' }])).toEqual([
+      { action: 'left_click', ok: true },
+      { action: 'type', ok: true },
+      { action: 'scroll', ok: true },
+    ]);
+    expect(helper.did('bg.click').at(-1)?.params).toEqual({ window: '42', x: 500, y: 350, button: 'left', count: 1, modifiers: [] });
+    expect(helper.did('bg.key').at(-1)?.params).toEqual({ window: '42', keys: ['cmd', 'a'] });
+    expect(helper.did('bg.type').at(-1)?.params).toEqual({ window: '42', text: 'hi' });
+    expect(helper.did('bg.scroll').at(-1)?.params).toMatchObject({ window: '42', x: 500, y: 350, dy: 3 });
+    expect(helper.did('control.begin')).toHaveLength(0);
+    expect(helper.did('mouse.click')).toHaveLength(0);
+    // Its password fields, and what needs Full control.
+    helper.focused = { app: APPS[0]!, secure: true };
+    expect((await batch([{ action: 'type', text: 'x' }]))[0]).toMatchObject({ ok: false, note: /password field/ });
+    expect((await batch([{ action: 'left_click_drag', start: [1, 1], coordinate: [5, 5] }]))[0]).toMatchObject({ ok: false, note: /Dragging needs Full control/ });
+    // The other app, click only: typing refused, with how to get more.
+    await ask('screenshot', { app: 'Safari', size: SIZE });
+    helper.focused = { app: APPS[1]! };
+    expect((await batch([{ action: 'type', text: 'x' }]))[0]).toMatchObject({ ok: false, note: /You may not type in Safari\. Ask with ComputerAccess for more/ });
+    // An app it may not use isn't looked at.
+    await expect(ask('screenshot', { app: 'Mail', size: SIZE })).rejects.toThrow(/You may not use Mail/);
+    // The turn ends: the note goes.
+    await ask('turn.end', {});
+    expect(overlay.at(-1)).toBe('working:null');
+  });
+
+  it('says when an app has no window open', async () => {
+    helper.background = true;
+    await controller.grant('local', 's1', [{ id: 'com.apple.Notes', tier: 'full' }], false);
+    await expect(ask('screenshot', { size: SIZE })).rejects.toThrow('Notes has no window open: open it with OpenApp first.');
+  });
+});
+
 describe('on Windows', () => {
   it('lets alt+tab and the Windows key switch apps while Atelier has the keyboard, and reads cmd as ctrl', async () => {
     const windows = new ComputerController({
       helper: helper as unknown as ComputerHelper,
       hasHelper: true,
       settingsPath,
-      overlay: { show() {}, hide() {}, esc() {}, paused() {} },
+      overlay: { show() {}, hide() {}, esc() {}, paused() {}, working() {} },
       windows: { hide() {}, restore() {}, focus() {} },
       event() {},
       changed() {},

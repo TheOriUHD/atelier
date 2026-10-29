@@ -2,7 +2,23 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+/// Where synthesized input goes: the HID system, as if from the person's own mouse and keyboard (Full control: it moves
+/// the cursor and reaches the frontmost app), or straight to one app's process (background: the cursor stays where it
+/// is and the app isn't brought forward).
+public enum InputRoute: Equatable, Sendable {
+  case hid
+  case process(pid_t)
+}
+
 extension MouseButton {
+  init(_ button: CGMouseButton) {
+    switch button {
+    case .left: self = .left
+    case .right: self = .right
+    default: self = .middle
+    }
+  }
+
   var cgButton: CGMouseButton {
     switch self {
     case .left: .left
@@ -36,9 +52,10 @@ extension MouseButton {
   }
 }
 
-/// Synthesized mouse and keyboard input. Every event is posted to the HID tap and tagged 'ATLR' in
-/// `kCGEventSourceUserData`, so the control watch can tell it from the person's own input. Keys, modifiers and buttons
-/// it presses are tracked, so `releaseAll` (and the Esc stop, and exiting) can let go of them.
+/// Synthesized mouse and keyboard input. Every event is posted to the HID tap (or, in the background, to one app's
+/// process) and tagged 'ATLR' in `kCGEventSourceUserData`, so the control watch can tell it from the person's own input.
+/// Keys, modifiers and buttons it presses are tracked, so `releaseAll` (and the Esc stop, and exiting) can let go of
+/// them; after a stop both routes are refused alike.
 public final class InputController: @unchecked Sendable {
   /// 'ATLR'.
   public static let eventTag: Int64 = 0x4154_4C52
@@ -54,6 +71,8 @@ public final class InputController: @unchecked Sendable {
   private var heldKeys: [CGKeyCode] = []
   private var heldModifiers: [Modifier] = []
   private var heldButtons: [MouseButton] = []
+  /// Presses posted to an app's process that weren't let go of yet, with the event that does.
+  private var heldInProcesses: [ProcessHold] = []
   private var lastPointer: CGPoint?
   private var lastEscapeEventAt: UInt64 = 0
 
@@ -114,44 +133,54 @@ public final class InputController: @unchecked Sendable {
   private func releaseLocked() {
     var flags = Modifier.flags(heldModifiers)
     for code in heldKeys.reversed() {
-      if let event = try? keyEvent(code, down: false, flags: flags) { postLocked(event) }
+      postLocked(.key(code, down: false, flags: flags), .hid)
     }
     let location = CGEvent(source: nil)?.location ?? lastPointer ?? .zero
     for button in heldButtons.reversed() {
-      if let event = try? mouseEvent(button.upType, at: location, button: button, clickState: 1, flags: flags) {
-        postLocked(event)
-      }
+      postLocked(.mouse(button.upType, at: location, button: button, clickState: 1, flags: flags), .hid)
     }
     for modifier in heldModifiers.reversed() {
       flags.remove(modifier.flag)
-      if let event = try? modifierEvent(modifier, flags: flags) { postLocked(event) }
+      postLocked(.modifier(modifier, flags: flags), .hid)
+    }
+    for hold in heldInProcesses.reversed() {
+      postLocked(hold.release, .process(hold.pid))
     }
     heldKeys = []
     heldButtons = []
     heldModifiers = []
+    heldInProcesses = []
     generation += 1
     condition.broadcast()
   }
 
   // ---------------------------------------------------------------- posting
 
+  private struct ProcessHold: Equatable {
+    var pid: pid_t
+    var release: EventSpec
+  }
+
   private enum Change {
     case none, keyDown(CGKeyCode), keyUp(CGKeyCode), modifierDown(Modifier), modifierUp(Modifier)
     case buttonDown(MouseButton), buttonUp(MouseButton)
+    case processDown(ProcessHold), processUp(ProcessHold)
   }
 
-  /// Input may go out: not stopped, and Accessibility granted (posting events needs it).
-  private func ready() throws {
+  /// Input may go out: not stopped, and Accessibility granted (posting events, and pressing through Accessibility,
+  /// need it).
+  func ready() throws {
     if condition.withLock({ stopped || terminated }) { throw RPCError.stopped }
     guard AXIsProcessTrusted() else { throw RPCError.permission(.accessibility) }
   }
 
   /// Posts one event unless input was stopped meanwhile; the check and the post are atomic with `stop()`.
-  private func post(_ event: CGEvent, _ change: Change = .none) throws {
+  private func post(_ spec: EventSpec, _ change: Change = .none, route: InputRoute = .hid) throws {
+    let event = try spec.make(source: source)
     condition.lock()
     defer { condition.unlock() }
     if stopped || terminated { throw RPCError.stopped }
-    postLocked(event)
+    postLocked(event, route)
     switch change {
     case .none: break
     case .keyDown(let code):
@@ -166,48 +195,67 @@ public final class InputController: @unchecked Sendable {
       if !heldButtons.contains(button) { heldButtons.append(button) }
     case .buttonUp(let button):
       heldButtons.removeAll { $0 == button }
+    case .processDown(let hold):
+      if !heldInProcesses.contains(hold) { heldInProcesses.append(hold) }
+    case .processUp(let hold):
+      heldInProcesses.removeAll { $0 == hold }
     }
-    switch change {
-    case .keyDown(Self.escape), .keyUp(Self.escape): lastEscapeEventAt = DispatchTime.now().uptimeNanoseconds
+    // Only an Esc through the HID system shows in the key state the Esc watch polls.
+    switch (change, route) {
+    case (.keyDown(Self.escape), .hid), (.keyUp(Self.escape), .hid):
+      lastEscapeEventAt = DispatchTime.now().uptimeNanoseconds
     default: break
     }
   }
 
-  private func postLocked(_ event: CGEvent) {
+  private func postLocked(_ event: CGEvent, _ route: InputRoute) {
     event.setIntegerValueField(.eventSourceUserData, value: Self.eventTag)
-    event.post(tap: .cghidEventTap)
-    switch event.type {
-    case .mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged, .rightMouseDown, .rightMouseUp,
-      .rightMouseDragged, .otherMouseDown, .otherMouseUp, .otherMouseDragged, .scrollWheel:
-      lastPointer = event.location
-    default: break
+    switch route {
+    case .hid:
+      event.post(tap: .cghidEventTap)
+      switch event.type {
+      case .mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged, .rightMouseDown, .rightMouseUp,
+        .rightMouseDragged, .otherMouseDown, .otherMouseUp, .otherMouseDragged, .scrollWheel:
+        lastPointer = event.location
+      default: break
+      }
+    case .process(let pid):
+      // Straight to the app: the window server doesn't move the cursor or bring the app forward for it.
+      event.postToPid(pid)
     }
   }
 
-  private func keyEvent(_ code: CGKeyCode, down: Bool, flags: CGEventFlags) throws -> CGEvent {
-    guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else {
-      throw RPCError.internal("could not create a key event")
+  /// A release or a stop: best effort, an event that can't be made is skipped.
+  private func postLocked(_ spec: EventSpec, _ route: InputRoute) {
+    if let event = try? spec.make(source: source) { postLocked(event, route) }
+  }
+
+  /// What posting a step changes in the held state.
+  private func change(for step: EventStep, route: InputRoute) -> Change {
+    let down = step.release != nil
+    guard down || step.isRelease else { return .none }
+    switch route {
+    case .process(let pid):
+      return down ? .processDown(ProcessHold(pid: pid, release: step.release!)) : .processUp(ProcessHold(pid: pid, release: step.event))
+    case .hid:
+      switch step.event.kind {
+      case .key(let code, _): return down ? .keyDown(code) : .keyUp(code)
+      case .text: return down ? .keyDown(0) : .keyUp(0)
+      case .mouse(_, let button): return down ? .buttonDown(MouseButton(button)) : .buttonUp(MouseButton(button))
+      case .modifier, .scroll: return .none
+      }
     }
-    event.flags = flags
-    return event
   }
 
-  /// A modifier key going down or up: a flagsChanged event whose flags say which modifiers are now held.
-  private func modifierEvent(_ modifier: Modifier, flags: CGEventFlags) throws -> CGEvent {
-    let event = try keyEvent(modifier.keyCode, down: flags.contains(modifier.flag), flags: flags)
-    event.type = .flagsChanged
-    return event
-  }
-
-  private func mouseEvent(
-    _ type: CGEventType, at point: CGPoint, button: MouseButton, clickState: Int64 = 0, flags: CGEventFlags = []
-  ) throws -> CGEvent {
-    guard
-      let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: button.cgButton)
-    else { throw RPCError.internal("could not create a mouse event") }
-    if clickState > 0 { event.setIntegerValueField(.mouseEventClickState, value: clickState) }
-    event.flags = flags
-    return event
+  /// Posts a sequence of steps, pausing as each says; refused as a whole when stopped, cut short by a stop.
+  public func run(_ steps: [EventStep], route: InputRoute) throws {
+    try ready()
+    try sequence {
+      for step in steps {
+        try post(step.event, change(for: step, route: route), route: route)
+        if step.pause > 0 { pause(step.pause) }
+      }
+    }
   }
 
   private func pause(_ seconds: Double) {
@@ -230,7 +278,7 @@ public final class InputController: @unchecked Sendable {
     var flags = CGEventFlags()
     for modifier in modifiers {
       flags.insert(modifier.flag)
-      try post(modifierEvent(modifier, flags: flags), .modifierDown(modifier))
+      try post(.modifier(modifier, flags: flags), .modifierDown(modifier))
       pause(0.008)
     }
     return flags
@@ -242,7 +290,7 @@ public final class InputController: @unchecked Sendable {
     var flags = Modifier.flags(held)
     for modifier in modifiers.reversed() where held.contains(modifier) {
       flags.remove(modifier.flag)
-      try post(modifierEvent(modifier, flags: flags), .modifierUp(modifier))
+      try post(.modifier(modifier, flags: flags), .modifierUp(modifier))
       pause(0.008)
     }
   }
@@ -252,9 +300,9 @@ public final class InputController: @unchecked Sendable {
   /// Moves the pointer; with a button held this is a drag, so `mouse.down`, `mouse.move`, `mouse.up` drags too.
   private func postMove(_ point: CGPoint) throws {
     if let held = condition.withLock({ heldButtons.first }) {
-      try post(mouseEvent(held.dragType, at: point, button: held))
+      try post(.mouse(held.dragType, at: point, button: held))
     } else {
-      try post(mouseEvent(.mouseMoved, at: point, button: .left))
+      try post(.mouse(.mouseMoved, at: point, button: .left))
     }
   }
 
@@ -270,9 +318,9 @@ public final class InputController: @unchecked Sendable {
       pause(0.03)
       let flags = try pressModifiers(modifiers)
       for n in 1...count {
-        try post(mouseEvent(button.downType, at: point, button: button, clickState: Int64(n), flags: flags), .buttonDown(button))
+        try post(.mouse(button.downType, at: point, button: button, clickState: Int64(n), flags: flags), .buttonDown(button))
         pause(0.02)
-        try post(mouseEvent(button.upType, at: point, button: button, clickState: Int64(n), flags: flags), .buttonUp(button))
+        try post(.mouse(button.upType, at: point, button: button, clickState: Int64(n), flags: flags), .buttonUp(button))
         if n < count { pause(0.04) }
       }
       pause(0.01)
@@ -285,7 +333,7 @@ public final class InputController: @unchecked Sendable {
     try sequence {
       try postMove(point)
       pause(0.02)
-      try post(mouseEvent(button.downType, at: point, button: button, clickState: 1), .buttonDown(button))
+      try post(.mouse(button.downType, at: point, button: button, clickState: 1), .buttonDown(button))
     }
   }
 
@@ -294,7 +342,7 @@ public final class InputController: @unchecked Sendable {
     try sequence {
       try postMove(point)
       pause(0.02)
-      try post(mouseEvent(button.upType, at: point, button: button, clickState: 1), .buttonUp(button))
+      try post(.mouse(button.upType, at: point, button: button, clickState: 1), .buttonUp(button))
     }
   }
 
@@ -303,14 +351,14 @@ public final class InputController: @unchecked Sendable {
     try sequence {
       try postMove(start)
       pause(0.03)
-      try post(mouseEvent(button.downType, at: start, button: button, clickState: 1), .buttonDown(button))
+      try post(.mouse(button.downType, at: start, button: button, clickState: 1), .buttonDown(button))
       pause(0.05)
       for point in Self.dragPath(from: start, to: end) {
-        try post(mouseEvent(button.dragType, at: point, button: button))
+        try post(.mouse(button.dragType, at: point, button: button))
         pause(0.016)
       }
       pause(0.03)
-      try post(mouseEvent(button.upType, at: end, button: button, clickState: 1), .buttonUp(button))
+      try post(.mouse(button.upType, at: end, button: button, clickState: 1), .buttonUp(button))
     }
   }
 
@@ -335,12 +383,7 @@ public final class InputController: @unchecked Sendable {
       pause(0.02)
       let (wheel1, wheel2) = Self.wheelDeltas(dx: dx, dy: dy)
       guard wheel1 != 0 || wheel2 != 0 else { return }
-      guard
-        let event = CGEvent(
-          scrollWheelEvent2Source: source, units: .line, wheelCount: 2, wheel1: wheel1, wheel2: wheel2, wheel3: 0)
-      else { throw RPCError.internal("could not create a scroll event") }
-      event.location = point
-      try post(event)
+      try post(.scroll(at: point, wheel1: wheel1, wheel2: wheel2))
     }
   }
 
@@ -352,9 +395,9 @@ public final class InputController: @unchecked Sendable {
       let flags = try pressModifiers(stroke.modifiers).union(stroke.keyFlags)
       if let code = stroke.keyCode {
         for n in 0..<count {
-          try post(keyEvent(code, down: true, flags: flags), .keyDown(code))
+          try post(.key(code, down: true, flags: flags), .keyDown(code))
           pause(0.01)
-          try post(keyEvent(code, down: false, flags: flags), .keyUp(code))
+          try post(.key(code, down: false, flags: flags), .keyUp(code))
           if n < count - 1 { pause(0.02) }
         }
       }
@@ -364,38 +407,17 @@ public final class InputController: @unchecked Sendable {
   }
 
   public func type(_ text: String) throws {
-    try ready()
-    try sequence {
-      for piece in KeyText.pieces(text) {
-        switch piece {
-        case .newline:
-          let code = CGKeyCode(36)
-          try post(keyEvent(code, down: true, flags: []), .keyDown(code))
-          pause(0.005)
-          try post(keyEvent(code, down: false, flags: []), .keyUp(code))
-        case .text(let units):
-          try post(unicodeEvent(units, down: true), .keyDown(0))
-          try post(unicodeEvent(units, down: false), .keyUp(0))
-        }
-        pause(0.012)
-      }
-    }
-  }
-
-  private func unicodeEvent(_ units: [UniChar], down: Bool) throws -> CGEvent {
-    let event = try keyEvent(0, down: down, flags: [])
-    units.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress) }
-    return event
+    try run(TypingEvents.steps(text), route: .hid)
   }
 
   public func hold(_ stroke: KeyStroke, milliseconds: Int) throws {
     try ready()
     try sequence {
       let flags = try pressModifiers(stroke.modifiers).union(stroke.keyFlags)
-      if let code = stroke.keyCode { try post(keyEvent(code, down: true, flags: flags), .keyDown(code)) }
+      if let code = stroke.keyCode { try post(.key(code, down: true, flags: flags), .keyDown(code)) }
       try wait(milliseconds)
       if let code = stroke.keyCode, condition.withLock({ heldKeys.contains(code) }) {
-        try post(keyEvent(code, down: false, flags: flags), .keyUp(code))
+        try post(.key(code, down: false, flags: flags), .keyUp(code))
       }
       try releaseModifiers(stroke.modifiers)
     }

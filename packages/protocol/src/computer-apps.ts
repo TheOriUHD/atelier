@@ -1,6 +1,6 @@
 /**
- * Which kind of app an app is, for computer use: browsers start view-only (web pages can carry instructions aimed at the
- * model), terminals and IDEs click-only (typing there would run commands outside the permission rules), system apps
+ * Which kind of app an app is, for computer use: terminals and IDEs start click-only (typing there would run commands
+ * outside the permission rules), browsers and everything else with full use, system apps
  * can never be allowed (security prompts, System Settings, the keychain, Atelier itself), and password managers start
  * on the person's denied list. By bundle id on macOS; on Windows by the lowercase exe name (`chrome.exe`), or a
  * packaged app's package family name (`MSTeams_8wekyb3d8bbwe`), as the Windows helper names apps.
@@ -160,7 +160,6 @@ export function appCategory(id: string): AppCategory {
 /** The tier an app gets when allowed, before the person changes it: null where it can never be allowed. */
 export function defaultTier(category: AppCategory): AppTier | null {
   if (category === 'system') return null;
-  if (category === 'browser') return 'view';
   if (category === 'terminal' || category === 'ide') return 'click';
   return 'full';
 }

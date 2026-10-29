@@ -73,6 +73,13 @@ public enum ComputerMethod: String, Sendable, CaseIterable {
   case keyType = "key.type"
   case keyHold = "key.hold"
   case inputReleaseAll = "input.releaseAll"
+  case windowCapture = "window.capture"
+  case bgInspect = "bg.inspect"
+  case bgFocused = "bg.focused"
+  case bgClick = "bg.click"
+  case bgScroll = "bg.scroll"
+  case bgKey = "bg.key"
+  case bgType = "bg.type"
   case controlBegin = "control.begin"
   case controlEnd = "control.end"
   case controlResume = "control.resume"
@@ -402,6 +409,100 @@ public struct KeyHoldParams: Codable, Sendable {
   public var ms: Double
 }
 
+// ---------------------------------------------------------------- background (one app's window, no mouse or keyboard)
+
+/// Background mode works in one app's window without the person's mouse and keyboard: the cursor doesn't move, the app
+/// isn't brought forward, the person keeps working.
+public struct WindowCaptureParams: Codable, Sendable {
+  /// The app (its bundle id). Its frontmost window that isn't minimized; a minimized one is restored without
+  /// activating it.
+  public var app: String
+  public var maxWidth: Double
+  public var maxHeight: Double
+  public var format: ImageFormat
+  public var quality: Double?
+}
+
+/// The window as it is, even when other windows cover it. `rect`: the window in global points.
+public struct WindowCaptureResult: Codable, Sendable {
+  /// Base64.
+  public var data: String
+  public var mime: String
+  public var width: Int
+  public var height: Int
+  public var rect: ScreenRect
+  /// The window number, for the `bg.*` calls that follow.
+  public var window: String
+  public var title: String?
+
+  public init(data: String, mime: String, width: Int, height: Int, rect: ScreenRect, window: String, title: String?) {
+    self.data = data
+    self.mime = mime
+    self.width = width
+    self.height = height
+    self.rect = rect
+    self.window = window
+    self.title = title
+  }
+
+  enum CodingKeys: String, CodingKey { case data, mime, width, height, rect, window, title }
+
+  // `title` is `string | null`: written as null, not left out.
+  public func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(data, forKey: .data)
+    try c.encode(mime, forKey: .mime)
+    try c.encode(width, forKey: .width)
+    try c.encode(height, forKey: .height)
+    try c.encode(rect, forKey: .rect)
+    try c.encode(window, forKey: .window)
+    try c.encode(title, forKey: .title)
+  }
+}
+
+/// A window from `window.capture`.
+public struct BgWindowParams: Codable, Sendable {
+  public var window: String
+}
+
+/// A point in global points inside `window`.
+public struct BgPointParams: Codable, Sendable {
+  public var window: String
+  public var x: Double
+  public var y: Double
+}
+
+public struct BgClickParams: Codable, Sendable {
+  public var window: String
+  public var x: Double
+  public var y: Double
+  public var button: MouseButton
+  /// 1, 2 or 3 clicks.
+  public var count: Int
+  /// Held during the click (in the events' flags only): `cmd`, `shift`, `alt`, `ctrl`.
+  public var modifiers: [String]
+}
+
+/// Lines to scroll: positive `dy` scrolls down, positive `dx` right.
+public struct BgScrollParams: Codable, Sendable {
+  public var window: String
+  public var x: Double
+  public var y: Double
+  public var dx: Double
+  public var dy: Double
+}
+
+public struct BgKeyParams: Codable, Sendable {
+  public var window: String
+  public var keys: [String]
+  public var `repeat`: Int?
+}
+
+public struct BgTypeParams: Codable, Sendable {
+  public var window: String
+  public var text: String
+}
+
 // ---------------------------------------------------------------- notifications
 
 public enum EscPhase: String, Codable, Sendable {
@@ -410,15 +511,18 @@ public enum EscPhase: String, Codable, Sendable {
   case stopped
 }
 
-public enum UserInputKind: String, Codable, Sendable {
+/// What the person used themselves: `move` the pointer only (more than 24 points from where the helper put it),
+/// `mouse` a button, `key` a key other than a modifier.
+public enum UserInputKind: String, Codable, Sendable, CaseIterable {
+  case move
   case mouse
   case key
 }
 
 /// Notifications from the helper while it has control (`control.begin` … `control.end`). `control.esc`: the person
 /// pressed Esc (`down`), let go early (`up`), or held it a second (`stopped`: input is refused until
-/// `control.resume`). `control.userInput`: the person used the mouse or keyboard themselves. `control.secureInput`: a
-/// password field anywhere turned secure input on (the Esc watch can't see keys then).
+/// `control.resume`). `control.userInput`: the person used the mouse or keyboard themselves (`UserInputKind`).
+/// `control.secureInput`: a password field anywhere turned secure input on (the Esc watch can't see keys then).
 public enum ComputerNotification: Sendable, Equatable, Encodable {
   case esc(phase: EscPhase, heldMs: Int)
   case userInput(kind: UserInputKind)

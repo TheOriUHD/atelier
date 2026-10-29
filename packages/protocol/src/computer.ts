@@ -252,15 +252,67 @@ export interface KeyHoldParams {
   ms: number;
 }
 
+// ---------------------------------------------------------------- background (one app's window, no mouse or keyboard)
+
+/**
+ * Background mode works in one app's window without the person's mouse and keyboard: the cursor doesn't move, the app
+ * isn't brought forward, the person keeps working. A helper says it can in `initialize.supports.background`.
+ */
+export interface WindowCaptureParams {
+  /** The app (its id, as `apps.list` names it). Its frontmost window that isn't minimized; a minimized one is restored without activating it. */
+  app: string;
+  maxWidth: number;
+  maxHeight: number;
+  format: 'jpeg' | 'png';
+  quality?: number;
+}
+
+/** The window as it is, even when other windows cover it. `rect`: the window in global coordinates (points on macOS, pixels on Windows). */
+export interface WindowCaptureResult extends CaptureResult {
+  /** The window, for the `bg.*` calls that follow (macOS: its window number; Windows: its handle). */
+  window: string;
+  title: string | null;
+}
+
+/** A point in global coordinates inside `window` (from `window.capture`). */
+export interface BgPointParams {
+  window: string;
+  x: number;
+  y: number;
+}
+
+export interface BgClickParams extends BgPointParams {
+  button: MouseButton;
+  count: number;
+  modifiers: string[];
+}
+
+export interface BgScrollParams extends BgPointParams {
+  dx: number;
+  dy: number;
+}
+
+export interface BgKeyParams {
+  window: string;
+  keys: string[];
+  repeat?: number;
+}
+
+export interface BgTypeParams {
+  window: string;
+  text: string;
+}
+
 /**
  * Notifications from the helper while it has control (`control.begin` … `control.end`). `control.esc`: the person
  * pressed Esc (`down`), let go early (`up`), or held it a second (`stopped`: input is refused until `control.resume`).
- * `control.userInput`: the person used the mouse or keyboard themselves. `control.secureInput`: a password field
+ * `control.userInput`: the person used the mouse or keyboard themselves (`move`: the pointer only, more than 24 points or
+ * pixels from where the helper put it; `mouse`: a button; `key`: a key other than a modifier). `control.secureInput`: a password field
  * anywhere turned secure input on (the Esc watch can't see keys then).
  */
 export type ComputerNotification =
   | { method: 'control.esc'; params: { phase: 'down' | 'up' | 'stopped'; heldMs: number } }
-  | { method: 'control.userInput'; params: { kind: 'mouse' | 'key' } }
+  | { method: 'control.userInput'; params: { kind: 'move' | 'mouse' | 'key' } }
   | { method: 'control.secureInput'; params: { on: boolean } };
 
 /** Every method of computer protocol v1, with its params and result. */
@@ -292,6 +344,18 @@ export interface ComputerMethods {
   'key.hold': { params: KeyHoldParams; result: Record<string, never> };
   /** Releases every key and button this helper may have left down. */
   'input.releaseAll': { params: Record<string, never>; result: Record<string, never> };
+  /** Background: one app's window as it is, covered or not. */
+  'window.capture': { params: WindowCaptureParams; result: WindowCaptureResult };
+  /** Background: what is at a point of that window (not whatever covers it). */
+  'bg.inspect': { params: BgPointParams; result: InspectPointResult };
+  /** Background: the element of that window's app that takes typing (its focused element, whether or not the app is active). */
+  'bg.focused': { params: { window: string }; result: InspectPointResult };
+  /** Background: a click delivered to that window, the cursor unmoved and the app not brought forward. -32032 when the app won't take it. */
+  'bg.click': { params: BgClickParams; result: Record<string, never> };
+  'bg.scroll': { params: BgScrollParams; result: Record<string, never> };
+  /** Background: keys delivered to that window's focused element. Shortcuts with modifiers may not reach every app (-32032). */
+  'bg.key': { params: BgKeyParams; result: Record<string, never> };
+  'bg.type': { params: BgTypeParams; result: Record<string, never> };
   /** Starts watching the Esc hold and the person's own input; `control.end` stops it; `control.resume` lifts a stop. */
   'control.begin': { params: Record<string, never>; result: Record<string, never> };
   'control.end': { params: Record<string, never>; result: Record<string, never> };
@@ -332,6 +396,8 @@ export const ComputerActionItem = z.object({
   /** Where a drag starts (`coordinate` is where it ends). */
   start: Coordinate.optional(),
   text: z.string().max(10_000).optional(),
+  /** `type`: select what the focused field holds first, so the text replaces it. */
+  replace: z.boolean().optional(),
   direction: z.enum(['up', 'down', 'left', 'right']).optional(),
   /** Scroll lines, or how many times a key is pressed. */
   amount: z.number().int().min(1).max(200).optional(),
@@ -391,6 +457,8 @@ export interface ControllerMethods {
       /** The computer's system, for the shortcuts the agent uses (cmd on macOS, ctrl on Windows). */
       platform: 'darwin' | 'win32' | 'linux';
       mode: ComputerMode;
+      /** Background mode works here: one app's window at a time, without the person's mouse and keyboard. */
+      background: boolean;
       denied: string[];
       control: boolean;
       displays: { id: string; name: string; primary: boolean }[];
@@ -398,8 +466,11 @@ export interface ControllerMethods {
   };
   'apps.list': { params: { query?: string }; result: { apps: { app: ComputerApp; category: AppCategory; running: boolean; granted: AppTier | null }[] } };
   'apps.open': { params: { id: string }; result: Record<string, never> };
-  /** The display (only the allowed apps, never Atelier); with `region`, part of the latest screenshot at full detail. */
-  screenshot: { params: { display?: string; size: ScreenshotSize }; result: ComputerScreenshot & { display: string; note?: string } };
+  /**
+   * Full control: the display (the screen as the person sees it, but for their denied apps). Background: `app`'s window
+   * as it is (the app it works in from then on), or the one it works in already.
+   */
+  screenshot: { params: { display?: string; app?: string; size: ScreenshotSize }; result: ComputerScreenshot & { display: string; note?: string } };
   /** Takes the mouse and keyboard, once the person agreed on this computer (or always lets it). */
   'control.request': { params: Record<string, never>; result: { granted: boolean; reason?: string } };
   'control.batch': { params: { actions: ComputerActionItem[]; size: ScreenshotSize }; result: { results: ComputerActionResult[] } };

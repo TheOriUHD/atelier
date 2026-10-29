@@ -19,7 +19,7 @@ async function openFolder(page: Page, folder: string): Promise<void> {
   await expect(page.getByRole('button', { name: basename(folder) })).toBeVisible();
 }
 
-test('desktop: computer use is turned on in Settings, the person allows apps and full control, and holding Esc takes it back', async () => {
+test('desktop: computer use is turned on in Settings, the person allows apps, and Background works in their window without taking the mouse', async () => {
   test.setTimeout(150_000);
   // The full tier: the fake model counts as compact, which leaves out the app list tools.
   const configDir = await tempConfigDir({ models: { overrides: { 'fake/fake-chat:8b': { promptTier: 'full' } } } });
@@ -58,62 +58,45 @@ test('desktop: computer use is turned on in Settings, the person allows apps and
     await box.fill(
       [
         call('ComputerAccess', { apps: ['TextEdit', 'Safari', 'Terminal'], reason: 'Write the notes into a document.' }),
-        call('Screenshot', {}),
-        call('ComputerAction', { actions: [{ action: 'left_click', coordinate: [100, 100], summary: 'Clicks into the document' }, { action: 'type', text: 'hello' }] }),
+        call('Screenshot', { app: 'TextEdit' }),
+        call('ComputerAction', { actions: [{ action: 'left_click', coordinate: [100, 100], summary: 'Clicks into the document' }, { action: 'type', text: 'hello', replace: true }] }),
       ].join('\n'),
     );
     await box.press('Enter');
 
-    // Terminal is denied: it isn't asked about. Safari, a browser, is offered to look at only.
+    // Terminal is denied: it isn't asked about. Browsers start with full use like other apps; the card says how
+    // Background works.
     const access = page.getByRole('region', { name: 'Let Atelier use 2 apps?' });
     await expect(access).toContainText('Write the notes into a document.');
+    await expect(access).toContainText('in the background, one at a time, without your mouse and keyboard');
     await expect(access.getByRole('list', { name: 'Apps' })).not.toContainText('Terminal');
-    await expect(access.getByRole('combobox', { name: 'What Atelier may do in Safari' })).toContainText('See only');
+    await expect(access.getByRole('combobox', { name: 'What Atelier may do in Safari' })).toContainText('Full use');
     await expect(access.getByRole('combobox', { name: 'What Atelier may do in TextEdit' })).toContainText('Full use');
     await access.getByRole('button', { name: 'Allow for this session' }).click();
 
-    // The screenshot shows the allowed apps only. Ask mode asks for clicking and typing like any action, each step
-    // spelled out; then, in Background, taking the mouse and keyboard asks too.
+    // Ask mode asks for clicking and typing like any action, each step spelled out. Background never takes over: the
+    // click and the typing go into TextEdit's window, the mouse and keyboard stay the person's.
     const prompt = page.getByRole('region', { name: 'Allow Atelier to use your computer?' });
     await expect(prompt.getByRole('list', { name: 'Steps' })).toContainText('Clicks into the document');
-    await expect(prompt.getByRole('list', { name: 'Steps' })).toContainText('Type “hello”');
+    await expect(prompt.getByRole('list', { name: 'Steps' })).toContainText('Type “hello”, replacing what the field holds');
     await prompt.getByRole('button', { name: 'Allow once' }).click();
-    const control = page.getByRole('region', { name: 'Let Atelier take over your mouse and keyboard?' });
-    await expect(control).toContainText('Clicks into the document');
-    await expect(control).toContainText('TextEdit, Safari');
-    await expect(page.getByRole('button', { name: 'Screenshot image 1 of 1' })).toBeVisible();
-    const shot = (await helperLog(log)).find((e) => e.method === 'capture.display');
-    expect(shot?.apps).toEqual(['com.apple.TextEdit', 'com.apple.Safari']);
-    expect((await helperLog(log)).some((e) => e.method === 'control.begin')).toBe(false);
-    await control.getByRole('button', { name: 'Allow', exact: true }).click();
     await expect(page.getByText(/^Tool result: 1\. Clicks into the document: done/)).toBeVisible();
-    await expect.poll(async () => (await helperLog(log)).map((e) => e.method)).toEqual(expect.arrayContaining(['control.begin', 'mouse.click', 'key.type', 'control.end']));
-    const typed = (await helperLog(log)).find((e) => e.method === 'key.type');
-    expect(typed?.text).toBe('hello');
-    // The turn is over: the mouse and keyboard went back, and Mail (running, not allowed) was hidden meanwhile and shown again.
-    const methods = (await helperLog(log)).map((e) => e.method);
-    expect(methods.lastIndexOf('control.end')).toBeGreaterThan(methods.lastIndexOf('key.type'));
+    await expect(page.getByRole('region', { name: 'Let Atelier take over your mouse and keyboard?' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Screenshot image 1 of 1' })).toBeVisible();
     const entries = await helperLog(log);
-    expect(entries.find((e) => e.method === 'apps.hide')?.ids).toEqual(['com.apple.mail']);
-    expect(entries.find((e) => e.method === 'apps.unhide')?.ids).toEqual(['com.apple.mail']);
-
-    // Holding Esc stops it while it works: the run ends and nothing more reaches the computer.
-    await box.fill(call('ComputerAction', { actions: [{ action: 'wait', duration: 8 }, { action: 'left_click', coordinate: [200, 200] }] }));
-    await sendWhenIdle(page);
-    await prompt.getByRole('button', { name: 'Allow once' }).click();
-    await expect.poll(async () => (await helperLog(log)).filter((e) => e.method === 'control.begin').length).toBe(2);
-    await writeFile(`${log}.esc`, '');
-    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, { timeout: 15_000 });
-    const after = await helperLog(log);
-    expect(after.filter((e) => e.method === 'control.end').length).toBe(2);
-    expect(after.filter((e) => e.method === 'mouse.click').length).toBe(1);
+    expect(entries.find((e) => e.method === 'window.capture')).toMatchObject({ app: 'com.apple.TextEdit' });
+    // The click lands in the window: image pixels map onto its rect (800×600 at 100,50, shown at full size).
+    expect(entries.find((e) => e.method === 'bg.click')).toMatchObject({ window: 'w:com.apple.TextEdit', x: 200, y: 150, button: 'left', count: 1 });
+    expect(entries.find((e) => e.method === 'bg.key')).toMatchObject({ keys: process.platform === 'darwin' ? ['cmd', 'a'] : ['ctrl', 'a'] });
+    expect(entries.find((e) => e.method === 'bg.type')).toMatchObject({ text: 'hello' });
+    for (const method of ['control.begin', 'mouse.click', 'key.type', 'apps.hide']) expect(entries.map((e) => e.method), method).not.toContain(method);
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });
   }
 });
 
-test('desktop: in Full control the assistant takes the computer as it is, without cards, hiding nothing', async () => {
+test('desktop: in Full control the assistant takes the computer as it is, without cards, hiding nothing, until Esc is held', async () => {
   test.setTimeout(120_000);
   const configDir = await tempConfigDir({ models: { overrides: { 'fake/fake-chat:8b': { promptTier: 'full' } } } });
   const repo = await tempRepo();
@@ -164,6 +147,19 @@ test('desktop: in Full control the assistant takes the computer as it is, withou
     expect(entries.find((e) => e.method === 'key.type')).toMatchObject({ text: 'amazon.de' });
     // Done: the turn ends, the computer goes back and Atelier comes to the front.
     await expect.poll(async () => (await helperLog(log)).map((e) => e.method)).toEqual(expect.arrayContaining(['control.end', 'apps.activate']));
+
+    // Holding Esc stops it while it works: the run ends and nothing more reaches the computer.
+    await box.fill(call('ComputerAction', { actions: [{ action: 'wait', duration: 8 }, { action: 'left_click', coordinate: [200, 200] }] }));
+    await sendWhenIdle(page);
+    await prompt.getByRole('button', { name: 'Allow once' }).click();
+    await expect.poll(async () => (await helperLog(log)).filter((e) => e.method === 'control.begin').length).toBe(2);
+    await writeFile(`${log}.esc`, '');
+    // The reply goes on without the computer: the agent hears it was taken back, and the turn ends on its own.
+    await expect(page.getByText(/^Tool result: [\s\S]*The person took the computer back \(held Esc\)/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, { timeout: 15_000 });
+    const after = await helperLog(log);
+    expect(after.filter((e) => e.method === 'control.end').length).toBe(2);
+    expect(after.filter((e) => e.method === 'mouse.click').length).toBe(1);
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });

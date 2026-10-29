@@ -12,6 +12,7 @@ import (
 const (
 	Edit      = 50004
 	Hyperlink = 50005
+	Document  = 50030
 )
 
 var controlTypes = map[int]string{

@@ -13,7 +13,7 @@ export class HelperError extends Error {
   constructor(
     message: string,
     readonly code: number,
-    readonly data?: { permission?: 'accessibility' | 'screenRecording' },
+    readonly data?: { permission?: 'accessibility' | 'screenRecording'; reason?: string },
   ) {
     super(message);
   }

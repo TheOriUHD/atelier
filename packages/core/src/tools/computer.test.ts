@@ -44,6 +44,7 @@ const state = (apps: AppGrant[], control = false, mode: 'background' | 'full' = 
   apps,
   platform: 'darwin',
   mode,
+  background: false,
   denied: ['1Password'],
   control,
   displays: [{ id: '1', name: 'Main', primary: true }],
@@ -138,6 +139,44 @@ describe('ComputerAction', () => {
     const out = await tool('ComputerAction').run({ actions: [{ action: 'fly' }] }, ctx);
     expect(out.isError).toBe(true);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('in the background', () => {
+  it('acts in the window of its latest screenshot without asking to take over', async () => {
+    const { tool, asked, calls } = setup([], {
+      'access.state': () => ({ ...state([textEdit]), background: true }),
+      screenshot: () => ({ data: 'AAAA', mime: 'image/jpeg', width: 400, height: 300, display: 'TextEdit’s window', note: 'Only this window.' }),
+      'control.batch': () => ({ results: [{ action: 'left_click', ok: true }] }),
+    });
+    expect(text(await tool('Screenshot').run({ app: 'TextEdit' }, ctx))).toBe('Screenshot of TextEdit’s window, 400×300 pixels. Only this window.');
+    expect(calls.find((c) => c.method === 'screenshot')?.params).toMatchObject({ app: 'TextEdit' });
+    expect(text(await tool('ComputerAction').run({ actions: [{ action: 'left_click', coordinate: [5, 5] }] }, ctx))).toBe('1. left_click: done');
+    expect(calls.some((c) => c.method === 'control.request')).toBe(false);
+    expect(asked).toEqual([]);
+  });
+
+  it('tells it how Background works, and how to get more in an app', async () => {
+    const { tool } = setup([{ behavior: 'allow' }], {
+      'access.prepare': () => ({ apps: [prepared('Safari', { granted: 'view', tier: 'full', maxTier: 'full', category: 'browser' })], unknown: [] }),
+      'access.state': () => ({ ...state([{ app: { id: 'com.example.Safari', name: 'Safari' }, tier: 'view' }]), background: true }),
+    });
+    // Safari has less than it could get: the card comes up again for it, offering full use.
+    const asked: PermissionRequest[] = [];
+    const again = createComputerTools({
+      approve: async (_s, request) => (asked.push(request), { behavior: 'deny' }),
+      call: (async (_s: string, method: string) =>
+        method === 'access.prepare'
+          ? { apps: [prepared('Safari', { granted: 'view', tier: 'full', maxTier: 'full' })], unknown: [] }
+          : state([])) as never,
+      blobs: { put: async () => ({ sha256: 'b' }) as never },
+      size: async () => ({ maxWidth: 1280, maxHeight: 800 }),
+    }).find((t) => t.name === 'ComputerAccess') as Tool<Record<string, unknown>>;
+    await again.run({ apps: ['Safari'] }, ctx);
+    expect((asked[0]?.input as { apps: PreparedApp[] }).apps[0]).toMatchObject({ app: { name: 'Safari' }, tier: 'full', granted: 'view' });
+    const out = text(await tool('ComputerAccess').run({ apps: ['Safari'] }, ctx));
+    expect(out).toContain('You work in the background, in one app at a time');
+    expect(out).toContain('If you need more in an app than you were given, ask with ComputerAccess again');
   });
 });
 

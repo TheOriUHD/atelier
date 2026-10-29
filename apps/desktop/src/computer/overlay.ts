@@ -48,8 +48,22 @@ function esc(phase) {
 /** The overlay, and which windows are its (Atelier's own windows are the others). */
 export type ScreenOverlay = Overlay & { owns(win: BrowserWindow): boolean };
 
+/** Background: a small note below the menu bar that Atelier works in an app; no glow, no clicks taken. */
+const notePage = (app: string) => `<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-user-select:none;cursor:default}
+.pill{position:fixed;inset:6px;display:flex;align-items:center;gap:10px;padding:0 14px 0 12px;border-radius:12px;background:rgba(28,28,27,.86);color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.24);-webkit-backdrop-filter:blur(14px)}
+.dot{width:8px;height:8px;flex:none;border-radius:50%;background:#D97757;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+@media (prefers-reduced-motion: reduce){.dot{animation:none}}
+.pill b{display:block;font-size:13px;line-height:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill span{display:block;font-size:11px;line-height:15px;opacity:.7}
+</style></head><body><div class="pill" role="status"><div class="dot"></div><div style="min-width:0"><b id="title"></b><span>In the background · Stop it in Atelier</span></div></div>
+<script>function set(app){document.getElementById('title').textContent='Atelier is working in '+app}set(${JSON.stringify(app)})</script></body></html>`;
+
 export function createOverlay(): ScreenOverlay {
   let windows: BrowserWindow[] = [];
+  let note: BrowserWindow | null = null;
   /** After a stop, "Stopped" stays a moment so the person sees it took. */
   let closing: ReturnType<typeof setTimeout> | null = null;
   const close = () => {
@@ -59,7 +73,46 @@ export function createOverlay(): ScreenOverlay {
     windows = [];
   };
   return {
-    owns: (win) => windows.includes(win),
+    owns: (win) => windows.includes(win) || win === note,
+    working(app) {
+      if (!app) {
+        if (note && !note.isDestroyed()) note.destroy();
+        note = null;
+        return;
+      }
+      if (note && !note.isDestroyed()) {
+        void note.webContents.executeJavaScript(`set(${JSON.stringify(app)})`).catch(() => undefined);
+        return;
+      }
+      const display = screen.getPrimaryDisplay();
+      const width = 320;
+      const height = 56;
+      const top = Math.max(0, display.workArea.y - display.bounds.y) + 4;
+      note = new BrowserWindow({
+        x: Math.round(display.bounds.x + (display.bounds.width - width) / 2),
+        y: display.bounds.y + top,
+        width,
+        height,
+        transparent: true,
+        frame: false,
+        focusable: false,
+        skipTaskbar: true,
+        hasShadow: false,
+        resizable: false,
+        movable: false,
+        show: false,
+        alwaysOnTop: true,
+        ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+      });
+      const win = note;
+      win.setIgnoreMouseEvents(true);
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+      win.setContentProtection(true);
+      win.once('ready-to-show', () => win.showInactive());
+      void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(notePage(app))}`);
+    },
     show() {
       if (closing) close();
       if (windows.length) return;

@@ -77,19 +77,20 @@ public struct EscTracker: Sendable {
   private static func ms(_ value: Double) -> Int { max(0, Int(value.rounded())) }
 }
 
-/// Throttles `control.userInput`, and decides whether a pointer move was the person's.
+/// Throttles `control.userInput`, each kind on its own (a stream of moves never hides a button or a key), and decides
+/// whether a pointer move was the person's.
 public struct UserInputFilter: Sendable {
   public static let intervalMs: Double = 500
   public static let moveTolerance: Double = 24
 
-  private var lastSentAt: Double?
+  private var lastSentAt: [UserInputKind: Double] = [:]
 
   public init() {}
 
-  /// True when a notification may go out now (at most one per 500 ms).
-  public mutating func admit(at now: Double) -> Bool {
-    if let last = lastSentAt, now - last < Self.intervalMs { return false }
-    lastSentAt = now
+  /// True when a notification of this kind may go out now (at most one per kind per 500 ms).
+  public mutating func admit(_ kind: UserInputKind, at now: Double) -> Bool {
+    if let last = lastSentAt[kind], now - last < Self.intervalMs { return false }
+    lastSentAt[kind] = now
     return true
   }
 
@@ -284,12 +285,12 @@ public final class ControlMonitor: @unchecked Sendable {
     case .escUp:
       emit(esc.keyUp(at: now))
     case .keyDown:
-      if userInput.admit(at: now) { notify(.userInput(kind: .key)) }
+      if userInput.admit(.key, at: now) { notify(.userInput(kind: .key)) }
     case .mouseDown:
-      if userInput.admit(at: now) { notify(.userInput(kind: .mouse)) }
+      if userInput.admit(.mouse, at: now) { notify(.userInput(kind: .mouse)) }
     case .moved(let point):
-      if UserInputFilter.isPersonMove(point, helperAt: input.lastPointerPosition), userInput.admit(at: now) {
-        notify(.userInput(kind: .mouse))
+      if UserInputFilter.isPersonMove(point, helperAt: input.lastPointerPosition), userInput.admit(.move, at: now) {
+        notify(.userInput(kind: .move))
       }
     }
   }

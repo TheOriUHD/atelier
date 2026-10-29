@@ -1019,8 +1019,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     recordUsage,
   });
   // Held Esc on the computer: the session's response stops, as with its Stop button.
+  // Holding Esc doesn't stop the run: the agent hears that the computer is the person's again (its actions say so) and
+  // finishes another way, or says why it can't. The Stop button is what stops a run.
   platform.computer?.onEvent((sessionId, event) => {
-    if (event.type === 'stopped') void chat.stop(sessionId).catch((e: unknown) => platform.logger.error('stopping after Esc failed', e));
+    if (event.type === 'stopped') platform.logger.info('computer use taken back with Esc', { sessionId });
   });
 
   await sessions.markRunningAsInterrupted();

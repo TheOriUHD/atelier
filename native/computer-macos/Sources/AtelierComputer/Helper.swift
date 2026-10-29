@@ -83,7 +83,7 @@ public final class Helper: @unchecked Sendable {
       }
       return ComputerInitializeResult(
         protocolVersion: ComputerProtocol.version, helperVersion: ComputerProtocol.helperVersion,
-        platform: ComputerProtocol.platform, supports: .init(background: false, fullControl: true, filter: true))
+        platform: ComputerProtocol.platform, supports: .init(background: true, fullControl: true, filter: true))
     }
 
     inline(.permissionsStatus) { (_: NoParams) in Permissions.status() }
@@ -172,6 +172,34 @@ public final class Helper: @unchecked Sendable {
       return Empty()
     }
 
+    // Background: one app's window, the cursor unmoved and the app left where it is.
+    async(.windowCapture) { (params: WindowCaptureParams) in try await Capture.window(params) }
+    async(.bgInspect) { (params: BgPointParams) in
+      let point = try Self.point(params.x, params.y)
+      let window = try Windows.target(params.window, onScreen: true)
+      try WindowChoice.check(point, in: window)
+      return try await Inspect.point(point, in: window)
+    }
+    async(.bgFocused) { (params: BgWindowParams) in
+      try await Inspect.focused(in: Windows.target(params.window, onScreen: false))
+    }
+    queued(.bgClick) { (params: BgClickParams) in
+      try Background.click(params, input: input)
+      return Empty()
+    }
+    queued(.bgScroll) { (params: BgScrollParams) in
+      try Background.scroll(params, input: input)
+      return Empty()
+    }
+    queued(.bgKey) { (params: BgKeyParams) in
+      try Background.key(params, layout: Self.currentLayout, input: input)
+      return Empty()
+    }
+    queued(.bgType) { (params: BgTypeParams) in
+      try Background.type(params, input: input)
+      return Empty()
+    }
+
     inline(.controlBegin) { (_: NoParams) in
       try control.begin()
       return Empty()
@@ -186,7 +214,8 @@ public final class Helper: @unchecked Sendable {
     }
   }
 
-  private static func point(_ x: Double, _ y: Double) throws -> CGPoint {
+  /// A point as the protocol sends it: finite, and within any display arrangement.
+  static func point(_ x: Double, _ y: Double) throws -> CGPoint {
     guard x.isFinite, y.isFinite, abs(x) < 1_000_000, abs(y) < 1_000_000 else {
       throw RPCError.invalidParams("x and y must be screen coordinates")
     }

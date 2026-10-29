@@ -41,7 +41,7 @@ prompts or replies.
 | [`work.full.no-web`](/prompts/assembled/work.full.no-web.txt) | Cowork with web access and skills switched off. | 33 KB |
 | [`work.compact`](/prompts/assembled/work.compact.txt) | Cowork, compact tier. | 21 KB |
 | [`work.full.memory`](/prompts/assembled/work.full.memory.txt) | Cowork for a person with memory. | 50 KB |
-| [`work.full.computer`](/prompts/assembled/work.full.computer.txt) | Cowork in the desktop app with computer use on: the computer use tools. | 48 KB |
+| [`work.full.computer`](/prompts/assembled/work.full.computer.txt) | Cowork in the desktop app with computer use on: the computer use tools. | 49 KB |
 | [`code.compact.computer`](/prompts/assembled/code.compact.computer.txt) | Code, compact tier, with computer use on. | 26 KB |
 | [`code.full`](/prompts/assembled/code.full.txt) | Code, full tier: the baseline. | 51 KB |
 | [`code.full.plan`](/prompts/assembled/code.full.plan.txt) | Code in plan mode. | 51 KB |

@@ -33,6 +33,8 @@ type System struct {
 
 	pathsMu sync.Mutex
 	paths   map[string]string // lowercase id → the exe path of an app seen running
+
+	bg bgState // Background mode's memory (background.go)
 }
 
 func NewSystem() *System {

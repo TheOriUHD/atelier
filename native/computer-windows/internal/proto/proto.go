@@ -74,6 +74,13 @@ const (
 	MKeyType            = "key.type"
 	MKeyHold            = "key.hold"
 	MInputReleaseAll    = "input.releaseAll"
+	MWindowCapture      = "window.capture"
+	MBgInspect          = "bg.inspect"
+	MBgFocused          = "bg.focused"
+	MBgClick            = "bg.click"
+	MBgScroll           = "bg.scroll"
+	MBgKey              = "bg.key"
+	MBgType             = "bg.type"
 	MControlBegin       = "control.begin"
 	MControlEnd         = "control.end"
 	MControlResume      = "control.resume"
@@ -85,6 +92,7 @@ var Methods = []string{
 	MInitialize, MPermissionsStatus, MPermissionsRequest, MDisplaysList, MAppsList, MAppsFrontmost, MAppsOpen,
 	MAppsHide, MAppsUnhide, MAppsActivate, MCaptureDisplay, MInspectPoint, MInspectFocused, MMouseMove, MMouseClick,
 	MMouseDown, MMouseUp, MMouseDrag, MMouseScroll, MCursorPosition, MKeyPress, MKeyType, MKeyHold, MInputReleaseAll,
+	MWindowCapture, MBgInspect, MBgFocused, MBgClick, MBgScroll, MBgKey, MBgType,
 	MControlBegin, MControlEnd, MControlResume, MShutdown,
 }
 
@@ -198,7 +206,16 @@ type CaptureResult struct {
 	Rect   Rect   `json:"rect"`
 }
 
-// InspectResult answers inspect.point and inspect.focused; every field is always written.
+// WindowCaptureResult answers window.capture: the window as it is, covered or not. Rect is its visible frame (without
+// the drop shadow) in physical pixels of the virtual screen; Window is its handle in decimal, for the bg.* calls; Title
+// is null when it has none.
+type WindowCaptureResult struct {
+	CaptureResult
+	Window string  `json:"window"`
+	Title  *string `json:"title"`
+}
+
+// InspectResult answers inspect.point, inspect.focused, bg.inspect and bg.focused; every field is always written.
 type InspectResult struct {
 	App    *App    `json:"app"`
 	Role   *string `json:"role"`
@@ -214,9 +231,21 @@ type EscParams struct {
 	HeldMs int    `json:"heldMs"`
 }
 
+// UserInputParams is control.userInput's: what the person used themselves.
 type UserInputParams struct {
 	Kind string `json:"kind"`
 }
+
+// control.userInput's kinds: `move`, the pointer only (more than 24 pixels from where the helper put it); `mouse`, a
+// button; `key`, a key other than a modifier.
+const (
+	UserInputMove  = "move"
+	UserInputMouse = "mouse"
+	UserInputKey   = "key"
+)
+
+// UserInputKinds are every kind of control.userInput.
+var UserInputKinds = []string{UserInputMove, UserInputMouse, UserInputKey}
 
 // Notification is a whole JSON-RPC notification: no id.
 type Notification struct {

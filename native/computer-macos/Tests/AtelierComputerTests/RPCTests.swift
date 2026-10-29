@@ -70,7 +70,7 @@ final class RPCTests: XCTestCase {
     XCTAssertEqual(result?["helperVersion"] as? String, ComputerProtocol.helperVersion)
     XCTAssertEqual(result?["platform"] as? String, "darwin")
     let supports = result?["supports"] as? [String: Any]
-    XCTAssertEqual(supports?["background"] as? Bool, false)
+    XCTAssertEqual(supports?["background"] as? Bool, true)
     XCTAssertEqual(supports?["fullControl"] as? Bool, true)
     XCTAssertEqual(supports?["filter"] as? Bool, true)
   }
@@ -117,6 +117,39 @@ final class RPCTests: XCTestCase {
     XCTAssertEqual(error(byID["d"]!)?.code, -32602)
     XCTAssertEqual(error(byID["e"]!)?.code, -32602)
     XCTAssertEqual(error(byID["f"]!)?.code, -32602)
+  }
+
+  /// Background's read-only methods turn bad params down before they look at anything; an unknown window is NotFound.
+  /// (The input methods' checks are tested on their own in BackgroundTests: nothing here may post an event.)
+  func testBackgroundReadsCheckTheirParams() {
+    let helper = Helper(output: output)
+    _ = helper.server.receive(initialize)
+    let capture = #"{"jsonrpc":"2.0","id":"%@","method":"window.capture","params":%@}"#
+    let requests: [(String, String)] = [
+      ("w1", String(format: capture, "w1", #"{"app":"com.apple.finder","maxWidth":0,"maxHeight":10,"format":"jpeg"}"#)),
+      ("w2", String(format: capture, "w2", #"{"app":"","maxWidth":10,"maxHeight":10,"format":"jpeg"}"#)),
+      ("w3", String(format: capture, "w3", #"{"app":"com.apple.finder","maxWidth":10,"maxHeight":10,"format":"gif"}"#)),
+      ("w4", String(format: capture, "w4", #"{"maxWidth":10,"maxHeight":10,"format":"png"}"#)),
+      ("i1", #"{"jsonrpc":"2.0","id":"i1","method":"bg.inspect","params":{"window":"abc","x":1,"y":1}}"#),
+      ("i2", #"{"jsonrpc":"2.0","id":"i2","method":"bg.inspect","params":{"window":"4294967295","x":1,"y":1}}"#),
+      ("i3", #"{"jsonrpc":"2.0","id":"i3","method":"bg.inspect","params":{"window":"4294967295","x":"left","y":1}}"#),
+      ("i4", #"{"jsonrpc":"2.0","id":"i4","method":"bg.inspect","params":{"window":4294967295,"x":1,"y":1}}"#),
+      ("f1", #"{"jsonrpc":"2.0","id":"f1","method":"bg.focused","params":{"window":""}}"#),
+      ("f2", #"{"jsonrpc":"2.0","id":"f2","method":"bg.focused","params":{"window":"4294967295"}}"#),
+      ("f3", #"{"jsonrpc":"2.0","id":"f3","method":"bg.focused","params":{}}"#),
+    ]
+    for (_, line) in requests { _ = helper.server.receive(line) }
+    let all = messages(waitingFor: requests.count + 1)
+    let byID = Dictionary(all.compactMap { m in (m["id"] as? String).map { ($0, m) } }, uniquingKeysWith: { a, _ in a })
+    let expected: [String: Int] = [
+      "w1": -32602, "w2": -32602, "w3": -32602, "w4": -32602, "i1": -32602, "i2": -32033, "i3": -32602, "i4": -32602,
+      "f1": -32602, "f2": -32033, "f3": -32602,
+    ]
+    for (id, code) in expected {
+      XCTAssertEqual(byID[id].flatMap(error)?.code, code, id)
+    }
+    XCTAssertEqual(byID["i2"].flatMap(error)?.data?["reason"] as? String, "gone")
+    XCTAssertEqual(byID["f2"].flatMap(error)?.data?["reason"] as? String, "gone")
   }
 
   func testPermissionsStatusShape() {
@@ -229,7 +262,8 @@ final class RPCTests: XCTestCase {
     server.notify(.esc(phase: .stopped, heldMs: 1003))
     server.notify(.userInput(kind: .mouse))
     server.notify(.secureInput(on: true))
-    let all = messages(waitingFor: 4)
+    server.notify(.userInput(kind: .move))
+    let all = messages(waitingFor: 5)
     XCTAssertEqual(all[1]["method"] as? String, "control.esc")
     XCTAssertNil(all[1]["id"])
     XCTAssertEqual((all[1]["params"] as? [String: Any])?["phase"] as? String, "stopped")
@@ -238,6 +272,7 @@ final class RPCTests: XCTestCase {
     XCTAssertEqual((all[2]["params"] as? [String: Any])?["kind"] as? String, "mouse")
     XCTAssertEqual(all[3]["method"] as? String, "control.secureInput")
     XCTAssertEqual((all[3]["params"] as? [String: Any])?["on"] as? Bool, true)
+    XCTAssertEqual((all[4]["params"] as? [String: Any])?["kind"] as? String, "move")
   }
 
   // ---------------------------------------------------------------- encoding

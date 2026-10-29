@@ -99,7 +99,7 @@ const watchEsc = () => {
 };
 
 const methods = {
-  initialize: () => ({ protocolVersion: 1, helperVersion: 'fake', platform: 'darwin', supports: { background: false, fullControl: true, filter: true } }),
+  initialize: () => ({ protocolVersion: 1, helperVersion: 'fake', platform: 'darwin', supports: { background: true, fullControl: true, filter: true } }),
   'permissions.status': () => permissions,
   'permissions.request': ({ kind }) => {
     log({ method: 'permissions.request', kind });
@@ -170,6 +170,23 @@ const methods = {
   },
   'mouse.scroll': (p) => (acting(), log({ method: 'mouse.scroll', ...p }), {}),
   'cursor.position': () => cursor,
+  // Background: every app's window is 800×600 at 100,50, named after its app.
+  'window.capture': ({ app: id, maxWidth, maxHeight }) => {
+    needs('screenRecording');
+    const owner = find(id);
+    const rect = { x: 100, y: 50, width: 800, height: 600 };
+    const scale = Math.min(1, maxWidth / rect.width, maxHeight / rect.height);
+    const width = Math.round(rect.width * scale);
+    const height = Math.round(rect.height * scale);
+    log({ method: 'window.capture', app: id });
+    return { data: png(width, height).toString('base64'), mime: 'image/png', width, height, rect, window: `w:${owner.id}`, title: 'Untitled' };
+  },
+  'bg.inspect': ({ window }) => ({ app: find(window.slice(2)), role: 'AXButton', title: null, secure: false, link: null }),
+  'bg.focused': ({ window }) => ({ app: find(window.slice(2)), role: 'AXTextArea', title: null, secure: false, link: null }),
+  'bg.click': (p) => (acting(), log({ method: 'bg.click', ...p }), {}),
+  'bg.scroll': (p) => (acting(), log({ method: 'bg.scroll', ...p }), {}),
+  'bg.key': (p) => (acting(), log({ method: 'bg.key', ...p }), {}),
+  'bg.type': (p) => (acting(), log({ method: 'bg.type', ...p }), {}),
   'key.press': (p) => (acting(), log({ method: 'key.press', ...p }), {}),
   'key.type': (p) => (acting(), log({ method: 'key.type', ...p }), {}),
   'key.hold': (p) => (acting(), log({ method: 'key.hold', ...p }), {}),

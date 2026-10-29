@@ -3,7 +3,9 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
-/// What is under a point, or has the keyboard focus, as the Accessibility API tells it.
+/// What is under a point, or has the keyboard focus, as the Accessibility API tells it: on top of everything
+/// (`inspect.*`, asking the system-wide element), or in one app's window whatever covers it (`bg.*`, asking that app's
+/// element).
 enum Inspect {
   /// The parts of an element `inspect.*` reports, read off the main thread (the AX calls can wait on the app).
   struct Element: Sendable, Equatable {
@@ -14,24 +16,48 @@ enum Inspect {
     var link: String?
   }
 
+  // ---------------------------------------------------------------- the elements asked
+
+  /// An app's accessibility element, answering within a second. Asked directly, an app answers for its own windows
+  /// whether or not it is active or covered.
+  static func application(_ pid: pid_t) -> AXUIElement {
+    let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 1.0)
+    return app
+  }
+
+  static func systemWide() -> AXUIElement {
+    let system = AXUIElementCreateSystemWide()
+    AXUIElementSetMessagingTimeout(system, 1.0)
+    return system
+  }
+
+  /// The element at a point of `root`: the system-wide element hit-tests whatever is on top there; an app's element
+  /// only that app's windows, covered or not. nil when there is none or the app didn't answer in time.
+  static func element(at point: CGPoint, in root: AXUIElement) throws -> AXUIElement? {
+    var hit: AXUIElement?
+    let status = AXUIElementCopyElementAtPosition(root, Float(point.x), Float(point.y), &hit)
+    if status == .apiDisabled { throw RPCError.permission(.accessibility) }
+    return status == .success ? hit : nil
+  }
+
+  /// The element with the keyboard focus, as `root` tells it (an app's element: that app's own focus, active or not).
+  static func focusedElement(in root: AXUIElement) -> AXUIElement? {
+    copy(root, kAXFocusedUIElementAttribute).flatMap(asElement)
+  }
+
+  // ---------------------------------------------------------------- inspect.* (on top of everything)
+
   static func point(_ params: InspectPointParams) async throws -> InspectPointResult {
     guard params.x.isFinite, params.y.isFinite else { throw RPCError.invalidParams("x and y must be numbers") }
     guard AXIsProcessTrusted() else { throw RPCError.permission(.accessibility) }
-    let system = AXUIElementCreateSystemWide()
-    AXUIElementSetMessagingTimeout(system, 1.0)
-    var hit: AXUIElement?
-    let status = AXUIElementCopyElementAtPosition(system, Float(params.x), Float(params.y), &hit)
-    if status == .apiDisabled { throw RPCError.permission(.accessibility) }
     let point = CGPoint(x: params.x, y: params.y)
-    var element = (status == .success ? hit : nil).map(read)
+    var element = try element(at: point, in: systemWide()).map(read)
     // The app that started this helper (Atelier) floats its overlay above everything while it has control. Clicks pass
     // through it, but the hit test doesn't: ask the app whose window is under it instead.
     let parent = getppid()
     if element?.pid == parent, let owner = windowOwner(at: point, passingThrough: parent), owner != parent {
-      let app = AXUIElementCreateApplication(owner)
-      AXUIElementSetMessagingTimeout(app, 1.0)
-      var below: AXUIElement?
-      element = AXUIElementCopyElementAtPosition(app, Float(params.x), Float(params.y), &below) == .success ? below.map(read) : nil
+      element = try self.element(at: point, in: application(owner)).map(read)
       return await result(element, pid: owner)
     }
     // No element (an app without accessibility, or one that didn't answer in time): still say whose window it is.
@@ -41,17 +67,31 @@ enum Inspect {
 
   static func focused() async throws -> InspectPointResult {
     guard AXIsProcessTrusted() else { throw RPCError.permission(.accessibility) }
-    let system = AXUIElementCreateSystemWide()
-    AXUIElementSetMessagingTimeout(system, 1.0)
-    var focused = copy(system, "AXFocusedUIElement").flatMap(asElement)
+    var focused = focusedElement(in: systemWide())
     let front = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
     if focused == nil, let front {
       // Some apps only answer when asked through their own application element.
-      let app = AXUIElementCreateApplication(front)
-      focused = copy(app, "AXFocusedUIElement").flatMap(asElement)
+      focused = focusedElement(in: application(front))
     }
     let element = focused.map(read)
     return await result(element, pid: element?.pid ?? front)
+  }
+
+  // ---------------------------------------------------------------- bg.* (one app's window, covered or not)
+
+  /// `bg.inspect`: what is at a point of the window, asked of its app, so whatever covers the window doesn't matter.
+  /// The app is the window's, whichever process the element says it belongs to.
+  static func point(_ point: CGPoint, in window: WindowInfo) async throws -> InspectPointResult {
+    guard AXIsProcessTrusted() else { throw RPCError.permission(.accessibility) }
+    let element = try element(at: point, in: application(window.pid)).map(read)
+    return await result(element, pid: window.pid)
+  }
+
+  /// `bg.focused`: the element of the window's app that takes typing, whether or not the app is active.
+  static func focused(in window: WindowInfo) async throws -> InspectPointResult {
+    guard AXIsProcessTrusted() else { throw RPCError.permission(.accessibility) }
+    let element = focusedElement(in: application(window.pid)).map(read)
+    return await result(element, pid: window.pid)
   }
 
   private static func result(_ element: Element?, pid: pid_t?) async -> InspectPointResult {
@@ -83,7 +123,7 @@ enum Inspect {
     return nil
   }
 
-  private static func read(_ element: AXUIElement) -> Element {
+  static func read(_ element: AXUIElement) -> Element {
     var pid: pid_t = 0
     let hasPid = AXUIElementGetPid(element, &pid) == .success && pid > 0
     let role = copy(element, "AXRole") as? String
@@ -101,7 +141,7 @@ enum Inspect {
     var currentRole = role
     for depth in 0...3 {
       if depth > 0 {
-        guard let parent = copy(current, "AXParent").flatMap(asElement) else { return nil }
+        guard let parent = parent(of: current) else { return nil }
         current = parent
         currentRole = copy(current, "AXRole") as? String
       }
@@ -119,15 +159,30 @@ enum Inspect {
     return nil
   }
 
-  private static func copy(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+  static func copy(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
     var value: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
     return value
   }
 
-  private static func asElement(_ value: CFTypeRef) -> AXUIElement? {
+  static func asElement(_ value: CFTypeRef) -> AXUIElement? {
     guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
     return (value as! AXUIElement)
+  }
+
+  static func parent(of element: AXUIElement) -> AXUIElement? {
+    copy(element, kAXParentAttribute).flatMap(asElement)
+  }
+
+  static func role(of element: AXUIElement) -> String? {
+    copy(element, kAXRoleAttribute) as? String
+  }
+
+  /// The actions an element offers (`AXPress`, …).
+  static func actions(of element: AXUIElement) -> [String] {
+    var names: CFArray?
+    guard AXUIElementCopyActionNames(element, &names) == .success, let names = names as? [String] else { return [] }
+    return names
   }
 
   /// The process owning the frontmost window that contains a point (window bounds need no permission). Floating windows

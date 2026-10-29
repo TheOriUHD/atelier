@@ -240,6 +240,10 @@ func (c *Controller) ready() error {
 	return nil
 }
 
+// Ready is nil when input may go out, else the stop (-32031): background input (posted window messages, UI
+// Automation) is refused after an Esc stop exactly as SendInput's is.
+func (c *Controller) Ready() error { return c.ready() }
+
 // post sends events unless input was stopped meanwhile; the check and the send are atomic with Stop.
 func (c *Controller) post(events []Event, ch change) error {
 	c.mu.Lock()

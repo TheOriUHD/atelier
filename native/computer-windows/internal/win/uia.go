@@ -4,6 +4,7 @@ package win
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -51,34 +52,47 @@ var (
 	iidIUIAutomation2   = windows.GUID{Data1: 0x34723aff, Data2: 0x0c9d, Data3: 0x49d0, Data4: [8]byte{0x98, 0x96, 0x7a, 0xb5, 0x2d, 0xf8, 0xcd, 0x8a}}
 )
 
-// vtable indexes (UIAutomationClient.h; IUnknown is 0–2).
+// vtable indexes (UIAutomationClient.h; IUnknown is 0–2). Checked against UIAutomationCore.dll's type library.
 const (
+	iuaElementFromHandle      = 6
 	iuaElementFromPoint       = 7
 	iuaGetFocusedElement      = 8
 	iuaGetControlViewWalker   = 14
+	iua2GetAutoSetFocus       = 58
+	iua2PutAutoSetFocus       = 59
 	iua2GetConnectionTimeout  = 60
 	iua2PutConnectionTimeout  = 61
 	iua2PutTransactionTimeout = 63
 
 	elemGetCurrentPropertyValue = 10
+	elemGetCurrentPatternAs     = 14
 
-	walkerGetParentElement = 3
+	walkerGetParentElement      = 3
+	walkerGetFirstChildElement  = 4
+	walkerGetNextSiblingElement = 6
 )
 
 // Property ids.
 const (
+	propBoundingRectangle  = 30001
 	propProcessID          = 30002
 	propControlType        = 30003
 	propName               = 30005
+	propHasKeyboardFocus   = 30008
+	propIsEnabled          = 30010
 	propIsPassword         = 30019
+	propNativeWindowHandle = 30020
 	propValueValue         = 30045
+	propValueIsReadOnly    = 30046
 	propLegacyIAccessValue = 30093
 )
 
 const (
-	vtI4   = 3
-	vtBSTR = 8
-	vtBool = 11
+	vtI4    = 3
+	vtR8    = 5
+	vtBSTR  = 8
+	vtBool  = 11
+	vtArray = 0x2000
 )
 
 // variant is a VARIANT (24 bytes on 64-bit Windows).
@@ -151,14 +165,26 @@ const (
 )
 
 type uiaRequest struct {
-	kind  uiaKind
-	x, y  int32
+	kind uiaKind
+	x, y int32
+	// run, when set, is the job instead (Background mode's).
+	run   func(u *uiaSession) (any, error)
 	reply chan uiaReply
 }
 
 type uiaReply struct {
-	el  *inspect.Element
-	err error
+	el    *inspect.Element
+	value any
+	err   error
+}
+
+// uiaSession is a worker's UI Automation: its IUIAutomation and control view walker (nil when there is none).
+// patterns: control pattern calls leave the focus alone (IUIAutomation2's AutoSetFocus is off), so Background mode may
+// call them without bringing the app forward.
+type uiaSession struct {
+	automation *comObject
+	walker     *comObject
+	patterns   bool
 }
 
 type uiaWorker struct {
@@ -184,24 +210,36 @@ var errUIATimeout = errors.New("UI Automation didn't answer within 1 s")
 
 // uiaInspect asks UI Automation for the element at a point, or the focused one, within the budget.
 func uiaInspect(kind uiaKind, x, y int32) (*inspect.Element, error) {
+	r, err := uiaSubmit(uiaRequest{kind: kind, x: x, y: y}, uiaBudget)
+	return r.el, err
+}
+
+// uiaRun runs a job on a worker within a budget. A job that overruns it keeps running on its abandoned worker: one
+// that must not act late checks a flag it shares with its caller (see uiaClick).
+func uiaRun(budget time.Duration, job func(u *uiaSession) (any, error)) (any, error) {
+	r, err := uiaSubmit(uiaRequest{run: job}, budget)
+	return r.value, err
+}
+
+func uiaSubmit(req uiaRequest, budget time.Duration) (uiaReply, error) {
 	w, err := takeWorker()
 	if err != nil {
-		return nil, err
+		return uiaReply{}, err
 	}
-	req := uiaRequest{kind: kind, x: x, y: y, reply: make(chan uiaReply, 1)}
+	req.reply = make(chan uiaReply, 1)
 	w.requests <- req
 	select {
 	case r := <-req.reply:
 		putWorker(w)
-		return r.el, r.err
-	case <-time.After(uiaBudget):
+		return r, r.err
+	case <-time.After(budget):
 		uiaMu.Lock()
 		uiaStuck++
 		uiaMu.Unlock()
 		w.counted.Store(true)
 		w.abandoned.Store(true)
 		close(w.requests) // It exits after the call in progress.
-		return nil, errUIATimeout
+		return uiaReply{}, errUIATimeout
 	}
 }
 
@@ -256,7 +294,7 @@ func (w *uiaWorker) run(ready chan<- error) {
 	if err := windows.CoInitializeEx(0, windows.COINIT_MULTITHREADED); err == nil {
 		defer windows.CoUninitialize()
 	}
-	automation, err := createAutomation()
+	automation, patterns, err := createAutomation()
 	if err != nil {
 		ready <- err
 		return
@@ -267,29 +305,59 @@ func (w *uiaWorker) run(ready chan<- error) {
 		walker = nil
 	}
 	defer walker.release()
+	session := &uiaSession{automation: automation, walker: walker, patterns: patterns}
 	ready <- nil
 	for req := range w.requests {
-		el, err := readRequest(automation, walker, req)
-		req.reply <- uiaReply{el: el, err: err}
+		var r uiaReply
+		if req.run != nil {
+			r.value, r.err = runJob(session, req.run)
+		} else {
+			r.el, r.err = readRequest(automation, walker, req)
+		}
+		req.reply <- r
 		if w.abandoned.Load() {
 			return
 		}
 	}
 }
 
-func createAutomation() (*comObject, error) {
-	var automation *comObject
+// runJob runs a job; a panic in it (a provider handing back garbage) is an error, not a crash.
+func runJob(u *uiaSession, job func(u *uiaSession) (any, error)) (value any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("UI Automation: %v", r)
+		}
+	}()
+	return job(u)
+}
+
+// createAutomation makes the IUIAutomation; patterns reports that control pattern calls won't move the focus.
+func createAutomation() (automation *comObject, patterns bool, err error) {
 	hr, _, _ := procCoCreateInstance.Call(uintptr(unsafe.Pointer(&clsidCUIAutomation8)), 0, 1 /* CLSCTX_INPROC_SERVER */, uintptr(unsafe.Pointer(&iidIUIAutomation)), uintptr(unsafe.Pointer(&automation)))
 	if !succeeded(hr) || automation == nil {
 		hr, _, _ = procCoCreateInstance.Call(uintptr(unsafe.Pointer(&clsidCUIAutomation)), 0, 1, uintptr(unsafe.Pointer(&iidIUIAutomation)), uintptr(unsafe.Pointer(&automation)))
 		if !succeeded(hr) || automation == nil {
-			return nil, windows.Errno(hr)
+			return nil, false, windows.Errno(hr)
 		}
-		return automation, nil
+		return automation, false, nil
 	}
-	// IUIAutomation2 (Windows 8+): UI Automation's own timeouts, so a hung app frees the thread sooner.
+	// IUIAutomation2 (Windows 8+): UI Automation's own timeouts, so a hung app frees the thread sooner; and AutoSetFocus
+	// off, so calling a control pattern (Background mode's Invoke, Toggle, Select, SetValue) doesn't first set the
+	// focus to the element, which would bring its app forward.
 	var automation2 *comObject
 	if succeeded(automation.call(0, uintptr(unsafe.Pointer(&iidIUIAutomation2)), uintptr(unsafe.Pointer(&automation2)))) && automation2 != nil {
+		var autoSetFocus int32 = -1
+		// A sanity check of the vtable index before writing through it: a BOOL, TRUE by default.
+		if succeeded(automation2.call(iua2GetAutoSetFocus, uintptr(unsafe.Pointer(&autoSetFocus)))) && (autoSetFocus == 0 || autoSetFocus == 1) {
+			patterns = succeeded(automation2.call(iua2PutAutoSetFocus, 0))
+			if debug {
+				var now int32 = -1
+				automation2.call(iua2GetAutoSetFocus, uintptr(unsafe.Pointer(&now)))
+				rpc.Logf("UI Automation: AutoSetFocus was %d, now %d (control patterns in the background: %v)", autoSetFocus, now, patterns && now == 0)
+			}
+		} else if debug {
+			rpc.Logf("UI Automation: unexpected AutoSetFocus %d, left as it is (no control patterns in the background)", autoSetFocus)
+		}
 		var connection uint32
 		// A sanity check of the vtable index before writing through it: the default is a few seconds.
 		if succeeded(automation2.call(iua2GetConnectionTimeout, uintptr(unsafe.Pointer(&connection)))) && connection > 0 && connection <= 600_000 {
@@ -303,7 +371,7 @@ func createAutomation() (*comObject, error) {
 		}
 		automation2.release()
 	}
-	return automation, nil
+	return automation, patterns, nil
 }
 
 func readRequest(automation, walker *comObject, req uiaRequest) (*inspect.Element, error) {

@@ -4,6 +4,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Background mode works in the background:** with Background chosen in Settings › System › Computer use, the assistant works in one app's window at a time without taking your mouse and keyboard: it sees the window even when others cover it, clicks and types in it while you keep working, and a small note says which app it works in. Before, it asked to take over the mouse and keyboard for every task.
+- **Computer use isn't thrown off by you:** moving the mouse while it works changes nothing, and when you click or type it waits until you stop and carries on (it only looks again if you switched apps). Holding Esc gives you the computer back without ending the reply: the assistant finishes another way, or says what it couldn't do and why.
+- **Computer use asks more sensibly:** browsers start with full use on the card like other apps (you can lower it), the assistant asks again when it needs more in an app (the card offers it once more), and it replaces a field's text instead of adding to it, fixing slips by selecting and retyping rather than reloading the page.
+
 ## [0.2.12] — 2026-10-29
 
 - **Computer use on Windows:** the same as on the Mac (Full control and Background, the denied apps, holding Esc to stop), with nothing to grant first. Shortcuts use Ctrl, and apps running as administrator can't be used. The password managers start on the denied list there too.

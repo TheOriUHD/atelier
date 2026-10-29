@@ -142,7 +142,7 @@ Desktop app only.
 | **Launch at login** | Open Atelier when you sign in to this computer. |
 | **Enable computer use** *(only where it works)* | Let the assistant in Code and Cowork see and use the apps you allow on this computer. |
 | **Unhide apps when Atelier finishes** *(only where it works)* | Apps hidden while Atelier had full control of your screen come back when it stops. |
-| **How Atelier uses the apps you allow** *(only where it works)* | Background: asks you for each app, and before it takes over your mouse and keyboard. Full control: takes over your computer as it is, any app but your denied ones, without asking. |
+| **How Atelier uses the apps you allow** *(only where it works)* | Background: asks you for each app, then works in one app at a time in the background, without your mouse and keyboard, while you keep working. Full control: takes over your computer as it is, any app but your denied ones, without asking. |
 | **Denied apps** *(only where it works)* | Atelier never uses these apps: asking for them is turned down without a question. |
 | **Apps allowed for good** *(only where it works)* | Apps you allowed with “Always allow on this computer”; every session may use them. |
 | **Accessibility** *(only where it works)* | macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission. |

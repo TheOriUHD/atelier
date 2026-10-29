@@ -55,4 +55,13 @@ final class ProtocolParityTests: XCTestCase {
     let names = try matches(#"\{ method: '([A-Za-z.]+)'; params:"#, in: text[...]).map { $0[0] }
     XCTAssertEqual(Set(names), Set(ComputerNotification.methods))
   }
+
+  func testUserInputKinds() throws {
+    let text = try contract()
+    let union = try XCTUnwrap(
+      matches(#"method: 'control\.userInput'; params: \{ kind: ([^}]+) \}"#, in: text[...]).first?.first)
+    let kinds = try matches(#"'([a-z]+)'"#, in: union[...]).map { $0[0] }
+    XCTAssertFalse(kinds.isEmpty)
+    XCTAssertEqual(Set(kinds), Set(UserInputKind.allCases.map(\.rawValue)))
+  }
 }

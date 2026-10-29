@@ -90,14 +90,30 @@ final class EscTrackerTests: XCTestCase {
 }
 
 final class UserInputFilterTests: XCTestCase {
-  func testAtMostOncePer500ms() {
+  func testAtMostOncePer500msPerKind() {
+    for kind in UserInputKind.allCases {
+      var filter = UserInputFilter()
+      XCTAssertTrue(filter.admit(kind, at: 0))
+      XCTAssertFalse(filter.admit(kind, at: 100))
+      XCTAssertFalse(filter.admit(kind, at: 499))
+      XCTAssertTrue(filter.admit(kind, at: 500))
+      XCTAssertFalse(filter.admit(kind, at: 900))
+      XCTAssertTrue(filter.admit(kind, at: 1001))
+    }
+  }
+
+  func testMovesNeverHideAButtonOrAKey() {
     var filter = UserInputFilter()
-    XCTAssertTrue(filter.admit(at: 0))
-    XCTAssertFalse(filter.admit(at: 100))
-    XCTAssertFalse(filter.admit(at: 499))
-    XCTAssertTrue(filter.admit(at: 500))
-    XCTAssertFalse(filter.admit(at: 900))
-    XCTAssertTrue(filter.admit(at: 1001))
+    // The person moves the pointer, then clicks and types within the same 500 ms: each still goes out.
+    XCTAssertTrue(filter.admit(.move, at: 0))
+    XCTAssertFalse(filter.admit(.move, at: 50))
+    XCTAssertTrue(filter.admit(.mouse, at: 60))
+    XCTAssertTrue(filter.admit(.key, at: 70))
+    XCTAssertFalse(filter.admit(.mouse, at: 200))
+    XCTAssertFalse(filter.admit(.key, at: 300))
+    XCTAssertFalse(filter.admit(.move, at: 400))
+    XCTAssertTrue(filter.admit(.move, at: 500))
+    XCTAssertTrue(filter.admit(.mouse, at: 560))
   }
 
   func testMovesWithin24PointsAreTheHelpers() {

@@ -115,14 +115,21 @@ func TestHookAndPollTogetherReportOnce(t *testing.T) {
 	eq(t, e.Tick(250, no()), nil, "poll after")
 }
 
-func TestAtMostOnceEvery500ms(t *testing.T) {
+func TestAtMostOnceEvery500msPerKind(t *testing.T) {
 	var f UserInputFilter
 	for _, c := range []struct {
+		kind string
 		at   float64
 		want bool
-	}{{0, true}, {100, false}, {499, false}, {500, true}, {900, false}, {1001, true}} {
-		if got := f.Admit(c.at); got != c.want {
-			t.Errorf("at %v: %v", c.at, got)
+	}{
+		{"move", 0, true}, {"move", 100, false}, {"move", 499, false}, {"move", 500, true}, {"move", 900, false},
+		{"move", 1001, true},
+		// A move just before never hides a button or a key: each kind has its own 500 ms.
+		{"mouse", 1002, true}, {"key", 1003, true}, {"mouse", 1200, false}, {"key", 1400, false}, {"move", 1450, false},
+		{"mouse", 1502, true}, {"key", 1503, true}, {"move", 1501, true},
+	} {
+		if got := f.Admit(c.kind, c.at); got != c.want {
+			t.Errorf("%s at %v: %v", c.kind, c.at, got)
 		}
 	}
 }
@@ -173,15 +180,23 @@ func TestMonitor(t *testing.T) {
 	m := NewMonitor(nil, in, func() bool { return false }, func(method string, params any) {
 		out = append(out, sent{method, params})
 	})
-	// The person's keys and clicks, throttled.
+	// The person's keys, clicks and moves, each kind throttled on its own.
 	m.Handle(Sample{Kind: SampleKeyDown, Time: 0})
+	m.Handle(Sample{Kind: SampleKeyDown, Time: 50})
 	m.Handle(Sample{Kind: SampleMouseDown, Time: 100})
 	// A move near where the helper put the pointer is the helper's; a far one the person's.
 	m.Handle(Sample{Kind: SampleMoved, At: proto.Point{X: 110, Y: 100}, Time: 600})
 	m.Handle(Sample{Kind: SampleMoved, At: proto.Point{X: 300, Y: 100}, Time: 700})
+	m.Handle(Sample{Kind: SampleMoved, At: proto.Point{X: 320, Y: 100}, Time: 720})
+	// A button and a key right after a move still get through.
+	m.Handle(Sample{Kind: SampleMouseDown, Time: 730})
+	m.Handle(Sample{Kind: SampleKeyDown, Time: 740})
 	want := []sent{
 		{proto.NControlUserInput, proto.UserInputParams{Kind: "key"}},
 		{proto.NControlUserInput, proto.UserInputParams{Kind: "mouse"}},
+		{proto.NControlUserInput, proto.UserInputParams{Kind: "move"}},
+		{proto.NControlUserInput, proto.UserInputParams{Kind: "mouse"}},
+		{proto.NControlUserInput, proto.UserInputParams{Kind: "key"}},
 	}
 	if !reflect.DeepEqual(out, want) {
 		t.Errorf("user input: %v", out)
