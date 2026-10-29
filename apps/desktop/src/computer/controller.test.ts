@@ -337,6 +337,33 @@ describe('full control', () => {
   });
 });
 
+describe('on Windows', () => {
+  it('lets alt+tab and the Windows key switch apps while Atelier has the keyboard, and reads cmd as ctrl', async () => {
+    const windows = new ComputerController({
+      helper: helper as unknown as ComputerHelper,
+      hasHelper: true,
+      settingsPath,
+      overlay: { show() {}, hide() {}, esc() {}, paused() {} },
+      windows: { hide() {}, restore() {}, focus() {} },
+      event() {},
+      changed() {},
+      platform: 'win32',
+    });
+    await changeComputerSettings(settingsPath, (s) => ({ ...s, mode: 'full' }));
+    const run = <M extends keyof ControllerMethods>(method: M, params: ControllerMethods[M]['params']) => windows.handle('local', 'w1', method, params);
+    expect(await run('access.state', {})).toMatchObject({ platform: 'win32' });
+    expect(await run('control.request', {})).toEqual({ granted: true });
+    helper.focused = { app: app('atelier.exe', 'Atelier') };
+    const press = async (text: string) => (await run('control.batch', { actions: [{ action: 'key', text }], size: SIZE })).results[0];
+    expect(await press('alt+tab')).toEqual({ action: 'key', ok: true });
+    expect(await press('win')).toEqual({ action: 'key', ok: true });
+    expect(await press('super')).toEqual({ action: 'key', ok: true });
+    // cmd+tab is ctrl+tab there: typing into Atelier, refused.
+    expect(await press('cmd+tab')).toMatchObject({ ok: false, note: /The keyboard goes to Atelier/ });
+    await run('turn.end', {});
+  });
+});
+
 describe('keys and names', () => {
   it('splits key combinations', () => {
     expect(parseKeys('Cmd+Shift+T')).toEqual(['cmd', 'shift', 't']);

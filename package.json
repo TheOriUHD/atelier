@@ -17,7 +17,7 @@
     "build": "pnpm -r build",
     "runner:build": "go -C runner run ./scripts/build",
     "runner:test": "go -C runner vet ./... && go -C runner test ./...",
-    "computer:build": "sh native/computer-macos/build.sh",
+    "computer:build": "node native/build.mjs",
     "dev:desktop": "pnpm --filter @atelier/desktop dev",
     "dev:web": "pnpm --filter @atelier/server dev",
     "build:theme": "pnpm --filter @atelier/design build:theme",

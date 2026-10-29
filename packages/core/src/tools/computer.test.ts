@@ -42,6 +42,7 @@ function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof Cont
 
 const state = (apps: AppGrant[], control = false, mode: 'background' | 'full' = 'background'): ControllerMethods['access.state']['result'] => ({
   apps,
+  platform: 'darwin',
   mode,
   denied: ['1Password'],
   control,
@@ -141,6 +142,16 @@ describe('ComputerAction', () => {
 });
 
 describe('Full control', () => {
+  it('names the shortcuts of the computer’s system', async () => {
+    const { tool } = setup([], {
+      'access.prepare': () => ({ apps: [], unknown: [] }),
+      'access.state': () => ({ ...state([], false, 'full'), platform: 'win32' }),
+    });
+    const out = text(await tool('ComputerAccess').run({ apps: [] }, ctx));
+    expect(out).toContain('(or alt+tab, the Windows key)');
+    expect(out).toContain('(ctrl+L). Shortcuts use ctrl on Windows.');
+  });
+
   it('needs no card for apps, and says what it may use', async () => {
     const { tool, asked } = setup([], {
       'access.prepare': () => ({ apps: [prepared('Safari', { granted: 'full' }), prepared('1Password', { denied: true })], unknown: [] }),

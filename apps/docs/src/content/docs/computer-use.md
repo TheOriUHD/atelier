@@ -1,6 +1,6 @@
 ---
 title: Computer use
-description: Let the assistant see and use apps on your Mac in Code and Cowork. Turn it on, allow apps one by one, decide when it may take the mouse and keyboard, and take them back by holding Esc.
+description: Let the assistant see and use apps on your Mac or Windows PC in Code and Cowork. Turn it on, allow apps one by one, decide when it may take the mouse and keyboard, and take them back by holding Esc.
 ---
 
 With computer use, the assistant in a Code session or a Cowork task can look at apps on your computer and use them:
@@ -11,7 +11,7 @@ assistant uses that: working on screen is slower and less reliable.
 It is off until you turn it on, it only uses apps you allow, and you can stop it at any moment.
 
 :::note
-Computer use comes to **macOS** first, in the desktop app with **Run on this computer**. Windows, Linux, and a desktop
+Computer use works on **macOS** and **Windows**, in the desktop app with **Run on this computer**. Linux and a desktop
 app signed in to a server come later. A session in the browser can't use your computer.
 :::
 
@@ -21,8 +21,8 @@ Open **Settings › System › Computer use** and switch on **Enable computer us
 
 <!-- screenshot: Settings › System › Computer use with the switch on, Background selected and the permission rows -->
 
-macOS asks for two permissions before Atelier can use apps. Both rows are on the same page, with **Grant…** and **Open
-System Settings**:
+On a Mac, macOS asks for two permissions before Atelier can use apps. Both rows are on the same page, with **Grant…**
+and **Open System Settings**:
 
 | Permission | What Atelier does with it |
 |---|---|
@@ -31,6 +31,11 @@ System Settings**:
 
 After you switch a permission on in System Settings, come back to Atelier: the page reads the permissions again.
 Atelier never answers these questions for you.
+
+Windows asks for nothing. Two things work differently there:
+
+- Apps running as administrator can't be used: Windows doesn't let an ordinary app type or click into them.
+- Shortcuts use **Ctrl** where a Mac uses **Cmd**, and the assistant switches apps with **Alt+Tab** or the Windows key.
 
 ## Allowing apps
 

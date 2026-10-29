@@ -2,7 +2,8 @@
  * Which kind of app an app is, for computer use: browsers start view-only (web pages can carry instructions aimed at the
  * model), terminals and IDEs click-only (typing there would run commands outside the permission rules), system apps
  * can never be allowed (security prompts, System Settings, the keychain, Atelier itself), and password managers start
- * on the person's denied list. By bundle id on macOS.
+ * on the person's denied list. By bundle id on macOS; on Windows by the lowercase exe name (`chrome.exe`), or a
+ * packaged app's package family name (`MSTeams_8wekyb3d8bbwe`), as the Windows helper names apps.
  */
 import type { AppCategory, AppTier, ComputerApp } from './computer.ts';
 
@@ -41,6 +42,8 @@ const MAC: Record<Exclude<AppCategory, 'other'>, readonly string[]> = {
   'password-manager': ['com.1password.1password', 'com.bitwarden.desktop', 'com.apple.Passwords', 'me.proton.pass.electron', 'org.keepassxc.keepassxc', 'com.dashlane.dashlanephonefinal'],
   system: [
     'dev.atelier.app',
+    // Atelier run from the bare Electron binary (development).
+    'com.github.Electron',
     'com.apple.SecurityAgent',
     'com.apple.loginwindow',
     'com.apple.coreautha',
@@ -52,12 +55,104 @@ const MAC: Record<Exclude<AppCategory, 'other'>, readonly string[]> = {
   ],
 };
 
-/** A bundle id ending in `.` matches every id that starts with it (JetBrains' IDEs). */
-const matches = (id: string, known: string) => (known.endsWith('.') ? id.startsWith(known) : id === known);
+const WINDOWS: Record<Exclude<AppCategory, 'other'>, readonly string[]> = {
+  browser: [
+    'chrome.exe',
+    'msedge.exe',
+    'firefox.exe',
+    'brave.exe',
+    'opera.exe',
+    'vivaldi.exe',
+    'arc.exe',
+    'TheBrowserCompany.Arc_ttt1ap7aakyb4',
+    'zen.exe',
+    'chromium.exe',
+    'iexplore.exe',
+  ],
+  terminal: [
+    'windowsterminal.exe',
+    'Microsoft.WindowsTerminal_8wekyb3d8bbwe',
+    'Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe',
+    'cmd.exe',
+    'powershell.exe',
+    'powershell_ise.exe',
+    'pwsh.exe',
+    'conhost.exe',
+    'openconsole.exe',
+    'wezterm-gui.exe',
+    'alacritty.exe',
+    'mintty.exe',
+    'hyper.exe',
+    'tabby.exe',
+    'warp.exe',
+    'putty.exe',
+    'mobaxterm.exe',
+  ],
+  ide: [
+    'code.exe',
+    'code - insiders.exe',
+    'cursor.exe',
+    'windsurf.exe',
+    'devenv.exe',
+    'zed.exe',
+    'sublime_text.exe',
+    'idea64.exe',
+    'pycharm64.exe',
+    'webstorm64.exe',
+    'rider64.exe',
+    'clion64.exe',
+    'goland64.exe',
+    'phpstorm64.exe',
+    'rubymine64.exe',
+    'datagrip64.exe',
+    'studio64.exe',
+    'fleet.exe',
+  ],
+  mail: ['outlook.exe', 'olk.exe', 'Microsoft.OutlookForWindows_8wekyb3d8bbwe', 'microsoft.windowscommunicationsapps_8wekyb3d8bbwe', 'thunderbird.exe', 'mailbird.exe', 'mailclient.exe'],
+  messaging: [
+    'MSTeams_8wekyb3d8bbwe',
+    'ms-teams.exe',
+    'teams.exe',
+    'slack.exe',
+    'discord.exe',
+    '5319275A.WhatsAppDesktop_cv1g1gvanyjgm',
+    'whatsapp.exe',
+    'telegram.exe',
+    'TelegramMessengerLLP.TelegramDesktop_t4vj0pshhgkwm',
+    'signal.exe',
+    'skype.exe',
+    'zoom.exe',
+  ],
+  'password-manager': ['1password.exe', 'bitwarden.exe', '8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xyy', 'keepassxc.exe', 'keepass.exe', 'proton pass.exe', 'enpass.exe'],
+  system: [
+    'atelier.exe',
+    'electron.exe',
+    'logonui.exe',
+    'consent.exe',
+    'credentialuibroker.exe',
+    'lockapp.exe',
+    'systemsettings.exe',
+    'windows.immersivecontrolpanel_cw5n1h2txyewy',
+    'Microsoft.SecHealthUI_8wekyb3d8bbwe',
+    'taskmgr.exe',
+    'regedit.exe',
+    'mmc.exe',
+    'useraccountcontrolsettings.exe',
+    'mstsc.exe',
+  ],
+};
+
+/**
+ * A bundle id ending in `.` matches every id that starts with it (JetBrains' IDEs). Windows names are compared without
+ * case: exe names come in either.
+ */
+const matches = (id: string, known: string) => (known.endsWith('.') ? id.startsWith(known) : id === known || id.toLowerCase() === known.toLowerCase());
 
 export function appCategory(id: string): AppCategory {
-  for (const [category, ids] of Object.entries(MAC) as [Exclude<AppCategory, 'other'>, readonly string[]][]) {
-    if (ids.some((known) => matches(id, known))) return category;
+  for (const lists of [MAC, WINDOWS]) {
+    for (const [category, ids] of Object.entries(lists) as [Exclude<AppCategory, 'other'>, readonly string[]][]) {
+      if (ids.some((known) => matches(id, known))) return category;
+    }
   }
   return 'other';
 }
@@ -80,7 +175,7 @@ export function maxTier(category: AppCategory): AppTier | null {
 /** Mail and messaging apps: their links aren't clicked (they lead to wherever a message says). */
 export const linkSensitive = (category: AppCategory): boolean => category === 'mail' || category === 'messaging';
 
-/** The denied list a new person starts with: the password managers (removable). */
+/** The denied list a new person starts with on macOS: the password managers (removable). */
 export const SEEDED_DENIED: readonly ComputerApp[] = [
   { id: 'com.1password.1password', name: '1Password' },
   { id: 'com.bitwarden.desktop', name: 'Bitwarden' },
@@ -89,3 +184,18 @@ export const SEEDED_DENIED: readonly ComputerApp[] = [
   { id: 'org.keepassxc.keepassxc', name: 'KeePassXC' },
   { id: 'com.dashlane.dashlanephonefinal', name: 'Dashlane' },
 ];
+
+const SEEDED_DENIED_WINDOWS: readonly ComputerApp[] = [
+  { id: '1password.exe', name: '1Password' },
+  { id: 'bitwarden.exe', name: 'Bitwarden' },
+  { id: '8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xyy', name: 'Bitwarden (Microsoft Store)' },
+  { id: 'keepassxc.exe', name: 'KeePassXC' },
+  { id: 'keepass.exe', name: 'KeePass' },
+  { id: 'proton pass.exe', name: 'Proton Pass' },
+  { id: 'enpass.exe', name: 'Enpass' },
+];
+
+/** The password managers a new person's denied list starts with, on their system. */
+export function seededDenied(platform: string): readonly ComputerApp[] {
+  return platform === 'win32' ? SEEDED_DENIED_WINDOWS : SEEDED_DENIED;
+}

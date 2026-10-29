@@ -386,7 +386,15 @@ export interface ControllerMethods {
   /** What the session may use now: the apps allowed one by one (none in Full control, where every app but the denied ones is). */
   'access.state': {
     params: Record<string, never>;
-    result: { apps: AppGrant[]; mode: ComputerMode; denied: string[]; control: boolean; displays: { id: string; name: string; primary: boolean }[] };
+    result: {
+      apps: AppGrant[];
+      /** The computer's system, for the shortcuts the agent uses (cmd on macOS, ctrl on Windows). */
+      platform: 'darwin' | 'win32' | 'linux';
+      mode: ComputerMode;
+      denied: string[];
+      control: boolean;
+      displays: { id: string; name: string; primary: boolean }[];
+    };
   };
   'apps.list': { params: { query?: string }; result: { apps: { app: ComputerApp; category: AppCategory; running: boolean; granted: AppTier | null }[] } };
   'apps.open': { params: { id: string }; result: Record<string, never> };

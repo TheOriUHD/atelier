@@ -432,6 +432,10 @@ async function makeTree({ tag, tree, work, log }) {
   // All six runner builds: each package bundles its own OS's two.
   await exec('pnpm', ['runner:build'], { cwd: tree, log, env: { PATH: `${process.env.PATH}:/usr/local/go/bin:/opt/homebrew/bin` } });
   await exec('tar', ['-czf', join(work, 'runner-bin.tar.gz'), '-C', join(tree, 'runner'), 'bin'], { log });
+  // The computer use helpers: macOS's built here, Windows' cross-built with Go and handed to the Windows machine.
+  await exec('pnpm', ['computer:build'], { cwd: tree, log, env: { PATH: `${process.env.PATH}:/usr/local/go/bin:/opt/homebrew/bin` } });
+  // COPYFILE_DISABLE: no macOS `._` files in the tarball.
+  await exec('tar', ['-czf', join(work, 'computer-windows.tar.gz'), '-C', join(tree, 'native'), 'bin/atelier-computer-windows-x64.exe', 'bin/atelier-computer-windows-arm64.exe'], { log, env: { COPYFILE_DISABLE: '1' } });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -492,6 +496,7 @@ async function buildWindows({ version, work, artifacts, log }) {
   const root = CONFIG.windowsRoot;
   await exec('scp', ['-q', ...SSH, join(work, 'src.tar.gz'), `${host}:${root}/atelier-src.tar.gz`], { log });
   await exec('scp', ['-q', ...SSH, join(work, 'runner-bin.tar.gz'), `${host}:${root}/runner-bin.tar.gz`], { log });
+  await exec('scp', ['-q', ...SSH, join(work, 'computer-windows.tar.gz'), `${host}:${root}/computer-windows.tar.gz`], { log });
   await exec('scp', ['-q', ...SSH, join(HERE, 'windows-build.ps1'), `${host}:${root}/release-build.ps1`], { log });
   const winRoot = root.replace(/\//g, '\\');
   await exec('ssh', [...SSH, host, `powershell -NoProfile -ExecutionPolicy Bypass -File ${winRoot}\\release-build.ps1 -Root ${winRoot}`], { log });

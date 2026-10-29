@@ -34,6 +34,7 @@ import { createUpdates, inertUpdater, type Updater } from './updater.ts';
 import { ComputerController } from './computer/controller.ts';
 import { ComputerHelper } from './computer/helper.ts';
 import { createOverlay, type ScreenOverlay } from './computer/overlay.ts';
+import { describe, logMain, openMainLog } from './main-log.ts';
 import {
   clearConnection,
   clearToken,
@@ -68,7 +69,27 @@ protocol.registerSchemesAsPrivileged([
 
 // The name first: the profile folder (userData) and the single-instance lock take their name from it, not from the package's.
 app.setName(APP.name);
-if (!app.requestSingleInstanceLock()) app.quit();
+// A second copy hands over to the first (its `second-instance` shows the window) and goes at once: quitting the gentle
+// way would still run its start below, a second backend on the same data included.
+if (!app.requestSingleInstanceLock()) app.exit(0);
+const mainLog = openMainLog(logsDir());
+logMain(`start ${APP.version} on ${process.platform} ${process.arch}`);
+process.on('unhandledRejection', (reason) => logMain(`unhandled rejection: ${describe(reason)}`));
+process.on('uncaughtExceptionMonitor', (error) => logMain(`uncaught exception: ${describe(error)}`));
+
+/**
+ * Where the main log goes: ~/Library/Logs/Atelier on macOS, the profile's logs folder elsewhere. Development and test
+ * runs (the bare Electron binary, whose logs folder is Electron's) keep it in their own profile.
+ */
+function logsDir(): string {
+  if (!app.isPackaged || process.env.ATELIER_CONFIG_DIR) return join(app.getPath('userData'), 'logs');
+  try {
+    app.setAppLogsPath();
+    return app.getPath('logs');
+  } catch {
+    return join(app.getPath('userData'), 'logs');
+  }
+}
 
 /** Null until the first-run choice; no backend runs before it. */
 let connection: Connection | null = null;
@@ -156,10 +177,19 @@ function runnerDir(): string {
   return app.isPackaged ? join(process.resourcesPath, 'runner') : join(import.meta.dirname, '..', '..', '..', 'runner', 'bin');
 }
 
+/** This system's computer use helper (macOS and Windows so far), by its file name in `native/bin`. */
+const COMPUTER_HELPER: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: 'atelier-computer-darwin',
+  win32: `atelier-computer-windows-${process.arch === 'arm64' ? 'arm64' : 'x64'}.exe`,
+};
+
 /** The computer use helper: `native/bin` (from `pnpm computer:build`) in development, a resource when packaged. */
-const computerHelperPath =
-  process.env.ATELIER_COMPUTER_HELPER ??
-  (app.isPackaged ? join(process.resourcesPath, 'computer', 'atelier-computer-darwin') : join(import.meta.dirname, '..', '..', '..', 'native', 'bin', 'atelier-computer-darwin'));
+const computerHelperPath = (() => {
+  if (process.env.ATELIER_COMPUTER_HELPER) return process.env.ATELIER_COMPUTER_HELPER;
+  const name = COMPUTER_HELPER[process.platform];
+  if (!name) return null;
+  return app.isPackaged ? join(process.resourcesPath, 'computer', name) : join(import.meta.dirname, '..', '..', '..', 'native', 'bin', name);
+})();
 
 /** A test's stand-in helper answers for macOS's permissions too; the real one is checked against macOS itself. */
 const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COMPUTER_HELPER;
@@ -178,9 +208,9 @@ const atelierWindows = () => {
   return usedLast && all.includes(usedLast) ? [usedLast, ...all.filter((w) => w !== usedLast)] : all;
 };
 const computer = new ComputerController({
-  helper: new ComputerHelper(computerHelperPath, APP.version),
-  // macOS first (ARCHITECTURE §22); a test's stand-in anywhere.
-  hasHelper: !!process.env.ATELIER_COMPUTER_HELPER || (process.platform === 'darwin' && existsSync(computerHelperPath)),
+  helper: new ComputerHelper(computerHelperPath ?? '', APP.version),
+  // macOS and Windows (ARCHITECTURE §22); a test's stand-in anywhere.
+  hasHelper: !!computerHelperPath && existsSync(computerHelperPath),
   settingsPath: computerSettingsFile(),
   overlay: screenOverlay,
   windows: {
@@ -444,7 +474,21 @@ function createWindow(hash = ''): BrowserWindow {
     },
   });
   // End-to-end runs set ATELIER_HIDE_WINDOW: the page works the same unseen, and no test window takes the screen or focus.
-  if (!process.env.ATELIER_HIDE_WINDOW) win.once('ready-to-show', () => win.show());
+  if (!process.env.ATELIER_HIDE_WINDOW) {
+    win.once('ready-to-show', () => win.show());
+    // A page that never paints (a GPU or driver problem, a stuck renderer) mustn't leave the app running with no window.
+    setTimeout(() => {
+      if (win.isDestroyed() || win.isVisible()) return;
+      logMain('the window had not painted after 5 s: shown anyway');
+      win.show();
+    }, 5000);
+  }
+  // A crashed page loads again, a few times at most.
+  let reloads = 0;
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logMain(`page gone: ${details.reason} (${details.exitCode})`);
+    if (details.reason !== 'clean-exit' && details.reason !== 'killed' && reloads++ < 3 && !win.isDestroyed()) setTimeout(() => !win.isDestroyed() && win.reload(), 1000);
+  });
   win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     if (!hardenWebview(webPreferences, params)) event.preventDefault();
   });
@@ -590,7 +634,10 @@ function registerComputerIpc(): void {
   });
 }
 
+let registeredIpc = false;
+
 function registerIpc(): void {
+  registeredIpc = true;
   registerComputerIpc();
   ipcMain.on('connect-backend', (event) => connectRenderer(event.sender));
   // Settings › Keyboard shortcuts changed (or a window opened): the menu takes the page's bindings. Each window's are
@@ -829,7 +876,24 @@ function registerIpc(): void {
 
 let quitting = false;
 
+app.on('child-process-gone', (_event, details) => {
+  if (details.reason !== 'clean-exit') logMain(`${details.type} process gone: ${details.reason} (${details.exitCode})${details.name ? ` ${details.name}` : ''}`);
+});
+
 app.whenReady().then(async () => {
+  const started = Date.now();
+  try {
+    await startApp();
+    logMain(`ready in ${Date.now() - started} ms`);
+  } catch (error) {
+    // Better a message and an exit than a process with no window.
+    logMain(`start failed: ${describe(error)}`);
+    dialog.showErrorBox(`${APP.name} couldn’t start`, `${error instanceof Error ? error.message : String(error)}\n\nDetails are in ${mainLog}.`);
+    app.exit(1);
+  }
+});
+
+async function startApp(): Promise<void> {
   // A packaged app has its icon in the bundle; run from the bare Electron binary (development), the Dock would show
   // Electron's.
   if (process.env.ATELIER_HIDE_WINDOW) app.dock?.hide();
@@ -895,16 +959,21 @@ app.whenReady().then(async () => {
   registerIpc();
   createWindow();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (atelierWindows().length === 0) createWindow();
   });
-});
+}
 
+/** Opening Atelier again shows its window: restored, shown if it never was, or made again if there is none. */
 app.on('second-instance', () => {
-  const win = BrowserWindow.getAllWindows()[0];
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
+  logMain('opened again');
+  const win = atelierWindows()[0];
+  if (!win) {
+    if (app.isReady() && registeredIpc) createWindow();
+    return;
   }
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible() && !process.env.ATELIER_HIDE_WINDOW) win.show();
+  win.focus();
 });
 
 app.on('window-all-closed', () => {

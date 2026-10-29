@@ -30,7 +30,7 @@ export function ComputerUseSection() {
   if (!status.available) {
     return (
       <SettingsSection title="Computer use">
-        <p className="pb-3 text-body text-fg-muted">Computer use isn’t available on this computer yet: it comes to macOS first.</p>
+        <p className="pb-3 text-body text-fg-muted">Computer use isn’t available on this computer yet: it works on macOS and Windows so far.</p>
       </SettingsSection>
     );
   }

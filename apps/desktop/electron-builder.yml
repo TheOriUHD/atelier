@@ -51,6 +51,10 @@ win:
     - from: ../../runner/bin
       to: runner
       filter: ['atelier-runner-windows-*', 'atelier-runner-linux-*', 'atelier-runner-darwin-*', 'checksums.json']
+    # The computer use helpers (`pnpm computer:build`, Go): main picks this machine's architecture.
+    - from: ../../native/bin
+      to: computer
+      filter: ['atelier-computer-windows-*.exe']
     - from: ../../THIRD_PARTY_NOTICES.md
       to: THIRD_PARTY_NOTICES.md
   target:

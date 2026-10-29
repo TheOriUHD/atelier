@@ -125,8 +125,16 @@ const NEEDS: Partial<Record<ComputerActionItem['action'], AppTier>> = {
 };
 
 /** Keys that switch apps rather than type into one: fine whatever app has the keyboard (Full control). */
-const SWITCH_KEYS = new Set(['cmd+tab', 'cmd+shift+tab', 'cmd+space']);
-const KEY_ALIASES: Record<string, string> = { command: 'cmd', meta: 'cmd', super: 'cmd', option: 'alt', opt: 'alt', control: 'ctrl' };
+const SWITCH_KEYS = new Set(['cmd+tab', 'cmd+shift+tab', 'cmd+space', 'alt+tab', 'alt+shift+tab', 'win', 'win+s']);
+
+/** A key combination in one spelling: on macOS meta/super are cmd; on Windows cmd is ctrl and meta/super the Windows key. */
+function comboOf(keys: string[], platform: NodeJS.Platform): string {
+  const windows = platform === 'win32';
+  const alias: Record<string, string> = windows
+    ? { command: 'ctrl', cmd: 'ctrl', meta: 'win', super: 'win', option: 'alt', opt: 'alt', control: 'ctrl' }
+    : { command: 'cmd', meta: 'cmd', super: 'cmd', option: 'alt', opt: 'alt', control: 'ctrl' };
+  return keys.map((k) => alias[k] ?? k).join('+');
+}
 
 /** What the model hears when the mouse and keyboard went back in the middle of its actions. */
 const ENDED = {
@@ -294,6 +302,7 @@ export class ComputerController {
         const { displays } = await this.deps.helper.call('displays.list', {});
         return {
           apps: policy.grants,
+          platform: this.deps.platform === 'win32' ? 'win32' : this.deps.platform === 'linux' ? 'linux' : 'darwin',
           mode: settings.mode,
           denied: policy.denied.map((d) => d.name),
           control: this.control?.key === key,
@@ -466,7 +475,7 @@ export class ComputerController {
       case 'key': {
         const keys = parseKeys(item.text ?? '');
         if (!keys.length) return refuse('Which keys? Like "cmd+s" or "return".');
-        const switching = policy.full && SWITCH_KEYS.has(keys.map((k) => KEY_ALIASES[k] ?? k).join('+'));
+        const switching = policy.full && SWITCH_KEYS.has(comboOf(keys, this.deps.platform));
         const why = switching ? null : await checkKeys();
         if (why) return refuse(why);
         await helper.call('key.press', { keys, ...(item.amount ? { repeat: item.amount } : {}) });
@@ -632,7 +641,7 @@ export class ComputerController {
   private async display(name?: string): Promise<HelperDisplay> {
     const { displays } = await this.deps.helper.call('displays.list', {});
     const wanted = name?.trim().toLowerCase();
-    const found = wanted ? displays.find((d) => d.name.toLowerCase() === wanted || d.id === wanted) : displays.find((d) => d.primary);
+    const found = wanted ? displays.find((d) => d.name.toLowerCase() === wanted || d.id.toLowerCase() === wanted) : displays.find((d) => d.primary);
     if (!found) throw new Error(wanted ? `No display called ${name}: ${displays.map((d) => d.name).join(', ')}.` : 'No display.');
     return found;
   }
