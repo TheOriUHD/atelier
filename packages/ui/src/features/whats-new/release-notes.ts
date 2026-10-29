@@ -1,4 +1,4 @@
-import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessagesSquare, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,28 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.2.11',
+    intro: 'The assistant can use your Mac, and the message box suggests your next reply.',
+    highlights: [
+      {
+        icon: MousePointerClick,
+        title: 'Computer use (macOS)',
+        body: 'Turn it on in Settings › System › Computer use, give Atelier Accessibility and Screen recording, and the assistant in Code and Cowork can see and use your apps. Full control takes over your computer as it is; Background asks for each app first. The screen’s edges glow while it works, holding Esc for a second stops it, and when it’s done Atelier comes back to the front. Clicks and typing follow your permission mode like any action, and your denied apps (password managers to start with) stay off-limits.',
+      },
+      {
+        icon: MessageSquareText,
+        title: 'Suggested replies',
+        body: 'When a reply ends in Code or Cowork, the empty message box shows a short guess at your next message in grey, like “push it” when that’s what you usually say. Tab puts it in as your own text. It comes back whenever the box is empty, until you send.',
+      },
+    ],
+    also: [
+      'The assistant does the work you ask for, also when you ask it as a question (“can you start?”).',
+      'A session the assistant moved to another folder shows that folder in the sidebar, the Terminal and the Run button.',
+      'Several windows, devices and the browser stay in step: branches, deleted chats, SSH questions, side chats, projects and lent folders.',
+      'Run in terminal works for PowerShell code blocks.',
+    ],
+  },
   {
     version: '0.2.10',
     intro: 'The commands the assistant runs are color-coded.',
