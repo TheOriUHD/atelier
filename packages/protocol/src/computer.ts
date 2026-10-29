@@ -274,6 +274,8 @@ export interface ComputerMethods {
   'apps.open': { params: AppsOpenParams; result: { app: HelperApp } };
   'apps.hide': { params: AppsHideParams; result: AppsHideResult };
   'apps.unhide': { params: AppsHideParams; result: Record<string, never> };
+  /** Makes a running app (by process: Atelier itself) the active one, through Accessibility where macOS ignores the ask. */
+  'apps.activate': { params: { pid: number }; result: { activated: boolean } };
   'capture.display': { params: CaptureDisplayParams; result: CaptureResult };
   'inspect.point': { params: InspectPointParams; result: InspectPointResult };
   /** The element with the keyboard focus (where typing goes), in the frontmost app. */

@@ -127,6 +127,10 @@ const methods = {
     log({ method: 'apps.hide', ids: hid.map((a) => a.id) });
     return { ids: hid.map((a) => a.id) };
   },
+  'apps.activate': ({ pid }) => {
+    log({ method: 'apps.activate', pid });
+    return { activated: true };
+  },
   'apps.unhide': ({ ids }) => {
     for (const a of apps) if (ids.includes(a.id)) a.hidden = false;
     log({ method: 'apps.unhide', ids });

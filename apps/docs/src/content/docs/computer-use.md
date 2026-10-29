@@ -77,7 +77,7 @@ Acting in an app means taking your mouse and keyboard. While Atelier has them:
 - in Background, apps it wasn't allowed are hidden, and so are Atelier's own windows; **Unhide apps when Atelier
   finishes** (on by default) shows them again afterwards. Full control hides nothing;
 - it keeps them for the whole task and gives them back when it is done (as it writes its reply), when it asks you a
-  question, or when you stop it. In Full control a permission prompt doesn't end it: it waits for your answer and
+  question, or when you stop it. When it is done or asks you something, Atelier comes back to the front. In Full control a permission prompt doesn't end it: it waits for your answer and
   carries on. In Background any card hands them back.
 
 In **Background**, the first time in a conversation a card asks **Let Atelier take over your mouse and keyboard?**

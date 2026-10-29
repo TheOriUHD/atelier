@@ -33,7 +33,7 @@ import { createBundleSwap } from './bundle-swap.ts';
 import { createUpdates, inertUpdater, type Updater } from './updater.ts';
 import { ComputerController } from './computer/controller.ts';
 import { ComputerHelper } from './computer/helper.ts';
-import { createOverlay } from './computer/overlay.ts';
+import { createOverlay, type ScreenOverlay } from './computer/overlay.ts';
 import {
   clearConnection,
   clearToken,
@@ -166,21 +166,39 @@ const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COM
 
 /** Atelier's windows step aside while it has full control of the computer, and come back after. */
 let stepAside: BrowserWindow[] = [];
+// A test run with hidden windows doesn't light up the screen of the computer running it.
+const screenOverlay: ScreenOverlay = process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {}, owns: () => false } : createOverlay();
+/** Atelier's own windows (not the overlay's), the one used last first. */
+let usedLast: BrowserWindow | null = null;
+app.on('browser-window-focus', (_event, win) => {
+  if (!screenOverlay.owns(win)) usedLast = win;
+});
+const atelierWindows = () => {
+  const all = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && !screenOverlay.owns(w));
+  return usedLast && all.includes(usedLast) ? [usedLast, ...all.filter((w) => w !== usedLast)] : all;
+};
 const computer = new ComputerController({
   helper: new ComputerHelper(computerHelperPath, APP.version),
   // macOS first (ARCHITECTURE §22); a test's stand-in anywhere.
   hasHelper: !!process.env.ATELIER_COMPUTER_HELPER || (process.platform === 'darwin' && existsSync(computerHelperPath)),
   settingsPath: computerSettingsFile(),
-  // A test run with hidden windows doesn't light up the screen of the computer running it.
-  overlay: process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {} } : createOverlay(),
+  overlay: screenOverlay,
   windows: {
     hide: () => {
-      stepAside = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isVisible());
+      stepAside = atelierWindows().filter((w) => w.isVisible());
       for (const win of stepAside) win.hide();
     },
     restore: () => {
       for (const win of stepAside) if (!win.isDestroyed()) win.showInactive();
       stepAside = [];
+    },
+    focus: () => {
+      const win = atelierWindows()[0];
+      // A test run's window stays hidden.
+      if (!win || process.env.ATELIER_HIDE_WINDOW) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
     },
   },
   event: (backendKey, sessionId, event) => {

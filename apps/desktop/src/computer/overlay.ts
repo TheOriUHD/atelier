@@ -45,7 +45,10 @@ function esc(phase) {
 }
 </script></body></html>`;
 
-export function createOverlay(): Overlay {
+/** The overlay, and which windows are its (Atelier's own windows are the others). */
+export type ScreenOverlay = Overlay & { owns(win: BrowserWindow): boolean };
+
+export function createOverlay(): ScreenOverlay {
   let windows: BrowserWindow[] = [];
   /** After a stop, "Stopped" stays a moment so the person sees it took. */
   let closing: ReturnType<typeof setTimeout> | null = null;
@@ -56,6 +59,7 @@ export function createOverlay(): Overlay {
     windows = [];
   };
   return {
+    owns: (win) => windows.includes(win),
     show() {
       if (closing) close();
       if (windows.length) return;

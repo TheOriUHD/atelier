@@ -45,7 +45,12 @@ export interface ControllerDeps {
   settingsPath: string;
   overlay: Overlay;
   /** Atelier's own windows step aside during full control (they would be in the way of clicks), and come back. */
-  windows: { hide(): void; restore(): void };
+  windows: {
+    hide(): void;
+    restore(): void;
+    /** Shows a window of Atelier's in front (making Atelier the active app is the helper's part). */
+    focus(): void;
+  };
   /** Tells the backend that owns a session: the person held Esc, or took the mouse back. */
   event(backend: string, sessionId: string, event: ControllerEvent): void;
   /** The settings or the state changed: the windows read the status again. */
@@ -198,7 +203,7 @@ export class ComputerController {
   /** Changes the settings (from this computer's Settings page). Turning it off ends full control at once. */
   async settings(change: (s: ComputerSettings) => ComputerSettings): Promise<ComputerSettings> {
     const next = (await this.write(() => changeComputerSettings(this.deps.settingsPath, change))) as ComputerSettings;
-    if (!next.enabled && this.control) await this.end(this.control, true);
+    if (!next.enabled && this.control) await this.end(this.control, { unhide: true });
     // A denied app loses what it was allowed.
     for (const state of this.sessions.values()) for (const app of next.denied) state.grants.delete(app.id);
     this.deps.changed();
@@ -250,7 +255,7 @@ export class ComputerController {
   }
 
   async dispose(): Promise<void> {
-    if (this.control) await this.end(this.control, true);
+    if (this.control) await this.end(this.control, { unhide: true });
     await this.deps.helper.shutdown();
   }
 
@@ -352,12 +357,13 @@ export class ComputerController {
         }
         return { results };
       },
+      // Done with the computer (the agent says so, or its turn ends): Atelier comes back to the front with the reply.
       'control.release': async () => {
-        if (this.control?.key === key) await this.end(this.control);
+        if (this.control?.key === key) await this.end(this.control, { focus: true });
         return {};
       },
       'turn.end': async () => {
-        if (this.control?.key === key) await this.end(this.control);
+        if (this.control?.key === key) await this.end(this.control, { focus: true });
         return {};
       },
       'turn.wait': async ({ kind }: ControllerMethods['turn.wait']['params']) => {
@@ -365,12 +371,14 @@ export class ComputerController {
         if (control?.key !== key) return {};
         // Full control keeps the computer through a permission card (Atelier stays on screen there); anything else the
         // person must answer, and Background (its windows stepped aside), hands it back.
+        // Either way Atelier comes to the front, where the card is.
         if (settings.mode === 'full' && kind === 'permission') {
           const { app } = await this.deps.helper.call('apps.frontmost', {});
           control.front = app && appCategory(app.id) !== 'system' ? app.id : null;
+          await this.focusAtelier();
           return {};
         }
-        await this.end(control);
+        await this.end(control, { focus: true });
         return {};
       },
     };
@@ -528,7 +536,11 @@ export class ComputerController {
    * Gives the mouse and keyboard back: overlay off, Atelier's windows back, and the apps it hid back when the person
    * wants that ("Unhide apps when Atelier finishes"), or always (`unhide`) when computer use goes off or the app quits.
    */
-  private async end(control: Control, unhide = false): Promise<void> {
+  /**
+   * `unhide`: show the apps it hid whatever the setting says (computer use turned off, the app quitting). `focus`: bring
+   * Atelier to the front (the task is done, or it asks the person something).
+   */
+  private async end(control: Control, { unhide = false, focus = false }: { unhide?: boolean; focus?: boolean } = {}): Promise<void> {
     if (this.control !== control) return;
     this.control = null;
     const helper = this.deps.helper;
@@ -538,7 +550,14 @@ export class ComputerController {
     this.deps.windows.restore();
     const settings = await readComputerSettings(this.deps.settingsPath);
     if (control.hidden.length && (settings.unhideOnFinish || unhide)) await helper.call('apps.unhide', { ids: control.hidden }).catch(() => undefined);
+    if (focus) await this.focusAtelier();
     this.deps.changed();
+  }
+
+  /** Atelier in front: its window shown, and the app made active through the helper (macOS 14+ ignores its own ask). */
+  private async focusAtelier(): Promise<void> {
+    this.deps.windows.focus();
+    await this.deps.helper.call('apps.activate', { pid: process.pid }).catch(() => undefined);
   }
 
   private notified(n: ComputerNotification): void {

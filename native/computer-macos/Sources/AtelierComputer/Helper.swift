@@ -101,6 +101,10 @@ public final class Helper: @unchecked Sendable {
       try Self.validate(ids: params.ids)
       return AppsHideResult(ids: await MainActor.run { Apps.hide(ids: params.ids) })
     }
+    async(.appsActivate) { (params: AppsActivateParams) in
+      guard params.pid > 0, params.pid <= Int(Int32.max) else { throw RPCError.invalidParams("pid must be a process id") }
+      return AppsActivateResult(activated: await Apps.bringToFront(pid: pid_t(params.pid)))
+    }
     async(.appsUnhide) { (params: AppsHideParams) in
       try Self.validate(ids: params.ids)
       await MainActor.run { Apps.unhide(ids: params.ids) }

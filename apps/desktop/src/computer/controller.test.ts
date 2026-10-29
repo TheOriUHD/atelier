@@ -87,7 +87,7 @@ beforeEach(async () => {
     hasHelper: true,
     settingsPath,
     overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`), paused: (on) => overlay.push(`paused:${on}`) },
-    windows: { hide() {}, restore() {} },
+    windows: { hide() {}, restore() {}, focus: () => overlay.push('focus') },
     event: (_backend, sessionId, event) => events.push({ sessionId, event }),
     changed() {},
     platform: 'darwin',
@@ -179,7 +179,9 @@ describe('full control', () => {
     await controller.grant('local', 's2', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
     expect(await ask('control.request', {}, 's2')).toMatchObject({ granted: false, reason: /Another conversation/ });
     await ask('turn.end', {});
-    expect(overlay.at(-1)).toBe('hide');
+    // Done: the overlay goes, and Atelier comes back to the front with the reply.
+    expect(overlay.slice(-2)).toEqual(['hide', 'focus']);
+    expect(helper.did('apps.activate').at(-1)?.params).toEqual({ pid: process.pid });
     expect(helper.did('apps.unhide')[0]?.params).toEqual({ ids: ['com.apple.Safari', 'com.apple.Terminal', 'com.apple.mail', 'com.apple.Notes', 'com.1password.1password'] });
   });
 
@@ -316,6 +318,9 @@ describe('full control', () => {
     helper.front = APPS[1]!;
     await ask('turn.wait', { kind: 'permission' });
     expect(helper.did('control.end')).toHaveLength(0);
+    // Atelier comes forward, where the card is, while it keeps the computer.
+    expect(overlay.at(-1)).toBe('focus');
+    expect(helper.did('apps.activate')).toHaveLength(1);
     // The person answers the card in Atelier, which takes the keyboard; the next batch brings Safari back first.
     helper.front = app('dev.atelier.app', 'Atelier');
     await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }], size: SIZE });

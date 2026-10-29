@@ -58,6 +58,7 @@ public enum ComputerMethod: String, Sendable, CaseIterable {
   case appsOpen = "apps.open"
   case appsHide = "apps.hide"
   case appsUnhide = "apps.unhide"
+  case appsActivate = "apps.activate"
   case captureDisplay = "capture.display"
   case inspectPoint = "inspect.point"
   case inspectFocused = "inspect.focused"
@@ -259,6 +260,16 @@ public struct AppsOpenParams: Codable, Sendable {
 
 public struct AppsHideParams: Codable, Sendable {
   public var ids: [String]
+}
+
+/// A running app by its process: Atelier itself (main's pid), which has no bundle id worth trusting in development.
+public struct AppsActivateParams: Codable, Sendable {
+  public var pid: Int
+}
+
+public struct AppsActivateResult: Codable, Sendable, Equatable {
+  /// It is the active app now.
+  public var activated: Bool
 }
 
 /// `ids`: the apps this call hid (not those already hidden), for `apps.unhide` afterwards.

@@ -161,8 +161,8 @@ test('desktop: in Full control the assistant takes the computer as it is, withou
     expect(shot).toMatchObject({ apps: null });
     expect(shot?.exclude).toContain('com.1password.1password');
     expect(entries.find((e) => e.method === 'key.type')).toMatchObject({ text: 'amazon.de' });
-    // Done: the turn ends and the computer goes back.
-    await expect.poll(async () => (await helperLog(log)).map((e) => e.method)).toContain('control.end');
+    // Done: the turn ends, the computer goes back and Atelier comes to the front.
+    await expect.poll(async () => (await helperLog(log)).map((e) => e.method)).toEqual(expect.arrayContaining(['control.end', 'apps.activate']));
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });
