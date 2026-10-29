@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.12] — 2026-10-29
+
 - **Computer use on Windows:** the same as on the Mac (Full control and Background, the denied apps, holding Esc to stop), with nothing to grant first. Shortcuts use Ctrl, and apps running as administrator can't be used. The password managers start on the denied list there too.
 - **Atelier no longer stays invisible on Windows when something goes wrong at start:** a start that fails says why and where the details are (`%APPDATA%\Atelier\logs\main.log`) instead of leaving Atelier running with no window, a window that doesn't paint is shown after 5 seconds, a crashed page loads again, and opening Atelier again shows its window even when it never appeared.
 
