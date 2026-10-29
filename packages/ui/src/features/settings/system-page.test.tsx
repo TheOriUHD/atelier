@@ -90,6 +90,14 @@ describe('System page', () => {
     expect(bridge.updates.check).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the copyright under the version, the name linking to the author', async () => {
+    desktopBridge();
+    renderPage();
+    await waitFor(() => expect(row('system.version').textContent).toContain('© 2026 TheOriUHD'));
+    fireEvent.click(screen.getByRole('button', { name: 'TheOriUHD' }));
+    expect(platform.openExternal).toHaveBeenCalledWith('https://github.com/TheOriUHD');
+  });
+
   it('says when it last found nothing newer', async () => {
     desktopBridge({ checkedAt: Date.now() });
     renderPage();

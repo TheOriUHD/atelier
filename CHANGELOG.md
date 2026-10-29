@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Copyright notice:** Settings › System shows "© 2026 TheOriUHD" under the version (the name opens github.com/TheOriUHD), and the About Atelier panel on macOS and the Windows file properties say "Copyright © 2026 TheOriUHD" instead of "© 2026 Atelier".
+
 ## [0.2.13] — 2026-10-29
 
 - **Background mode works in the background:** with Background chosen in Settings › System › Computer use, the assistant works in one app's window at a time without taking your mouse and keyboard: it sees the window even when others cover it, clicks and types in it while you keep working, and a small note says which app it works in. Before, it asked to take over the mouse and keyboard for every task.

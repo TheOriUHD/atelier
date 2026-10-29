@@ -32,6 +32,7 @@ test('desktop: Settings › System shows the version and turns launch at login o
     const dialog = page.getByRole('dialog', { name: 'Settings' });
     await expect(dialog.getByRole('button', { name: 'System' })).toHaveAttribute('aria-current', 'page');
     await expect(dialog.locator('[data-setting-row="system.version"]')).toContainText(version);
+    await expect(dialog.locator('[data-setting-row="system.version"]')).toContainText('© 2026 TheOriUHD');
     // The test builds run with the update feed off (desktop-app.ts), and "Run on this computer" has no server to ask.
     await expect(dialog.getByText('This copy has no update source, so it can’t check for new versions. Get them from the Releases page.')).toBeVisible();
 

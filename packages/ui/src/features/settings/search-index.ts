@@ -443,7 +443,7 @@ export const SETTINGS_INDEX = [
     keywords: ['add skill', 'skills', 'github', 'repository', 'download', 'npx skills', 'replace'],
     admin: true,
   },
-  { id: 'system.version', page: 'system', label: 'Version', keywords: ['about', 'release', 'build', 'desktop app'] },
+  { id: 'system.version', page: 'system', label: 'Version', keywords: ['about', 'release', 'build', 'desktop app', 'copyright', 'author'] },
   {
     id: 'system.updates',
     page: 'system',

@@ -28,7 +28,7 @@ export function SystemPage() {
   return (
     <>
       <SettingsSection title="This app">
-        <SettingRow id="system.version">
+        <SettingRow id="system.version" detail={<Copyright />}>
           <span className="text-body text-fg-secondary tabular-nums">{status?.version}</span>
         </SettingRow>
         <UpdatesRow status={status} />
@@ -41,6 +41,18 @@ export function SystemPage() {
       </SettingsSection>
       <ComputerUseSection />
       <LentSection />
+    </>
+  );
+}
+
+/** The copyright line under the version; the name opens the author's GitHub. */
+function Copyright() {
+  return (
+    <>
+      © {APP.author.since}{' '}
+      <button type="button" onClick={() => openExternal(APP.author.url)} className="rounded-xs text-interactive-text outline-none focus-ring hover:underline">
+        {APP.author.name}
+      </button>
     </>
   );
 }

@@ -1,5 +1,7 @@
 appId: dev.atelier.app
 productName: Atelier
+# The About panel on macOS and the .exe's file properties (electron-builder makes up "© <year> <author>" without it).
+copyright: Copyright © 2026 TheOriUHD
 directories:
   output: release
   buildResources: resources

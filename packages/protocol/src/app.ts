@@ -10,6 +10,8 @@ export const APP = {
   /** Web session cookie name. */
   cookie: 'atelier_session',
   version: '0.2.13',
+  /** Who holds the copyright (LICENSE's required notice), shown under the version in Settings › System. */
+  author: { name: 'TheOriUHD', url: 'https://github.com/TheOriUHD', since: 2026 },
   /** Where the desktop builds are published. */
   releases: 'https://github.com/TheOriUHD/atelier/releases',
   /** Every change, release by release. */
