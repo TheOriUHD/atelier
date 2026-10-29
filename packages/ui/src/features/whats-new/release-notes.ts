@@ -19,6 +19,26 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.2.13',
+    intro: 'Background computer use works in the background now, and the assistant isn’t thrown off when you use your computer.',
+    highlights: [
+      {
+        icon: MousePointerClick,
+        title: 'Background works in the background',
+        body: 'With Background chosen in Settings › System › Computer use, the assistant works in one app’s window at a time without your mouse and keyboard: it sees the window even when others cover it and clicks and types in it while you keep working. A small note says which app it works in. Dragging and zooming still need Full control, which it asks for.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'You and the assistant on one computer',
+        body: 'Moving the mouse while it works changes nothing; when you click or type it waits until you stop and carries on. Holding Esc gives you the computer back without ending the reply: the assistant finishes another way, or says what it couldn’t do and why.',
+      },
+    ],
+    also: [
+      'Browsers start with full use on the access card, like other apps, and the assistant asks again when it needs more in an app.',
+      'The assistant replaces a field’s text instead of adding to it, and fixes slips without reloading the page.',
+    ],
+  },
+  {
     version: '0.2.12',
     intro: 'Computer use comes to Windows, and Atelier no longer stays invisible when its start goes wrong.',
     highlights: [
