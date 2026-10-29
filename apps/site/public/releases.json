@@ -1,44 +1,44 @@
 {
-  "version": "0.2.10",
-  "tag": "v0.2.10",
+  "version": "0.2.11",
+  "tag": "v0.2.11",
   "prerelease": false,
-  "publishedAt": "2026-10-25T20:13:09Z",
-  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.2.10",
+  "publishedAt": "2026-10-29T15:50:41Z",
+  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.2.11",
   "assets": {
     "macos-arm64": {
-      "name": "Atelier-0.2.10-arm64.dmg",
-      "size": 145774627,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.10-arm64.dmg"
+      "name": "Atelier-0.2.11-arm64.dmg",
+      "size": 146467338,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.11-arm64.dmg"
     },
     "macos-x64": {
-      "name": "Atelier-0.2.10.dmg",
-      "size": 152379085,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.10.dmg"
+      "name": "Atelier-0.2.11.dmg",
+      "size": 153076599,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.11.dmg"
     },
     "windows": {
-      "name": "Atelier-Setup-0.2.10.exe",
-      "size": 247328802,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.2.10.exe"
+      "name": "Atelier-Setup-0.2.11.exe",
+      "size": 247365691,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.2.11.exe"
     },
     "linux-deb-x64": {
-      "name": "Atelier-0.2.10-amd64.deb",
-      "size": 112665048,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.10-amd64.deb"
+      "name": "Atelier-0.2.11-amd64.deb",
+      "size": 112689644,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.11-amd64.deb"
     },
     "linux-deb-arm64": {
-      "name": "Atelier-0.2.10-arm64.deb",
-      "size": 107871616,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.10-arm64.deb"
+      "name": "Atelier-0.2.11-arm64.deb",
+      "size": 107894424,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.11-arm64.deb"
     },
     "linux-appimage-x64": {
-      "name": "Atelier-0.2.10.AppImage",
-      "size": 141477339,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.10.AppImage"
+      "name": "Atelier-0.2.11.AppImage",
+      "size": 141501656,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.11.AppImage"
     },
     "linux-appimage-arm64": {
-      "name": "Atelier-0.2.10-arm64.AppImage",
-      "size": 142839682,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.10-arm64.AppImage"
+      "name": "Atelier-0.2.11-arm64.AppImage",
+      "size": 142864047,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.2.11-arm64.AppImage"
     }
   }
 }
