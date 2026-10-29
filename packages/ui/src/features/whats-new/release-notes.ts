@@ -19,6 +19,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.2.12',
+    intro: 'Computer use comes to Windows, and Atelier no longer stays invisible when its start goes wrong.',
+    highlights: [
+      {
+        icon: MousePointerClick,
+        title: 'Computer use on Windows',
+        body: 'Turn it on in Settings › System › Computer use: the assistant in Code and Cowork can see and use your apps, as on the Mac. Windows asks for no permissions; shortcuts use Ctrl, and apps running as administrator can’t be used. Your password managers start on the denied list, and holding Esc for a second stops it.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'A start that goes wrong says so',
+        body: 'On Windows, Atelier could keep running in the background without ever showing its window. Now a start that fails explains why and where the details are, a window that doesn’t appear is shown after a few seconds, and opening Atelier again brings its window back.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.2.11',
     intro: 'The assistant can use your Mac, and the message box suggests your next reply.',
     highlights: [
