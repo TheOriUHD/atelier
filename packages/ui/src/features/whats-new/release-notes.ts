@@ -1,4 +1,4 @@
-import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,23 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.2.14',
+    intro: 'Sign in to a server through your own identity provider, and two fixes for computer use on Windows.',
+    highlights: [
+      {
+        icon: KeyRound,
+        title: 'Single sign-on',
+        body: 'In a browser, people can sign in to an Atelier server through Authentik, Keycloak, Google or anything else that speaks OpenID Connect. An admin adds the provider in Settings › Admin › Server › Single sign-on and chooses what happens to someone new: they wait for approval, get an account right away or are turned away. An existing account connects it once in Settings › Account › Connected sign-ins. The desktop app keeps signing in with passwords.',
+      },
+      {
+        icon: MousePointerClick,
+        title: 'Computer use on Windows',
+        body: 'Atelier stays on the taskbar when the assistant takes over and comes back as it was; before, it could look like it had quit. Text typed in Full control comes out right in apps like Notepad, which could show repeated letters. It now types about 30 characters a second.',
+      },
+    ],
+    also: ['Settings › System shows the copyright under the version.'],
+  },
   {
     version: '0.2.13',
     intro: 'Background computer use works in the background now, and the assistant isn’t thrown off when you use your computer.',

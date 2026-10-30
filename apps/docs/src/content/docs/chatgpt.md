@@ -109,7 +109,7 @@ The provider's ⋯ menu has **Test connection**, **Open ChatGPT session** (shows
 prompt ChatGPT shows), **Temporary chats**, and **Remove** (clears the private browser session and removes its model from the
 picker; your Atelier conversations stay in your history). There is no **Edit**.
 
-*(next release)* With the desktop app signed in to an Atelier server, you add ChatGPT Chat for yourself instead: **Settings ›
+With the desktop app signed in to an Atelier server, you add ChatGPT Chat for yourself instead: **Settings ›
 Your models › Add ChatGPT Chat**, with the same warning and sign-in. The window is the app's on that computer, so only you
 use it, and only while that app is connected. Signing in there allows the server to use the window; **Settings › System**
 has the switch to take that back.

@@ -342,7 +342,7 @@ password. See [Accounts](/accounts/).
 
 ### Can I sign in with Authentik, Keycloak or Google?
 
-In a browser, yes *(next release)*: anything that speaks OpenID Connect. An admin adds it in **Settings › Admin › Server ›
+In a browser, yes: anything that speaks OpenID Connect. An admin adds it in **Settings › Admin › Server ›
 Single sign-on**, and the desktop app keeps signing in with a password. See [Single sign-on](/self-hosting/#single-sign-on).
 
 ### Can I use my sessions from another device?

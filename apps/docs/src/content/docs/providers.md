@@ -149,7 +149,7 @@ once. It exists only in the desktop app, is fragile by nature, and may conflict 
 
 ## Your own models on a server
 
-*(next release)* On a server, everyone can add the model servers on their own computer and their own ChatGPT Chat in
+On a server, everyone can add the model servers on their own computer and their own ChatGPT Chat in
 **Settings › Your models**, from the desktop app on that computer. They are not providers for everyone: only that person
 sees and uses them, while the app there is connected. See
 [Local models](/local-models/#your-computers-models-on-a-server).

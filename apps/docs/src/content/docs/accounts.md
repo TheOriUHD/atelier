@@ -119,7 +119,7 @@ Each row other than yours has a menu (**⋯**):
 - **Passkeys**, in a browser, from **Sign in with a passkey**: your device's screen lock or a security key instead of a
   password. They need an HTTPS address with a hostname; they are not offered on IP addresses or in the desktop app. Add one
   in **Settings › Account › Passkeys**.
-- **An identity provider** *(next release)*, in a browser, from **Continue with** and its name, when an admin set one up
+- **An identity provider**, in a browser, from **Continue with** and its name, when an admin set one up
   (see [Single sign-on](/self-hosting/#single-sign-on)). Not in the desktop app.
 - **An invite code** or **Create an account** (above) for new people.
 - The desktop app signs in with a password and keeps the sign-in in the system's secure storage (Keychain, Credential
@@ -128,7 +128,7 @@ Each row other than yours has a menu (**⋯**):
 
 ### Signing in with an identity provider
 
-*(next release)* An admin adds a provider such as Authentik, Keycloak or Google in **Settings › Admin › Server › Single
+An admin adds a provider such as Authentik, Keycloak or Google in **Settings › Admin › Server › Single
 sign-on**. It works in browsers only: the desktop app keeps signing in with a password.
 
 - **You already have an account:** sign in the usual way and press **Connect** and the provider's name in **Settings ›

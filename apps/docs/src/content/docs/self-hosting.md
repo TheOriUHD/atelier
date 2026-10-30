@@ -259,7 +259,7 @@ expose this to the internet.
 
 ## Single sign-on
 
-*(next release)* People can sign in through an OpenID Connect identity provider such as Authentik, Keycloak, Authelia,
+People can sign in through an OpenID Connect identity provider such as Authentik, Keycloak, Authelia,
 Pocket ID, Google or Microsoft Entra ID. It is for browsers: the desktop app signs in with a password. See
 [what it means for accounts](/accounts/#signing-in-with-an-identity-provider).
 

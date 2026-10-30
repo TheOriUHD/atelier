@@ -199,7 +199,7 @@ once** if your server cannot take that.
 
 ## Your computer's models on a server
 
-*(next release)* With the desktop app signed in to an Atelier server, that server can use the model servers on your
+With the desktop app signed in to an Atelier server, that server can use the model servers on your
 computer, for you alone. It reaches them through the app.
 
 1. In the desktop app on that computer, open **Settings › Your models**. Ollama, llama.cpp and LM Studio answering on their
