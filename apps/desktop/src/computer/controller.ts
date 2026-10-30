@@ -46,7 +46,7 @@ export interface ControllerDeps {
   hasHelper: boolean;
   settingsPath: string;
   overlay: Overlay;
-  /** Atelier's own windows step aside during full control (they would be in the way of clicks), and come back. */
+  /** Atelier's own windows step aside when it takes over from Background (they would be in the way of clicks), and come back. */
   windows: {
     hide(): void;
     restore(): void;

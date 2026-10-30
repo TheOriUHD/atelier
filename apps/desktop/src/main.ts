@@ -34,6 +34,7 @@ import { createUpdates, inertUpdater, type Updater } from './updater.ts';
 import { ComputerController } from './computer/controller.ts';
 import { ComputerHelper } from './computer/helper.ts';
 import { createOverlay, type ScreenOverlay } from './computer/overlay.ts';
+import { stepAside, stepBack } from './computer/step-aside.ts';
 import { describe, logMain, openMainLog } from './main-log.ts';
 import {
   clearConnection,
@@ -194,8 +195,8 @@ const computerHelperPath = (() => {
 /** A test's stand-in helper answers for macOS's permissions too; the real one is checked against macOS itself. */
 const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COMPUTER_HELPER;
 
-/** Atelier's windows step aside while it has full control of the computer, and come back after. */
-let stepAside: BrowserWindow[] = [];
+/** Atelier's windows that stepped aside while it has the computer, to bring back after. */
+let steppedAside: BrowserWindow[] = [];
 // A test run with hidden windows doesn't light up the screen of the computer running it.
 const screenOverlay: ScreenOverlay = process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {}, working() {}, owns: () => false } : createOverlay();
 /** Atelier's own windows (not the overlay's), the one used last first. */
@@ -215,12 +216,12 @@ const computer = new ComputerController({
   overlay: screenOverlay,
   windows: {
     hide: () => {
-      stepAside = atelierWindows().filter((w) => w.isVisible());
-      for (const win of stepAside) win.hide();
+      steppedAside = stepAside(atelierWindows(), process.platform);
+      logMain(`computer use: ${steppedAside.length} window(s) stepped aside`);
     },
     restore: () => {
-      for (const win of stepAside) if (!win.isDestroyed()) win.showInactive();
-      stepAside = [];
+      stepBack(steppedAside);
+      steppedAside = [];
     },
     focus: () => {
       const win = atelierWindows()[0];
@@ -984,6 +985,8 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => updates?.installOnQuit());
 
 app.on('before-quit', () => {
+  // With no line like this, the app didn't quit: it crashed.
+  logMain('quitting');
   quitting = true;
   keepAwake.stop();
   // Gives back the mouse and keyboard and shows the apps it hid.

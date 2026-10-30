@@ -86,7 +86,7 @@ has them:
 
 - a soft clay glow runs along the edges of every screen, and a small panel below the menu bar says **Atelier is using
   your computer · Hold Esc to stop**;
-- when it took them from Background, apps it wasn't allowed are hidden, and so are Atelier's own windows; **Unhide
+- when it took them from Background, apps it wasn't allowed are hidden, and Atelier's own windows step aside: hidden on macOS, minimized to the taskbar on Windows; **Unhide
   apps when Atelier finishes** (on by default) shows them again afterwards. Full control hides nothing;
 - it keeps them for the whole task and gives them back when it is done (as it writes its reply), when it asks you a
   question, or when you stop it. When it is done or asks you something, Atelier comes back to the front. In Full control a permission prompt doesn't end it: it waits for your answer and
