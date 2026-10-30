@@ -131,8 +131,9 @@ Each row other than yours has a menu (**⋯**):
 An admin adds a provider such as Authentik, Keycloak or Google in **Settings › Admin › Server › Single
 sign-on**. It works in browsers only: the desktop app keeps signing in with a password.
 
-- **You already have an account:** sign in the usual way and press **Connect** and the provider's name in **Settings ›
-  Account › Connected sign-ins**, once. After that **Continue with** signs you in to that account.
+- **You already have an account:** in a browser, sign in the usual way and press **Connect** and the provider's name in
+  **Settings › Account › Connected sign-ins**, once. After that **Continue with** signs you in to that account. The
+  desktop app shows the same section, and **Open in browser** takes you there.
 - **You don't have one:** what happens is the admin's choice for each provider: **Create an account an admin approves**
   (the default), **Create an account right away**, or **Turn them away**. A new account gets its name from the provider
   and a username from your username or email address there, with a number added when that one is taken.
@@ -198,7 +199,7 @@ On a server (in a browser or in a desktop app connected to one), top to bottom:
 | **Log out** | See above. In the desktop app it also offers **Switch…**. |
 | **Log out of all devices › Log out everywhere** | Ends every sign-in, after confirming. |
 | **Passkeys** | Browser only. **Add passkey** names it and asks your browser where to keep it. The list shows **Name**, **Added** and **Last used**; removing one here does not delete it from your device or password manager. |
-| **Connected sign-ins** | Browser only, when the server has identity providers. **Connect** and the provider's name goes through its sign-in and back here; the list shows **Provider**, **Signed in as** and **Last used**. |
+| **Connected sign-ins** | When the server has identity providers. **Connect** and the provider's name goes through its sign-in and back here, in a browser; the desktop app has **Open in browser** instead; the list shows **Provider**, **Signed in as** and **Last used**. |
 | **Devices** | Computers running the Atelier desktop app for your account: **Name**, **Platform**, **Added**, and **Online** or when last seen. **This computer** marks the one you are on; the others can be removed. |
 
 On **Run on this computer** the page is shorter, because there is no sign-in to manage: **Profile**, **Instructions for

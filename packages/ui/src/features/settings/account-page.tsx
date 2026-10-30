@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, UserRound } from 'lucide-react';
+import { ExternalLink, Plus, Trash2, UserRound } from 'lucide-react';
 import { z } from 'zod';
 import {
   CustomPersonality,
@@ -33,7 +33,7 @@ import {
   type SelectOption,
 } from '../../components/ui/index.ts';
 import { relativeTime, shortDate } from '../../lib/dates.ts';
-import { blobUrl, desktop, surface } from '../../lib/platform.ts';
+import { blobUrl, desktop, openExternal } from '../../lib/platform.ts';
 import { keys, useAccount, useSettings } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { ChangePasswordForm } from '../auth/change-password-form.tsx';
@@ -87,7 +87,7 @@ export function AccountPage() {
       <RemoteControlSection />
       <AccountSection account={account} />
       {passkeysAvailable() && <PasskeysSection />}
-      {surface === 'web' && <IdentitiesSection />}
+      <IdentitiesSection />
       <SessionsSection />
       <DevicesSection />
     </>
@@ -698,13 +698,24 @@ function PasskeysSection() {
   );
 }
 
-/** Web only, like the sign-in it serves: connecting goes through the provider's own pages and back here. */
+/**
+ * Connecting goes through the provider's pages and back here in a browser, like the sign-in it serves. The desktop app
+ * shows the same list, sends you to this section in your browser, and reads the list again when you come back.
+ */
 function IdentitiesSection() {
   const entry = settingEntry('account.identities');
+  const qc = useQueryClient();
   const { data } = useQuery({ queryKey: keys.identities, queryFn: () => rpc().call('account.identities', {}), staleTime: 0 });
+  const { data: connection } = useQuery({ queryKey: keys.connection, queryFn: () => desktop!.connection.get(), enabled: !!desktop });
   const [connecting, setConnecting] = useState<string>();
   const [error, setError] = useState(oidcError);
   useEffect(clearOidcError, []);
+  useEffect(() => {
+    if (!desktop) return;
+    const refresh = () => void qc.invalidateQueries({ queryKey: keys.identities });
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [qc]);
   if (!data || (!data.connected.length && !data.available.length)) return null;
   const connect = (id: string) => {
     setConnecting(id);
@@ -714,6 +725,7 @@ function IdentitiesSection() {
       setError(describeError(e).message);
     });
   };
+  const serverUrl = connection?.serverUrl;
   return (
     <SettingsSection id="account.identities" title={entry.label} description={entry.description}>
       {data.connected.length > 0 && (
@@ -723,13 +735,23 @@ function IdentitiesSection() {
           ))}
         </DataTable>
       )}
-      {data.available.length > 0 && (
+      {data.available.length > 0 && !desktop && (
         <div className="flex flex-wrap gap-2 py-3">
           {data.available.map((p) => (
             <Button key={p.id} leadingIcon={Plus} loading={connecting === p.id} disabled={!!connecting} onClick={() => connect(p.id)}>
               Connect {p.name}
             </Button>
           ))}
+        </div>
+      )}
+      {data.available.length > 0 && serverUrl && (
+        <div className="flex flex-col items-start gap-2 py-3">
+          <p className="text-body text-fg-muted">
+            To connect {data.available.map((p) => p.name).join(', ')}, open this page in your browser. Sign in there with your password: Continue with would make a new account.
+          </p>
+          <Button trailingIcon={ExternalLink} onClick={() => openExternal(`${serverUrl}/#/?settings=account&row=account.identities`)}>
+            Open in browser
+          </Button>
         </div>
       )}
       {error && (

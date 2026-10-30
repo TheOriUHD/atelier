@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRowFlash } from './row-flash.ts';
@@ -75,10 +75,51 @@ describe('useRowFlash', () => {
     }
   });
 
-  it('clears an unknown target without scrolling', () => {
+  it('waits for a row whose section shows only once its data is here', async () => {
     const onDone = vi.fn();
-    render(<Rows initialRow="nope" onDone={onDone} />);
-    expect(scrollIntoView).not.toHaveBeenCalled();
+    function Late() {
+      const container = useRef<HTMLDivElement>(null);
+      const [loaded, setLoaded] = useState(false);
+      const [row, setRow] = useState<string | undefined>('account.identities');
+      const done = useCallback(() => {
+        onDone();
+        setRow(undefined);
+      }, []);
+      useRowFlash(container, row, done);
+      return (
+        <div ref={container}>
+          <button type="button" onClick={() => setLoaded(true)}>
+            Load
+          </button>
+          {loaded && <div data-setting-row="account.identities">Connected sign-ins</div>}
+        </div>
+      );
+    }
+    render(<Late />);
+    expect(onDone).not.toHaveBeenCalled();
+
+    act(() => screen.getByRole('button', { name: 'Load' }).click());
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByText('Connected sign-ins'));
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears an unknown target without scrolling, after giving it time to appear', () => {
+    vi.useFakeTimers();
+    try {
+      const onDone = vi.fn();
+      function Unknown() {
+        const container = useRef<HTMLDivElement>(null);
+        useRowFlash(container, 'nope', onDone);
+        return <div ref={container} />;
+      }
+      render(<Unknown />);
+      expect(onDone).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(3000));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(onDone).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -46,6 +46,11 @@ test('an identity provider signs people in: set up, connected, and for someone n
   await expect(visitor.getByRole('alert')).toHaveText('Your account is waiting for an admin to approve it.');
   await expect(visitor).toHaveURL(`${baseURL}/`);
 
+  // The desktop app's Open in browser lands on the section, which shows only once its data is here.
+  await page.goto('about:blank');
+  await page.goto('/#/?settings=account&row=account.identities');
+  await expect(page.getByRole('button', { name: 'Connect Test IdP' })).toBeInViewport();
+
   // The admin connects their own account from Settings › Account.
   await signInAs({ sub: 'the-admin', preferred_username: 'tester', name: 'Tester', email: 'tester@example.com' });
   const account = await openSettings(page, 'account');

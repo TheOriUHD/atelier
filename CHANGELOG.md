@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Connected sign-ins in the desktop app:** Settings › Account shows them there too, where you can disconnect one, and **Open in browser** takes you to the same section in your browser to connect a provider. Before, the section existed only in a browser, and nothing in the app said so.
+
 ## [0.2.14] — 2026-10-30
 
 - **Typing in Full control on Windows comes out right:** text went out in bursts, which Windows 11's Notepad and apps like it read wrongly, so "typed in full control" could arrive as "typed lllllllllllllll". On a test machine about half of the typed lines in Notepad were wrong. Characters now go one at a time, about 30 a second in every app, and long text is sent in pieces so it can't run into a time limit. Background mode and Edge weren't affected.

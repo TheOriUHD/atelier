@@ -22,9 +22,10 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
 });
 
 /** The desktop bridge; undefined is the browser. */
-const platform = vi.hoisted(() => ({ desktop: undefined as unknown }));
+const platform = vi.hoisted(() => ({ desktop: undefined as unknown, openExternal: vi.fn() }));
 vi.mock('../../lib/platform.ts', async (importOriginal) => ({
   ...(await importOriginal<object>()),
+  openExternal: (url: string) => platform.openExternal(url),
   get desktop() {
     return platform.desktop;
   },
@@ -42,6 +43,7 @@ function desktopBridge(connection: { mode: 'local' | 'server'; serverUrl: string
 
 afterEach(() => {
   platform.desktop = undefined;
+  platform.openExternal.mockClear();
   webLogout.mockClear();
 });
 
@@ -239,6 +241,59 @@ describe('Account › Instructions for Code and Cowork', () => {
       ]),
     );
     expect(prefs.personalization.atelierMd).toBe('- Explain a plan before large changes.');
+  });
+});
+
+describe('Account › Connected sign-ins', () => {
+  const authentik = { id: 'authentik', name: 'Authentik' };
+  const identity = { id: 'i1', providerId: 'authentik', provider: 'Authentik', label: 'ada@example.com', createdAt: 1, lastUsedAt: null };
+  let identities: { connected: (typeof identity)[]; available: (typeof authentik)[] };
+
+  beforeEach(() => {
+    identities = { connected: [], available: [authentik] };
+    resetBackend({
+      'settings.get': () => snapshot({}),
+      'account.get': () => user(),
+      'account.sessions': () => [],
+      'account.devices': () => [],
+      'account.passkeys': () => [],
+      'account.identities': () => identities,
+    });
+  });
+
+  it('connects right here in a browser', async () => {
+    await renderPage();
+    expect(await screen.findByRole('button', { name: 'Connect Authentik' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
+  });
+
+  it('sends the desktop app to this section in the browser, warning about Continue with', async () => {
+    desktopBridge({ mode: 'server', serverUrl: 'https://atelier.example.com' });
+    await renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open in browser' }));
+    expect(platform.openExternal).toHaveBeenCalledWith('https://atelier.example.com/#/?settings=account&row=account.identities');
+    expect(screen.getByText(/To connect Authentik, .*Continue with would make a new account/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Connect Authentik' })).toBeNull();
+  });
+
+  it('shows what was connected when you come back to the desktop app, and disconnects there', async () => {
+    desktopBridge({ mode: 'server', serverUrl: 'https://atelier.example.com' });
+    await renderPage();
+    await screen.findByRole('button', { name: 'Open in browser' });
+
+    identities = { connected: [identity], available: [] };
+    fireEvent.focus(window);
+    expect(await screen.findByRole('cell', { name: 'ada@example.com' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Disconnect Authentik' })).toBeTruthy();
+  });
+
+  it('stays away on a server without identity providers', async () => {
+    identities = { connected: [], available: [] };
+    desktopBridge({ mode: 'server', serverUrl: 'https://atelier.example.com' });
+    await renderPage();
+    await waitFor(() => expect(callsTo('account.identities')).toHaveLength(1));
+    expect(document.querySelector('[data-setting-row="account.identities"]')).toBeNull();
   });
 });
 

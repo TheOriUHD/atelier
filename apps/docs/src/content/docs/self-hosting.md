@@ -276,7 +276,8 @@ work, for a provider on your own network.
 3. Back in the dialog, fill in **Issuer**, **Client ID** and **Client secret** (empty for a public client), and choose
    what happens to **someone without an account here**. Atelier reads the provider's configuration before it saves, so a
    wrong address shows there. The client secret is encrypted with the [secrets key](#the-secrets-key).
-4. Connect your own admin account in **Settings › Account › Connected sign-ins**. **Continue with** does not find an
+4. In a browser, sign in with your password and connect your own admin account in **Settings › Account › Connected
+   sign-ins**; the desktop app has **Open in browser** there. **Continue with** does not find an
    existing account by itself: it would make you a new one.
 
 When a sign-in fails after the provider, people see that it didn't work and the server's log says why.

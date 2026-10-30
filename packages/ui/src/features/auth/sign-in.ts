@@ -40,10 +40,10 @@ export async function oidcStart(id: string, link = false): Promise<never> {
 }
 
 let offered = false;
-/** Whether this browser can sign in with an identity provider here; the backend says so with the sign-in status. */
+/** Whether this server has identity providers; the backend says so with the sign-in status. */
 export const identityProvidersOffered = () => offered;
 export function setIdentityProvidersOffered(available: boolean): void {
-  offered = available && !desktop;
+  offered = available;
 }
 
 const OIDC_ERRORS: Record<string, string> = {
