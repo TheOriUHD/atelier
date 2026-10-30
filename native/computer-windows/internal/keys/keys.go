@@ -322,7 +322,7 @@ type Piece struct {
 	Units []uint16
 }
 
-// ChunkLength is the most UTF-16 units sent in one go; a surrogate pair is never split.
+// ChunkLength is the most UTF-16 units in a run; a surrogate pair is never split.
 const ChunkLength = 20
 
 // Pieces splits text for key.type: "\n", "\r" and "\r\n" are one Return each, "\t" is Tab, the rest goes in runs.

@@ -144,6 +144,17 @@ function comboOf(keys: string[], platform: NodeJS.Platform): string {
   return keys.map((k) => alias[k] ?? k).join('+');
 }
 
+/** Characters in one key.type: Windows types about 30 a second, and a helper call has 30 s to answer. */
+const TYPED_PIECE = 400;
+
+/** Text cut into key.type calls, between characters. */
+function typedPieces(text: string): string[] {
+  const characters = Array.from(text);
+  const pieces: string[] = [];
+  for (let at = 0; at < characters.length; at += TYPED_PIECE) pieces.push(characters.slice(at, at + TYPED_PIECE).join(''));
+  return pieces;
+}
+
 /** What the model hears when the mouse and keyboard went back in the middle of its actions. */
 /** After the person held Esc: the computer is theirs for the rest of the turn. */
 const TAKEN_BACK =
@@ -511,7 +522,7 @@ export class ComputerController {
         if (why) return refuse(why);
         // `replace`: what the field holds is selected first, so the text takes its place instead of joining it.
         if (item.replace) await helper.call('key.press', { keys: this.deps.platform === 'darwin' ? ['cmd', 'a'] : ['ctrl', 'a'] });
-        await helper.call('key.type', { text: item.text });
+        for (const piece of typedPieces(item.text)) await helper.call('key.type', { text: piece });
         return done();
       }
       case 'key': {

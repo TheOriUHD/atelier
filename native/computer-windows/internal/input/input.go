@@ -557,6 +557,11 @@ func (c *Controller) Press(s keys.Stroke, repeat int) error {
 	})
 }
 
+// typingPause is the time between typed characters. A KEYEVENTF_UNICODE key finds its character when the app takes the
+// key, in one place holding the last one sent, so keys left waiting while an app is busy for a moment all come out as
+// the last one. Windows 11's Notepad pauses like that between words, and took faster typing wrongly; Chromium doesn't.
+const typingPause = 30 * time.Millisecond
+
 // UnicodeEvents types UTF-16 units with KEYEVENTF_UNICODE: each unit down, then up (a surrogate pair is two units).
 func UnicodeEvents(units []uint16) []Event {
 	events := make([]Event, 0, len(units)*2)
@@ -580,7 +585,7 @@ func (c *Controller) Type(text string) error {
 			case keys.TabKey:
 				err = c.pressKey(keys.Key{VK: keys.VK_TAB})
 			default:
-				err = c.post(UnicodeEvents(piece.Units), change{})
+				err = c.typeUnits(piece.Units)
 			}
 			if err != nil {
 				return err
@@ -589,6 +594,17 @@ func (c *Controller) Type(text string) error {
 		}
 		return nil
 	})
+}
+
+// typeUnits sends UTF-16 units one at a time, at the pace of typingPause.
+func (c *Controller) typeUnits(units []uint16) error {
+	for _, u := range units {
+		if err := c.post(UnicodeEvents([]uint16{u}), change{}); err != nil {
+			return err
+		}
+		c.sleep(typingPause)
+	}
+	return nil
 }
 
 // Hold holds the stroke for ms, cut short by a release or a stop.

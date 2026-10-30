@@ -15,6 +15,7 @@ import (
 type fakeSender struct {
 	mu      sync.Mutex
 	events  []Event
+	sends   []int
 	cursor  []proto.Point
 	swapped bool
 }
@@ -23,6 +24,7 @@ func (f *fakeSender) Send(e []Event) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.events = append(f.events, e...)
+	f.sends = append(f.sends, len(e))
 	return nil
 }
 func (f *fakeSender) SetCursorPos(x, y int) {
@@ -198,6 +200,22 @@ func TestTypeUnicodeAndBreaks(t *testing.T) {
 	}
 	if e[0].VK != 0 || e[1].Flags != KeyUnicode|KeyUp {
 		t.Errorf("unicode events: %+v %+v", e[0], e[1])
+	}
+}
+
+func TestTypeSendsOneUnitAtATimeWithAPause(t *testing.T) {
+	c, s := newController()
+	var pauses []time.Duration
+	c.SetSleep(func(d time.Duration) { pauses = append(pauses, d) })
+	if err := c.Type("ab😀"); err != nil {
+		t.Fatal(err)
+	}
+	// Down and up of each unit go together, the surrogate pair's two units apart.
+	if want := []int{2, 2, 2, 2}; !slices.Equal(s.sends, want) {
+		t.Errorf("sent in batches of %v, want %v", s.sends, want)
+	}
+	if n := slices.Index(pauses, typingPause); n != 0 || len(pauses) < 4 || pauses[3] != typingPause {
+		t.Errorf("pauses: %v", pauses)
 	}
 }
 

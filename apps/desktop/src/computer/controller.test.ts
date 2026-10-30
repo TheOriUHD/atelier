@@ -289,6 +289,16 @@ describe('full control', () => {
     expect(helper.did('key.type')).toHaveLength(1);
   });
 
+  it('types long text in pieces the helper finishes in time, between characters', async () => {
+    await ready([{ id: APPS[0]!.id, tier: 'full' }]);
+    helper.focused = { app: APPS[0]! };
+    const text = '🙂'.repeat(450);
+    expect((await ask('control.batch', { actions: [{ action: 'type', text }], size: SIZE })).results[0]).toEqual({ action: 'type', ok: true });
+    const pieces = helper.did('key.type').map((call) => (call.params as { text: string }).text);
+    expect(pieces.map((piece) => Array.from(piece).length)).toEqual([400, 50]);
+    expect(pieces.join('')).toBe(text);
+  });
+
   it("doesn't click links in mail", async () => {
     await ready([{ id: 'com.apple.mail', tier: 'full' }]);
     helper.under = { app: APPS[3]!, link: 'https://evil.example/' };
