@@ -48,8 +48,12 @@ import {
   AutoLockMinutes,
   ClientKind,
   DeviceSummary,
+  IdentitySummary,
   InviteSummary,
   NewScreenLock,
+  OidcProviderInput,
+  OidcProviderSummary,
+  OidcSignInOption,
   PasskeySummary,
   Password,
   SafeguardsOverride,
@@ -167,13 +171,17 @@ export const contract = {
 
     'account.get': { input: Empty, output: UserSummary },
     'account.update': { input: z.object({ name: z.string().trim().min(1).max(80).optional(), avatar: z.string().nullable().optional() }), output: UserSummary },
-    'account.changePassword': { input: z.object({ current: z.string().min(1).max(256), next: Password }), output: Ok },
+    /** `current` may be empty only for an account without a password. */
+    'account.changePassword': { input: z.object({ current: z.string().max(256), next: Password }), output: Ok },
     'account.sessions': { input: Empty, output: z.array(AuthSessionSummary) },
     'account.revokeSession': { input: Id, output: Ok },
     'account.logoutEverywhere': { input: Empty, output: Ok },
     /** The person's passkeys (added and used through the web sign-in routes). */
     'account.passkeys': { input: Empty, output: z.array(PasskeySummary) },
     'account.removePasskey': { input: Id, output: Ok },
+    /** Sign-ins with identity providers on this account, and the server's providers it can still connect. */
+    'account.identities': { input: Empty, output: z.object({ connected: z.array(IdentitySummary), available: z.array(OidcSignInOption) }) },
+    'account.removeIdentity': { input: Id, output: Ok },
     'account.devices': { input: Empty, output: z.array(DeviceSummary) },
     'account.removeDevice': { input: Id, output: Ok },
     /** Desktop apps register the machine they run on for the signed-in user. */
@@ -210,6 +218,10 @@ export const contract = {
     'settings.set': { input: z.object({ layer: SettingsLayer.default('global'), path: SettingsPath, value: z.unknown() }), output: Ok },
     'settings.reset': { input: z.object({ layer: SettingsLayer, path: SettingsPath }), output: Ok },
 
+    /** Identity providers for browsers' sign-in; null on the desktop app's own backend. */
+    'oidc.list': { input: Empty, output: z.object({ redirectBase: z.string(), providers: z.array(OidcProviderSummary) }).nullable() },
+    'oidc.save': { input: OidcProviderInput, output: OidcProviderSummary },
+    'oidc.remove': { input: Id, output: Ok },
     'secrets.list': { input: Empty, output: z.array(SecretSummary) },
     /** Stores (or rotates) a secret; returns its masked summary. The value never comes back. */
     'secrets.set': {
@@ -740,6 +752,9 @@ export const LOCKED_PROCEDURES: ReadonlySet<ProcedureName> = PUBLIC_PROCEDURES;
 export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureName>([
   'settings.set',
   'settings.reset',
+  'oidc.list',
+  'oidc.save',
+  'oidc.remove',
   'secrets.list',
   'secrets.set',
   'secrets.delete',

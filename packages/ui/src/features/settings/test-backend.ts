@@ -21,6 +21,7 @@ export function user(extra: Partial<UserSummary> = {}): UserSummary {
     role: 'admin',
     avatar: null,
     mustChangePassword: false,
+    hasPassword: true,
     disabled: false,
     safeguards: 'inherit',
     createdAt: 0,

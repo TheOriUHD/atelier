@@ -114,6 +114,11 @@ export class SecretStore {
     return Boolean(await this.db.select({ id: secrets.id }).from(secrets).where(eq(secrets.id, id)).get());
   }
 
+  /** The last four characters, to show a stored secret masked; undefined when there is none. */
+  async tail(id: string): Promise<string | undefined> {
+    return (await this.db.select({ tail: secrets.tail }).from(secrets).where(eq(secrets.id, id)).get())?.tail;
+  }
+
   /** Creates or rotates a secret; returns its id. */
   async set(input: { id?: string; label: string; kind: SecretSummary['kind']; value: string }): Promise<string> {
     const id = input.id ?? (await this.freeId(slugId(input.label)));

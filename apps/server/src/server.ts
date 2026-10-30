@@ -16,6 +16,7 @@ import { AccountError, AesGcmCipher, createBackend, loadServerKey, type ClientIn
 import { APP, artifactRuntimeCsp, DEVICE_HEADERS, DEVICE_LINK_PATH, DeviceInfo, Password, Username, type RpcMessage, type Transport } from '@atelier/protocol';
 import { z } from 'zod';
 import { oauthRoutes } from './oauth.ts';
+import { oidcRoutes } from './oidc.ts';
 import { clientIp, originRefusal, proxyConfig, publicOrigin } from './proxy.ts';
 import { updateFeed } from './updates.ts';
 
@@ -112,11 +113,13 @@ const sameOrigin = (c: Context, what = 'a cross-site request') => {
   return false;
 };
 
+const keepSignIn = (c: Context, token: string) => setCookie(c, COOKIE, token, { httpOnly: true, sameSite: 'Lax', secure: secure(c), path: '/', maxAge: 30 * 24 * 3600 });
+
 const signIn = async (c: Context, run: (client: ClientInfo) => Promise<{ token: string; user: unknown }>) => {
   if (!sameOrigin(c)) return c.json({ code: 'bad_origin', message: 'Cross-site request refused.' }, 403);
   try {
     const { token, user } = await run(clientOf(c));
-    setCookie(c, COOKIE, token, { httpOnly: true, sameSite: 'Lax', secure: secure(c), path: '/', maxAge: 30 * 24 * 3600 });
+    keepSignIn(c, token);
     return c.json({ user });
   } catch (e) {
     if (e instanceof AccountError) return c.json({ code: e.code, message: e.message }, e.code === 'rate_limited' ? 429 : 400);
@@ -196,6 +199,7 @@ app.post('/api/auth/logout', async (c) => {
 });
 
 oauthRoutes(app, backend, { cookie: COOKIE, originOf });
+oidcRoutes(app, backend, { cookie: COOKIE, originOf, sameOrigin, secure, clientOf, keepSignIn });
 
 const INLINE_TYPES = /^image\/(png|jpeg|gif|webp|avif)$/;
 app.get('/api/blobs/:sha', async (c) => {

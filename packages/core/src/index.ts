@@ -5,4 +5,5 @@ export { hostRunnerBinary } from './workspaces/runner-client.ts';
 export { CALLBACK_HEADERS, callbackPage, CLIENT_METADATA_PATH, clientMetadata, OAUTH_CALLBACK_PATH } from './mcp/oauth.ts';
 export type { LinkSocket } from './workspaces/device-links.ts';
 export type { RelyingParty } from './accounts/passkeys.ts';
+export type { OidcResult } from './accounts/oidc.ts';
 export { ServerUpdates, ServerUpdateError, serverUpdatesFromEnv, type ServerUpdatesOptions } from './server-updates/server-updates.ts';

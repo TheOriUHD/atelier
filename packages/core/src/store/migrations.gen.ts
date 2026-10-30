@@ -173,5 +173,14 @@ export const migrations: { name: string; statements: string[] }[] = [
       "CREATE TABLE `personal_providers` (\n\t`id` text PRIMARY KEY,\n\t`user_id` text NOT NULL,\n\t`device_id` text NOT NULL,\n\t`type` text NOT NULL,\n\t`name` text NOT NULL,\n\t`base_url` text NOT NULL,\n\t`options` text NOT NULL,\n\t`enabled` integer DEFAULT true NOT NULL,\n\t`created_at` integer NOT NULL,\n\tCONSTRAINT `fk_personal_providers_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE\n);",
       "CREATE INDEX `personal_providers_user` ON `personal_providers` (`user_id`);"
     ]
+  },
+  {
+    "name": "20261030162847_user_identities",
+    "statements": [
+      "CREATE TABLE `oidc_providers` (\n\t`id` text PRIMARY KEY,\n\t`name` text NOT NULL,\n\t`issuer` text NOT NULL,\n\t`client_id` text NOT NULL,\n\t`new_accounts` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+      "CREATE TABLE `user_identities` (\n\t`id` text PRIMARY KEY,\n\t`user_id` text NOT NULL,\n\t`provider_id` text NOT NULL,\n\t`issuer` text NOT NULL,\n\t`subject` text NOT NULL,\n\t`label` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`last_used_at` integer,\n\tCONSTRAINT `fk_user_identities_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,\n\tCONSTRAINT `fk_user_identities_provider_id_oidc_providers_id_fk` FOREIGN KEY (`provider_id`) REFERENCES `oidc_providers`(`id`) ON DELETE CASCADE\n);",
+      "CREATE UNIQUE INDEX `user_identities_subject` ON `user_identities` (`issuer`,`subject`);",
+      "CREATE INDEX `user_identities_user` ON `user_identities` (`user_id`);"
+    ]
   }
 ];

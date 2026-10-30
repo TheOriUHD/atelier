@@ -48,6 +48,8 @@ export const UserSummary = z.object({
   /** Blob sha256 of the profile photo. */
   avatar: z.string().nullable(),
   mustChangePassword: z.boolean(),
+  /** False for an account made through an identity provider, until its owner sets one in Settings › Account. */
+  hasPassword: z.boolean(),
   disabled: z.boolean(),
   /** Admin-set: `inherit` follows the system safeguards setting. */
   safeguards: SafeguardsOverride,
@@ -116,6 +118,66 @@ export const InviteSummary = z.object({
 });
 export type InviteSummary = z.infer<typeof InviteSummary>;
 
+/** Where browsers go through an identity provider (OpenID Connect): `<path>/<id>/start` and `<path>/<id>/callback`. */
+export const OIDC_PATH = '/api/auth/oidc';
+
+/** An identity provider's button on the sign-in page. */
+export const OidcSignInOption = z.object({ id: z.string(), name: z.string() });
+export type OidcSignInOption = z.infer<typeof OidcSignInOption>;
+
+/** Someone the provider vouches for who has no account here: turned away, waiting for an admin, or let straight in. */
+export const OidcNewAccounts = z.enum(['none', 'pending', 'user']);
+export type OidcNewAccounts = z.infer<typeof OidcNewAccounts>;
+
+/** An identity provider as admins see it (Settings › Admin › Server). */
+export const OidcProviderSummary = OidcSignInOption.extend({
+  issuer: z.string(),
+  clientId: z.string(),
+  /** The client secret's masked tail; null for a public client. */
+  secret: z.string().nullable(),
+  newAccounts: OidcNewAccounts,
+  /** How many accounts sign in with it. */
+  people: z.number(),
+});
+export type OidcProviderSummary = z.infer<typeof OidcProviderSummary>;
+
+export const OidcProviderInput = z.object({
+  /** The provider to change; without it a new one is added, under `oidcProviderId(name)`. */
+  id: z.string().max(40).optional(),
+  name: z.string().trim().min(1).max(60),
+  issuer: z.url().trim().max(2048),
+  clientId: z.string().trim().min(1).max(512),
+  /** A new client secret; left out keeps the stored one, empty removes it (a public client). */
+  clientSecret: z.string().max(4096).optional(),
+  newAccounts: OidcNewAccounts,
+});
+export type OidcProviderInput = z.infer<typeof OidcProviderInput>;
+
+/** A sign-in with an identity provider connected to the person's account. */
+export const IdentitySummary = z.object({
+  id: z.string(),
+  providerId: z.string(),
+  provider: z.string(),
+  /** Who the provider says they are there (an email address or username). */
+  label: z.string(),
+  createdAt: z.number(),
+  lastUsedAt: z.number().nullable(),
+});
+export type IdentitySummary = z.infer<typeof IdentitySummary>;
+
+/** The id a new provider gets from its name. It is part of the redirect URI, so it stays when the name changes. */
+export function oidcProviderId(name: string): string {
+  const id = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return id || 'sso';
+}
+
 export const AuthStatus = z.object({
   /** No account exists yet: the first one created becomes the admin. */
   setupRequired: z.boolean(),
@@ -124,6 +186,8 @@ export const AuthStatus = z.object({
   user: UserSummary.nullable(),
   /** The desktop app's own backend ("Run on this computer"): one person, no password, no sign-in screen. */
   local: z.boolean(),
+  /** Identity providers this server signs people in with; browsers offer them on the sign-in page. */
+  oidc: z.array(OidcSignInOption),
 });
 export type AuthStatus = z.infer<typeof AuthStatus>;
 

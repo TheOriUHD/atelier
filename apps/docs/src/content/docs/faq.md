@@ -340,6 +340,11 @@ In a browser, yes: **Settings › Account › Passkeys**. A passkey belongs to t
 rather than an IP address (and a secure page: browsers only offer passkeys over HTTPS), and the desktop app signs in with a
 password. See [Accounts](/accounts/).
 
+### Can I sign in with Authentik, Keycloak or Google?
+
+In a browser, yes *(next release)*: anything that speaks OpenID Connect. An admin adds it in **Settings › Admin › Server ›
+Single sign-on**, and the desktop app keeps signing in with a password. See [Single sign-on](/self-hosting/#single-sign-on).
+
 ### Can I use my sessions from another device?
 
 On a server, yes: sign in from another browser or the desktop app and your conversations are there. Folders opened in a

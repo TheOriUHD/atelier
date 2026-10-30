@@ -29,7 +29,7 @@ import { useDialog } from './use-dialog.ts';
 
 type Kind = SecretSummary['kind'];
 
-const KIND_LABELS: Record<Kind, string> = { api_key: 'API key', token: 'Token', mcp_oauth: 'OAuth token', github: 'GitHub' };
+const KIND_LABELS: Record<Kind, string> = { api_key: 'API key', token: 'Token', mcp_oauth: 'OAuth token', github: 'GitHub', oidc: 'Client secret' };
 /** What admins add by hand; OAuth and GitHub tokens come from their own sign-in flows. */
 const KINDS: SelectOption<Kind>[] = [
   { value: 'api_key', label: 'API key' },

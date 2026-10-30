@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 // Overridable so several checkouts can run their E2E suites at once (see e2e/fixtures.ts).
-const [ollamaPort, webPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360)];
+const [ollamaPort, webPort, oidcPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360), Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362)];
 const dataDir = await mkdtemp(join(tmpdir(), 'atelier-e2e-web-'));
 await writeFile(
   join(dataDir, 'settings.json'),
@@ -36,6 +36,7 @@ await Promise.all([
 
 const children = [
   spawn(process.execPath, ['e2e/fake-ollama.mjs', String(ollamaPort)], { stdio: 'inherit' }),
+  spawn(process.execPath, ['e2e/fake-oidc.mjs', String(oidcPort)], { stdio: 'inherit' }),
   // The setup project (e2e/auth.setup.ts) creates the admin with this token (SETUP_TOKEN in fixtures.ts).
   spawn(process.execPath, ['apps/server/dist/server.mjs'], {
     stdio: 'inherit',

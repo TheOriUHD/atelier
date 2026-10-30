@@ -542,7 +542,7 @@ export type ArtifactVersion = z.infer<typeof ArtifactVersion>;
 export const SecretSummary = z.object({
   id: z.string(),
   label: z.string(),
-  kind: z.enum(['api_key', 'token', 'mcp_oauth', 'github']),
+  kind: z.enum(['api_key', 'token', 'mcp_oauth', 'github', 'oidc']),
   /** Masked tail, e.g. "••••3f9a". The plaintext never leaves the backend. */
   masked: z.string(),
   usedBy: z.array(z.string()),

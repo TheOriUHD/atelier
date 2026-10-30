@@ -33,7 +33,23 @@ type InviteRow = typeof invites.$inferSelect;
 
 export class AccountError extends Error {
   constructor(
-    readonly code: 'invalid_credentials' | 'pending' | 'disabled' | 'exists' | 'setup_done' | 'invalid_invite' | 'signup_closed' | 'rate_limited' | 'last_admin' | 'not_found',
+    readonly code:
+      | 'invalid_credentials'
+      | 'pending'
+      | 'disabled'
+      | 'exists'
+      | 'setup_done'
+      | 'invalid_invite'
+      | 'signup_closed'
+      | 'rate_limited'
+      | 'last_admin'
+      | 'not_found'
+      | 'no_account'
+      | 'identity_taken'
+      | 'last_sign_in'
+      | 'expired'
+      | 'denied'
+      | 'oidc_failed',
     message: string,
   ) {
     super(message);
@@ -60,6 +76,7 @@ export function toUserSummary(r: UserRow): UserSummary {
     role: r.role,
     avatar: r.avatarBlob,
     mustChangePassword: r.mustChangePassword,
+    hasPassword: r.passwordHash !== '',
     disabled: r.disabledAt !== null,
     safeguards: r.safeguards,
     createdAt: r.createdAt,
@@ -108,7 +125,7 @@ export class AccountService {
     if (this.recentFailures(key) >= MAX_FAILURES) throw new AccountError('rate_limited', 'Too many attempts. Try again in a few minutes.');
     const row = await this.db.select().from(users).where(eq(users.username, input.username)).get();
     // Verify against a dummy hash for unknown users so timing doesn't reveal which usernames exist.
-    const ok = await verifyPassword(input.password, row?.passwordHash ?? DUMMY_HASH);
+    const ok = (await verifyPassword(input.password, row?.passwordHash || DUMMY_HASH)) && !!row?.passwordHash;
     if (!row || !ok) {
       this.failures.set(key, [...this.recentFailuresList(key), Date.now()]);
       throw new AccountError('invalid_credentials', 'Wrong username or password.');
@@ -118,11 +135,21 @@ export class AccountService {
     return { token: await this.startSession(row.id, client), user: toUserSummary(row) };
   }
 
-  /** Signs in someone who proved who they are another way (a passkey); the account must still be active. */
+  /** Signs in someone who proved who they are another way (a passkey, an identity provider); the account must still be active. */
   async signInAs(userId: string, client: ClientInfo): Promise<{ token: string; user: UserSummary }> {
     const row = await this.row(userId);
     this.assertActive(row);
     return { token: await this.startSession(row.id, client), user: toUserSummary(row) };
+  }
+
+  /**
+   * An account for someone an identity provider vouches for. It has no password until they set one in Settings ›
+   * Account. A username that is taken gets a number: being called the same at the provider doesn't make it the same person.
+   */
+  async createForIdentity(input: { username: string; name: string; role: 'user' | 'pending' }): Promise<UserSummary> {
+    let username = input.username;
+    for (let n = 2; await this.db.select({ id: users.id }).from(users).where(eq(users.username, username)).get(); n++) username = `${input.username.slice(0, 28)}${n}`;
+    return toUserSummary(await this.insertUser({ ...input, username, password: null, mustChangePassword: false }));
   }
 
   async signup(input: { username: string; name: string; password: string }): Promise<void> {
@@ -192,7 +219,8 @@ export class AccountService {
 
   async changePassword(userId: string, current: string, next: string, keepSession: string | null): Promise<void> {
     const row = await this.row(userId);
-    if (!(await verifyPassword(current, row.passwordHash))) throw new AccountError('invalid_credentials', 'The current password is wrong.');
+    // An account without a password has none to prove: being signed in is all it has, as for adding a passkey.
+    if (row.passwordHash && !(await verifyPassword(current, row.passwordHash))) throw new AccountError('invalid_credentials', 'The current password is wrong.');
     await this.db.update(users).set({ passwordHash: await hashPassword(next), mustChangePassword: false, updatedAt: Date.now() }).where(eq(users.id, userId));
     await this.revokeAll(userId, keepSession ?? undefined);
   }
@@ -269,7 +297,7 @@ export class AccountService {
 
   // ------------------------------------------------------------------ internals
 
-  private async insertUser(input: { username: string; name: string; password: string; role: UserRole; mustChangePassword: boolean }): Promise<UserRow> {
+  private async insertUser(input: { username: string; name: string; password: string | null; role: UserRole; mustChangePassword: boolean }): Promise<UserRow> {
     if (await this.db.select({ id: users.id }).from(users).where(eq(users.username, input.username)).get()) {
       throw new AccountError('exists', `The username “${input.username}” is taken.`);
     }
@@ -279,7 +307,7 @@ export class AccountService {
       username: input.username,
       name: input.name,
       role: input.role,
-      passwordHash: await hashPassword(input.password),
+      passwordHash: input.password === null ? '' : await hashPassword(input.password),
       mustChangePassword: input.mustChangePassword,
       safeguards: 'inherit',
       avatarBlob: null,

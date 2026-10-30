@@ -5,6 +5,7 @@ import { Button, ConfirmDialog, Select, type SelectOption } from '../../componen
 import { relativeTime } from '../../lib/dates.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
+import { SingleSignOnSection } from './single-sign-on-section.tsx';
 import { useSetting, useWrite } from './use-setting.ts';
 
 const POLICIES: SelectOption<SignupPolicy>[] = [
@@ -25,6 +26,7 @@ export function ServerPage() {
           {(label) => <Select {...label} options={POLICIES} value={signup.value} onValueChange={(v) => void signup.set(v)} />}
         </SettingRow>
       </SettingsSection>
+      <SingleSignOnSection />
     </>
   );
 }

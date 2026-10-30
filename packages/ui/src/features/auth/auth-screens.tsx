@@ -1,18 +1,18 @@
 /** The signed-out screens: centered cards. */
-import { useId, useState, type ReactNode } from 'react';
-import { ArrowLeft, KeyRound, Laptop, Server } from 'lucide-react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import { ArrowLeft, KeyRound, Laptop, LogIn, Server } from 'lucide-react';
 import { z } from 'zod';
-import { APP, Password, Username, type UserSummary } from '@atelier/protocol';
+import { APP, Password, Username, type OidcSignInOption, type UserSummary } from '@atelier/protocol';
 import { Button, Field, Icon, Spinner, TextField } from '../../components/ui/index.ts';
 import { BrandMark } from '../../components/brand-mark.tsx';
 import { useAppearance } from '../../lib/appearance.ts';
-import { desktop } from '../../lib/platform.ts';
+import { desktop, surface } from '../../lib/platform.ts';
 import { describeError, errorCode } from '../../lib/rpc.ts';
 import { ChangePasswordForm } from './change-password-form.tsx';
 import { FoundServers } from './found-servers.tsx';
 import { useFormSubmit } from './form.ts';
 import { passkeySignIn, passkeysAvailable } from './passkeys.ts';
-import { acceptInvite, login, setup, setupLocal, signup, type NewAccount } from './sign-in.ts';
+import { acceptInvite, clearOidcError, login, oidcError, oidcStart, setup, setupLocal, signup, type NewAccount } from './sign-in.ts';
 
 export function AuthLayout({
   title,
@@ -358,10 +358,13 @@ const Credentials = z.object({ username: Username, password: z.string().min(1, '
 
 export function LoginScreen({
   footer,
+  providers = [],
   onSignedIn,
   onPending,
 }: {
   footer?: ReactNode;
+  /** The server's identity providers; browsers only, the desktop app signs in with a password. */
+  providers?: OidcSignInOption[] | undefined;
   onSignedIn(user: UserSummary): void;
   onPending(): void;
 }) {
@@ -381,6 +384,19 @@ export function LoginScreen({
       onPending();
     }),
   );
+  const offered = surface === 'web' ? providers : [];
+  const [provider, setProvider] = useState<string>();
+  const [providerError, setProviderError] = useState(oidcError);
+  useEffect(clearOidcError, []);
+  const continueWith = (id: string) => {
+    setProvider(id);
+    setProviderError(undefined);
+    oidcStart(id).catch((e: unknown) => {
+      setProvider(undefined);
+      setProviderError(describeError(e).message);
+    });
+  };
+  const others = offered.length > 0 || passkeysAvailable();
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to continue to Atelier." footer={footer}>
       <form noValidate onSubmit={form.onSubmit({ username, password })} className="flex flex-col gap-4">
@@ -409,18 +425,28 @@ export function LoginScreen({
           Sign in
         </Button>
       </form>
-      {passkeysAvailable() && (
-        <form noValidate onSubmit={passkey.onSubmit({})} className="mt-4 flex flex-col gap-4">
+      {others && (
+        <div className="mt-4 flex flex-col gap-4">
           <div className="flex items-center gap-3 text-footnote text-fg-muted" aria-hidden>
             <span className="h-px flex-1 bg-line" />
             or
             <span className="h-px flex-1 bg-line" />
           </div>
-          <Button type="submit" size="lg" leadingIcon={KeyRound} loading={passkey.pending}>
-            Sign in with a passkey
-          </Button>
-          <FormError message={passkey.errors.form} />
-        </form>
+          {offered.map((p) => (
+            <Button key={p.id} size="lg" leadingIcon={LogIn} loading={provider === p.id} disabled={!!provider} onClick={() => continueWith(p.id)}>
+              Continue with {p.name}
+            </Button>
+          ))}
+          <FormError message={providerError} />
+          {passkeysAvailable() && (
+            <form noValidate onSubmit={passkey.onSubmit({})} className="flex flex-col gap-4">
+              <Button type="submit" size="lg" leadingIcon={KeyRound} loading={passkey.pending}>
+                Sign in with a passkey
+              </Button>
+              <FormError message={passkey.errors.form} />
+            </form>
+          )}
+        </div>
       )}
     </AuthLayout>
   );

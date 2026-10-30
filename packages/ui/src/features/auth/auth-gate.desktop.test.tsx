@@ -37,7 +37,7 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
 
-const status = (patch: Partial<AuthStatus> = {}): AuthStatus => ({ setupRequired: false, signup: 'invite', user: null, local: false, ...patch });
+const status = (patch: Partial<AuthStatus> = {}): AuthStatus => ({ setupRequired: false, signup: 'invite', user: null, local: false, oidc: [], ...patch });
 
 beforeEach(() => {
   for (const fn of [bridge.connection.get, bridge.connection.set, bridge.connection.problem, bridge.connection.onProblem, bridge.connection.openNetworkSettings, bridge.session.save, bridge.session.clear, toasts.message]) fn.mockReset();

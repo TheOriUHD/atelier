@@ -17,6 +17,7 @@ import {
   contract,
   effectiveSafeguards,
   LOCKED_PROCEDURES,
+  OIDC_PATH,
   PROVIDER_LABELS,
   PUBLIC_PROCEDURES,
   isLoopbackHost,
@@ -46,6 +47,7 @@ import {
 } from '@atelier/protocol';
 import { AccountError, AccountService, type Authenticated, type ClientInfo } from '../accounts/account-service.ts';
 import { DeviceRepo, toDeviceSummary } from '../accounts/device-repo.ts';
+import { Oidc } from '../accounts/oidc.ts';
 import { Passkeys } from '../accounts/passkeys.ts';
 import { PrefsRepo, PrefsValidationError } from '../accounts/prefs-repo.ts';
 import { ScreenLock, ScreenLockError } from '../accounts/screen-lock.ts';
@@ -176,6 +178,7 @@ export interface Backend {
   accounts: AccountService;
   /** Passkey sign-in and registration ceremonies, for the web server's routes. */
   passkeys: Passkeys;
+  oidc: Oidc;
   /**
    * A desktop device lending its runner over the device link (ARCHITECTURE §21). Null when the token isn't a
    * usable sign-in; otherwise where the socket's text frames and its close go.
@@ -322,6 +325,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   });
   const devices = new DeviceRepo(db);
   const passkeys = new Passkeys(db, accounts);
+  const oidc = new Oidc({ db, accounts, secrets, log: (message, reason) => platform.logger.error(message, reason) });
 
   const connections = new Set<Connection>();
   type Events = AppContract['events'];
@@ -1257,6 +1261,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       signup: settings.effective.server.signup,
       user: ctx.connection().auth?.user ?? null,
       local,
+      oidc: platform.surface === 'web' ? await oidc.options() : [],
     }),
     'auth.setupLocal': ({ name, clientKind }, ctx) =>
       accountErrors(async () => {
@@ -1356,6 +1361,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     'account.passkeys': (_input, ctx) => passkeys.list(me(ctx).id),
+    'account.identities': (_input, ctx) => oidc.identities(me(ctx).id),
+    'account.removeIdentity': ({ id }, ctx) =>
+      accountErrors(async () => {
+        await oidc.removeIdentity(me(ctx).id, id);
+        return { ok: true as const };
+      }),
     'account.removePasskey': async ({ id }, ctx) => {
       await passkeys.remove(me(ctx).id, id);
       return { ok: true as const };
@@ -1464,11 +1475,19 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
 
+    'oidc.list': async (_input, ctx) => (platform.surface === 'web' ? { redirectBase: `${ctx.connection().origin ?? ''}${OIDC_PATH}`, providers: await oidc.list() } : null),
+    'oidc.save': (input) => accountErrors(() => oidc.save(input)),
+    'oidc.remove': async ({ id }) => {
+      await oidc.remove(id);
+      return { ok: true as const };
+    },
+
     'secrets.list': async () => {
       const usage = secretUsage();
       // People's own GitHub tokens are theirs, not the admin's to see or rotate. Connectors' sign-ins are managed on
       // the connector (Sign in, Sign out, Remove).
-      return (await secrets.list((id) => usage.get(id) ?? [])).filter((s) => !isPersonalSecret(s.id) && s.kind !== 'mcp_oauth');
+      // An identity provider's client secret is set on the provider.
+      return (await secrets.list((id) => usage.get(id) ?? [])).filter((s) => !isPersonalSecret(s.id) && s.kind !== 'mcp_oauth' && s.kind !== 'oidc');
     },
     'secrets.set': async ({ id, label, kind, value }) => {
       if (isPersonalSecret(id)) throw appError('forbidden', 'That secret belongs to a person.');
@@ -2312,6 +2331,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { bytes: await blobs.read(sha256), mime: info.mime };
     },
     passkeys,
+    oidc,
     async linkDevice(socket, token, device) {
       const auth = await accounts.authenticate(token);
       if (!auth || auth.user.mustChangePassword) return null;

@@ -119,10 +119,33 @@ Each row other than yours has a menu (**⋯**):
 - **Passkeys**, in a browser, from **Sign in with a passkey**: your device's screen lock or a security key instead of a
   password. They need an HTTPS address with a hostname; they are not offered on IP addresses or in the desktop app. Add one
   in **Settings › Account › Passkeys**.
+- **An identity provider** *(next release)*, in a browser, from **Continue with** and its name, when an admin set one up
+  (see [Single sign-on](/self-hosting/#single-sign-on)). Not in the desktop app.
 - **An invite code** or **Create an account** (above) for new people.
 - The desktop app signs in with a password and keeps the sign-in in the system's secure storage (Keychain, Credential
   Manager, Secret Service). On a computer where Atelier can't use that, it signs you in for the session and says "You're
   signed in for now: This computer has no secure storage Atelier can use, so it can't keep you signed in."
+
+### Signing in with an identity provider
+
+*(next release)* An admin adds a provider such as Authentik, Keycloak or Google in **Settings › Admin › Server › Single
+sign-on**. It works in browsers only: the desktop app keeps signing in with a password.
+
+- **You already have an account:** sign in the usual way and press **Connect** and the provider's name in **Settings ›
+  Account › Connected sign-ins**, once. After that **Continue with** signs you in to that account.
+- **You don't have one:** what happens is the admin's choice for each provider: **Create an account an admin approves**
+  (the default), **Create an account right away**, or **Turn them away**. A new account gets its name from the provider
+  and a username from your username or email address there, with a number added when that one is taken.
+- **The same name doesn't connect anything.** Atelier matches the provider's permanent id for you, never your username
+  or email address, so someone who gets the name `ada` at the provider gets an account of their own and not Ada's. That
+  is why an existing account has to connect the provider itself.
+- **An account made this way has no password.** To use the desktop app, press **Set a password** in **Settings ›
+  Account**. Without one, an admin's **Reset password** gives you a temporary one too.
+- **Disconnecting** is refused when it is your only way in: set a password or add a passkey first. When an admin removes
+  a provider, the connections go with it and the accounts stay.
+- **Signing out** ends your Atelier sign-in, not your session at the provider, so **Continue with** may sign you straight
+  back in on a shared computer. Disabling someone at the provider stops new sign-ins; a browser that is already signed in
+  stays signed in until you disable the account in **Users** or their sign-in expires.
 
 ### Sign-in sessions
 
@@ -171,10 +194,11 @@ On a server (in a browser or in a desktop app connected to one), top to bottom:
 | **Instructions for Code and Cowork › Your ATELIER.md** | Your own conventions for Code sessions and Cowork tasks and their sub-agents, in Markdown (up to 60,000 characters), saved on the server so it works from every device. Where a project's ATELIER.md disagrees, yours wins. |
 | **Session access › Remote control** | On by default. Whether your other browsers and devices can open this account's conversations. See [Remote control](/remote-control/). |
 | **Account › Username** | What you sign in with. Fixed. |
-| **Password › Change password** | Asks for the current password and a new one (8 characters or more). |
+| **Password › Change password** | Asks for the current password and a new one (8 characters or more). On an account made through an identity provider it says **Set a password** and asks only for the new one. |
 | **Log out** | See above. In the desktop app it also offers **Switch…**. |
 | **Log out of all devices › Log out everywhere** | Ends every sign-in, after confirming. |
 | **Passkeys** | Browser only. **Add passkey** names it and asks your browser where to keep it. The list shows **Name**, **Added** and **Last used**; removing one here does not delete it from your device or password manager. |
+| **Connected sign-ins** | Browser only, when the server has identity providers. **Connect** and the provider's name goes through its sign-in and back here; the list shows **Provider**, **Signed in as** and **Last used**. |
 | **Devices** | Computers running the Atelier desktop app for your account: **Name**, **Platform**, **Added**, and **Online** or when last seen. **This computer** marks the one you are on; the others can be removed. |
 
 On **Run on this computer** the page is shorter, because there is no sign-in to manage: **Profile**, **Instructions for

@@ -31,6 +31,7 @@ export const keys = {
   /** The desktop app's connection (its own backend, or a server). */
   connection: ['connection'] as const,
   passkeys: ['account', 'passkeys'] as const,
+  identities: ['account', 'identities'] as const,
   screenLock: ['screenLock'] as const,
   /** Every usage summary; each is keyed further by period and scope. */
   usage: ['usage'] as const,

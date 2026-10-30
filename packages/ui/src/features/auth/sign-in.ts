@@ -29,6 +29,45 @@ export async function postJson(path: string, body: object): Promise<unknown> {
 
 const post = (path: 'setup' | 'login' | 'invite' | 'logout', body: object) => postJson(`api/auth/${path}`, body);
 
+/**
+ * Sends the browser to an identity provider to sign in or, with `link`, to connect it to the signed-in account. The
+ * server takes it from there and the page loads again when it comes back, so the promise never settles.
+ */
+export async function oidcStart(id: string, link = false): Promise<never> {
+  const { url } = (await postJson(`api/auth/oidc/${id}/start`, { link })) as { url: string };
+  location.assign(url);
+  return new Promise(() => {});
+}
+
+let offered = false;
+/** Whether this browser can sign in with an identity provider here; the backend says so with the sign-in status. */
+export const identityProvidersOffered = () => offered;
+export function setIdentityProvidersOffered(available: boolean): void {
+  offered = available && !desktop;
+}
+
+const OIDC_ERRORS: Record<string, string> = {
+  no_account: 'There’s no account for this sign-in here. Ask an admin for one, or sign in another way and connect it in Settings › Account.',
+  pending: 'Your account is waiting for an admin to approve it.',
+  disabled: 'This account is disabled. Ask an admin to re-enable it.',
+  denied: 'The identity provider didn’t allow this sign-in.',
+  expired: 'That sign-in expired. Try again.',
+  identity_taken: 'That sign-in is already connected to another account.',
+  not_found: 'That sign-in isn’t set up on this server any more.',
+};
+
+/** What went wrong when the server sent the browser back from an identity provider (`?signIn=<code>`). */
+export function oidcError(): string | undefined {
+  const code = new URLSearchParams(location.search).get('signIn');
+  if (!code) return undefined;
+  return OIDC_ERRORS[code] ?? 'That sign-in didn’t work. The server’s log says why.';
+}
+
+/** Takes `?signIn=<code>` out of the address, so a reload doesn't show it again. */
+export function clearOidcError(): void {
+  if (location.search) history.replaceState(null, '', `${location.pathname}${location.hash}`);
+}
+
 /** Reloads the page; the returned promise never settles, so forms stay busy until the page goes. */
 export function reload(): Promise<never> {
   location.reload();

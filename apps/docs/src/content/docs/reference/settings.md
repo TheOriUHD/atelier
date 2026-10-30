@@ -56,6 +56,7 @@ see are hidden in the app.
 | **PIN or password** *(only where it works)* | Asked for when Atelier starts and whenever you lock it. |
 | **Lock when inactive** *(only where it works)* | Locks Atelier after this long without typing or clicking in any of its windows. |
 | **Passkeys** *(only where it works)* | Sign in to this site with your device’s screen lock or a security key instead of your password. |
+| **Connected sign-ins** *(only where it works)* | Other sign-ins for this account in a browser, such as Authentik or Google. |
 
 ## Settings › Privacy
 
@@ -261,6 +262,7 @@ Admins only.
 | **Server version** | The version of Atelier this server runs. |
 | **Update server** | Installs the newest version of Atelier on this server. It restarts, and everyone reconnects by themselves. |
 | **Sign-up** | Invite only: admins add people or give them invite codes. Open: anyone who can reach this server can create an account, which waits for an admin to approve it. |
+| **Single sign-on** | Lets people sign in to this server in a browser through an OpenID Connect identity provider, such as Authentik, Keycloak or Google. The desktop app keeps signing in with passwords. |
 
 ## Settings › Admin › Developer
 

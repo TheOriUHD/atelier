@@ -30,6 +30,7 @@
     "jsonrepair": "3.15.0",
     "linkedom": "0.18.13",
     "node-html-markdown": "2.0.0",
+    "openid-client": "6.8.8",
     "pdfjs-dist": "6.4.299",
     "pngjs": "7.0.0",
     "tar": "7.5.22",

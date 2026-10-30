@@ -11,7 +11,7 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
 
-const status = (patch: Partial<AuthStatus> = {}): AuthStatus => ({ setupRequired: false, signup: 'invite', user: null, local: false, ...patch });
+const status = (patch: Partial<AuthStatus> = {}): AuthStatus => ({ setupRequired: false, signup: 'invite', user: null, local: false, oidc: [], ...patch });
 
 const fetchMock = vi.fn<(url: URL, init: RequestInit) => Promise<Response>>();
 const reload = vi.fn();
@@ -49,6 +49,46 @@ function posted(path: string): unknown {
 }
 
 const type = (label: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+describe('Identity providers on the sign-in page', () => {
+  const answered = (url: string) => fetchMock.mockResolvedValue(new Response(JSON.stringify({ url }), { status: 200 }));
+
+  it('offers each one and sends the browser there', async () => {
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined);
+    answered('https://auth.example.com/authorize?x=1');
+    resetBackend({ 'auth.status': () => status({ oidc: [{ id: 'authentik', name: 'Authentik' }] }) });
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with Authentik' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://auth.example.com/authorize?x=1'));
+    expect(fetchMock.mock.calls[0]![0].pathname).toBe('/api/auth/oidc/authentik/start');
+    expect(screen.getByRole('button', { name: 'Continue with Authentik' }).getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('says why when the server can’t start it', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ code: 'oidc_failed', message: 'Authentik isn’t answering.' }), { status: 400 }));
+    resetBackend({ 'auth.status': () => status({ oidc: [{ id: 'authentik', name: 'Authentik' }] }) });
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with Authentik' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Authentik isn’t answering.');
+    expect(screen.getByRole('button', { name: 'Continue with Authentik' }).getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('shows what went wrong when the browser comes back, once', async () => {
+    history.replaceState(null, '', '/?signIn=pending');
+    resetBackend({ 'auth.status': () => status({ oidc: [{ id: 'authentik', name: 'Authentik' }] }) });
+    renderGate();
+    expect((await screen.findByRole('alert')).textContent).toBe('Your account is waiting for an admin to approve it.');
+    expect(location.search).toBe('');
+  });
+
+  it('never repeats a code it doesn’t know', async () => {
+    history.replaceState(null, '', '/?signIn=%3Cscript%3E');
+    resetBackend({ 'auth.status': () => status({ oidc: [] }) });
+    renderGate();
+    await screen.findByRole('heading', { name: 'Welcome back' });
+    expect(screen.queryByText('<script>')).toBeNull();
+  });
+});
 
 describe('screenFor', () => {
   it('sends a signed-in user to the app, or to a new password first', () => {

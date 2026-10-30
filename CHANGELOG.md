@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Sign in with Authentik, Keycloak, Google and others (OpenID Connect):** an admin adds an identity provider in **Settings › Admin › Server › Single sign-on**, and the browser's sign-in page gets **Continue with** and its name. An existing account connects it once in **Settings › Account › Connected sign-ins**; someone new gets an account that waits for approval, gets one right away or is turned away, as the admin chooses per provider. Accounts are matched on the provider's permanent id and never on a name or email address. An account made this way sets a password in Settings to use the desktop app, which keeps signing in with passwords. See [Single sign-on](https://docs.atelierhq.dev/self-hosting/#single-sign-on).
 - **Copyright notice:** Settings › System shows "© 2026 TheOriUHD" under the version (the name opens github.com/TheOriUHD), and the About Atelier panel on macOS and the Windows file properties say "Copyright © 2026 TheOriUHD" instead of "© 2026 Atelier".
 
 ## [0.2.13] — 2026-10-29

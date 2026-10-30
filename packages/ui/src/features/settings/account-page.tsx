@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, UserRound } from 'lucide-react';
 import { z } from 'zod';
@@ -10,6 +10,7 @@ import {
   PERSONAL_INSTRUCTIONS_MAX,
   type Personality,
   type AuthSessionSummary,
+  type IdentitySummary,
   type PasskeySummary,
   type UserPrefs,
   type UserSummary,
@@ -32,12 +33,13 @@ import {
   type SelectOption,
 } from '../../components/ui/index.ts';
 import { relativeTime, shortDate } from '../../lib/dates.ts';
-import { blobUrl, desktop } from '../../lib/platform.ts';
+import { blobUrl, desktop, surface } from '../../lib/platform.ts';
 import { keys, useAccount, useSettings } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { ChangePasswordForm } from '../auth/change-password-form.tsx';
 import { useFormSubmit } from '../auth/form.ts';
 import { addPasskey, passkeysAvailable } from '../auth/passkeys.ts';
+import { clearOidcError, oidcError, oidcStart } from '../auth/sign-in.ts';
 import { leaveSetup, logout } from '../auth/sign-in.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { isImage, readBase64 } from '../chat/use-attachments.ts';
@@ -85,6 +87,7 @@ export function AccountPage() {
       <RemoteControlSection />
       <AccountSection account={account} />
       {passkeysAvailable() && <PasskeysSection />}
+      {surface === 'web' && <IdentitiesSection />}
       <SessionsSection />
       <DevicesSection />
     </>
@@ -377,7 +380,7 @@ function AccountSection({ account }: { account: UserSummary }) {
         <span className="font-mono text-body text-fg-secondary">{account.username}</span>
       </SettingRow>
       <SettingRow id="account.password">
-        <Button onClick={() => setChangingPassword(true)}>Change password</Button>
+        <Button onClick={() => setChangingPassword(true)}>{account.hasPassword ? 'Change password' : 'Set a password'}</Button>
       </SettingRow>
       <SignOutRows />
       <SettingRow id="account.logoutEverywhere">
@@ -385,20 +388,22 @@ function AccountSection({ account }: { account: UserSummary }) {
       </SettingRow>
       <Dialog open={changingPassword} onOpenChange={setChangingPassword}>
         <DialogContent
-          title="Change password"
-          description="You stay signed in here. Everywhere else you are signed out."
+          title={account.hasPassword ? 'Change password' : 'Set a password'}
+          description={account.hasPassword ? 'You stay signed in here. Everywhere else you are signed out.' : 'The desktop app signs in with it. You stay signed in here.'}
         >
           <ChangePasswordForm
+            first={!account.hasPassword}
             onDone={() => {
               setChangingPassword(false);
-              toast.success('Password changed.');
+              toast.success(account.hasPassword ? 'Password changed.' : 'Password set.');
               void qc.invalidateQueries({ queryKey: keys.authSessions });
+              void qc.invalidateQueries({ queryKey: keys.account });
             }}
             actions={(pending) => (
               <DialogFooter className="mt-2">
                 <Button onClick={() => setChangingPassword(false)}>Cancel</Button>
                 <Button type="submit" variant="primary" loading={pending}>
-                  Change password
+                  {account.hasPassword ? 'Change password' : 'Set password'}
                 </Button>
               </DialogFooter>
             )}
@@ -690,6 +695,80 @@ function PasskeysSection() {
       )}
       <AddPasskeyDialog key={adding.key} open={adding.open} onOpenChange={adding.onOpenChange} />
     </SettingsSection>
+  );
+}
+
+/** Web only, like the sign-in it serves: connecting goes through the provider's own pages and back here. */
+function IdentitiesSection() {
+  const entry = settingEntry('account.identities');
+  const { data } = useQuery({ queryKey: keys.identities, queryFn: () => rpc().call('account.identities', {}), staleTime: 0 });
+  const [connecting, setConnecting] = useState<string>();
+  const [error, setError] = useState(oidcError);
+  useEffect(clearOidcError, []);
+  if (!data || (!data.connected.length && !data.available.length)) return null;
+  const connect = (id: string) => {
+    setConnecting(id);
+    setError(undefined);
+    oidcStart(id, true).catch((e: unknown) => {
+      setConnecting(undefined);
+      setError(describeError(e).message);
+    });
+  };
+  return (
+    <SettingsSection id="account.identities" title={entry.label} description={entry.description}>
+      {data.connected.length > 0 && (
+        <DataTable label={entry.label} columns={[{ label: 'Provider' }, { label: 'Signed in as' }, { label: 'Last used', className: 'w-32' }, { label: 'Actions', hidden: true, className: 'w-12' }]}>
+          {data.connected.map((identity) => (
+            <IdentityRow key={identity.id} identity={identity} />
+          ))}
+        </DataTable>
+      )}
+      {data.available.length > 0 && (
+        <div className="flex flex-wrap gap-2 py-3">
+          {data.available.map((p) => (
+            <Button key={p.id} leadingIcon={Plus} loading={connecting === p.id} disabled={!!connecting} onClick={() => connect(p.id)}>
+              Connect {p.name}
+            </Button>
+          ))}
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="pb-3 text-body text-danger-text">
+          {error}
+        </p>
+      )}
+    </SettingsSection>
+  );
+}
+
+function IdentityRow({ identity }: { identity: IdentitySummary }) {
+  const qc = useQueryClient();
+  const [confirm, setConfirm] = useState(false);
+  const disconnect = async () => {
+    try {
+      await rpc().call('account.removeIdentity', { id: identity.id });
+    } catch (e) {
+      toast.error(describeError(e).message);
+    }
+    await qc.invalidateQueries({ queryKey: keys.identities });
+  };
+  return (
+    <TableRow>
+      <Cell className="truncate text-fg">{identity.provider}</Cell>
+      <Cell className="truncate">{identity.label}</Cell>
+      <Cell>{identity.lastUsedAt ? relativeTime(identity.lastUsedAt) : 'Never'}</Cell>
+      <Cell className="text-right">
+        <IconButton icon={Trash2} label={`Disconnect ${identity.provider}`} size="sm" onClick={() => setConfirm(true)} />
+        <ConfirmDialog
+          open={confirm}
+          onOpenChange={setConfirm}
+          title={`Disconnect ${identity.provider}?`}
+          description="It no longer signs you in to this account."
+          confirmLabel="Disconnect"
+          onConfirm={disconnect}
+        />
+      </Cell>
+    </TableRow>
   );
 }
 

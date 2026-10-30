@@ -86,7 +86,7 @@ function renderWith(node: ReactNode) {
   );
 }
 
-const signedOut: AuthStatus = { setupRequired: false, signup: 'invite', user: null, local: false };
+const signedOut: AuthStatus = { setupRequired: false, signup: 'invite', user: null, local: false, oidc: [] };
 
 describe('Signing in with a passkey', () => {
   it('runs the browser’s prompt with the server’s options, then reloads signed in', async () => {

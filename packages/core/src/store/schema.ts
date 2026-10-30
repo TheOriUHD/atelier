@@ -123,6 +123,46 @@ export const passkeys = sqliteTable(
 );
 
 /**
+ * Identity providers browsers sign in with (OpenID Connect, ARCHITECTURE §21). A table of their own and not settings:
+ * project settings merge into settings, and no project may decide who signs in to a server. The client secret is the
+ * secret `oidc-<id>`.
+ */
+export const oidcProviders = sqliteTable('oidc_providers', {
+  /** From the name when added; part of the redirect URI, so it never changes. */
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  /** Exactly as the provider states it, trailing slash and all. */
+  issuer: text('issuer').notNull(),
+  clientId: text('client_id').notNull(),
+  newAccounts: text('new_accounts', { enum: ['none', 'pending', 'user'] }).notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+/**
+ * Who a person is at an identity provider. Issuer and subject are the only stable names OpenID Connect gives, and
+ * only the pair is unique; email addresses and usernames can change hands, so nothing is matched on those.
+ */
+export const userIdentities = sqliteTable(
+  'user_identities',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id')
+      .notNull()
+      .references(() => oidcProviders.id, { onDelete: 'cascade' }),
+    issuer: text('issuer').notNull(),
+    subject: text('subject').notNull(),
+    /** An email address or username to tell it by; never used to find anyone. */
+    label: text('label').notNull(),
+    createdAt: integer('created_at').notNull(),
+    lastUsedAt: integer('last_used_at'),
+  },
+  (t) => [uniqueIndex('user_identities_subject').on(t.issuer, t.subject), index('user_identities_user').on(t.userId)],
+);
+
+/**
  * Desktop apps signed in to an account; they lend their machine to that user's sessions. A device id is
  * the app's own, so each account that signs in on the same machine has its own row for it.
  */
@@ -368,7 +408,7 @@ export const personalProviders = sqliteTable(
 export const secrets = sqliteTable('secrets', {
   id: text('id').primaryKey(),
   label: text('label').notNull(),
-  kind: text('kind', { enum: ['api_key', 'token', 'mcp_oauth', 'github'] }).notNull(),
+  kind: text('kind', { enum: ['api_key', 'token', 'mcp_oauth', 'github', 'oidc'] }).notNull(),
   ciphertext: text('ciphertext').notNull(),
   /** Last four characters, stored to render the masked value without decrypting. */
   tail: text('tail').notNull(),

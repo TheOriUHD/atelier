@@ -26,7 +26,7 @@ import {
 import { InviteCodeScreen } from './invite-code-screen.tsx';
 import { LockScreen } from './lock-screen.tsx';
 import { setLocal, useAutoLock } from './screen-lock.ts';
-import { localSignIn } from './sign-in.ts';
+import { localSignIn, setIdentityProvidersOffered } from './sign-in.ts';
 
 type Screen =
   | { name: 'loading' }
@@ -85,6 +85,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const next = await rpc().call('auth.status', {});
     setLocal(next.local);
+    setIdentityProvidersOffered(next.oidc.length > 0);
     setStatus(next);
     if (next.local) setLock(await rpc().call('lock.status', {}));
     // The owner of this computer has no password: without a kept sign-in they are signed in again by themselves.
@@ -244,6 +245,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     case 'login':
       return (
         <LoginScreen
+          providers={status?.oidc}
           onSignedIn={signedIn}
           onPending={() => setScreen({ name: 'pending' })}
           footer={

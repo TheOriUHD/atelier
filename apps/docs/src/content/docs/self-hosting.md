@@ -257,6 +257,43 @@ What you give up: passwords, sign-in cookies and every conversation cross the ne
 available. Browsers on other computers can use it; desktop apps accept `http://` for private addresses. Do not
 expose this to the internet.
 
+## Single sign-on
+
+*(next release)* People can sign in through an OpenID Connect identity provider such as Authentik, Keycloak, Authelia,
+Pocket ID, Google or Microsoft Entra ID. It is for browsers: the desktop app signs in with a password. See
+[what it means for accounts](/accounts/#signing-in-with-an-identity-provider).
+
+Two addresses have to be right first. Set [`ATELIER_BASE_URL`](#atelier_base_url-and-atelier_trusted_proxies) when the
+server runs behind a proxy, because the redirect URI is built from it. And the server itself reaches the provider to read
+its configuration and finish each sign-in, so the issuer's address must work from inside the container, not only from
+your browser. A provider with a certificate from your own authority needs `NODE_EXTRA_CA_CERTS`; plain `http://` issuers
+work, for a provider on your own network.
+
+1. Open **Settings › Admin › Server › Single sign-on › Add provider** and type a name. The dialog shows the
+   **Redirect URI**, which follows the name until you add the provider and then stays. Copy it.
+2. Create an application at your provider with that redirect URI, the authorization code flow and the scopes `openid`,
+   `profile` and `email`. Atelier always uses PKCE.
+3. Back in the dialog, fill in **Issuer**, **Client ID** and **Client secret** (empty for a public client), and choose
+   what happens to **someone without an account here**. Atelier reads the provider's configuration before it saves, so a
+   wrong address shows there. The client secret is encrypted with the [secrets key](#the-secrets-key).
+4. Connect your own admin account in **Settings › Account › Connected sign-ins**. **Continue with** does not find an
+   existing account by itself: it would make you a new one.
+
+When a sign-in fails after the provider, people see that it didn't work and the server's log says why.
+
+### Authentik
+
+1. In the Admin interface, open **Applications › Applications** and press **New Application**. Give it a name and a slug,
+   such as `atelier`.
+2. Choose **OAuth2/OIDC** as the provider type, and put the redirect URI from Atelier in **Redirect URIs**.
+3. Copy the **Client ID** and **Client Secret** to Atelier. The issuer is
+   `https://authentik.example.com/application/o/atelier/`, ending in the application's slug and a slash; Atelier also takes
+   it without the slash, or the address of its OpenID configuration.
+
+Authentik applications are open to every Authentik user until you bind a group or policy to them. Bind one, or keep
+**Create an account an admin approves**, which is the default for this reason. **Issuer mode** has to stay on its default,
+one issuer per provider: with one for all providers, the issuer's address has no configuration for Atelier to read.
+
 ## The secrets key
 
 Provider API keys, connector tokens and other secrets are encrypted at rest with AES-256-GCM. The key is **exactly 32
@@ -516,6 +553,7 @@ Atelier does not publish measured requirements. What is known:
 - [ ] `ATELIER_TRUSTED_PROXIES` set to your proxy only.
 - [ ] `ATELIER_SECRET_KEY` set, kept in a secret store, and not stored in the backup it protects.
 - [ ] Sign-up left on **Invite only** unless you want strangers able to request accounts.
+- [ ] Each identity provider limited to the people it should let in, or left on **Create an account an admin approves**.
 - [ ] The first admin created, and a second admin added, so that losing one account does not lock you out of
   administration. The last admin cannot be demoted, disabled or deleted.
 - [ ] Port 7340 not published to the internet: only the proxy is.

@@ -5,6 +5,7 @@
  */
 import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
+import { identityProvidersOffered } from '../auth/sign-in.ts';
 import { desktop, isMac } from '../../lib/platform.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
@@ -256,6 +257,14 @@ export const SETTINGS_INDEX = [
     description: 'Sign in to this site with your device’s screen lock or a security key instead of your password.',
     keywords: ['webauthn', 'security key', 'touch id', 'face id', 'windows hello', 'fingerprint', 'login', 'security'],
     available: passkeysAvailable,
+  },
+  {
+    id: 'account.identities',
+    page: 'account',
+    label: 'Connected sign-ins',
+    description: 'Other sign-ins for this account in a browser, such as Authentik or Google.',
+    keywords: ['sso', 'single sign-on', 'oidc', 'openid connect', 'authentik', 'keycloak', 'login', 'connect'],
+    available: identityProvidersOffered,
   },
   {
     id: 'privacy.retention',
@@ -976,6 +985,13 @@ export const SETTINGS_INDEX = [
     description:
       'Invite only: admins add people or give them invite codes. Open: anyone who can reach this server can create an account, which waits for an admin to approve it.',
     keywords: ['registration', 'open sign-up', 'invite only', 'join', 'policy'],
+  },
+  {
+    id: 'server.oidc',
+    page: 'server',
+    label: 'Single sign-on',
+    description: 'Lets people sign in to this server in a browser through an OpenID Connect identity provider, such as Authentik, Keycloak or Google. The desktop app keeps signing in with passwords.',
+    keywords: ['sso', 'oidc', 'openid connect', 'oauth', 'authentik', 'keycloak', 'authelia', 'identity provider', 'idp', 'login'],
   },
   {
     id: 'developer.inspector',

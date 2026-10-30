@@ -7,6 +7,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 /** Override both to run another checkout's suite alongside (e.g. ATELIER_E2E_WEB_PORT=7370 ATELIER_E2E_OLLAMA_PORT=11520). */
 export const FAKE_OLLAMA_PORT = Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510);
 export const WEB_PORT = Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360);
+export const FAKE_OIDC_PORT = Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362);
 
 /** e2e/serve.mjs starts the web server with this as ATELIER_SETUP_TOKEN. */
 export const SETUP_TOKEN = 'atelier-e2e-setup-token';

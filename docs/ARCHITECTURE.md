@@ -47,7 +47,7 @@ Everything else in the original plan (pnpm, strict TS, React+Vite+Tailwind, Elec
             └───────────────▲─────────────────────────▲───────────────┘
            MessagePort (IPC)│                         │WebSocket (+HTTP for blobs)
  apps/desktop ──────────────┤                         ├────────────── apps/server
-  main: window, menus,      │                         │  Hono: auth (password+passkey),
+  main: window, menus,      │                         │  Hono: auth (password+passkey+OIDC),
   safeStorage, updater,     │                         │  sessions, static UI, blob downloads,
   folder picker, keep-awake │                         │  OAuth callbacks, update feed, trusted proxy
   utilityProcess ───► createBackend(platform) ◄─── same function
@@ -690,6 +690,8 @@ Cloudflare, Notion and Linear can be signed in to with OAuth instead of a pasted
 | `users` | id, username (unique, lowercase), name, role (admin\|user\|pending), password_hash (scrypt), must_change_password, avatar_blob, safeguards (inherit\|on\|off), last_active_at, disabled_at, created_at, updated_at |
 | `auth_sessions` | id, token_hash (sha256), user_id, client_kind (web\|desktop), device_id, user_agent, ip, created_at, last_seen_at, expires_at |
 | `passkeys` | id (credential id), user_id, public_key, counter, transports, name, created_at, last_used_at |
+| `oidc_providers` | id, name, issuer, client_id, new_accounts, created_at |
+| `user_identities` | id, user_id, provider_id, issuer, subject, label, created_at, last_used_at |
 | `invites` | id, token_hash, code_hint, role, created_by, expires_at, used_at, used_by |
 | `devices` | (user_id, id), name, platform, created_at, last_seen_at |
 | `user_prefs` | user_id, prefs (json, `UserPrefs`), updated_at |
@@ -926,6 +928,13 @@ Semantic roles:
   - Stores sha256(token), user, client kind (`web | desktop`), device id, user agent, IP, created and last-seen times, and a sliding 30-day expiry.
   - On web the token travels in an `HttpOnly; SameSite=Lax` cookie (`Secure` when the public origin is https). The desktop keeps its token in `safeStorage` and sends it as a header.
   - Account › Sessions lists the sessions and revokes them, and "Log out of all devices" revokes every one. In "This computer" mode Settings › Account hides username, password, sessions, devices and log out (and the profile menu's Log out becomes Lock Atelier): there is no sign-in to manage.
+
+**Identity providers (browsers only).** `accounts/oidc.ts` signs people in through OpenID Connect (`openid-client`), for providers an admin adds in Settings › Admin › Server.
+- **Providers** are the `oidc_providers` table, not settings: project settings merge into `settings.effective`, and no project may decide who signs in to a server. The client secret is the secret `oidc-<id>` (kind `oidc`, left out of Keys & secrets). The id comes from the name and is part of the redirect URI, so it doesn't change.
+- **The flow:** `POST /api/auth/oidc/<id>/start` (same origin) answers with the provider's address and sets the `HttpOnly; SameSite=Lax` cookie `atelier_session_oidc`, which names a flow kept in memory for 10 minutes (PKCE verifier, state, nonce, redirect URI, and the user for a connect). `GET /api/auth/oidc/<id>/callback` takes the flow, once, and signs the browser in or sends it back to `/?signIn=<code>`. The redirect URI is the public origin's, kept in the flow for the token request.
+- **Accounts:** `user_identities` joins an account to (issuer, subject), the only stable pair OpenID Connect gives. Nothing is matched on email address or username: an existing account connects itself from Settings › Account (`link: true`, needs the session cookie, and the same person must be signed in when it comes back). Someone unknown follows the provider's `new_accounts` (`none | pending | user`, default `pending`). Such an account has an empty password hash, which never verifies, until they set one; `account.changePassword` then asks for no current password.
+- **Issuers** are stored as the provider states them; `discover()` also tries the other trailing-slash spelling, since they must match to the character. `http://` issuers are allowed (the admin's own address on a LAN). The client secret goes by HTTP Basic unless the provider lists only `client_secret_post`.
+- **Not done:** signing out at the provider, back-channel logout, and group-to-role mapping. A provider can't end a browser's Atelier sign-in.
 
 **Screen lock ("This computer" only).**
 - One per installation, off by default: a PIN (4–8 digits) or a password (6+ characters), set in Settings › Account. `accounts/screen-lock.ts` keeps it in `<dataDir>/screen-lock.json` (`0600`, written atomically) as a scrypt hash (`passwords.ts`), with the auto-lock minutes (0, 5, 15, 30, 60) and the failure count.
