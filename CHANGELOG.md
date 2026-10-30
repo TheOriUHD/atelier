@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.14] — 2026-10-30
+
 - **Typing in Full control on Windows comes out right:** text went out in bursts, which Windows 11's Notepad and apps like it read wrongly, so "typed in full control" could arrive as "typed lllllllllllllll". On a test machine about half of the typed lines in Notepad were wrong. Characters now go one at a time, about 30 a second in every app, and long text is sent in pieces so it can't run into a time limit. Background mode and Edge weren't affected.
 - **Atelier no longer seems to quit on Windows when the assistant takes over:** after you allowed it to take the mouse and keyboard from Background, Atelier's windows were hidden, which on Windows also removes them from the taskbar, and there is no tray icon to get them back from. They now minimize to the taskbar and come back as they were.
 - **Sign in with Authentik, Keycloak, Google and others (OpenID Connect):** an admin adds an identity provider in **Settings › Admin › Server › Single sign-on**, and the browser's sign-in page gets **Continue with** and its name. An existing account connects it once in **Settings › Account › Connected sign-ins**; someone new gets an account that waits for approval, gets one right away or is turned away, as the admin chooses per provider. Accounts are matched on the provider's permanent id and never on a name or email address. An account made this way sets a password in Settings to use the desktop app, which keeps signing in with passwords. See [Single sign-on](https://docs.atelierhq.dev/self-hosting/#single-sign-on).
