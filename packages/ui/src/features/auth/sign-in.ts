@@ -39,6 +39,16 @@ export async function oidcStart(id: string, link = false): Promise<never> {
   return new Promise(() => {});
 }
 
+/**
+ * Connects an identity provider to the signed-in account. The desktop app does it in a window of its own and resolves
+ * when that closes; a browser goes to the provider and the page loads again when it comes back.
+ */
+export async function connectProvider(provider: { id: string; name: string }): Promise<void> {
+  if (!desktop?.identities) return oidcStart(provider.id, true);
+  const outcome = await desktop.identities.connect(provider);
+  if (outcome.status === 'failed') throw appError(outcome.code ?? 'failed', outcome.message ?? oidcMessage(outcome.code));
+}
+
 let offered = false;
 /** Whether this server has identity providers; the backend says so with the sign-in status. */
 export const identityProvidersOffered = () => offered;
@@ -56,11 +66,12 @@ const OIDC_ERRORS: Record<string, string> = {
   not_found: 'That sign-in isn’t set up on this server any more.',
 };
 
+const oidcMessage = (code = '') => OIDC_ERRORS[code] ?? 'That sign-in didn’t work. The server’s log says why.';
+
 /** What went wrong when the server sent the browser back from an identity provider (`?signIn=<code>`). */
 export function oidcError(): string | undefined {
   const code = new URLSearchParams(location.search).get('signIn');
-  if (!code) return undefined;
-  return OIDC_ERRORS[code] ?? 'That sign-in didn’t work. The server’s log says why.';
+  return code ? oidcMessage(code) : undefined;
 }
 
 /** Takes `?signIn=<code>` out of the address, so a reload doesn't show it again. */

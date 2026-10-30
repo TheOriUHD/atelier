@@ -70,6 +70,9 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     relink: () => ipcRenderer.invoke('session:relink'),
     clear: () => ipcRenderer.invoke('session:clear'),
   },
+  identities: {
+    connect: (provider: { id: string; name: string }) => ipcRenderer.invoke('identities:connect', provider),
+  },
   device,
   hourCycle,
   lock: {

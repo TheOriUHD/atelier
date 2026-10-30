@@ -267,25 +267,58 @@ describe('Account › Connected sign-ins', () => {
     expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
   });
 
-  it('sends the desktop app to this section in the browser, warning about Continue with', async () => {
-    desktopBridge({ mode: 'server', serverUrl: 'https://atelier.example.com' });
+  const connectIn = (outcome: { status: 'connected' | 'cancelled' | 'failed'; code?: string; message?: string }) => {
+    const connect = vi.fn(async () => {
+      if (outcome.status === 'connected') identities = { connected: [identity], available: [] };
+      return outcome;
+    });
+    platform.desktop = { ...desktopBridge({ mode: 'server', serverUrl: 'https://atelier.example.com' }), identities: { connect } };
+    return connect;
+  };
+
+  it('connects in the desktop app, in a window of its own, and shows it', async () => {
+    const connect = connectIn({ status: 'connected' });
+    await renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Authentik' }));
+    expect(await screen.findByRole('cell', { name: 'ada@example.com' })).toBeTruthy();
+    expect(connect).toHaveBeenCalledWith(authentik);
+    expect(screen.getByRole('button', { name: 'Disconnect Authentik' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
+  });
+
+  it('says why when connecting in the desktop app didn’t work', async () => {
+    connectIn({ status: 'failed', code: 'identity_taken' });
+    await renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Authentik' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('That sign-in is already connected to another account.');
+    expect((screen.getByRole('button', { name: 'Connect Authentik' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('says nothing when you close the window', async () => {
+    connectIn({ status: 'cancelled' });
+    await renderPage();
+    const button = (await screen.findByRole('button', { name: 'Connect Authentik' })) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('offers the browser for providers that refuse app windows, warning about Continue with', async () => {
+    connectIn({ status: 'connected' });
     await renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Open in browser' }));
     expect(platform.openExternal).toHaveBeenCalledWith('https://atelier.example.com/#/?settings=account&row=account.identities');
-    expect(screen.getByText(/To connect Authentik, .*Continue with would make a new account/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Connect Authentik' })).toBeNull();
+    expect(screen.getByText(/refuse app windows.*Continue with would make a new account/)).toBeTruthy();
   });
 
-  it('shows what was connected when you come back to the desktop app, and disconnects there', async () => {
-    desktopBridge({ mode: 'server', serverUrl: 'https://atelier.example.com' });
+  it('shows what was connected in the browser when you come back to the desktop app', async () => {
+    connectIn({ status: 'cancelled' });
     await renderPage();
     await screen.findByRole('button', { name: 'Open in browser' });
 
     identities = { connected: [identity], available: [] };
     fireEvent.focus(window);
     expect(await screen.findByRole('cell', { name: 'ada@example.com' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Disconnect Authentik' })).toBeTruthy();
   });
 
   it('stays away on a server without identity providers', async () => {

@@ -1,4 +1,4 @@
-// A scripted OpenID Connect provider for e2e/oidc.web.spec.ts. Whoever `POST /person` named is signed in straight away:
+// A scripted OpenID Connect provider for e2e/oidc.*.spec.ts. Whoever `POST /person` named is signed in straight away:
 // `/authorize` shows no page and sends the browser back with a code, as a provider does for someone already signed in.
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -35,6 +35,8 @@ createServer(async (req, res) => {
     });
   }
   if (url.pathname === '/authorize') {
+    // Someone not signed in yet: a page they can leave.
+    if (person.hold) return res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>Log in</title><p>Sign in to continue</p>');
     const code = randomBytes(16).toString('hex');
     codes.set(code, { nonce: url.searchParams.get('nonce'), challenge: url.searchParams.get('code_challenge') });
     const back = new URL(url.searchParams.get('redirect_uri'));

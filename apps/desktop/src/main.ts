@@ -5,6 +5,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, powerSaveBlocker, protocol, safeStorage, session, shell, systemPreferences, utilityProcess, webContents, type UtilityProcess, type WebContents } from 'electron';
 import { ChatGptChatBrowser } from './chatgpt-chat.ts';
+import { connectIdentity } from './connect-identity.ts';
 import { autoUpdater } from 'electron-updater';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -579,6 +580,7 @@ const Theme = z.enum(['light', 'dark']);
 const UpdateChannel = z.enum(['stable', 'beta']);
 const ExternalUrl = z.string().regex(/^https?:\/\//);
 const Token = z.string().min(1).max(512);
+const ConnectingProvider = z.object({ id: z.string().min(1).max(100), name: z.string().min(1).max(100) });
 /** Permissions the renderer may get; everything else (camera, location, …) is denied. */
 const SaveBlob = z.object({ sha256: z.string().regex(/^[0-9a-f]{64}$/), name: z.string().min(1).max(255) });
 
@@ -784,6 +786,13 @@ function registerIpc(): void {
     token = null;
     post({ kind: 'token', token });
     followConnection();
+  });
+  // Settings › Account › Connected sign-ins.
+  ipcMain.handle('identities:connect', (event, input: unknown) => {
+    const provider = ConnectingProvider.parse(input);
+    if (connection?.mode !== 'server' || !token) throw new Error('Sign in to a server first.');
+    const parent = BrowserWindow.fromWebContents(event.sender);
+    return connectIdentity({ serverUrl: connection.serverUrl, token, provider, ...(parent ? { parent } : {}), hidden: !!process.env.ATELIER_HIDE_WINDOW });
   });
   // A forgotten screen lock PIN: macOS's Touch ID proves the person owns this OS account, who could delete the lock file anyway.
   ipcMain.handle('lock:canUseSystem', () => connection?.mode === 'local' && isMac && systemPreferences.canPromptTouchID());

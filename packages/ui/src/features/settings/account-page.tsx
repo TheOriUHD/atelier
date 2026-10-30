@@ -11,6 +11,7 @@ import {
   type Personality,
   type AuthSessionSummary,
   type IdentitySummary,
+  type OidcSignInOption,
   type PasskeySummary,
   type UserPrefs,
   type UserSummary,
@@ -39,7 +40,7 @@ import { describeError, rpc } from '../../lib/rpc.ts';
 import { ChangePasswordForm } from '../auth/change-password-form.tsx';
 import { useFormSubmit } from '../auth/form.ts';
 import { addPasskey, passkeysAvailable } from '../auth/passkeys.ts';
-import { clearOidcError, oidcError, oidcStart } from '../auth/sign-in.ts';
+import { clearOidcError, connectProvider, oidcError } from '../auth/sign-in.ts';
 import { leaveSetup, logout } from '../auth/sign-in.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { isImage, readBase64 } from '../chat/use-attachments.ts';
@@ -699,8 +700,9 @@ function PasskeysSection() {
 }
 
 /**
- * Connecting goes through the provider's pages and back here in a browser, like the sign-in it serves. The desktop app
- * shows the same list, sends you to this section in your browser, and reads the list again when you come back.
+ * Connecting goes through the provider's pages: in a browser and back to this page, in the desktop app in a window of
+ * its own. For providers that refuse app windows it can send you to this section in your browser, and reads the list
+ * again when you come back.
  */
 function IdentitiesSection() {
   const entry = settingEntry('account.identities');
@@ -717,13 +719,13 @@ function IdentitiesSection() {
     return () => window.removeEventListener('focus', refresh);
   }, [qc]);
   if (!data || (!data.connected.length && !data.available.length)) return null;
-  const connect = (id: string) => {
-    setConnecting(id);
+  const connect = (provider: OidcSignInOption) => {
+    setConnecting(provider.id);
     setError(undefined);
-    oidcStart(id, true).catch((e: unknown) => {
-      setConnecting(undefined);
-      setError(describeError(e).message);
-    });
+    connectProvider(provider)
+      .then(() => qc.invalidateQueries({ queryKey: keys.identities }))
+      .catch((e: unknown) => setError(describeError(e).message))
+      .finally(() => setConnecting(undefined));
   };
   const serverUrl = connection?.serverUrl;
   return (
@@ -735,21 +737,21 @@ function IdentitiesSection() {
           ))}
         </DataTable>
       )}
-      {data.available.length > 0 && !desktop && (
+      {data.available.length > 0 && (!desktop || desktop.identities) && (
         <div className="flex flex-wrap gap-2 py-3">
           {data.available.map((p) => (
-            <Button key={p.id} leadingIcon={Plus} loading={connecting === p.id} disabled={!!connecting} onClick={() => connect(p.id)}>
+            <Button key={p.id} leadingIcon={Plus} loading={connecting === p.id} disabled={!!connecting} onClick={() => connect(p)}>
               Connect {p.name}
             </Button>
           ))}
         </div>
       )}
       {data.available.length > 0 && serverUrl && (
-        <div className="flex flex-col items-start gap-2 py-3">
+        <div className="flex flex-col items-start gap-2 pb-3">
           <p className="text-body text-fg-muted">
-            To connect {data.available.map((p) => p.name).join(', ')}, open this page in your browser. Sign in there with your password: Continue with would make a new account.
+            Some providers, such as Google, refuse app windows. For those, open this page in your browser and sign in there with your password: Continue with would make a new account.
           </p>
-          <Button trailingIcon={ExternalLink} onClick={() => openExternal(`${serverUrl}/#/?settings=account&row=account.identities`)}>
+          <Button size="sm" trailingIcon={ExternalLink} onClick={() => openExternal(`${serverUrl}/#/?settings=account&row=account.identities`)}>
             Open in browser
           </Button>
         </div>

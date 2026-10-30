@@ -1,20 +1,20 @@
 import { spawn } from 'node:child_process';
 import { rm } from 'node:fs/promises';
-import { chromium, expect, test, type ElectronApplication } from '@playwright/test';
+import { expect, test, type ElectronApplication } from '@playwright/test';
 import { launchDesktop, PASSWORD } from './desktop-app.ts';
 import { FAKE_OIDC_PORT, tempConfigDir } from './fixtures.ts';
 import { PORT, SERVER_URL, SETUP_TOKEN, waitForHealth } from './server-mode.ts';
 
 const OIDC = `http://127.0.0.1:${FAKE_OIDC_PORT}`;
+const signInAs = (person: Record<string, unknown>) => fetch(`${OIDC}/person`, { method: 'POST', body: JSON.stringify(person) });
 
-test('desktop: shows connected sign-ins and sends you to the browser to connect one', async () => {
+test('desktop: connects an identity provider from Settings, in a window of its own', async () => {
   const dataDir = await tempConfigDir();
   const configDir = await tempConfigDir();
   const server = spawn(process.execPath, ['apps/server/dist/server.mjs'], {
     stdio: 'inherit',
     env: { ...process.env, ATELIER_DATA_DIR: dataDir, ATELIER_PORT: String(PORT), ATELIER_SETUP_TOKEN: SETUP_TOKEN },
   });
-  const chrome = await chromium.launch();
   let app: ElectronApplication | undefined;
   try {
     await waitForHealth();
@@ -46,36 +46,39 @@ test('desktop: shows connected sign-ins and sends you to the browser to connect 
     await dialog.getByRole('button', { name: 'Add provider' }).click();
     await expect(dialog).toBeHidden();
 
-    // The system browser is a page here; the app can't connect by itself, so it says where.
+    // Someone who hasn't signed in at the provider yet gets its page in a window, and can walk away from it.
+    await settings.getByRole('button', { name: 'Account', exact: true }).click();
+    await signInAs({ hold: true });
+    const opening = app.waitForEvent('window');
+    await settings.getByRole('button', { name: 'Connect Test IdP' }).click();
+    const provider = await opening;
+    await expect(provider.getByText('Sign in to continue')).toBeVisible();
+    // With no address bar, the title says whose page this is. (Test runs keep windows hidden unless they have a screen of their own.)
+    await expect
+      .poll(() => app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => ({ title: w.getTitle(), visible: w.isVisible() }))))
+      .toContainEqual({ title: `Connect Test IdP — 127.0.0.1:${FAKE_OIDC_PORT}`, visible: !!process.env.ATELIER_SHOW_WINDOW });
+    await provider.close();
+    await expect(settings.getByRole('button', { name: 'Connect Test IdP' })).toBeEnabled();
+    await expect(settings.getByRole('alert')).toHaveCount(0);
+
+    // Signed in there, the window comes and goes by itself and the account has it.
+    await signInAs({ sub: 'the-admin', preferred_username: 'admin', name: 'Tester', email: 'admin@example.com' });
+    await settings.getByRole('button', { name: 'Connect Test IdP' }).click();
+    await expect(settings.getByRole('cell', { name: 'admin@example.com' })).toBeVisible();
+
+    // It can be disconnected here too.
+    await settings.getByRole('button', { name: 'Disconnect Test IdP' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Disconnect' }).click();
+
+    // For providers that refuse app windows the app knows the way to the browser.
     await app.evaluate(({ shell }) => {
       const opened: string[] = [];
       (globalThis as { opened?: string[] }).opened = opened;
       shell.openExternal = async (url) => void opened.push(url);
     });
-    await settings.getByRole('button', { name: 'Account', exact: true }).click();
-    await expect(settings.getByRole('heading', { name: 'Connected sign-ins' })).toBeVisible();
     await settings.getByRole('button', { name: 'Open in browser' }).click();
     await expect.poll(() => app!.evaluate(() => (globalThis as { opened?: string[] }).opened)).toEqual([`${SERVER_URL}/#/?settings=account&row=account.identities`]);
-
-    // In the browser you sign in with your password, land on the section and connect.
-    await fetch(`${OIDC}/person`, { method: 'POST', body: JSON.stringify({ sub: 'the-admin', preferred_username: 'admin', name: 'Tester', email: 'admin@example.com' }) });
-    const browser = await chrome.newPage();
-    await browser.goto(`${SERVER_URL}/#/?settings=account&row=account.identities`);
-    await browser.getByLabel('Username', { exact: true }).fill('admin');
-    await browser.getByLabel('Password', { exact: true }).fill(PASSWORD);
-    await browser.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await browser.getByRole('button', { name: 'Connect Test IdP' }).click();
-    await expect(browser.getByRole('cell', { name: 'admin@example.com' })).toBeVisible();
-
-    // Back in the app it shows, and can be disconnected there.
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(settings.getByRole('cell', { name: 'admin@example.com' })).toBeVisible();
-    await expect(settings.getByRole('button', { name: 'Open in browser' })).toBeHidden();
-    await settings.getByRole('button', { name: 'Disconnect Test IdP' }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Disconnect' }).click();
-    await expect(settings.getByRole('button', { name: 'Open in browser' })).toBeVisible();
   } finally {
-    await chrome.close();
     await app?.close();
     // Wait for the server to be gone: Windows won't delete a database file something still has open.
     const gone = new Promise((resolve) => server.once('exit', resolve));

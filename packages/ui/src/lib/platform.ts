@@ -84,6 +84,8 @@ interface DesktopBridge {
   };
   /** Atelier servers on the local network, each reported as it answers; resolves with all of them within about 3 s. */
   discovery?: { scan(onFound: (server: FoundServer) => void): Promise<FoundServer[]> };
+  /** Server mode: connects an identity provider to the signed-in account in a window of its own; resolves when that closes. */
+  identities?: { connect(provider: { id: string; name: string }): Promise<{ status: 'connected' | 'cancelled' | 'failed'; code?: string; message?: string }> };
   /** The sign-in token for the current connection, kept in the OS keychain by the main process. */
   session: {
     /** `remembered` is false when this computer has no secure storage to keep it in: signed in for this run only. */

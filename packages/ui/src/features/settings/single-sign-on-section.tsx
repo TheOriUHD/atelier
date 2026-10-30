@@ -133,7 +133,7 @@ function ProviderDialog({
           <Field label="Name" description="The sign-in page says “Continue with” this name." error={form.errors.name}>
             <TextField autoFocus maxLength={60} placeholder="Authentik" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Redirect URI" description={provider ? undefined : 'Follows the name until you add the provider, then it stays.'}>
+          <Field label="Redirect URI" description={`${provider ? '' : 'Follows the name until you add the provider, then it stays. '}Anyone reaching this server at another address, such as the desktop app on your network, needs that address’s URI listed at your provider too.`}>
             <div className="flex items-center gap-2">
               <TextField readOnly value={redirectUri} className="min-w-0 flex-1 font-mono text-code" />
               <CopyButton text={redirectUri} size="md" label="Copy redirect URI" />

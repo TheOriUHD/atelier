@@ -303,7 +303,8 @@ computer. Turning off the home folder in the desktop app (**Settings › System*
   and address for passwords, per address for invite codes). Passkeys need user verification and a discoverable credential. Details in [Accounts](/accounts/).
 - Connector OAuth sign-ins finish at `/oauth/callback` only with the same person's cookie.
 - Identity provider sign-ins use the authorization code flow with PKCE, state and a nonce. A flow is used
-  once, within 10 minutes, in the browser that started it (an `HttpOnly`, `SameSite=Lax` cookie names it). The client
+  once, within 10 minutes, in the browser that started it (an `HttpOnly`, `SameSite=Lax` cookie names it). The desktop app
+  connects a provider under the same rules, in a window with cookies of its own that are thrown away when it closes. The client
   secret is encrypted like any other secret. Accounts are matched on the provider's issuer and subject together, never on
   an email address or username, so a name that changes hands at the provider does not bring an account with it. Providers
   live in the database and not in settings, so no project's settings can add one. Details in

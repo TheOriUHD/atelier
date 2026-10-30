@@ -269,6 +269,10 @@ its configuration and finish each sign-in, so the issuer's address must work fro
 your browser. A provider with a certificate from your own authority needs `NODE_EXTRA_CA_CERTS`; plain `http://` issuers
 work, for a provider on your own network.
 
+Without `ATELIER_BASE_URL`, each address people reach the server at has its own redirect URI, and the provider has to list
+all of them. The dialog shows the one for the address you are on. A browser on `https://atelier.example.com` and a desktop
+app on `http://192.168.1.10:7340` are two addresses, so list both.
+
 1. Open **Settings › Admin › Server › Single sign-on › Add provider** and type a name. The dialog shows the
    **Redirect URI**, which follows the name until you add the provider and then stays. Copy it.
 2. Create an application at your provider with that redirect URI, the authorization code flow and the scopes `openid`,
@@ -276,8 +280,8 @@ work, for a provider on your own network.
 3. Back in the dialog, fill in **Issuer**, **Client ID** and **Client secret** (empty for a public client), and choose
    what happens to **someone without an account here**. Atelier reads the provider's configuration before it saves, so a
    wrong address shows there. The client secret is encrypted with the [secrets key](#the-secrets-key).
-4. In a browser, sign in with your password and connect your own admin account in **Settings › Account › Connected
-   sign-ins**; the desktop app has **Open in browser** there. **Continue with** does not find an
+4. Connect your own admin account in **Settings › Account › Connected sign-ins**, in a browser or the desktop app.
+   **Continue with** does not find an
    existing account by itself: it would make you a new one.
 
 When a sign-in fails after the provider, people see that it didn't work and the server's log says why.
