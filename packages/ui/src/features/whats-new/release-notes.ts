@@ -19,6 +19,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.2.15',
+    intro: 'Connect your identity provider from the desktop app, without going to a browser.',
+    highlights: [
+      {
+        icon: KeyRound,
+        title: 'Connected sign-ins in the desktop app',
+        body: 'In Settings › Account › Connected sign-ins, Connect opens your provider’s sign-in in a small window that closes by itself when you’re done, and you can disconnect it there too. If the app reaches your server at a different address than your browser does, your provider needs that address’s redirect URI as well. Providers that refuse app windows, such as Google, can still be connected with Open in browser.',
+      },
+    ],
+    also: ['Links to a setting reach it even when its section loads a moment later.'],
+  },
+  {
     version: '0.2.14',
     intro: 'Sign in to a server through your own identity provider, and two fixes for computer use on Windows.',
     highlights: [
