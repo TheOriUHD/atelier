@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.2.15] — 2026-10-31
+
 - **Connect an identity provider from the desktop app:** Settings › Account › Connected sign-ins works there too. **Connect** opens the provider's sign-in in a small window that closes by itself when you're done, and you can disconnect one there as well. Providers that refuse app windows, such as Google, can still be connected through **Open in browser**. The window comes back to the address the app uses for the server, so when that differs from the browser's, the provider has to list that address's redirect URI too. Before, the section existed only in a browser, and nothing in the app said so.
 
 ## [0.2.14] — 2026-10-30
