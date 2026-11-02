@@ -158,7 +158,7 @@ Image models you can use with GenerateImage, the person's choice first:
 - comfy/sdxl (SDXL): prompt in comma-separated tags, takes a negative prompt, can change images
 </context-update>
 
-# Tools: 23, 30448 characters of JSON
+# Tools: 23, 30515 characters of JSON
 
 [
   {
@@ -765,7 +765,7 @@ Image models you can use with GenerateImage, the person's choice first:
   },
   {
     "name": "GenerateImage",
-    "description": "Makes images from a text description and shows them in the conversation. A local server can take minutes.\n- Use it when the person asks for a picture, photo, illustration, logo or anything else to look at. Charts, diagrams and anything drawn from data or code belong in an artifact or visual instead.\n- Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.\n- A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.\n- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want. A path to an image file in the folder works too.\n- `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.\n- If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.\n- The images appear by themselves: never paste their ids or links into your reply.\n- A provider's refusal is final: tell the person, and don't reword the prompt to get around it. Never make sexual images of minors, whatever the model allows.",
+    "description": "Makes images from a text description and shows them in the conversation. A local server can take minutes.\n- Use it when the person asks for a picture, photo, illustration, logo or anything else to look at. Charts, diagrams and anything drawn from data or code belong in an artifact or visual instead.\n- Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.\n- A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.\n- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want. For an image file in the folder, open it with Read first: that gives you its id.\n- `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.\n- If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.\n- The images appear by themselves: never paste their ids or links into your reply.\n- A provider's refusal is final: tell the person, and don't reword the prompt to get around it. Never make sexual images of minors, whatever the model allows.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -810,13 +810,15 @@ Image models you can use with GenerateImage, the person's choice first:
           "type": "array",
           "items": {
             "type": "string",
-            "description": "An image id like img_ab12cd34, or a path in the folder."
+            "pattern": "^img_[0-9a-f]{8}$",
+            "description": "An image id like img_ab12cd34."
           },
           "maxItems": 16,
           "description": "Images to change or to work from."
         },
         "mask": {
           "type": "string",
+          "pattern": "^img_[0-9a-f]{8}$",
           "description": "An image id: white where the first reference image may change."
         },
         "model": {
