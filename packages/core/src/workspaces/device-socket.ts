@@ -85,28 +85,25 @@ export function deviceSocket(links: Pick<DeviceLinks, 'start'>, userId: string, 
       };
       channel.onLine((line) => {
         if (ended) return;
-        const parsed = (() => {
-          try {
-            return DeviceSocketLine.safeParse(JSON.parse(line));
-          } catch {
-            return null;
-          }
-        })();
-        if (!parsed?.success) return;
-        const message = parsed.data;
+        let message: DeviceSocketLine;
+        try {
+          message = DeviceSocketLine.parse(JSON.parse(line));
+        } catch {
+          return;
+        }
         if ('open' in message) {
-          if (opened) return;
           opened = true;
           clearTimeout(timer);
           resolve(socket);
-        } else if (!opened) {
-          if ('error' in message) stop(Object.assign(new Error(message.error), message.code ? { code: message.code } : {}));
-          // Nothing but `error` may come before `open`: a socket isn't up until the device says so.
-        } else if ('text' in message) push(message.text, message.text.length);
-        else if ('binary' in message) {
+        } else if ('error' in message) stop(Object.assign(new Error(message.error), message.code ? { code: message.code } : {}));
+        else if ('close' in message) stop();
+        // Nothing else counts before `open`: a socket isn't up until the device says so.
+        else if (!opened) return;
+        else if ('text' in message) push(message.text, message.text.length);
+        else {
           const bytes = Buffer.from(message.binary, 'base64');
           push(bytes, bytes.length);
-        } else stop('error' in message ? Object.assign(new Error(message.error), message.code ? { code: message.code } : {}) : undefined);
+        }
       });
       void channel.closed.then(() => stop());
     });

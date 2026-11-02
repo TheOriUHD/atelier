@@ -227,7 +227,7 @@ describe('sockets to addresses lent to a server', () => {
       'ws://example.com/comfy/ws',
       'ftp://127.0.0.1/comfy/ws',
     ]);
-    await refused(`https://127.0.0.1:${server.port}`, [`${server.ws}/ws`]); // Plain where the person lent HTTPS.
+    await refused(`https://127.0.0.1:${server.port}`, [`${server.ws}/ws`, `https://127.0.0.1:${server.port}/ws`]); // Plain where the person lent HTTPS, and not a WebSocket URL.
     expect(server.requests).toEqual([]);
   });
 
@@ -239,6 +239,8 @@ describe('sockets to addresses lent to a server', () => {
     expect(withinSocketAddress('ws://localhost:8188/api/ws', 'http://localhost:8188/api/')).toBe(true);
     expect(withinSocketAddress('ws://localhost:8188/api', 'http://localhost:8188/api')).toBe(true);
     expect(withinSocketAddress('ws://comfy.example:443/ws', 'https://comfy.example')).toBe(false);
+    expect(withinSocketAddress('https://comfy.example/ws', 'https://comfy.example')).toBe(false);
+    expect(withinSocketAddress('http://localhost:8188/ws', 'http://localhost:8188')).toBe(false);
     expect(withinSocketAddress('ws://localhost:8188/apix', 'http://localhost:8188/api')).toBe(false);
     expect(withinSocketAddress('not a url', 'http://localhost:8188')).toBe(false);
   });

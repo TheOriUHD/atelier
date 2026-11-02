@@ -179,6 +179,8 @@ export function createDeviceLink(options: DeviceLinkOptions) {
       return; // Malformed frames from the server are dropped.
     }
     if (frame.t === 'ping') send({ t: 'pong' });
+    // A channel in use keeps what it has: taking its place would leave that running with nothing left to stop it.
+    else if ((frame.t === 'open' || frame.t === 'start') && (runners.has(frame.channel) || opening.has(frame.channel))) return;
     else if (frame.t === 'open') void open(frame.channel, frame.root);
     else if (frame.t === 'start') void start(frame.channel, frame.service);
     else if (frame.t === 'req') void answer(frame.id, frame.request);

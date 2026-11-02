@@ -1047,6 +1047,13 @@ describe('a person’s own image servers on their desktop', () => {
       expect(await ada.call('personalImageProviders.refresh', { id: ID })).toEqual([]);
       expect(await browser.call('personalImageProviders.list', {})).toMatchObject([{ id: ID }]);
 
+      // A change to the shared models reaches everyone, with their own after them and nobody else's.
+      const bobHears = new Promise<{ ref: string }[]>((resolve) => browser.on('imageModels.changed', resolve));
+      const adaHears = new Promise<{ ref: string }[]>((resolve) => ada.on('imageModels.changed', resolve));
+      await ada.call('imageProviders.save', { id: 'shared', type: 'openai-images', name: 'Shared', baseUrl: 'https://images.example.com', headers: {}, enabled: true });
+      expect((await bobHears).map((m) => m.ref)).toEqual([ref]);
+      expect((await adaHears).map((m) => m.ref)).toEqual([]);
+
       // The laptop stops lending the address, and then goes away: listed, but not available.
       const taken = new Promise<{ ref: string; available?: boolean }[]>((resolve) => browser.on('imageModels.changed', resolve));
       reply({ t: 'event', event: 'lending.changed', lending: { scratch: false, ssh: [], http: [] } });

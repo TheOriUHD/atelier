@@ -42,7 +42,7 @@ export type DeviceService = z.infer<typeof DeviceService>;
 export const LentConnector = z.object({ id: z.string().min(1).max(64), name: z.string().max(80), fingerprint: z.string().regex(/^[0-9a-f]{64}$/) });
 export type LentConnector = z.infer<typeof LentConnector>;
 
-/** An address the server may reach from here (a model server or connector on this computer or its network), by id. */
+/** An address the server may reach from here (a model or image server, or a connector, on this computer or its network), by id. */
 export const LentAddress = z.object({ id: z.string().min(1).max(64), baseUrl: z.url().max(2048) });
 export type LentAddress = z.infer<typeof LentAddress>;
 

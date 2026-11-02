@@ -404,6 +404,26 @@ describe('device link version 2', () => {
     expect(lent.killed()).toBe(true);
   });
 
+  it('won’t let a new start take the place of a channel in use, which would leave it running with nothing to stop it', async () => {
+    const lent = fakeChannel();
+    const start = vi.fn(async () => lent.channel);
+    const l = linkWith({ start });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    const service = { kind: 'ws', target: 'comfy', url: 'ws://127.0.0.1:8188/ws', headers: {} };
+    s.frame({ t: 'start', channel: 'c1', service });
+    s.frame({ t: 'start', channel: 'c1', service });
+    await tick();
+    s.frame({ t: 'start', channel: 'c1', service });
+    s.frame({ t: 'open', channel: 'c1', root: app });
+    await tick();
+    expect(start).toHaveBeenCalledOnce();
+    expect(runners).toEqual([]);
+    s.close(1006);
+    expect(lent.killed()).toBe(true);
+  });
+
   it('refuses a start that isn’t a known kind, or a socket without an address', async () => {
     const start = vi.fn(async () => fakeChannel().channel);
     const l = linkWith({ start });
