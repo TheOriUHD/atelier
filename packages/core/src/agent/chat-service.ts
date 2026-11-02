@@ -145,6 +145,8 @@ export interface ResolvedModel {
 export interface ModelResolver {
   /** Throws a ModelUnavailableError when the ref cannot be served. */
   resolve(ref: string, userId?: string | null): Promise<ResolvedModel>;
+  /** Throws a ModelHiddenError when `ref` is hidden and `userId` is no admin (lists leave hidden models out, a ref sent by name must be refused too). */
+  assertVisible?(ref: string, userId: string | null | undefined): Promise<void>;
   /** First visible model, used when nothing is configured for a mode. */
   firstAvailable(): Promise<string | undefined>;
   /** Every model of the enabled providers and the person's own, hidden ones included (providers/model-choice.ts skips those not listed). */
@@ -173,6 +175,16 @@ export class ModelUnavailableError extends Error {
     readonly fix = 'settings/providers',
   ) {
     super(message);
+  }
+}
+
+/**
+ * `ref` is a model an admin hid and the person is no admin. Worded like a model that doesn't exist, so a person can't
+ * probe for hidden ones. A session that already holds one moves to another model instead of failing (`resolveSessionModel`).
+ */
+export class ModelHiddenError extends ModelUnavailableError {
+  constructor(readonly ref: string) {
+    super(`There's no model "${ref}".`, 'settings/models');
   }
 }
 
@@ -958,7 +970,7 @@ export class ChatService {
           await this.addContextMessage(sessionId, { type: 'context', text: '', notice: { kind: 'command', command: focus ? `/compact ${focus}` : '/compact' } });
         await this.setStatus(sessionId, 'running');
         this.emit(sessionId, { type: 'compacting', active: true });
-        const run = await this.requestContext(session, await this.deps.models.resolve(ref, session.userId), controller.signal, false);
+        const run = await this.requestContext(session, await this.resolveSessionModel(session, ref), controller.signal, false);
         const { summaryTokens } = roomBudgets(run.threshold - run.fixedTokens);
         if (!(await this.compactNow(sessionId, { ...(focus ? { focus } : {}), signal: controller.signal, current: run.model, summaryTokens }))) throw new Error('There is nothing to compact yet.');
         this.emit(sessionId, { type: 'context', context: await this.measure(run, await this.forModel(run), false) });
@@ -1157,10 +1169,11 @@ export class ChatService {
       if (turnHooks && !(await this.beforeTurn(session, turnHooks, submitted, signal))) return;
       if (submitted && !session.parentSessionId) await this.expandSlash(session);
       let resolved: ResolvedModel;
+      const moved: string[] = [];
       try {
         const ref = await this.modelRef(session);
         if (!ref) throw new ModelUnavailableError('Add a model provider to start chatting.');
-        resolved = await this.deps.models.resolve(ref, session.userId);
+        resolved = await this.resolveSessionModel(session, ref, moved);
         if (!session.model) await this.deps.repo.update(sessionId, { model: ref });
       } catch (error) {
         await this.failWithoutModel(sessionId, error);
@@ -1171,6 +1184,7 @@ export class ChatService {
       if (!session.parentSessionId && !session.title && !this.titling.has(sessionId)) void this.generateTitle(sessionId, resolved);
       const run = await this.requestContext(session, resolved, signal, true);
       if (!session.parentSessionId) await this.announce(session, run);
+      for (const note of moved) await this.addContextMessage(sessionId, note);
       // A defined sub-agent's own `maxTurns` wins over the sub-agents' ceiling; a person's own turn has none.
       const maxSteps = (await this.definedAgentTurns(session)) ?? stepCap(!!session.parentSessionId, resolved.info.tier);
       // An Ultracode turn shares one sub-agent budget with everything it starts, and so does a turn that hears how its
@@ -1310,6 +1324,28 @@ export class ChatService {
 
   private timeZone(): string {
     return this.deps.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+
+  /**
+   * `ref` for the session's owner. A model an admin hid since the session chose it isn't theirs to use any more, but the
+   * session must not break for that: it moves to the mode's default (else the first model on offer), says so in the
+   * conversation (`notes` collects the text for the caller to add, else it is added now), and keeps the new model.
+   * Without another model the refusal stands.
+   */
+  private async resolveSessionModel(session: SessionRow, ref: string, notes?: string[]): Promise<ResolvedModel> {
+    try {
+      return await this.deps.models.resolve(ref, session.userId);
+    } catch (error) {
+      if (!(error instanceof ModelHiddenError)) throw error;
+      const fallback = await firstUsableModel(this.deps.models, [defaultModelFor(this.deps.settings(), session.mode), await this.deps.models.firstAvailable()], session.userId);
+      if (!fallback) throw error;
+      this.deps.sessionChanged(await this.deps.repo.update(session.id, { model: fallback.info.ref }));
+      const note = `The model "${ref}" is no longer available to you, so this conversation continues on ${fallback.info.displayName} (${fallback.info.ref}). Choose another model in the model menu if you prefer.`;
+      // A run's note is added once its turn note is (the turn note goes in front of the person's message only while that is the last one).
+      if (notes) notes.push(note);
+      else await this.addContextMessage(session.id, note);
+      return fallback;
+    }
   }
 
   /** The model a session runs on: its own, else the mode's default, else the first one available. */

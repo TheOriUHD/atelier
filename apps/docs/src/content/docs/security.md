@@ -280,9 +280,11 @@ computer. Turning off the home folder in the desktop app (**Settings › System*
   party; the site cannot be framed.
 - The artifact page has the stricter policy above, `X-Content-Type-Options: nosniff`, and is served at
   `/artifact-runtime/` and `/inline-visual.html`.
-- `/api/blobs/<hash>` (attachments, generated files, avatars) requires a sign-in, serves only common image types inline
-  (PNG, JPEG, GIF, WebP, AVIF) and everything else as a download, with `Content-Security-Policy: default-src 'none'; sandbox`
-  and `nosniff`.
+- `/api/blobs/<hash>` (attachments, generated files, avatars) requires a sign-in and returns a file only to an account that
+  holds something referring to it: its own conversations (messages, tool results, generated images), files, projects and
+  checkpoints, or an avatar, which everyone sees. Anyone else, admins included, gets "not found", as for a file that does not
+  exist. It serves only common image types inline (PNG, JPEG, GIF, WebP, AVIF) and everything else as a download, with
+  `Content-Security-Policy: default-src 'none'; sandbox` and `nosniff`.
 - The server does **not** send `Strict-Transport-Security` or `Referrer-Policy`: add `Strict-Transport-Security` at your
   proxy once HTTPS works.
 
@@ -312,9 +314,11 @@ computer. Turning off the home folder in the desktop app (**Settings › System*
 
 ### Isolation between accounts
 
-Every request is scoped to the signed-in account. Two things are not per-person permission checks: files are fetched by
-their content hash, so any signed-in account that knew a 256-bit hash could fetch that file (the hash cannot be guessed,
-but it is an address, not a grant); and an admin can reset a password and thereby take over an account. See
+Every request is scoped to the signed-in account. Files are stored under their content hash, but the hash is an address and
+not a grant: `/api/blobs/<hash>` serves a file only to an account that holds something referring to it (see above), and a
+message or avatar can only name a file the account already holds, so writing someone else's hash into one unlocks nothing.
+The same file uploaded by two accounts is one stored file that both may read. One thing is not a per-person permission
+check: an admin can reset a password and thereby take over an account. See
 [Accounts](/accounts/#what-admins-can-and-cannot-see).
 
 ## Image generation
@@ -325,8 +329,8 @@ Making an image sends the prompt and any input images to the image provider, and
 - **Image services.** A redirect from an image service is followed only on its own host, and no answer can be larger than 256 MB. On a server, Atelier asks a desktop which image servers answer on their usual ports, so a server you sign in to can learn that.
 - **Spending.** Each turn can make at most 8 images (an admin can change it), so text on a web page can't run up a bill. Admins can also set limits per person per day.
 - **What a model can send.** A model can only use images from its own conversation as input, by their ids. It can't name a file: to use one it opens it with Read, which follows your permissions, so `GenerateImage` is never a way to send a file to a provider. Saving to your folder follows `Edit` rules.
-- **Other people's images.** Generated images are stored like other files, so `/api/blobs` applies: any signed-in account that knows a file's full hash can fetch it.
-- **Hidden models.** A model an admin hides can't be used by anyone else, even by name.
+- **Other people's images.** Generated images are stored like other files, so `/api/blobs` applies: only the account whose conversation (or Images page) holds an image can fetch it, even with the full hash.
+- **Hidden models.** A model an admin hides can't be used by anyone else, even by name, for images and for text: choosing it for a chat is refused, and a chat that already used it moves to the default model and says so. Admins can still use them.
 - **Local servers.** ComfyUI and most local servers have no sign-in: anyone who can reach the port can use them. Keep them on a network you trust.
 - **Image servers on a desktop.** A server can open a WebSocket through your desktop only to an address you lent it, at or below that address, over `ws` for `http` and `wss` for `https`. Your desktop re-reads what you lent for each connection and each message the server sends, and closes the connection as soon as you take the address back. It refuses redirects and any header except sign-in headers, and limits each message to 32 MiB and each address to 8 connections. A lent address is lent for requests and WebSockets alike. An image URL from a personal server goes through the same check: the server never fetches it itself.
 

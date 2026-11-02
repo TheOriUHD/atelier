@@ -26,7 +26,7 @@ import type { SettingsService } from '../settings/settings-service.ts';
 import type { Db } from '../store/db.ts';
 import { modelCache } from '../store/schema.ts';
 import { interpolate } from '../util/interpolate.ts';
-import { ModelUnavailableError, type ModelResolver, type ResolvedModel } from '../agent/chat-service.ts';
+import { ModelHiddenError, ModelUnavailableError, type ModelResolver, type ResolvedModel } from '../agent/chat-service.ts';
 import { tierFor } from './catalog.ts';
 import { estimateContext } from './context-estimator.ts';
 import { isAbortError, noAnswerError } from './http.ts';
@@ -48,6 +48,12 @@ export interface RegistryDeps {
   adapterDeps: AdapterDeps;
   /** People's own providers on their computers (personal.ts); without it there are none. */
   personal?: PersonalAccess;
+  /**
+   * Whether an account is an admin. `hidden` models are the admin's decision, so only admins (and requests that name no
+   * account: titles, memory and other work the backend picks a model for itself) resolve one. Without it every caller
+   * is trusted, as on a desktop that has no other accounts.
+   */
+  isAdmin?(userId: string): Promise<boolean>;
 }
 
 /** A health check that gets no answer this soon says so: the server is down or unreachable. */
@@ -210,6 +216,32 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
       .sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order || a.displayName.localeCompare(b.displayName));
   }
 
+  /** The shared model `modelId` of `config` as the settings configure it; waits for a discovery in flight when it isn't cached yet. */
+  private async sharedInfo(config: ProviderConfig, modelId: string): Promise<ModelInfo> {
+    const find = async () => (await this.deps.db.select().from(modelCache).where(eq(modelCache.providerId, config.id)).all()).find((r) => r.modelId === modelId);
+    // Not discovered yet: a request right after startup or a provider change waits for the discovery in flight
+    // rather than running on guessed limits (no reasoning control, an 8k reply cap).
+    const cached = (await find()) ?? (await this.syncing.then(find));
+    return this.configured(cached ? (cached.info as unknown as DiscoveredModel) : fallbackModel(config, modelId));
+  }
+
+  /**
+   * Whether `userId` may not use `info`: it is hidden and they are no admin. The list already leaves hidden models out
+   * for them, but a ref can be sent by name, so every resolve for a person checks too. An account that can't be read
+   * (removed) counts as no admin.
+   */
+  private async hiddenFrom(info: ModelInfo, userId: string | null | undefined): Promise<boolean> {
+    if (!info.hidden || !userId || !this.deps.isAdmin) return false;
+    return !(await this.deps.isAdmin(userId).catch(() => false));
+  }
+
+  /** Throws a ModelHiddenError when `ref` is a hidden model and `userId` no admin; any other ref passes (resolve judges the rest). */
+  async assertVisible(ref: string, userId: string | null | undefined): Promise<void> {
+    const parsed = parseModelRef(ref);
+    const config = parsed && !isPersonalProviderId(parsed.providerId) ? this.providers.find((p) => p.id === parsed.providerId) : undefined;
+    if (parsed && config && (await this.hiddenFrom(await this.sharedInfo(config, parsed.modelId), userId))) throw new ModelHiddenError(ref);
+  }
+
   async resolve(ref: string, userId?: string | null): Promise<ResolvedModel> {
     const parsed = parseModelRef(ref);
     if (!parsed) throw new ModelUnavailableError(`Invalid model "${ref}".`, 'settings/models');
@@ -217,12 +249,8 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     const config = this.providers.find((p) => p.id === parsed.providerId);
     if (!config) throw new ModelUnavailableError(`The provider for ${ref} is not configured.`);
     if (!config.enabled) throw new ModelUnavailableError(`${config.name} is disabled.`);
-    const find = async () => (await this.deps.db.select().from(modelCache).where(eq(modelCache.providerId, parsed.providerId)).all()).find((r) => r.modelId === parsed.modelId);
-    // Not discovered yet: a request right after startup or a provider change waits for the discovery in flight
-    // rather than running on guessed limits (no reasoning control, an 8k reply cap).
-    const cached = (await find()) ?? (await this.syncing.then(find));
-    const base: DiscoveredModel = cached ? (cached.info as unknown as DiscoveredModel) : fallbackModel(config, parsed.modelId);
-    const info = this.configured(base);
+    const info = await this.sharedInfo(config, parsed.modelId);
+    if (await this.hiddenFrom(info, userId)) throw new ModelHiddenError(ref);
     const adapter = await this.adapterFor(config);
     // Models without native tool calling get tools described in the prompt and parsed from the text (§7).
     return { adapter: info.capabilities.tools === 'prompted' ? this.prompted(adapter) : adapter, info };

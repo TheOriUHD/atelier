@@ -7,7 +7,7 @@ import { openDatabase, type Db } from '../store/db.ts';
 import { NodeWorkspaceFs } from '../fs/workspace-fs.ts';
 import { SettingsService } from '../settings/settings-service.ts';
 import { AesGcmCipher, SecretStore } from '../secrets/secret-store.ts';
-import { ModelUnavailableError } from '../agent/chat-service.ts';
+import { ModelHiddenError, ModelUnavailableError } from '../agent/chat-service.ts';
 import { PersonalProviderRepo, type PersonalAccess } from './personal.ts';
 import { ProviderRegistry } from './registry.ts';
 import type { AdapterDeps, ProviderAdapter, ProviderInstance } from './types.ts';
@@ -83,6 +83,28 @@ describe('ProviderRegistry', () => {
     await settings.reset('global', ['models', 'overrides', 'router/small']);
     await settings.set('global', ['models', 'defaults', 'chat'], 'router/small');
     expect((await r.listModels())[0]?.hidden).toBe(false);
+  });
+  it('resolves a hidden model for admins and for work that names no account, and refuses everyone else by name', async () => {
+    const admins = new Set(['ada']);
+    const r = new ProviderRegistry({ db, settings, secrets, env: {}, createAdapter: factory, adapterDeps: { fetch: offline, readBlob: async () => new Uint8Array() }, isAdmin: async (id) => (id === 'gone' ? Promise.reject(new Error('No such account')) : admins.has(id)) });
+    await r.save({ id: 'p', type: 'ollama', name: 'P', baseUrl: 'http://localhost:11434', headers: {}, enabled: true });
+    await settings.set('global', ['models', 'overrides', 'p/small', 'hidden'], true);
+    expect((await r.listModels())[0]?.hidden).toBe(true);
+    await expect(r.resolve('p/small', 'bob')).rejects.toBeInstanceOf(ModelHiddenError);
+    await expect(r.resolve('p/small', 'bob')).rejects.toThrow(`There's no model "p/small".`);
+    // A model that was never discovered is hidden by its override just the same.
+    await settings.set('global', ['models', 'overrides', 'p/unlisted', 'hidden'], true);
+    await expect(r.resolve('p/unlisted', 'bob')).rejects.toBeInstanceOf(ModelHiddenError);
+    await expect(r.assertVisible('p/small', 'bob')).rejects.toBeInstanceOf(ModelHiddenError);
+    // A removed account is no admin.
+    await expect(r.resolve('p/small', 'gone')).rejects.toBeInstanceOf(ModelHiddenError);
+    expect((await r.resolve('p/small', 'ada')).info.ref).toBe('p/small');
+    expect((await r.resolve('p/small')).info.ref).toBe('p/small');
+    expect((await r.resolve('p/small', null)).info.ref).toBe('p/small');
+    await expect(r.assertVisible('p/small', 'ada')).resolves.toBeUndefined();
+    // A visible model is not affected.
+    await settings.set('global', ['models', 'overrides', 'p/small', 'hidden'], false);
+    expect((await r.resolve('p/small', 'bob')).info.ref).toBe('p/small');
   });
   it('saves a provider with its key in the secret store, never in settings', async () => {
     const r = registry();

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { APP, connectorFingerprintInput, contract, createMemoryTransportPair, createRpcClient, LOOP_MAX_PER_SESSION, LOOP_MAX_PER_USER, type AppContract, type HomeScan, type RpcClient } from '@atelier/protocol';
 import { programChannel } from '../mcp/line-transport.ts';
 import { ArtifactRepo } from '../artifacts/artifact-repo.ts';
+import { BlobStore } from '../store/blobs.ts';
 import { SessionRepo } from '../sessions/session-repo.ts';
 import { TEMPORARY_MAX_IDLE_MS } from '../sessions/temporary.ts';
 import { openDatabase } from '../store/db.ts';
@@ -1630,4 +1631,131 @@ describe('usage limits', () => {
       await rm(home, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+describe('hidden models', () => {
+  it('can be used by admins only: refused by name when a session is made or changed, and left behind by a session that already held one', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-hidden-models-'));
+    const asked: string[] = [];
+    const reply = sse([{ data: { choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }] } }, { data: { choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } } }], true);
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      fetch: async (url, init) => {
+        if (!String(url).endsWith('/chat/completions')) return jsonResponse({ data: [{ id: 'open' }, { id: 'secret' }, { id: 'other' }, { id: 'third' }] });
+        asked.push((JSON.parse(String(init.body)) as { model: string }).model);
+        return streamResponse(reply);
+      },
+    });
+    try {
+      const signIn = () => {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+        return createRpcClient(contract, clientSide);
+      };
+      const ada = signIn();
+      await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      await ada.call('settings.set', { layer: 'global', path: ['providers'], value: [{ id: 'fake', type: 'openai-compatible', name: 'Fake', baseUrl: 'http://fake.test/v1', headers: {}, enabled: true }] });
+      await ada.call('settings.set', { layer: 'global', path: ['models', 'overrides', 'fake/secret', 'hidden'], value: true });
+      const { temporaryPassword } = await ada.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+      const bob = signIn();
+      await bob.call('auth.login', { username: 'bob', password: temporaryPassword, clientKind: 'web' });
+      await bob.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+
+      // By name, in a new session or on an existing one: refused for Bob, fine for the admin.
+      expect(await code(bob.call('sessions.create', { mode: 'chat', model: 'fake/secret' }))).toBe('not_found');
+      const mine = await bob.call('sessions.create', { mode: 'chat', model: 'fake/open' });
+      expect(await code(bob.call('sessions.update', { id: mine.id, model: 'fake/secret' }))).toBe('not_found');
+      expect((await bob.call('sessions.update', { id: mine.id, model: 'fake/other' })).model).toBe('fake/other');
+      expect(await code(ada.call('sessions.create', { mode: 'chat', model: 'fake/secret' }))).toBe('ok');
+
+      // A session that held the model before it was hidden carries on with another one, and says so.
+      const held = await bob.call('sessions.create', { mode: 'chat', model: 'fake/other' });
+      await ada.call('settings.set', { layer: 'global', path: ['models', 'overrides', 'fake/other', 'hidden'], value: true });
+      await ada.call('settings.set', { layer: 'global', path: ['models', 'overrides', 'fake/open', 'hidden'], value: true });
+      asked.length = 0;
+      await bob.call('chat.send', { sessionId: held.id, parts: [{ type: 'text', text: 'hi' }] });
+      await vi.waitFor(() => expect(asked).toContain('third'), { timeout: 10_000 });
+      expect(asked).not.toContain('other');
+      expect(asked).not.toContain('secret');
+      await vi.waitFor(async () => expect((await bob.call('sessions.subscribe', { id: held.id })).session).toMatchObject({ model: 'fake/third', status: 'idle' }));
+      const note = (await bob.call('sessions.subscribe', { id: held.id })).messages.flatMap((m) => m.parts).find((p) => p.type === 'context' && p.text.includes('fake/other'));
+      expect(note).toMatchObject({ text: expect.stringContaining('no longer available to you') });
+
+      // The admin still runs hidden models, and keeps the session's model as it is.
+      const admins = await ada.call('sessions.create', { mode: 'chat', model: 'fake/secret' });
+      asked.length = 0;
+      await ada.call('chat.send', { sessionId: admins.id, parts: [{ type: 'text', text: 'hi' }] });
+      await vi.waitFor(() => expect(asked).toContain('secret'), { timeout: 10_000 });
+      expect((await ada.call('sessions.subscribe', { id: admins.id })).session.model).toBe('fake/secret');
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
+
+describe('who reads a blob', () => {
+  const bytes = (text: string) => Buffer.from(text);
+  async function bobAccount() {
+    const { temporaryPassword } = await client.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+    const bob = await signedIn('bob', temporaryPassword);
+    await bob.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+    return { bob, id: (await bob.call('account.get', {})).id };
+  }
+
+  it('is whoever something refers it to, not whoever knows its hash', async () => {
+    const { bob, id: bobId } = await bobAccount();
+    const adaId = (await client.call('account.get', {})).id;
+
+    // An upload is its uploader's.
+    const upload = await client.call('files.upload', { name: 'plan.png', mime: 'image/png', dataBase64: bytes('ada upload').toString('base64') });
+    expect(Buffer.from((await backend.readBlobFor(adaId, upload.blob))!.bytes).toString()).toBe('ada upload');
+    expect(await backend.readBlobFor(bobId, upload.blob)).toBeUndefined();
+    // Not by sending a message that names its hash, nor by making it an avatar.
+    const chat = await bob.call('sessions.create', { mode: 'chat' });
+    expect(await code(bob.call('chat.send', { sessionId: chat.id, parts: [{ type: 'image', mime: 'image/png', blob: upload.blob }] }))).toBe('not_found');
+    expect(await code(bob.call('chat.queue', { sessionId: chat.id, parts: [{ type: 'document', mime: 'text/plain', blob: upload.blob, name: 'x.txt' }] }))).toBe('not_found');
+    expect(await code(bob.call('account.update', { avatar: upload.blob }))).toBe('not_found');
+    expect(await backend.readBlobFor(bobId, upload.blob)).toBeUndefined();
+    // Neither the shape of a hash nor an unknown one gets anywhere.
+    expect(await backend.readBlobFor(bobId, '../../etc/passwd')).toBeUndefined();
+    expect(await backend.readBlobFor(adaId, 'a'.repeat(64))).toBeUndefined();
+
+    // A picture that only lives inside a message, a tool result or a generated image is its conversation's owner's.
+    const db = openDatabase(join(dir, 'atelier.db'));
+    const store = new BlobStore(db, join(dir, 'blobs'));
+    const inMessage = (await store.put(bytes('in a message'), 'image/png')).sha256;
+    const inResult = (await store.put(bytes('in a tool result'), 'image/png')).sha256;
+    const forgotten = (await store.put(bytes('in nothing'), 'image/png')).sha256;
+    const hers = await client.call('sessions.create', { mode: 'chat' });
+    const repo = new SessionRepo(db);
+    const row = { parentId: null, model: null, usage: null, stopReason: null, error: null, kind: 'normal' as const, summarizesThroughId: null };
+    await repo.insertMessage({ ...row, id: 'm1', sessionId: hers.id, role: 'user', parts: [{ type: 'text', text: `see ${forgotten}` }, { type: 'image', mime: 'image/png', blob: inMessage }] });
+    await repo.insertMessage({ ...row, id: 'm2', sessionId: hers.id, role: 'tool', parts: [{ type: 'tool_result', callId: 'c', content: [{ type: 'image', mime: 'image/png', blob: inResult }] }] });
+    db.$client.close();
+    expect(await backend.readBlobFor(adaId, inMessage)).toBeDefined();
+    expect(await backend.readBlobFor(adaId, inResult)).toBeDefined();
+    expect(await backend.readBlobFor(bobId, inMessage)).toBeUndefined();
+    expect(await backend.readBlobFor(bobId, inResult)).toBeUndefined();
+    // Writing a hash in the text of a message is not holding the blob.
+    expect(await backend.readBlobFor(adaId, forgotten)).toBeUndefined();
+
+    // Avatars are shown to everyone.
+    const avatar = await client.call('files.upload', { name: 'me.png', mime: 'image/png', dataBase64: bytes('ada avatar').toString('base64') });
+    await client.call('account.update', { avatar: avatar.blob });
+    expect(await backend.readBlobFor(bobId, avatar.blob)).toBeDefined();
+  });
+
+  it('hands an account the export of its own data and a provider test picture, and nobody else', async () => {
+    const { id: bobId } = await bobAccount();
+    const adaId = (await client.call('account.get', {})).id;
+    const exported = await client.call('privacy.export', {});
+    expect(await backend.readBlobFor(adaId, exported.sha256)).toBeDefined();
+    expect(await backend.readBlobFor(bobId, exported.sha256)).toBeUndefined();
+  });
 });

@@ -82,7 +82,7 @@ import { deviceFetch } from '../workspaces/device-fetch.ts';
 import { deviceSocket } from '../workspaces/device-socket.ts';
 import { findFiles, gitDiff, gitStatus, grepFiles, listDir, readFile as readWorkspaceFile, sessionDiff } from '../workspaces/workspace-view.ts';
 import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
-import { ChatService, type ExtensionCatalog } from '../agent/chat-service.ts';
+import { ChatService, ModelHiddenError, type ExtensionCatalog } from '../agent/chat-service.ts';
 import { isSideChat } from '../agent/side-chat.ts';
 import { LoopLimitError } from '../agent/loops.ts';
 import { UsageLimits } from '../usage/limits.ts';
@@ -126,6 +126,7 @@ import { GroupRepo } from '../sessions/group-repo.ts';
 import { SessionRepo, connectorsOff, type SessionRow } from '../sessions/session-repo.ts';
 import { TEMPORARY_MAX_IDLE_MS } from '../sessions/temporary.ts';
 import { SettingsService, SettingsValidationError } from '../settings/settings-service.ts';
+import { BlobAccess } from '../store/blob-access.ts';
 import { BlobStore } from '../store/blobs.ts';
 import { MemoryEditingOffError, MemoryInvalidError, MemoryNotFoundError, MemoryService, ModelChoiceError } from '../memory/memory-service.ts';
 import { openDatabase } from '../store/db.ts';
@@ -208,6 +209,11 @@ export interface Backend {
    */
   finishSignIn(params: URLSearchParams, userId: string | null): Promise<string | null>;
   readBlob(sha256: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string } | undefined>;
+  /**
+   * `readBlob` for a signed-in account: undefined unless something that account may see refers to the blob (store/blob-access.ts).
+   * "This computer" has one person, so nothing is checked there.
+   */
+  readBlobFor(userId: string, sha256: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string } | undefined>;
   dispose(): Promise<void>;
 }
 
@@ -240,6 +246,7 @@ const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', '
 export async function createBackend(platform: Platform): Promise<Backend> {
   const db = openDatabase(join(platform.dataDir, 'atelier.db'));
   const blobs = new BlobStore(db, join(platform.dataDir, 'blobs'));
+  const blobAccess = new BlobAccess(db);
   const fs = new NodeWorkspaceFs();
   const settings = new SettingsService(fs, platform.configDir);
   await settings.load();
@@ -466,6 +473,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     // A server reaches people's own model servers and ChatGPT windows through their desktops.
     ...(platform.surface === 'web' ? { personal: personalAccess } : {}),
+    // Hidden models are for admins; everyone else is refused one sent by name (providers/registry.ts).
+    isAdmin: async (userId) => (await accounts.get(userId)).role === 'admin',
   });
   // "Connect with OpenRouter": mints a key in the person's account and saves the provider with it.
   const openrouter = new OpenRouterConnect({ fetch: httpFetch, surface: platform.surface, save: (draft) => registry.save(draft) });
@@ -1314,6 +1323,30 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       }
     }
   };
+  /** A hidden model can't be put on a session by name (and one already on it stops being used: agent/chat-service.ts). */
+  const readBlob = async (sha256: string) => {
+    const info = await blobs.info(sha256);
+    if (!info) return undefined;
+    return { bytes: await blobs.read(sha256), mime: info.mime };
+  };
+  /**
+   * A message can only attach files the account already holds. Reading a blob needs something of theirs to refer to it, and
+   * a message they write is such a thing: without this check, sending a message that names a hash would unlock the blob.
+   */
+  const ownBlobsOnly = async (parts: readonly { type: string; blob?: string }[], ctx: Ctx): Promise<void> => {
+    if (local) return;
+    for (const part of parts) {
+      const { blob } = part;
+      if (typeof blob === 'string' && !(await blobAccess.canRead(me(ctx).id, blob))) throw appError('not_found', 'That attachment no longer exists. Attach it again.');
+    }
+  };
+  const refuseHiddenModel = async (model: string, userId: string): Promise<void> => {
+    try {
+      await registry.assertVisible(model, userId);
+    } catch (e) {
+      throw e instanceof ModelHiddenError ? appError('not_found', e.message) : e;
+    }
+  };
   const sessionOrThrow = async (id: string, ctx: Ctx): Promise<SessionSummary> => {
     const row = await sessions.getRow(id);
     // Someone else's conversation reads like a deleted one; only the person's own, kept off this device, says so.
@@ -1474,6 +1507,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     // ---------------------------------------------------------------- your account
     'account.get': (_input, ctx) => accounts.get(me(ctx).id),
     'account.update': async (patch, ctx) => {
+      // Avatars are readable by every account, so a picture can only be one the person already holds.
+      if (patch.avatar) await ownBlobsOnly([{ type: 'avatar', blob: patch.avatar }], ctx);
       const user = await accounts.update(me(ctx).id, patch);
       for (const c of connections) if (c.auth?.user.id === user.id) c.auth.user = user;
       emitToUser(user.id, 'account.changed', user);
@@ -1671,7 +1706,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'imageProviders.status': () => imageRegistry.statusList(),
     'imageProviders.detect': () => imageRegistry.detect(),
     'imageProviders.test': (draft) => imageRegistry.test(draft),
-    'imageProviders.tryImage': ({ draft, modelId }) => images.tryImage(draft, modelId),
+    'imageProviders.tryImage': async ({ draft, modelId }, ctx) => {
+      const image = await images.tryImage(draft, modelId);
+      // Nothing holds the test picture; the admin who asked for it sees it.
+      blobAccess.grant(me(ctx).id, image.blob);
+      return image;
+    },
     'imageProviders.save': async (draft) => {
       const existing = settings.effective.imageProviders.find((p) => p.id === draft.id);
       if (imagePreset(draft.preset)?.key === 'required' && !draft.apiKey && !draft.apiKeyFromEnv && !draft.apiKeyFromProvider && !existing?.apiKey) throw appError('missing_key', `${draft.name} needs an API key.`);
@@ -1768,6 +1808,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'sessions.create': async ({ mode, projectId, model, effort, thinking, remoteControl, workspaceId, scratch, permissionMode, connectorsOff: off, research, imageModel, groupId, temporary }, ctx) => {
       if (projectId) await projectOrThrow(projectId, ctx);
       const userId = me(ctx).id;
+      if (model) await refuseHiddenModel(model, userId);
       if (temporary && (mode !== 'chat' || groupId)) throw appError('unsupported', 'Only a chat can be temporary, and it isn’t filed in a group.');
       if (workspaceId && !(await workspaceManager.list(userId)).some((w) => w.id === workspaceId)) throw appError('not_found', 'Workspace not found.');
       if (scratch && (mode === 'chat' || workspaceId)) throw appError('unsupported', 'Only a Code or Cowork session without a folder gets a scratch folder.');
@@ -1804,6 +1845,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'sessions.update': async ({ id, title, pinned, model, effort, thinking, remoteControl, projectId, permissionMode, connectorsOff: off, research, imageModel, groupId, archived, unread }, ctx) => {
       const before = await sessionOrThrow(id, ctx);
+      if (model) await refuseHiddenModel(model, me(ctx).id);
       const row = off !== undefined || research !== undefined || imageModel !== undefined || thinking !== undefined || remoteControl !== undefined ? await sessions.getRow(id) : undefined;
       if (projectId) await projectOrThrow(projectId, ctx);
       if (groupId && !(await groups.get(me(ctx).id, groupId))) throw appError('not_found', 'Group not found.');
@@ -1898,6 +1940,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
     'chat.send': async ({ sessionId, parentId, parts }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
+      await ownBlobsOnly(parts, ctx);
       return { userMessageId: await chat.send(sessionId, parts, parentId) };
     },
     'chat.stop': async ({ sessionId }, ctx) => {
@@ -1907,6 +1950,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.queue': async ({ sessionId, parts }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
+      await ownBlobsOnly(parts, ctx);
       return chat.queue(sessionId, parts);
     },
     'chat.unqueue': async ({ sessionId, id }, ctx) => {
@@ -1930,6 +1974,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.edit': async ({ sessionId, messageId, parts }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
+      await ownBlobsOnly(parts, ctx);
       return { userMessageId: await chat.edit(sessionId, messageId, parts) };
     },
     'chat.switchBranch': async ({ sessionId, messageId }, ctx) => {
@@ -2066,6 +2111,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'stats.summary': ({ mode, days, timezoneOffset }, ctx) => statsSummary(db, { userId: me(ctx).id, mode, days: days ?? null, timezoneOffset }),
     'privacy.export': async (_input, ctx) => {
       const blob = await blobs.put(await exportAll(db, blobs, me(ctx).id), 'application/zip');
+      // The export holds everything the person has and nothing refers to it: only they may download it.
+      blobAccess.grant(me(ctx).id, blob.sha256);
       return { sha256: blob.sha256, name: `${APP.dirName.replace(/^\./, '')}-export-${new Date().toISOString().slice(0, 10)}.zip` };
     },
     'privacy.deleteConversations': async (_input, ctx) => {
@@ -2562,10 +2609,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     finishSignIn: (params, userId) =>
       openrouter.owns(params) ? openrouter.finish(params, userId) : personal.owns(params) ? personal.finishSignIn(params, userId) : mcp.finishSignIn(params, userId),
-    async readBlob(sha256) {
-      const info = await blobs.info(sha256);
-      if (!info) return undefined;
-      return { bytes: await blobs.read(sha256), mime: info.mime };
+    readBlob,
+    async readBlobFor(userId, sha256) {
+      if (!local && !(await blobAccess.canRead(userId, sha256))) return undefined;
+      return readBlob(sha256);
     },
     passkeys,
     oidc,

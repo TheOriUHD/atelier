@@ -203,8 +203,12 @@ oidcRoutes(app, backend, { cookie: COOKIE, originOf, sameOrigin, secure, clientO
 
 const INLINE_TYPES = /^image\/(png|jpeg|gif|webp|avif)$/;
 app.get('/api/blobs/:sha', async (c) => {
-  if (!(await authenticated(c))) return c.json({ code: 'unauthenticated' }, 401);
-  const blob = await backend.readBlob(c.req.param('sha')).catch(() => undefined);
+  const token = tokenOf(c);
+  const auth = token ? await backend.authenticate(token) : null;
+  if (!auth) return c.json({ code: 'unauthenticated' }, 401);
+  // A blob is only for accounts that hold something referring to it (or an avatar): the hash is not a credential.
+  // Someone else's blob reads like one that doesn't exist.
+  const blob = await backend.readBlobFor(auth.user.id, c.req.param('sha')).catch(() => undefined);
   if (!blob) return c.notFound();
   const inline = INLINE_TYPES.test(blob.mime);
   return c.body(blob.bytes, 200, {
