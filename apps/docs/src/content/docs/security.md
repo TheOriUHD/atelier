@@ -326,7 +326,7 @@ Making an image sends the prompt and any input images to the image provider, and
 - **Other people's images.** A model can only use images from its own conversation as input. Generated images are stored like other files, so `/api/blobs` applies: any signed-in account that knows a file's full hash can fetch it.
 - **Hidden models.** A model an admin hides can't be used by anyone else, even by name.
 - **Local servers.** ComfyUI and most local servers have no sign-in: anyone who can reach the port can use them. Keep them on a network you trust.
-- **Image servers on a desktop.** A server reaches a person's own image server through their desktop, only at addresses that person lent from that desktop, over HTTP and WebSocket. Each new connection and request checks the lending list again, and taking an address back closes its open connections.
+- **Image servers on a desktop.** A server can open a WebSocket through your desktop only to an address you lent it, at or below that address, over `ws` for `http` and `wss` for `https`. Your desktop re-reads what you lent for each connection and each message the server sends, and closes the connection as soon as you take the address back. It refuses redirects and any header except sign-in headers, and limits each message to 32 MiB and each address to 8 connections. A lent address is lent for requests and WebSockets alike. An image URL from a personal server goes through the same check: the server never fetches it itself.
 
 ## Secrets
 

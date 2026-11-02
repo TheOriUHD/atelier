@@ -26,12 +26,12 @@ models** in the desktop app, and it works from sessions on the server while that
 
 | Service | Notes |
 |---|---|
-| **ComfyUI** | Your checkpoints appear as models with no setup, and you can import your own workflows. Shows the picture forming as it works. |
-| **Forge**, **AUTOMATIC1111**, **SD.Next**, **reForge** | Start them with `--api`. |
-| **SwarmUI** | |
-| **InvokeAI** | |
-| **Draw Things** | Turn on the API Server in the app, with HTTP as the protocol. |
-| **KoboldCpp** | Start it with an image model loaded. |
+| **ComfyUI** | Your models appear with no setup, and you can import your own workflows. Shows the picture forming as it works. |
+| **Forge**, **AUTOMATIC1111**, **SD.Next**, **reForge** | Start them with `--api`. Shows the picture forming. |
+| **SwarmUI** | Live progress works on a server without accounts. With accounts, you see the image when it's done. |
+| **InvokeAI** | SD 1.x, SD 2.x and SDXL models. |
+| **Draw Things** | Turn on the API Server in the app, with HTTP as the protocol. It uses the model open in the app, and shows no progress. For edits, sides must be multiples of 64. |
+| **KoboldCpp** | Start it with an image model loaded. It makes one image at a time. |
 | **stable-diffusion.cpp** | Use its `sd-server` program. |
 | **LocalAI** | |
 
@@ -65,8 +65,11 @@ a size. A frame in the final shape appears straight away and says what's happeni
 yours, or "Step 12 of 28".
 
 When it's done, click the image to see it bigger and zoom in. Point at it for **Copy**, **Download**, **Use as reference**
-and **Details**, which shows the model, size, seed, time and cost. **Images** in the sidebar has everything you've made,
-and you can search it by prompt.
+and **Details**, which shows the model, size, seed, time and cost. **Copy** needs `https` or `localhost`, so a browser on a
+plain `http` address doesn't offer it. **Images** in the sidebar has everything you've made, and you can search it by
+prompt.
+
+On local models you can ask for quality: `high` adds a second pass and a face fix on SDXL, and `draft` uses fewer steps.
 
 - **Change an image.** Say what to change: "make the sky darker". This works on images you attach, too. The model needs an
   image model that can edit; if the one in use can't, it says so.
@@ -98,11 +101,17 @@ hold both.
 
 ## Your own ComfyUI workflows
 
-Open the ComfyUI provider's **Workflows**. Paste a workflow exported with **Save (API)**, or drop a PNG made by ComfyUI,
-which carries its workflow. Atelier finds the prompt, seed, steps, size and input image, and shows you what it found so you
-can correct it. The workflow then appears as an image model.
+Your checkpoints and models work without this: each appears as a model with a recipe that suits it. A model Atelier has no
+recipe for, such as a video model, is left out, and that's what workflows are for.
 
-ComfyUI's ordinary **Save** writes a format meant for its own editor, which can't run as it is. Use **Save (API)** instead.
+Open the ComfyUI provider's **Workflows**. Paste a workflow exported with **Save (API)**, or drop a JSON file or a PNG made
+by ComfyUI, which carries its workflow. Atelier finds the prompt, seed, steps, size and input image, and shows you what it
+found so you can correct it. The workflow then appears as an image model.
+
+A workflow saved with ComfyUI's ordinary **Save** works too, unless it uses subgraphs. For those, use **Save (API)**.
+
+Atelier asks ComfyUI to keep images and input images in its temp folder, not your output folder. That folder empties when
+ComfyUI restarts.
 
 ## Costs and limits
 
@@ -129,3 +138,5 @@ the workflow into its PNGs, and some cloud services add a content credential.
 | The GPU ran out of memory | Close other models, set **Shares a GPU with**, or use a smaller size. |
 | The provider refused the prompt | That's the provider's filter, and it's final. The assistant won't reword it to get past it. A blurred or filtered image counts as refused, and isn't kept. |
 | No previews on a personal image server | Update the desktop app. |
+| **ComfyUI isn't starting jobs** | It's stuck, usually because it ran out of memory. Restart it. |
+| The first image takes minutes | A local server is loading the model. The next ones are much faster while you stay with that model. |
