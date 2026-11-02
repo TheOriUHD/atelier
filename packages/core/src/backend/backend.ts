@@ -50,6 +50,8 @@ import {
 } from '@atelier/protocol';
 import { AccountError, AccountService, type Authenticated, type ClientInfo } from '../accounts/account-service.ts';
 import { DeviceRepo, toDeviceSummary } from '../accounts/device-repo.ts';
+import { AuditLog } from '../audit/audit-log.ts';
+import { auditEntry, isSkip, type AuditEnv } from '../audit/audit-rules.ts';
 import { Oidc } from '../accounts/oidc.ts';
 import { Passkeys } from '../accounts/passkeys.ts';
 import { PrefsRepo, PrefsValidationError } from '../accounts/prefs-repo.ts';
@@ -250,9 +252,11 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const projects = new ProjectRepo(db);
   let promptOverrides = await loadTemplateOverrides(fs, join(platform.configDir, 'prompts'));
 
-  const accounts = new AccountService(db, () => settings.effective.server.signup);
   // The desktop app's own backend has one person and is reachable only through the app's MessagePorts, not a socket.
   const local = platform.surface === 'desktop' && !platform.setupToken;
+  // The admin activity log is for shared servers: a backend with one person has nobody to account to, and writes nothing.
+  const audit = new AuditLog(db, { enabled: () => !local, onError: (message, error) => platform.logger.error(message, error) });
+  const accounts = new AccountService(db, () => settings.effective.server.signup, audit);
   const screenLock = new ScreenLock(join(platform.dataDir, 'screen-lock.json'));
   if (local) await screenLock.load();
   // A device coming or going changes which of its user's workspaces are available, and what its windows offer.
@@ -642,6 +646,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
   /** Daily: old checkpoints, conversations past each person's retention period, then blobs nothing uses. */
   const dailyCleanup = async () => {
+    await audit.prune(settings.effective.audit.retentionDays).catch((e: unknown) => platform.logger.error('pruning the activity log failed', e));
     await checkpointStore.prune(settings.effective.checkpoints.retentionDays);
     for (const { id } of await db.select({ id: users.id }).from(users).all()) {
       const days = (await prefs.get(id)).privacy.historyRetentionDays;
@@ -651,6 +656,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
   const cleanupTimer = setInterval(() => void dailyCleanup().catch((e: unknown) => platform.logger.error('daily cleanup failed', e)), 24 * 3600_000);
   cleanupTimer.unref();
+  // A server that restarts more often than daily still keeps to its retention period.
+  void audit.prune(settings.effective.audit.retentionDays).catch((e: unknown) => platform.logger.error('pruning the activity log failed', e));
 
   /** Whether any window has the session open (subscribed to it). */
   const openAnywhere = (id: string, except?: Connection) => [...connections].some((c) => c !== except && c.subscriptions.has(id));
@@ -1372,6 +1379,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       // A server takes these from desktop devices (ARCHITECTURE §21); their windows offer them only where both ends can.
       ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...SERVER_DEVICE_SERVICES] } } : {}),
       imageGeneration: true,
+      auditLog: !local,
     }),
 
     // ---------------------------------------------------------------- sign-in
@@ -1570,6 +1578,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         await accounts.remove(id);
         return { ok: true as const };
       }),
+    'audit.list': ({ cursor, limit, ...filter }) => audit.list(filter, { cursor, limit }, settings.effective.audit.retentionDays),
+    'audit.export': (filter) => audit.export(filter, settings.effective.audit.retentionDays),
     'invites.list': () => accounts.listInvites(),
     'invites.create': ({ role }, ctx) => accounts.createInvite(role, me(ctx).id),
     'invites.revoke': async ({ id }) => {
@@ -2445,6 +2455,27 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'memory.import': ({ text, model }, ctx) => memoryErrors(async () => ({ changes: await memory.import(me(ctx).id, text, model ? { model } : {}) })),
   };
 
+  /** What an activity log rule may look at (audit-rules.ts). */
+  const auditEnv: AuditEnv = {
+    settings: () => settings.effective,
+    user: (id) => accounts.get(id).catch(() => null),
+    secretIds: async () => new Set((await secrets.list(() => [])).map((s) => s.id)),
+  };
+  /**
+   * Writes the activity log entry for an admin call that succeeded. Everything here is allowed to fail: the call has
+   * already done its work, and a log that can't be written must never turn that into an error.
+   */
+  const audited = (method: string, input: unknown, ctx: Ctx, before: unknown, result: unknown) => {
+    try {
+      const entry = auditEntry(method);
+      const user = ctx.connection().auth?.user;
+      if (!entry || isSkip(entry) || !user) return;
+      const drafts = (entry.describe as (call: unknown) => unknown)({ input, result, before, env: auditEnv });
+      if (drafts) audit.record({ actorId: user.id, actor: user.username, ip: ctx.connection().client.ip ?? null }, drafts as never);
+    } catch (e) {
+      platform.logger.error(`describing ${method} for the activity log failed`, e);
+    }
+  };
   /** Every procedure passes this gate: sign-in, admin role, and a forced password change come first. */
   const guarded = Object.fromEntries(
     Object.entries(handlers).map(([name, handler]) => [
@@ -2461,7 +2492,15 @@ export async function createBackend(platform: Platform): Promise<Backend> {
           }
           if (ADMIN_PROCEDURES.has(method) && c.auth.user.role !== 'admin') throw appError('forbidden', 'Only admins can do this.');
         }
-        return (handler as unknown as (i: never, x: Ctx & { signal: AbortSignal }) => unknown)(input, ctx);
+        const run = handler as unknown as (i: never, x: Ctx & { signal: AbortSignal }) => unknown;
+        if (!ADMIN_PROCEDURES.has(method) || local) return run(input, ctx);
+        // What the call is about to change (the old value, whether the thing existed) is read first, if its rule asks.
+        const entry = auditEntry(method);
+        let before: unknown;
+        if (entry && !isSkip(entry) && entry.before) before = await Promise.resolve((entry.before as (i: unknown, e: AuditEnv) => unknown)(input, auditEnv)).catch(() => undefined);
+        const result = await run(input, ctx);
+        audited(method, input, ctx, before, result);
+        return result;
       },
     ]),
   ) as unknown as Handlers<AppContract, Ctx>;
@@ -2517,6 +2556,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     async dispose() {
       clearInterval(cleanupTimer);
+      await audit.idle();
       clearInterval(temporaryTimer);
       for (const timer of graceTimers) clearTimeout(timer);
       openrouter.cancel();

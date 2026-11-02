@@ -523,3 +523,26 @@ export const memoryProgress = sqliteTable('memory_progress', {
   throughMessageId: text('through_message_id'),
   processedAt: integer('processed_at').notNull(),
 });
+
+/**
+ * The admin activity log of a shared server (ARCHITECTURE §21): who changed what, append-only, pruned by age. No
+ * foreign keys: an account that is deleted leaves its history behind (the username is kept as it was then).
+ */
+export const auditEvents = sqliteTable(
+  'audit_events',
+  {
+    id: text('id').primaryKey(),
+    at: integer('at').notNull(),
+    /** `<category>.<what>` (AUDIT_KINDS in the protocol). */
+    kind: text('kind').notNull(),
+    actorId: text('actor_id'),
+    /** The username then; for a failed sign-in, the one that was tried. Lowercase, so a filter finds it. */
+    actor: text('actor'),
+    /** What it was done to: a username, a provider or secret id, a settings path. Never a value that is secret. */
+    target: text('target'),
+    summary: text('summary').notNull(),
+    detail: text('detail', { mode: 'json' }).$type<Record<string, string | number | boolean | null>>(),
+    ip: text('ip'),
+  },
+  (t) => [index('audit_events_at').on(t.at), index('audit_events_kind').on(t.kind, t.at), index('audit_events_actor').on(t.actor, t.at)],
+);

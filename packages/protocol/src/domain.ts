@@ -613,5 +613,7 @@ export const AppInfo = z.object({
   deviceLink: z.object({ protocol: z.number(), services: z.array(z.string()) }).optional(),
   /** This backend can generate images (ARCHITECTURE §23); a newer app hides the feature on an older server. */
   imageGeneration: z.boolean().optional(),
+  /** This backend keeps the admin activity log (a shared server); absent on the desktop app's own backend and on older servers. */
+  auditLog: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

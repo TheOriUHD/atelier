@@ -16,6 +16,7 @@ import {
   type UserRole,
   type UserSummary,
 } from '@atelier/protocol';
+import type { AuditDraft, AuditLog } from '../audit/audit-log.ts';
 import type { Db } from '../store/db.ts';
 import { authSessions, files, invites, projects, sessions, usageEvents, users } from '../store/schema.ts';
 import { newId } from '../util/ids.ts';
@@ -63,6 +64,9 @@ export interface ClientInfo {
   deviceId?: string;
 }
 
+/** How a sign-in was proven; the activity log says which. */
+export type SignInMethod = 'password' | 'passkey' | 'oidc' | 'invite' | 'setup';
+
 export interface Authenticated {
   user: UserSummary;
   sessionId: string;
@@ -87,10 +91,14 @@ export function toUserSummary(r: UserRow): UserSummary {
 export class AccountService {
   private failures = new Map<string, number[]>();
   private touched = new Map<string, number>();
+  /** When a blocked sign-in was last written to the activity log, per key: a brute-force run is one entry per window, not thousands. */
+  private blockedLogged = new Map<string, number>();
 
   constructor(
     private readonly db: Db,
     private readonly signupPolicy: () => SignupPolicy,
+    /** The admin activity log; sign-ins and new accounts are written here because every way in passes through this class. */
+    private readonly audit?: Pick<AuditLog, 'record'>,
   ) {}
 
   async setupRequired(): Promise<boolean> {
@@ -102,7 +110,8 @@ export class AccountService {
     if (!(await this.setupRequired())) throw new AccountError('setup_done', 'This server already has an admin. Sign in instead.');
     const user = await this.insertUser({ ...input, role: 'admin', mustChangePassword: false });
     for (const table of [sessions, projects, files, usageEvents]) await this.db.update(table).set({ userId: user.id }).where(isNull(table.userId));
-    return { token: await this.startSession(user.id, client), user: toUserSummary(user) };
+    this.note(client, user, { kind: 'account.created', target: user.username, summary: `${user.username} created the first account, an admin`, detail: { role: 'admin', via: 'setup' } });
+    return { token: await this.startSession(user.id, client, 'setup'), user: toUserSummary(user) };
   }
 
   /**
@@ -122,24 +131,38 @@ export class AccountService {
 
   async login(input: { username: string; password: string }, client: ClientInfo): Promise<{ token: string; user: UserSummary }> {
     const key = `${input.username}|${client.ip ?? ''}`;
-    if (this.recentFailures(key) >= MAX_FAILURES) throw new AccountError('rate_limited', 'Too many attempts. Try again in a few minutes.');
+    if (this.recentFailures(key) >= MAX_FAILURES) {
+      this.noteBlocked(key, client, input.username);
+      throw new AccountError('rate_limited', 'Too many attempts. Try again in a few minutes.');
+    }
     const row = await this.db.select().from(users).where(eq(users.username, input.username)).get();
     // Verify against a dummy hash for unknown users so timing doesn't reveal which usernames exist.
     const ok = (await verifyPassword(input.password, row?.passwordHash || DUMMY_HASH)) && !!row?.passwordHash;
     if (!row || !ok) {
       this.failures.set(key, [...this.recentFailuresList(key), Date.now()]);
+      this.note(client, { id: row?.id ?? null, username: input.username }, { kind: 'signin.failed', target: input.username, summary: `Failed sign-in as ${input.username}`, detail: { reason: row ? 'wrong password' : 'unknown username' } });
       throw new AccountError('invalid_credentials', 'Wrong username or password.');
     }
     this.failures.delete(key);
-    this.assertActive(row);
-    return { token: await this.startSession(row.id, client), user: toUserSummary(row) };
+    try {
+      this.assertActive(row);
+    } catch (e) {
+      this.note(client, row, { kind: 'signin.failed', target: row.username, summary: `${row.username} gave the right password but cannot sign in`, detail: { reason: row.disabledAt ? 'account disabled' : 'waiting for approval' } });
+      throw e;
+    }
+    return { token: await this.startSession(row.id, client, 'password'), user: toUserSummary(row) };
   }
 
   /** Signs in someone who proved who they are another way (a passkey, an identity provider); the account must still be active. */
-  async signInAs(userId: string, client: ClientInfo): Promise<{ token: string; user: UserSummary }> {
+  async signInAs(userId: string, client: ClientInfo, method: 'passkey' | 'oidc' = 'passkey'): Promise<{ token: string; user: UserSummary }> {
     const row = await this.row(userId);
-    this.assertActive(row);
-    return { token: await this.startSession(row.id, client), user: toUserSummary(row) };
+    try {
+      this.assertActive(row);
+    } catch (e) {
+      this.note(client, row, { kind: 'signin.failed', target: row.username, summary: `${row.username} cannot sign in with ${method}`, detail: { reason: row.disabledAt ? 'account disabled' : 'waiting for approval', method } });
+      throw e;
+    }
+    return { token: await this.startSession(row.id, client, method), user: toUserSummary(row) };
   }
 
   /**
@@ -149,12 +172,15 @@ export class AccountService {
   async createForIdentity(input: { username: string; name: string; role: 'user' | 'pending' }): Promise<UserSummary> {
     let username = input.username;
     for (let n = 2; await this.db.select({ id: users.id }).from(users).where(eq(users.username, username)).get(); n++) username = `${input.username.slice(0, 28)}${n}`;
-    return toUserSummary(await this.insertUser({ ...input, username, password: null, mustChangePassword: false }));
+    const row = await this.insertUser({ ...input, username, password: null, mustChangePassword: false });
+    this.note({}, row, { kind: 'account.created', target: row.username, summary: `${row.username} was created by single sign-on`, detail: { role: row.role, via: 'single sign-on' } });
+    return toUserSummary(row);
   }
 
   async signup(input: { username: string; name: string; password: string }): Promise<void> {
     if (this.signupPolicy() !== 'open') throw new AccountError('signup_closed', 'Sign-up is by invitation. Ask an admin for an invite code.');
-    await this.insertUser({ ...input, role: 'pending', mustChangePassword: false });
+    const row = await this.insertUser({ ...input, role: 'pending', mustChangePassword: false });
+    this.note({}, row, { kind: 'account.created', target: row.username, summary: `${row.username} signed up and waits for approval`, detail: { role: 'pending', via: 'open sign-up' } });
   }
 
   /** Throws unless the invite code (or an older link's token) is open; it stays open. */
@@ -166,7 +192,9 @@ export class AccountService {
     const invite = await this.openInvite(input.invite, client);
     const user = await this.insertUser({ username: input.username, name: input.name, password: input.password, role: invite.role, mustChangePassword: false });
     await this.db.update(invites).set({ usedAt: Date.now(), usedBy: user.id }).where(eq(invites.id, invite.id));
-    return { token: await this.startSession(user.id, client), user: toUserSummary(user) };
+    this.note(client, user, { kind: 'account.created', target: user.username, summary: `${user.username} created an account with an invite`, detail: { role: user.role, via: 'invite' } });
+    this.note(client, user, { kind: 'invite.used', target: invite.id, summary: `${user.username} used an invite`, detail: { role: invite.role } });
+    return { token: await this.startSession(user.id, client, 'invite'), user: toUserSummary(user) };
   }
 
   /** The user behind a token, or null when it is unknown, expired, or the account can't sign in. */
@@ -320,7 +348,7 @@ export class AccountService {
     return row;
   }
 
-  private async startSession(userId: string, client: ClientInfo): Promise<string> {
+  private async startSession(userId: string, client: ClientInfo, method?: SignInMethod): Promise<string> {
     const token = newToken();
     const now = Date.now();
     await this.db.insert(authSessions).values({
@@ -336,7 +364,27 @@ export class AccountService {
       expiresAt: now + SESSION_TTL_MS,
     });
     await this.db.update(users).set({ lastActiveAt: now }).where(eq(users.id, userId));
+    if (method && this.audit) {
+      const who = await this.db.select({ username: users.username }).from(users).where(eq(users.id, userId)).get();
+      if (who) this.note(client, { id: userId, username: who.username }, { kind: 'signin.success', target: who.username, summary: `${who.username} signed in`, detail: { method, client: client.clientKind } });
+    }
     return token;
+  }
+
+  /** Writes to the activity log (when there is one); the address is the one the server saw. */
+  private note(client: Pick<ClientInfo, 'ip'>, who: { id: string | null; username: string }, draft: AuditDraft): void {
+    this.audit?.record({ actorId: who.id, actor: who.username, ip: client.ip ?? null }, draft);
+  }
+
+  private noteBlocked(key: string, client: Pick<ClientInfo, 'ip'>, username: string | null): void {
+    const now = Date.now();
+    if (now - (this.blockedLogged.get(key) ?? 0) < FAILURE_WINDOW_MS) return;
+    for (const [k, at] of this.blockedLogged) if (now - at > FAILURE_WINDOW_MS) this.blockedLogged.delete(k);
+    this.blockedLogged.set(key, now);
+    this.audit?.record(
+      { actorId: null, actor: username, ip: client.ip ?? null },
+      { kind: 'signin.blocked', target: username, summary: username ? `Sign-in as ${username} blocked after repeated failures` : 'Invite codes blocked after repeated failures', detail: { limit: MAX_FAILURES } },
+    );
   }
 
   private assertActive(row: UserRow): void {
@@ -363,11 +411,15 @@ export class AccountService {
   /** The open invite behind what someone entered. Wrong ones count per address, like wrong passwords. */
   private async openInvite(input: string, client: Pick<ClientInfo, 'ip'>): Promise<InviteRow> {
     const key = `invite|${client.ip ?? ''}`;
-    if (this.recentFailures(key) >= MAX_FAILURES) throw new AccountError('rate_limited', 'Too many attempts. Try again in a few minutes.');
+    if (this.recentFailures(key) >= MAX_FAILURES) {
+      this.noteBlocked(key, client, null);
+      throw new AccountError('rate_limited', 'Too many attempts. Try again in a few minutes.');
+    }
     const code = normalizeInviteCode(input);
     const invite = await this.db.select().from(invites).where(eq(invites.tokenHash, hashToken(code ?? input))).get();
     if (!invite || invite.usedAt || invite.expiresAt < Date.now()) {
       this.failures.set(key, [...this.recentFailuresList(key), Date.now()]);
+      this.audit?.record({ actorId: null, actor: null, ip: client.ip ?? null }, { kind: 'signin.failed', summary: 'Wrong, used or expired invite code', detail: { reason: 'invite code' } });
       throw new AccountError('invalid_invite', 'This invite code is wrong, already used or expired.');
     }
     return invite;

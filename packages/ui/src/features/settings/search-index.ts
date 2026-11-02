@@ -7,7 +7,7 @@ import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
 import { identityProvidersOffered } from '../auth/sign-in.ts';
 import { desktop, isMac } from '../../lib/platform.ts';
-import { imageGenerationOffered } from '../../lib/queries.ts';
+import { auditLogOffered, imageGenerationOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
 
@@ -1080,6 +1080,31 @@ export const SETTINGS_INDEX = [
     label: 'Single sign-on',
     description: 'Lets people sign in to this server in a browser through an OpenID Connect identity provider, such as Authentik, Keycloak or Google. The desktop app keeps signing in with passwords.',
     keywords: ['sso', 'oidc', 'openid connect', 'oauth', 'authentik', 'keycloak', 'authelia', 'identity provider', 'idp', 'login'],
+  },
+  {
+    id: 'activity.log',
+    page: 'activity',
+    label: 'Activity log',
+    description:
+      'Who changed what on this server, newest first: sign-ins and failed sign-ins, accounts, invites, settings, providers, secrets, connectors, plugins, models, limits and server updates. Passwords, keys and other secret values are never recorded.',
+    keywords: ['audit', 'audit log', 'history', 'who did', 'changes', 'sign-ins', 'failed login', 'security', 'events', 'admin actions', 'compliance'],
+    available: () => auditLogOffered(),
+  },
+  {
+    id: 'activity.retention',
+    page: 'activity',
+    label: 'Keep activity for',
+    description: 'Events older than this are deleted once a day. Between 7 and 365 days.',
+    keywords: ['audit', 'retention', 'days', 'delete old', 'prune', 'how long'],
+    available: () => auditLogOffered(),
+  },
+  {
+    id: 'activity.export',
+    page: 'activity',
+    label: 'Export activity',
+    description: 'Saves the events that match the filters as a JSON file.',
+    keywords: ['audit', 'download', 'json', 'save', 'backup', 'report'],
+    available: () => auditLogOffered(),
   },
   {
     id: 'developer.inspector',

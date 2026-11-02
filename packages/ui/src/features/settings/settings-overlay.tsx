@@ -26,6 +26,7 @@ import { ProvidersPage } from './providers-page.tsx';
 import { useRowFlash } from './row-flash.ts';
 import { searchSettings, type SettingEntry } from './search-index.ts';
 import { SecretsPage } from './secrets-page.tsx';
+import { ActivityPage } from './activity-page.tsx';
 import { ServerPage } from './server-page.tsx';
 import { SettingsFileErrors } from './settings-errors.tsx';
 import { ShortcutsPage } from './shortcuts-page.tsx';
@@ -58,6 +59,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   secrets: SecretsPage,
   users: UsersPage,
   server: ServerPage,
+  activity: ActivityPage,
   developer: DeveloperPage,
 };
 

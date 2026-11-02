@@ -258,6 +258,9 @@ export function useAppInfo() {
 /** For code outside React (the Settings page list). A newer app on an older server hides image generation; something must have asked `useAppInfo`. */
 export const imageGenerationOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.imageGeneration;
 
+/** For code outside React: this backend keeps the admin activity log (a shared server that knows it). */
+export const auditLogOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.auditLog;
+
 /** This backend can generate images: false on an older server, and until `app.info` answers. */
 export function useImageGeneration(): boolean {
   return !!useAppInfo().data?.imageGeneration;

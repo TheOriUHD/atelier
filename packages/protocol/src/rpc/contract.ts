@@ -34,6 +34,7 @@ import {
   WorkspaceFile,
   WorkspaceSummary,
 } from '../domain.ts';
+import { AuditExport, AuditFilter, AuditPage } from '../audit.ts';
 import { McpImportEntry, McpServerName, McpServerStatus, PersonalConnector, PersonalConnectorInput, PersonalConnectorView } from '../mcp.ts';
 import { MEMORY_DETAILS_MAX, MEMORY_SUMMARY_MAX, MEMORY_TITLE_MAX, MemoryChange, MemoryEntry, MemorySection } from '../memory.ts';
 import { LOOP_MAX_INTERVAL_MS } from '../loops.ts';
@@ -209,6 +210,10 @@ export const contract = {
     'invites.create': { input: z.object({ role: z.enum(['admin', 'user']) }), output: z.object({ invite: InviteSummary, code: z.string() }) },
     'invites.revoke': { input: Id, output: Ok },
     /** This server's version, the newest published one and how to update (null on the desktop app's own backend). `refresh` skips the 10-minute cache. */
+    /** The admin activity log (a server's admins only): newest first, a page at a time. */
+    'audit.list': { input: AuditFilter.extend({ cursor: z.string().max(100).optional(), limit: z.number().int().min(1).max(200).optional() }), output: AuditPage },
+    /** Every event matching the filter (at most AUDIT_EXPORT_MAX, the newest), for saving as JSON. */
+    'audit.export': { input: AuditFilter, output: AuditExport },
     'server.updates': { input: z.object({ refresh: z.boolean().optional() }), output: ServerUpdateStatus.nullable() },
     /** Asks the compose file's updater service to pull the images and recreate the server; progress shows in `server.updates`. */
     'server.update': { input: Empty, output: ServerUpdateStatus },
@@ -835,6 +840,8 @@ export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNam
   'invites.list',
   'invites.create',
   'invites.revoke',
+  'audit.list',
+  'audit.export',
   'server.updates',
   'server.update',
   'instructions.get',

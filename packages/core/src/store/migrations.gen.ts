@@ -200,5 +200,14 @@ export const migrations: { name: string; statements: string[] }[] = [
     "statements": [
       "ALTER TABLE `usage_events` ADD `cost_estimated` integer DEFAULT false NOT NULL;"
     ]
+  },
+  {
+    "name": "20261102170814_audit_events",
+    "statements": [
+      "CREATE TABLE `audit_events` (\n\t`id` text PRIMARY KEY,\n\t`at` integer NOT NULL,\n\t`kind` text NOT NULL,\n\t`actor_id` text,\n\t`actor` text,\n\t`target` text,\n\t`summary` text NOT NULL,\n\t`detail` text,\n\t`ip` text\n);",
+      "CREATE INDEX `audit_events_at` ON `audit_events` (`at`);",
+      "CREATE INDEX `audit_events_kind` ON `audit_events` (`kind`,`at`);",
+      "CREATE INDEX `audit_events_actor` ON `audit_events` (`actor`,`at`);"
+    ]
   }
 ];

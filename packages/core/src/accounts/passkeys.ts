@@ -93,7 +93,7 @@ export class Passkeys {
     }).catch(() => null);
     if (!result?.verified) throw invalid;
     await this.db.update(passkeys).set({ counter: result.authenticationInfo.newCounter, lastUsedAt: Date.now() }).where(eq(passkeys.id, row.id));
-    return this.accounts.signInAs(row.userId, client);
+    return this.accounts.signInAs(row.userId, client, 'passkey');
   }
 
   private remember(challenge: string, userId: string | null): string {

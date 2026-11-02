@@ -9,6 +9,7 @@ import {
   CodeXml,
   Cpu,
   FolderClosed,
+  History,
   Images,
   Keyboard,
   KeyRound,
@@ -25,7 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { desktop } from '../../lib/platform.ts';
-import { imageGenerationOffered } from '../../lib/queries.ts';
+import { auditLogOffered, imageGenerationOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 
 export type SettingsPageId =
@@ -51,6 +52,7 @@ export type SettingsPageId =
   | 'secrets'
   | 'users'
   | 'server'
+  | 'activity'
   | 'developer';
 
 export interface SettingsPage {
@@ -92,6 +94,8 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'secrets', label: 'Keys & secrets', icon: KeyRound, group: 'Admin' },
   { id: 'users', label: 'Users', icon: Users, group: 'Admin' },
   { id: 'server', label: 'Server', icon: Server, group: 'Admin' },
+  // Who changed what on a shared server. A desktop app on its own backend has one person, and no page for it.
+  { id: 'activity', label: 'Activity', icon: History, group: 'Admin', available: () => auditLogOffered() },
   { id: 'developer', label: 'Developer', icon: Wrench, group: 'Admin' },
 ];
 

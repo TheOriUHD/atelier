@@ -165,7 +165,7 @@ instructions and safeguards still apply). Temporary chats exist in Chat only, an
 | The model provider | Everything sent to it (first table). |
 | Search engines and pages | Queries, and the backend's IP address and user agent. |
 | The update feed's operator | The IP address, time and path of update requests. |
-| A server's admins, in the app | The account list, aggregate usage across accounts (not per person), and connector logs. Not conversations, memory or files. See [Accounts](/accounts/#what-admins-can-and-cannot-see). |
+| A server's admins, in the app | The account list, aggregate usage across accounts (not per person), connector logs, and the [activity log](/accounts/#the-activity-log) of who changed what and who signed in from which address. Not conversations, memory or files. See [Accounts](/accounts/#what-admins-can-and-cannot-see). |
 | Whoever runs the server's host | The whole data folder: conversations and files in plain form, secrets decryptable with the key in the same volume unless you set `ATELIER_SECRET_KEY` elsewhere. |
 | Your other signed-in devices | Your conversations, unless you turn off [Remote control](/remote-control/). |
 | Other people with accounts | Nothing of yours. |

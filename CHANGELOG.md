@@ -5,6 +5,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 ## [Unreleased]
 
 - **Smaller Windows downloads:** there is now an installer for x64 and one for ARM64 (`Atelier-Setup-<version>-x64.exe`, `-arm64.exe`), each about half the size of the one installer that carried both. Installed copies pick theirs by themselves. The website's Windows tab offers the right one for your PC.
+- **Activity log for shared servers:** **Settings › Admin › Activity** records who changed what on a server: sign-ins and failed sign-ins (with the address the server saw), accounts, invites, settings, providers, secrets (by id, never the value), connectors, plugins, models, limits and server updates. Filter it, scroll back through it, export it as JSON, and choose how long it is kept (7 to 365 days, 90 by default). A desktop app running its own backend has one person and does not keep it.
 
 ## [0.3.1] — 2026-11-02
 

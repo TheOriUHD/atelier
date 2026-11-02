@@ -36,6 +36,7 @@ What an admin **can** see in Atelier:
 - **Settings › Usage › Everyone**: requests, tokens and cost by day, provider, model and mode, added up across all
   accounts. It is not broken down by person.
 - Which settings and connectors use a stored secret (**Keys & secrets**), though never the secret's value.
+- **Settings › Admin › Activity**: who signed in (and failed to) from which address, and which admin changed what. See [the activity log](#the-activity-log).
 - **Developer**: each connector's log, and, only while **Record provider requests** is on, the web address, status,
   timing and size of the requests the server sent to model providers, with credentials masked. Prompts and replies are
   never recorded there. It is not attributed to people.
@@ -179,6 +180,38 @@ seen**. **Revoke** signs one out. The IP address is the one Atelier sees; behind
 - **Unknown usernames** cost the same time as wrong passwords, so the sign-in screen does not reveal which usernames exist.
 - **The screen lock** on a computer running its own backend has its own limit: 5 wrong tries, then waits of 30 seconds
   doubling up to an hour, also across restarts. See [Security](/security/#screen-lock-on-this-computer).
+
+## The activity log
+
+**Settings › Admin › Activity** is an append-only record of who changed what on a shared server. Only admins see it, and
+only on a server: a desktop app running its own backend has one person, so it records nothing and has no such page.
+
+What it records, newest first:
+
+- **Sign-ins**, with the username, the time and the address as the server saw it, and failed ones with the name that was
+  tried and why (unknown username, wrong password, disabled account, waiting for approval). A run of failures that hits
+  the [rate limit](#rate-limits-and-lockouts) shows as one **blocked** entry, not one per attempt. No password is ever
+  written.
+- **Accounts:** created (by an admin, an invite, open sign-up or single sign-on), disabled, enabled, approved, role
+  changed, password reset, deleted. **Invites** created, revoked and used.
+- **Settings:** the path and who changed it. A small value that is not a secret, such as a switch, a number or a short
+  word, is kept as old → new; anything else is recorded as changed without its value.
+- **Providers** (text and image) added, changed and removed; **secrets** created, replaced and deleted by their id,
+  never their value; **connectors**, **plugins** and **skills** installed, changed and removed; models **hidden** and
+  shown; **limits** changed; **server updates** started; and each **export** of this log.
+
+Each row opens to show everything it carries. Filter by type, by person (events by them or about them) and by date;
+older events load as you scroll. **Export JSON** saves everything the filters match (at most the newest 50,000) as a
+file.
+
+**Keep activity for** sets how long events are kept, from 7 to 365 days (90 by default). Older events are deleted once a
+day and when the server starts. As a safety net against a flood of failed sign-ins from many addresses, the log also
+never holds more than 500,000 events: the oldest go first.
+
+What it is not: it holds no conversations, prompts, file contents or passwords, and it is not tamper-proof. It is a table
+in the server's database, so anyone who runs the server's host can change it, as they can everything else. A change made
+by editing `settings.json` on disk, not through the app, is not in it. Writing never holds anything up: if an event
+can't be written, the change itself still goes through and the server logs that it could not be written.
 
 ## Settings › Account
 

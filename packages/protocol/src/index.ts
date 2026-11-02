@@ -6,6 +6,7 @@ export * from './effort.ts';
 export * from './loops.ts';
 export * from './settings.ts';
 export * from './accounts.ts';
+export * from './audit.ts';
 export * from './domain.ts';
 export * from './mcp.ts';
 export * from './rpc/index.ts';

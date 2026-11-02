@@ -166,6 +166,8 @@ export const SettingsSchema = z.object({
   /** File pre-images kept for Rewind. */
   checkpoints: z.object({ retentionDays: z.number().int().min(1).max(3650).default(30) }).default({ retentionDays: 30 }),
   server: z.object({ signup: SignupPolicy.default('invite') }).default({ signup: 'invite' }),
+  /** How long the admin activity log of a shared server keeps its events (ARCHITECTURE §21). */
+  audit: z.object({ retentionDays: z.number().int().min(7).max(365).default(90) }).default({ retentionDays: 90 }),
   /** System-wide permission rules in Claude Code syntax; projects and people add their own. */
   permissions: z
     .object({

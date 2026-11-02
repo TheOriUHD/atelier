@@ -283,6 +283,16 @@ Admins only.
 | **Sign-up** | Invite only: admins add people or give them invite codes. Open: anyone who can reach this server can create an account, which waits for an admin to approve it. |
 | **Single sign-on** | Lets people sign in to this server in a browser through an OpenID Connect identity provider, such as Authentik, Keycloak or Google. The desktop app keeps signing in with passwords. |
 
+## Settings › Admin › Activity
+
+Admins only.
+
+| Setting | What it does |
+|---|---|
+| **Activity log** *(only where it works)* | Who changed what on this server, newest first: sign-ins and failed sign-ins, accounts, invites, settings, providers, secrets, connectors, plugins, models, limits and server updates. Passwords, keys and other secret values are never recorded. |
+| **Keep activity for** *(only where it works)* | Events older than this are deleted once a day. Between 7 and 365 days. |
+| **Export activity** *(only where it works)* | Saves the events that match the filters as a JSON file. |
+
 ## Settings › Admin › Developer
 
 Admins only. Admins only. These are diagnostic tools.

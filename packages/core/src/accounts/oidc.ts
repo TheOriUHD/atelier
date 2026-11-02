@@ -142,7 +142,7 @@ export class Oidc {
     }
     if (found) {
       await db.update(userIdentities).set({ lastUsedAt: now }).where(eq(userIdentities.id, found.id));
-      return { signedIn: await accounts.signInAs(found.userId, client) };
+      return { signedIn: await accounts.signInAs(found.userId, client, 'oidc') };
     }
     if (provider.newAccounts === 'none') throw new AccountError('no_account', 'There’s no account for this sign-in here.');
     const user = await accounts.createForIdentity({
@@ -151,7 +151,7 @@ export class Oidc {
       role: provider.newAccounts,
     });
     await this.connect(provider.id, user.id, issuer, claims);
-    return { signedIn: await accounts.signInAs(user.id, client) };
+    return { signedIn: await accounts.signInAs(user.id, client, 'oidc') };
   }
 
   async identities(userId: string): Promise<{ connected: IdentitySummary[]; available: OidcSignInOption[] }> {
