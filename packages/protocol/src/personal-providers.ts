@@ -5,22 +5,11 @@
  * is connected; the admin's providers stay shared.
  */
 import { z } from 'zod';
-import { ProviderStatus, ProviderType } from './models.ts';
+import { PersonalProviderId, ProviderStatus, ProviderType } from './models.ts';
 import { ProviderConfig } from './settings.ts';
 
 export const PersonalProviderType = ProviderType.extract(['ollama', 'llamacpp', 'openai-compatible', 'chatgpt-chat']);
 export type PersonalProviderType = z.infer<typeof PersonalProviderType>;
-
-const ID = /^u-[a-z0-9]{10}$/;
-/** `u-` and ten lowercase letters or digits. An admin provider never has an id of this shape (`providers.save` refuses it). */
-export const PersonalProviderId = z.string().regex(ID, 'u- and ten lowercase letters or digits');
-export const isPersonalProviderId = (id: string): boolean => ID.test(id);
-
-/** A new personal provider's id, made where it is added: the desktop lends its address under this id before the server tests it. */
-export function newPersonalProviderId(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  return `u-${Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => alphabet[b % alphabet.length]).join('')}`;
-}
 
 const Options = ProviderConfig.pick({ parallelRequests: true, modelsAtOnce: true, vramGiB: true });
 

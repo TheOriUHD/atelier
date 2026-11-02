@@ -24,6 +24,7 @@ import {
   mcpToolName,
   imagePreset,
   isPersonalProviderId,
+  DetectedImageServer,
   type ImageModelInfo,
   LocalServer,
   parseModelRef,
@@ -77,6 +78,7 @@ import { SshAccess, sshSecretId } from '../workspaces/ssh-access.ts';
 import * as git from '../workspaces/git.ts';
 import { DeviceLinkError, DeviceLinks, type LinkSocket } from '../workspaces/device-links.ts';
 import { deviceFetch } from '../workspaces/device-fetch.ts';
+import { deviceSocket } from '../workspaces/device-socket.ts';
 import { findFiles, gitDiff, gitStatus, grepFiles, listDir, readFile as readWorkspaceFile, sessionDiff } from '../workspaces/workspace-view.ts';
 import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
 import { ChatService, type ExtensionCatalog } from '../agent/chat-service.ts';
@@ -107,6 +109,7 @@ import { loadTemplateOverrides } from '../prompts/templates.ts';
 import { ProjectRepo } from '../projects/project-repo.ts';
 import { createAdapter } from '../providers/index.ts';
 import { ProviderRegistry } from '../providers/registry.ts';
+import { PersonalImageRepo, type PersonalImageAccess } from '../images/personal.ts';
 import { PersonalProviderRepo, type PersonalAccess } from '../providers/personal.ts';
 import type { ChatGptChatPort } from '../providers/chatgpt-chat.ts';
 import type { ProviderFetch } from '../providers/types.ts';
@@ -222,7 +225,6 @@ interface Connection {
 const LOOPBACK_ON_SERVER =
   'That address is the Atelier server itself. A connector on your own computer goes under Customize › Connectors › Your connectors, added in the desktop app on that computer.';
 
-/** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
 /** A session's overrides with its image model set, or gone again on null. */
 function withImageModel(overrides: Record<string, unknown>, imageModel: string | null | undefined): Record<string, unknown> {
   if (imageModel === undefined) return overrides;
@@ -230,7 +232,8 @@ function withImageModel(overrides: Record<string, unknown>, imageModel: string |
   return imageModel === null ? rest : { ...rest, imageModel };
 }
 
-const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'chatgptChat'];
+/** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
+const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat'];
 
 export async function createBackend(platform: Platform): Promise<Backend> {
   const db = openDatabase(join(platform.dataDir, 'atelier.db'));
@@ -262,6 +265,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         .then((list) => emitToUser(userId, 'workspaces.changed', list))
         .catch((e: unknown) => platform.logger.error('workspace update broadcast failed', e));
       void registry.devicesChanged(userId).catch((e: unknown) => platform.logger.error('personal provider update failed', e));
+      void imageRegistry.devicesChanged(userId).catch((e: unknown) => platform.logger.error('personal image provider update failed', e));
       // Their connectors that run there (or failed for want of it), and the config from its home folder.
       personal.devicesChanged(userId);
       deviceHomes.forget(userId);
@@ -422,6 +426,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     secrets: { get: (id) => secrets.get(id), set: (secret) => secrets.set(secret), delete: (id) => secrets.delete(id) },
   });
   const personalRepo = new PersonalProviderRepo(db);
+  const personalImages = new PersonalImageRepo(db);
   /** A desktop's ChatGPT window, through its link; `start` carries the prompt and its files, so it may take longer. */
   const deviceChatGpt = (userId: string, deviceId: string): ChatGptChatPort => ({
     request: async (operation, value) =>
@@ -429,6 +434,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   });
   const personalAccess: PersonalAccess = {
     repo: personalRepo,
+    imageServer: async (id) => !!(await personalImages.get(id)),
     lends: (userId, deviceId, providerId, type) => {
       const info = links.info(userId, deviceId);
       if (!info) return false;
@@ -476,13 +482,25 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       queue: (id) => registry.queueOf(id),
       free: (id, signal) => registry.freeGpu(id, signal),
       key: (id) => registry.rawKey(id),
-      has: (id) => settings.effective.providers.some((p) => p.id === id) || isPersonalProviderId(id),
+      has: (id) => settings.effective.providers.some((p) => p.id === id),
+      personal: async (id) => !!(await personalRepo.get(id)),
     },
+    // A server reaches people's own image servers through their desktops, by the addresses lent there.
+    ...(platform.surface === 'web'
+      ? {
+          personal: {
+            repo: personalImages,
+            lends: (userId, deviceId, providerId) => {
+              const info = links.info(userId, deviceId);
+              return !!info?.services.includes('http') && info.lending.http.some((a) => a.id === providerId);
+            },
+            fetch: (userId, deviceId, providerId) => deviceFetch(links, userId, deviceId, providerId),
+            socket: (userId, deviceId, providerId, headers) => deviceSocket(links, userId, deviceId, providerId, headers),
+          } satisfies PersonalImageAccess,
+        }
+      : {}),
   });
   imageRegistry.on('status', (s) => emitWhere(isAdmin, 'imageProviders.changed', s));
-  imageRegistry.on('models', (models) => {
-    for (const c of connections) if (c.auth) c.rpc.emit('imageModels.changed', imageModelsFor(c, models));
-  });
   registry.on('status', (s) => emitWhere(isAdmin, 'providers.changed', s));
   // Everyone gets the shared models with their own after them; a change to a person's own models goes to them only.
   // One broadcast at a time, so a later list never arrives before an earlier one.
@@ -503,6 +521,22 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
   registry.on('models', (m: ModelInfo[]) => sendModels(async () => m, () => true));
   registry.on('personalModels', (userId) => sendModels(() => registry.listModels(), (c) => c.auth?.user.id === userId));
+  const sendImageModels = (shared: () => Promise<ImageModelInfo[]>, pick: (c: Connection) => boolean) => {
+    broadcasting = broadcasting
+      .then(async () => {
+        const list = await shared();
+        const own = new Map<string, ImageModelInfo[]>();
+        for (const c of connections) {
+          if (!c.auth || !pick(c)) continue;
+          const userId = c.auth.user.id;
+          if (!own.has(userId)) own.set(userId, await imageRegistry.personalModels(userId));
+          if (c.auth) c.rpc.emit('imageModels.changed', imageModelsFor(c, [...list, ...own.get(userId)!]));
+        }
+      })
+      .catch((e: unknown) => platform.logger.error('image model update broadcast failed', e));
+  };
+  imageRegistry.on('models', (m) => sendImageModels(async () => m, () => true));
+  imageRegistry.on('personalModels', (userId) => sendImageModels(() => imageRegistry.listModels(), (c) => c.auth?.user.id === userId));
   const syncProviders = () => {
     void registry.syncWithSettings().catch((e: unknown) => platform.logger.error('provider refresh failed', e));
     void imageRegistry.syncWithSettings().catch((e: unknown) => platform.logger.error('image provider refresh failed', e));
@@ -886,7 +920,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { bytes, mime: sniffMime(bytes) ?? 'application/octet-stream' };
     },
     // Tests point a hosted service's result URLs at a fake server on this machine.
-    download: (url, signal) => downloadImage({ fetch: httpFetch, allowPrivate: !!platform.env.ATELIER_IMAGE_DOWNLOAD_PRIVATE }, url, signal),
+    // From a person's own server the URL goes to their computer, whose lending decides; this server never fetches it.
+    download: (url, signal, through) => downloadImage(through ? { fetch: through, allowPrivate: true } : { fetch: httpFetch, allowPrivate: !!platform.env.ATELIER_IMAGE_DOWNLOAD_PRIVATE }, url, signal),
     recordUsage: ({ providerId, modelId, sessionId, userId, mode, images: count, costUsd, durationMs }) => {
       void db.insert(usageEvents).values({ id: newId(), ts: Date.now(), userId, providerId, modelId, sessionId, mode, input: 0, output: 0, durationMs, costUsd, images: count }).catch((e: unknown) => platform.logger.error('recording image usage failed', e));
     },
@@ -1634,10 +1669,33 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'imageProviders.refresh': ({ id }) => imageRegistry.refresh(id),
     'imageProviders.parseWorkflow': (source) => imageRegistry.parseWorkflow(source).catch(workflowRefusal),
     'imageProviders.savedWorkflows': ({ id }) => imageRegistry.savedWorkflows(id).catch(workflowRefusal),
-    'imageModels.list': async (_input, ctx) => imageModelsFor(ctx.connection(), await imageRegistry.listModels()),
+    'imageModels.list': async (_input, ctx) => imageModelsFor(ctx.connection(), await imageRegistry.listModels(me(ctx).id)),
     'generatedImages.list': ({ before, query, ref, limit }, ctx) => generatedImagesFor(db, me(ctx).id, { ...(before !== undefined ? { before } : {}), ...(query ? { query } : {}), ...(ref ? { ref } : {}), limit: limit ?? 60 }),
 
     // ------------------------------------------------- your models on your computers
+    'personalImageProviders.list': (_input, ctx) => imageRegistry.personalProviders(me(ctx).id),
+    'personalImageProviders.detect': async (_input, ctx) => {
+      const deviceId = personalDevice(ctx, 'http');
+      const found = z.array(DetectedImageServer).parse(
+        await links.request(me(ctx).id, deviceId, { op: 'images.detect' }).catch((e: unknown) => {
+          throw e instanceof DeviceLinkError && e.code === 'unsupported' ? appError('unsupported', 'Update the desktop app on this computer to find image servers on it.') : deviceRefusal(e);
+        }),
+      );
+      const added = new Set((await imageRegistry.personalProviders(me(ctx).id)).filter((p) => p.deviceId === deviceId).map((p) => p.baseUrl));
+      return found.filter((s) => !added.has(s.baseUrl));
+    },
+    'personalImageProviders.test': (draft, ctx) => modelOp(() => imageRegistry.testPersonal(me(ctx).id, personalDevice(ctx, 'http'), draft)),
+    'personalImageProviders.save': async (draft, ctx) => {
+      const existing = await personalImages.get(draft.id);
+      const deviceId = existing?.userId === me(ctx).id ? null : personalDevice(ctx, 'http');
+      return modelOp(() => imageRegistry.savePersonal(me(ctx).id, deviceId, draft));
+    },
+    'personalImageProviders.remove': async ({ id }, ctx) => {
+      await modelOp(() => imageRegistry.removePersonal(me(ctx).id, id));
+      return { ok: true as const };
+    },
+    'personalImageProviders.refresh': ({ id }, ctx) => imageRegistry.refreshPersonal(me(ctx).id, id),
+
     'personalProviders.list': (_input, ctx) => registry.personalProviders(me(ctx).id),
     'personalProviders.detect': async (_input, ctx) => {
       const deviceId = personalDevice(ctx, 'http');

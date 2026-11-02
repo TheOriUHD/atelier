@@ -521,7 +521,7 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
   private async personalDraft(userId: string, deviceId: string | null, draft: PersonalProviderDraft): Promise<{ row: PersonalRow; existing: PersonalRow | null }> {
     const personal = this.requirePersonal();
     const existing = await personal.repo.get(draft.id);
-    if ((existing && existing.userId !== userId) || this.providers.some((p) => p.id === draft.id)) throw new Error('That provider id is taken: add it again.');
+    if ((existing && existing.userId !== userId) || this.providers.some((p) => p.id === draft.id) || (await personal.imageServer(draft.id))) throw new Error('That provider id is taken: add it again.');
     const device = existing?.deviceId ?? deviceId;
     if (!device) throw new Error('Add models on your computer from the desktop app there.');
     const options = {

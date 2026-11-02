@@ -18,6 +18,9 @@ interface Setup {
   settings?: Partial<ReturnType<ImageServiceDeps['settings']>['imageGeneration']>;
   history?: Message[];
   config?: Record<string, unknown>;
+  /** What `resolve` adds for a person's own server. */
+  personal?: { deviceId: string; fetch: () => Promise<Response> };
+  userId?: string | null;
 }
 
 async function* images(n = 1): AsyncGenerator<ImageEvent> {
@@ -26,7 +29,7 @@ async function* images(n = 1): AsyncGenerator<ImageEvent> {
   yield { type: 'finish', reason: 'done' };
 }
 
-function setup({ run = () => images(), models = [info()], settings = {}, history = [], config = {} }: Setup = {}) {
+function setup({ run = () => images(), models = [info()], settings = {}, history = [], config = {}, personal, userId = null }: Setup = {}) {
   const db = openDatabase(':memory:');
   // Rows here point at sessions these tests don't need to make.
   db.$client.exec('PRAGMA foreign_keys = OFF');
@@ -42,17 +45,21 @@ function setup({ run = () => images(), models = [info()], settings = {}, history
   const configured = { id: 'img', type: 'openai-images', name: 'Provider', baseUrl: 'https://images.example.com', headers: {}, enabled: true, ...config };
   const held: string[] = [];
   const released = vi.fn();
+  const listedFor: unknown[] = [];
+  const resolved: unknown[] = [];
   const registry = {
-    listModels: async () => models,
-    resolve: async (ref: string) => {
+    listModels: async (user?: string | null) => (listedFor.push(user), models),
+    resolve: async (ref: string, options: unknown) => {
+      resolved.push(options);
       const found = models.find((m) => m.ref === ref);
       if (!found) throw new ImageModelUnavailable('gone');
-      return { adapter, info: found, config: configured };
+      return { adapter, info: found, config: configured, ...(personal ? { personal } : {}) };
     },
-    hold: async (_config: unknown, model: string) => (held.push(model), released),
+    hold: async (model: { info: ImageModelInfo }) => (held.push(model.info.modelId), released),
     freeText: vi.fn(async () => {}),
   } as unknown as ImageProviderRegistry;
   const usage = vi.fn();
+  const download = vi.fn(async (_url: string, _signal: AbortSignal, _through?: unknown) => ({ bytes: PNG, mime: 'image/png' as const }));
   const addGenerated = vi.fn(async () => {});
   const put = vi.fn(async () => ({ sha256: 'a'.repeat(64), size: PNG.length, mime: 'image/png', createdAt: 0 }));
   const service = new ImageService({
@@ -61,18 +68,18 @@ function setup({ run = () => images(), models = [info()], settings = {}, history
     files: { addGenerated },
     db,
     settings: () => ({ imageGeneration: { enabled: true, maxImagesPerTurn: 8, ...settings }, imageModels: { overrides: {} }, imagePricing: {}, models: { defaults: {}, aliases: {}, overrides: {} } }) as never,
-    session: async () => ({ userId: null, mode: 'chat', temporary: false }),
+    session: async () => ({ userId, mode: 'chat', temporary: false }),
     preferred: async () => undefined,
     isAdmin: async () => false,
     history: async () => history,
     turnStart: async () => 1,
-    download: async () => ({ bytes: PNG, mime: 'image/png' }),
+    download,
     recordUsage: usage,
     sleep: async () => {},
   });
   const events: RunEvent[] = [];
   const ctx = (signal = new AbortController().signal): ToolContext => ({ sessionId: 's', messageId: 'a', callId: 'c', signal, emit: (e) => events.push(e) });
-  return { service, requests, events, ctx, usage, addGenerated, held, released, registry, db, free };
+  return { service, requests, events, ctx, usage, addGenerated, held, released, registry, db, free, listedFor, resolved, download };
 }
 
 describe('ImageService', () => {
@@ -253,6 +260,50 @@ describe('ImageService', () => {
     const t = setup({ run });
     await expect(t.service.generate({ prompt: 'x' }, t.ctx(controller.signal))).rejects.toThrow('stopped');
     expect(t.released).toHaveBeenCalledOnce();
+  });
+
+  describe('a person’s own models', () => {
+    const own = (over: Partial<ImageModelInfo> = {}) => info({ ref: 'u-aaaaaaaaaa/sdxl', providerId: 'u-aaaaaaaaaa', modelId: 'sdxl', displayName: 'SDXL', personal: { deviceId: 'laptop', deviceName: 'Laptop' }, available: true, ...over });
+
+    it('lists and resolves models for the person the session belongs to', async () => {
+      const t = setup({ userId: 'ada', models: [own()] });
+      const out = await t.service.generate({ prompt: 'a cat', model: 'u-aaaaaaaaaa/sdxl' }, t.ctx());
+      expect(out.isError).toBeUndefined();
+      expect(t.listedFor).toContain('ada');
+      expect(t.resolved).toEqual([{ admin: false, userId: 'ada' }]);
+    });
+
+    it('doesn’t offer the tool or the model while its computer is away', async () => {
+      const t = setup({ userId: 'ada', models: [own({ available: false })] });
+      const session = { userId: 'ada', mode: 'chat', temporary: false };
+      expect(await t.service.available(session)).toBe(false);
+      expect(await t.service.modelList(session)).toBe('');
+      const both = setup({ userId: 'ada', models: [info(), own({ available: false })] });
+      expect(await both.service.available(session)).toBe(true);
+      expect(await both.service.modelList(session)).not.toContain('sdxl');
+    });
+
+    it('has the computer fetch a URL its server answers with: this server never goes there', async () => {
+      async function* linked(): AsyncGenerator<ImageEvent> {
+        yield { type: 'image', url: 'http://127.0.0.1:8080/generated/a.png' };
+        yield { type: 'finish', reason: 'done' };
+      }
+      const through = async () => new Response(PNG);
+      const t = setup({ userId: 'ada', models: [own()], personal: { deviceId: 'laptop', fetch: through }, run: () => linked() });
+      await t.service.generate({ prompt: 'a cat' }, t.ctx());
+      expect(t.download).toHaveBeenCalledWith('http://127.0.0.1:8080/generated/a.png', expect.anything(), through);
+      // A shared provider's stays on the server, behind its address guard.
+      const shared = setup({ run: () => linked() });
+      await shared.service.generate({ prompt: 'a cat' }, shared.ctx());
+      expect(shared.download).toHaveBeenCalledWith('http://127.0.0.1:8080/generated/a.png', expect.anything(), undefined);
+    });
+
+    it('costs nothing here, even if its model is named like a paid one', async () => {
+      const paid = own({ ref: 'u-aaaaaaaaaa/gpt-image-1', modelId: 'gpt-image-1' });
+      const t = setup({ userId: 'ada', models: [paid], personal: { deviceId: 'laptop', fetch: async () => new Response(PNG) } });
+      await t.service.generate({ prompt: 'a cat' }, t.ctx());
+      expect(t.usage).toHaveBeenCalledWith(expect.objectContaining({ costUsd: null, images: 1 }));
+    });
   });
 
   it('lists models for the text model with the chosen one first', async () => {

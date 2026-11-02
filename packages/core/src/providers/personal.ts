@@ -50,6 +50,8 @@ export class PersonalProviderRepo {
 /** How the registry reaches a person's computers, and where it keeps what their models' tests found. */
 export interface PersonalAccess {
   repo: PersonalProviderRepo;
+  /** Whether someone's own image server has this id: a desktop lends addresses by id, whatever uses them. */
+  imageServer(id: string): Promise<boolean>;
   /** The computer is connected and lends what the provider needs there: its address, or its ChatGPT window. */
   lends(userId: string, deviceId: string, providerId: string, type: PersonalProviderType): boolean;
   /** `fetch` from the computer to the address it lent as `providerId`. Never through the request inspector. */

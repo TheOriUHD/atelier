@@ -12,6 +12,7 @@ import type { FileRepo } from '../files/file-repo.ts';
 import { imageSize } from '../providers/image-size.ts';
 import { fitImage } from '../providers/images.ts';
 import { isLocalServer } from '../providers/scheduler.ts';
+import type { ProviderFetch } from '../providers/types.ts';
 import { toBase64 } from '../providers/util.ts';
 import { textOutput, type ToolContext, type ToolOutput } from '../tools/types.ts';
 import { checkImage, type DownloadedImage } from './download.ts';
@@ -59,7 +60,8 @@ export interface ImageServiceDeps {
   turnStart(sessionId: string): Promise<number>;
   /** An image file in the session's folder, for `reference_images` given as paths. */
   readFile?(sessionId: string, path: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;
-  download(url: string, signal: AbortSignal): Promise<DownloadedImage>;
+  /** A finished image's URL; `through` a person's computer when one of their own servers gave it. */
+  download(url: string, signal: AbortSignal, through?: ProviderFetch): Promise<DownloadedImage>;
   recordUsage(entry: { providerId: string; modelId: string; sessionId: string; userId: string | null; mode: string; images: number; costUsd: number | null; durationMs: number }): void;
   /** Changed by tests, which don't wait for retries. */
   sleep?(ms: number, signal: AbortSignal): Promise<void>;
@@ -118,13 +120,14 @@ export class ImageService {
   async models(session: ImageSessionFacts): Promise<ImageModelInfo[]> {
     if (!this.deps.settings().imageGeneration.enabled) return [];
     const admin = await this.deps.isAdmin(session.userId);
-    const all = (await this.deps.registry.listModels()).filter((m) => admin || !m.hidden);
+    const all = (await this.deps.registry.listModels(session.userId)).filter((m) => admin || !m.hidden);
     const first = session.imageModel ?? (await this.deps.preferred(session.userId)) ?? this.deps.settings().models.defaults.image;
     return [...all].sort((a, b) => Number(b.ref === first) - Number(a.ref === first));
   }
 
+  /** Whether any model can run now: one on a computer that's away can't. */
   async available(session: ImageSessionFacts): Promise<boolean> {
-    return (await this.models(session)).length > 0;
+    return (await this.models(session)).some((m) => m.available !== false);
   }
 
   private async pick(session: ImageSessionFacts, asked: string | undefined): Promise<ResolvedImageModel> {
@@ -133,7 +136,7 @@ export class ImageService {
     const wanted = asked?.toLowerCase();
     const match = wanted ? models.find((m) => m.ref.toLowerCase() === wanted || m.modelId.toLowerCase() === wanted || m.displayName.toLowerCase() === wanted) : models[0];
     if (!match) throw new ImageCallError(`There's no image model "${asked}". You can use: ${models.map((m) => m.ref).join(', ')}.`);
-    return this.deps.registry.resolve(match.ref, { admin: await this.deps.isAdmin(session.userId) });
+    return this.deps.registry.resolve(match.ref, { admin: await this.deps.isAdmin(session.userId), userId: session.userId });
   }
 
   private async inputImage(sessionId: string, reference: string, signal: AbortSignal): Promise<ImageInput> {
@@ -158,6 +161,7 @@ export class ImageService {
   /** The models as the text model reads them, the person's choice first. */
   async modelList(session: ImageSessionFacts): Promise<string> {
     return (await this.models(session))
+      .filter((m) => m.available !== false)
       .map((m) => {
         const { promptStyle, negativePrompt, edit } = m.capabilities;
         const style = promptStyle === 'tags' ? 'comma-separated tags' : 'plain sentences';
@@ -319,7 +323,7 @@ export class ImageService {
       const progress = this.progressReporter(ctx, { ...(fit.width ? { width: fit.width } : {}), ...(fit.height ? { height: fit.height } : {}), count: fit.count });
       progress.update({}, true);
 
-      const release = await this.deps.registry.hold(model.config, model.info.modelId, ctx.signal, { onWait: (ahead) => progress.update({ phase: 'queued', ...(ahead !== null ? { ahead } : {}) }, true), owner: ctx.sessionId });
+      const release = await this.deps.registry.hold(model, ctx.signal, { onWait: (ahead) => progress.update({ phase: 'queued', ...(ahead !== null ? { ahead } : {}) }, true), owner: ctx.sessionId });
       try {
         const { images, finish, usage } = await this.run(model, input, fit, references, mask, ctx, progress);
         if (finish.reason === 'aborted' || ctx.signal.aborted) throw ctx.signal.reason ?? new Error('Stopped.');
@@ -404,7 +408,9 @@ export class ImageService {
     const each = perImageCost(this.deps.settings(), model, facts.fit, facts.usage, images.length);
     const stored: GeneratedImageMeta[] = [];
     for (const image of images) {
-      const fetched = image.bytes ? { bytes: image.bytes, mime: checkImage(image.bytes) } : await this.deps.download(image.url!, ctx.signal);
+      // A person's own server says where its image is as it sees it: that URL means nothing here, and this server must not
+      // go wherever it points. The computer fetches it, and only from the address it lent.
+      const fetched = image.bytes ? { bytes: image.bytes, mime: checkImage(image.bytes) } : await this.deps.download(image.url!, ctx.signal, model.personal?.fetch);
       const { sha256: blob } = await this.deps.blobs.put(fetched.bytes, fetched.mime);
       const size = imageSize(fetched.bytes) ?? { width: facts.fit.width ?? 0, height: facts.fit.height ?? 0 };
       await this.deps.files.addGenerated({ name: fileName(input.prompt, blob, fetched.mime), mime: fetched.mime, blob, size: fetched.bytes.byteLength, userId: session.userId, sessionId: ctx.sessionId, messageId: ctx.messageId });
@@ -470,6 +476,8 @@ export class ImageService {
 /** One image's cost: what the service reported, else the admin's price, else a list price. */
 function perImageCost(settings: Settings, model: ResolvedImageModel, fit: ReturnType<typeof fitParams>, usage: { costUsd?: number; input?: number; output?: number }, count: number): { usd: number; estimated: boolean } | null {
   if (usage.costUsd !== undefined) return { usd: usage.costUsd / count, estimated: false };
+  // A person's own server costs nothing here, whatever its model happens to be called.
+  if (model.personal) return null;
   const price = settings.imagePricing[model.info.ref] ?? listImagePrice(model.info.modelId);
   if (!price) return null;
   if ((price.input !== undefined || price.output !== undefined) && (usage.input !== undefined || usage.output !== undefined)) {

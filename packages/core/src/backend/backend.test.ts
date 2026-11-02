@@ -949,6 +949,139 @@ describe('a desktop lending itself to a server', () => {
   }, 30_000);
 });
 
+describe('a person’s own image servers on their desktop', () => {
+  it('serves them through that desktop to their owner alone, and lets an older desktop keep working', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-own-images-'));
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      fetch: async () => Promise.reject(new TypeError('fetch failed')),
+    });
+    const ID = 'u-0123456789';
+    const BASE = 'http://127.0.0.1:8080';
+    const draft = { id: ID, type: 'openai-images' as const, preset: 'localai', name: 'My LocalAI', baseUrl: BASE };
+    const ref = `${ID}/flux`;
+    const asked: string[] = [];
+    try {
+      const signIn = () => {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+        return createRpcClient(contract, clientSide);
+      };
+      const ada = signIn();
+      await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      const { temporaryPassword } = await ada.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+      const browser = signIn();
+      await browser.call('auth.login', { username: 'bob', password: temporaryPassword, clientKind: 'web' });
+      await browser.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+      const desktop = signIn();
+      const { token } = await desktop.call('auth.login', { username: 'bob', password: 'bob-new-password', clientKind: 'desktop' });
+      const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
+      await desktop.call('devices.register', device);
+
+      // Bob's laptop, as its desktop app answers: LocalAI on its default port, lent under the provider's id.
+      let link: { receive(text: string): void; closed(): void } | null = null;
+      const reply = (frame: object) => link!.receive(JSON.stringify(frame));
+      const respond = (channel: string, body: string) => {
+        reply({ t: 'opened', channel });
+        reply({ t: 'line', channel, line: JSON.stringify({ head: { status: 200, headers: { 'content-type': 'application/json' } } }) });
+        reply({ t: 'line', channel, line: JSON.stringify({ chunk: Buffer.from(body).toString('base64') }) });
+        reply({ t: 'closed', channel, reason: 'done' });
+      };
+      link = await server.linkDevice(
+        {
+          send: (frame) => {
+            if (frame.t === 'req') {
+              if (frame.request.op === 'images.detect') return reply({ t: 'res', id: frame.id, ok: true, value: [{ preset: 'localai', type: 'openai-images', baseUrl: BASE, label: 'LocalAI' }] });
+              return reply({ t: 'res', id: frame.id, ok: false, code: 'unsupported', error: 'Not here.' });
+            }
+            if (frame.t !== 'start' || frame.service.kind !== 'http') return;
+            const { service } = frame;
+            if (service.target !== ID) return reply({ t: 'closed', channel: frame.channel, reason: 'Not lent.' });
+            asked.push(`${service.method} ${service.url}`);
+            setTimeout(() => respond(frame.channel, JSON.stringify({ data: [{ id: 'flux' }] })));
+          },
+          close: () => {},
+        },
+        token,
+        device,
+      );
+      const hello = (services: string[], http: object[]) => ({ t: 'hello', hello: { protocol: 2, app: '0.3.0', services, lending: { scratch: false, ssh: [], http }, home: '/Users/bob', sep: '/', os: 'darwin', arch: 'arm64' } });
+
+      // An older desktop has no `ws` and doesn't know this request: it's refused here, and nothing is left waiting.
+      reply(hello(['runner', 'http'], []));
+      const refused = await desktop.call('personalImageProviders.detect', {}).catch((e: unknown) => e);
+      expect(refused).toMatchObject({ data: { code: 'unsupported' }, message: expect.stringContaining('Update the desktop app') });
+
+      reply(hello(['runner', 'http', 'ws'], [{ id: ID, baseUrl: BASE }]));
+      expect(await desktop.call('personalImageProviders.detect', {})).toEqual([{ preset: 'localai', type: 'openai-images', baseUrl: BASE, label: 'LocalAI' }]);
+      // Added from the laptop's own window; a browser has no computer of its own to add them from.
+      expect(await code(browser.call('personalImageProviders.detect', {}))).toBe('unsupported');
+      expect(await code(browser.call('personalImageProviders.test', draft))).toBe('unsupported');
+      expect(await code(browser.call('personalImageProviders.save', { ...draft, id: 'u-9876543210' }))).toBe('unsupported');
+      expect((await desktop.call('personalImageProviders.test', draft)).status.ok).toBe(true);
+      expect(await desktop.call('personalImageProviders.list', {})).toEqual([]);
+      const added = new Promise<{ ref: string }[]>((resolve) => browser.on('imageModels.changed', resolve));
+      let adaHeard = false;
+      ada.on('imageModels.changed', () => (adaHeard = true));
+      expect(await desktop.call('personalImageProviders.save', draft)).toMatchObject({ id: ID, deviceName: 'Laptop', online: true, status: { ok: true, modelCount: 1 } });
+      expect((await added).map((m) => m.ref)).toEqual([ref]);
+      expect(await desktop.call('personalImageProviders.detect', {})).toEqual([]);
+      expect(asked).toContain(`GET ${BASE}/v1/models`);
+
+      // The admin can't take its id for a shared provider; nor can the same id be a model server's.
+      expect(await code(ada.call('imageProviders.save', { ...draft, headers: {}, enabled: true }))).not.toBe('ok');
+      expect(await code(desktop.call('personalProviders.save', { id: ID, type: 'ollama', name: 'Same id', baseUrl: BASE }))).toBe('invalid_request');
+
+      // Only its owner sees it, or hears of it, or can do anything to it.
+      expect((await browser.call('imageModels.list', {})).find((m) => m.ref === ref)).toMatchObject({ personal: { deviceName: 'Laptop' }, available: true });
+      expect((await ada.call('imageModels.list', {})).some((m) => m.ref === ref)).toBe(false);
+      expect(await ada.call('personalImageProviders.list', {})).toEqual([]);
+      expect(adaHeard).toBe(false);
+      expect(await code(ada.call('personalImageProviders.remove', { id: ID }))).toBe('invalid_request');
+      expect(await code(ada.call('personalImageProviders.save', draft))).not.toBe('ok');
+      expect(await ada.call('personalImageProviders.refresh', { id: ID })).toEqual([]);
+      expect(await browser.call('personalImageProviders.list', {})).toMatchObject([{ id: ID }]);
+
+      // The laptop stops lending the address, and then goes away: listed, but not available.
+      const taken = new Promise<{ ref: string; available?: boolean }[]>((resolve) => browser.on('imageModels.changed', resolve));
+      reply({ t: 'event', event: 'lending.changed', lending: { scratch: false, ssh: [], http: [] } });
+      expect((await taken).find((m) => m.ref === ref)?.available).toBe(false);
+      expect((await browser.call('personalImageProviders.list', {}))[0]).toMatchObject({ online: false });
+      link!.closed();
+      await vi.waitFor(async () => expect((await browser.call('imageModels.list', {})).find((m) => m.ref === ref)?.available).toBe(false));
+      expect(await code(desktop.call('personalImageProviders.detect', {}))).toBe('unsupported');
+
+      await browser.call('personalImageProviders.remove', { id: ID });
+      expect((await browser.call('imageModels.list', {})).some((m) => m.ref === ref)).toBe(false);
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('offers `ws` on a server, and none of this on the desktop’s own backend', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-own-images-'));
+    const start = (surface: 'web' | 'desktop') =>
+      createBackend({ surface, configDir: home, dataDir: home, cipher: { encrypt: async (s) => s, decrypt: async (s) => s }, env: {}, logger: { info: () => {}, error: () => {} }, fetch: async () => Promise.reject(new TypeError('fetch failed')) });
+    const server = await start('web');
+    try {
+      const [clientSide, serverSide] = createMemoryTransportPair();
+      server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+      const info = await createRpcClient(contract, clientSide).call('app.info', {});
+      expect(info.imageGeneration).toBe(true);
+      expect(info.deviceLink?.services).toContain('ws');
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('a person’s own models on their desktop', () => {
   it('serves them through that desktop to their owner alone, while it is connected', async () => {
     const home = await mkdtemp(join(tmpdir(), 'atelier-own-models-'));

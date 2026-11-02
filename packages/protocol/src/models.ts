@@ -37,6 +37,20 @@ export const DEFAULT_BASE_URLS: Record<ProviderType, string> = {
 /** Provider ids never contain "/", so a model ref splits unambiguously on the first slash. */
 export const ProviderId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,47}$/, 'lowercase letters, digits and dashes');
 
+const ID = /^u-[a-z0-9]{10}$/;
+/**
+ * `u-` and ten lowercase letters or digits: a person's own provider, text or image. An admin provider never has an id of
+ * this shape (`providers.save` and `imageProviders.save` refuse it).
+ */
+export const PersonalProviderId = z.string().regex(ID, 'u- and ten lowercase letters or digits');
+export const isPersonalProviderId = (id: string): boolean => ID.test(id);
+
+/** A new personal provider's id, made where it is added: the desktop lends its address under this id before the server tests it. */
+export function newPersonalProviderId(): string {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  return `u-${Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => alphabet[b % alphabet.length]).join('')}`;
+}
+
 export function modelRef(providerId: string, modelId: string): string {
   return `${providerId}/${modelId}`;
 }

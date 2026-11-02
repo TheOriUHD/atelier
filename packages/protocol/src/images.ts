@@ -3,7 +3,7 @@
  * services, as presets; a model's capabilities say what it takes, so one tool call fits every backend.
  */
 import { z } from 'zod';
-import { ProviderId, type ProviderStatus } from './models.ts';
+import { PersonalProviderId, ProviderId, ProviderStatus } from './models.ts';
 
 /** How a service is spoken to. A service that uses a known wire format is a preset, not a new type. */
 export const ImageProviderType = z.enum(['comfyui', 'a1111', 'swarmui', 'invokeai', 'openai-images', 'gemini', 'chat-images', 'responses-image', 'bfl', 'stability', 'fal', 'replicate', 'huggingface', 'ideogram', 'bedrock']);
@@ -277,6 +277,52 @@ export const IMAGE_PROVIDER_PRESETS: readonly ImagePreset[] = [
 ];
 
 export const imagePreset = (id: string | undefined): ImagePreset | undefined => IMAGE_PROVIDER_PRESETS.find((p) => p.id === id);
+
+/** The dialects a server on someone's own computer speaks. Cloud services are the admin's to add. */
+export const PersonalImageProviderType = ImageProviderType.extract(['comfyui', 'a1111', 'swarmui', 'invokeai', 'openai-images']);
+export type PersonalImageProviderType = z.infer<typeof PersonalImageProviderType>;
+
+const PersonalImageOptions = ImageProviderConfig.pick({ parallelRequests: true, freeAfterRun: true, models: true, workflows: true });
+
+/**
+ * A person's own image server on one of their computers, reached through the desktop app there (device services,
+ * ARCHITECTURE §21). Only they see and use its models, and only while that computer is connected.
+ */
+export const PersonalImageProvider = PersonalImageOptions.extend({
+  id: z.string(),
+  type: PersonalImageProviderType,
+  preset: z.string().optional(),
+  name: z.string(),
+  baseUrl: z.string(),
+  enabled: z.boolean(),
+  /** The computer it runs on, and that computer's name. */
+  deviceId: z.string(),
+  deviceName: z.string(),
+  /** That computer is connected and lends it right now. */
+  online: z.boolean(),
+  /** An API key is stored for it (the person's own secret). */
+  hasKey: z.boolean(),
+  /** The last check, while it was online. */
+  status: ProviderStatus.optional(),
+  createdAt: z.number(),
+});
+export type PersonalImageProvider = z.infer<typeof PersonalImageProvider>;
+
+/** How much workflow one graph may hold: any signed-in person can store these on the server. */
+const MAX_PERSONAL_WORKFLOW = 256 * 1024;
+
+/** A personal image server as entered: the key is passed raw and kept as the person's own secret. */
+export const PersonalImageProviderDraft = PersonalImageOptions.extend({
+  id: PersonalProviderId,
+  type: PersonalImageProviderType,
+  preset: z.string().max(40).optional(),
+  name: z.string().trim().min(1).max(80),
+  baseUrl: z.url().max(2048),
+  apiKey: z.string().max(10_000).optional(),
+  enabled: z.boolean().optional(),
+  workflows: PersonalImageOptions.shape.workflows.refine((list) => !list?.some((w) => JSON.stringify(w.graph).length > MAX_PERSONAL_WORKFLOW), 'A workflow can be at most 256 KB.'),
+});
+export type PersonalImageProviderDraft = z.infer<typeof PersonalImageProviderDraft>;
 
 /** One image provider's health; the same shape as a text provider's. */
 export type ImageProviderStatus = ProviderStatus;

@@ -314,6 +314,7 @@ describe('ProviderRegistry', () => {
 
 describe('personal providers', () => {
   const OWN = 'u-aaaaaaaaaa';
+  const IMAGE_SERVER = 'u-iiiiiiiiii';
   /** Computers connected and lending, by device id. */
   let connected: Set<string>;
   let fetched: string[][];
@@ -334,6 +335,7 @@ describe('personal providers', () => {
   function personalRegistry() {
     const access: PersonalAccess = {
       repo: new PersonalProviderRepo(db),
+      imageServer: async (id) => id === IMAGE_SERVER,
       lends: (_userId, deviceId) => connected.has(deviceId),
       fetch: (userId, deviceId, providerId) => {
         fetched.push([userId, deviceId, providerId]);
@@ -399,6 +401,8 @@ describe('personal providers', () => {
     // Nor can another person.
     await expect(r.savePersonal('bob', 'laptop', draft)).rejects.toThrow('taken');
     await expect(r.removePersonal('bob', OWN)).rejects.toThrow('gone');
+    // A desktop lends addresses by id, so an id can't also be someone's image server.
+    await expect(r.savePersonal('ada', 'laptop', { ...draft, id: IMAGE_SERVER })).rejects.toThrow('taken');
     // A new one needs the computer it runs on.
     await expect(r.savePersonal('ada', null, { ...draft, id: 'u-cccccccccc' })).rejects.toThrow('desktop app');
 

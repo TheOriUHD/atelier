@@ -41,7 +41,7 @@ import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, ProviderStatus, ProviderType } from '../models.ts';
-import { DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, SavedImageWorkflow } from '../images.ts';
+import { DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
 import {
@@ -291,6 +291,12 @@ export const contract = {
      * (or its ChatGPT window) first, under the draft's id. The ChatGPT Chat calls go to that provider's computer, or
      * without one to the calling desktop (signing in before it is added).
      */
+    'personalImageProviders.list': { input: Empty, output: z.array(PersonalImageProvider) },
+    'personalImageProviders.detect': { input: Empty, output: z.array(DetectedImageServer) },
+    'personalImageProviders.test': { input: PersonalImageProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ImageModelInfo) }) },
+    'personalImageProviders.save': { input: PersonalImageProviderDraft, output: PersonalImageProvider },
+    'personalImageProviders.remove': { input: Id, output: Ok },
+    'personalImageProviders.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(PersonalImageProvider) },
     'personalProviders.list': { input: Empty, output: z.array(PersonalProvider) },
     'personalProviders.detect': { input: Empty, output: z.array(LocalServer) },
     'personalProviders.test': { input: PersonalProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ModelInfo) }) },
