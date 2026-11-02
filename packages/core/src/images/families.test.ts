@@ -81,6 +81,19 @@ describe('editSize', () => {
     expect(size).toEqual({ width: 680, height: 384 });
   });
 
+  it('leaves a picture the size it is when the model can work at that, so an edit does not resize it', () => {
+    expect(editSize({ references: [{ bytes: pngOf(384, 384), mime: 'image/png', name: 'a.png' }], width: 512, height: 512, capabilities })).toEqual({ width: 384, height: 384 });
+    expect(editSize({ references: [{ bytes: pngOf(768, 512), mime: 'image/png', name: 'a.png' }], width: 512, height: 512, capabilities })).toEqual({ width: 768, height: 512 });
+  });
+
+  it('rounds a picture\'s own size to what the model takes', () => {
+    expect(editSize({ references: [{ bytes: pngOf(641, 483), mime: 'image/png', name: 'a.png' }], width: 512, height: 512, capabilities })).toEqual({ width: 640, height: 480 });
+  });
+
+  it('brings a picture too small for the model up to its size, in its shape', () => {
+    expect(editSize({ references: [{ bytes: pngOf(128, 128), mime: 'image/png', name: 'a.png' }], width: 512, height: 512, capabilities })).toEqual({ width: 512, height: 512 });
+  });
+
   it('keeps the size asked for when the picture can\'t be read', () => {
     expect(editSize({ references: [{ bytes: new Uint8Array([1, 2, 3]), mime: 'image/png', name: 'a.png' }], width: 512, height: 768, capabilities })).toEqual({ width: 512, height: 768 });
   });

@@ -170,7 +170,9 @@ for (const t of targets) {
       const [source] = imagesIn(await run(live(), smallRequest(model, { seed: 7 })));
       const events = await run(live(), smallRequest(model, { prompt: 'the same lighthouse at night', seed: 8, references: [{ bytes: source!.bytes!, mime: sniffMime(source!.bytes!)!, name: 'in.png' }] }));
       expect(finished(events)).toMatchObject({ reason: 'done' });
-      expect(Buffer.from(imagesIn(events)[0]!.bytes!).equals(Buffer.from(source!.bytes!))).toBe(false);
+      const edited = imagesIn(events)[0]!.bytes!;
+      expect(Buffer.from(edited).equals(Buffer.from(source!.bytes!))).toBe(false);
+      expect(imageSize(edited)).toEqual(imageSize(source!.bytes!));
     });
 
     it('changes only the area a mask marks', async () => {
@@ -181,8 +183,11 @@ for (const t of targets) {
       const mask = maskOfLeftHalf(width, height);
       const events = await run(live(), smallRequest(model, { prompt: 'a bright green forest', seed: 8, references: [{ bytes: source!.bytes!, mime: 'image/png', name: 'in.png' }], mask: { bytes: mask, mime: 'image/png', name: 'mask.png' } }));
       expect(finished(events)).toMatchObject({ reason: 'done' });
-      const { left, right } = differenceBySide(source!.bytes!, imagesIn(events)[0]!.bytes!);
-      expect(left).toBeGreaterThan(right);
+      const edited = imagesIn(events)[0]!.bytes!;
+      expect(imageSize(edited)).toEqual({ width, height });
+      const { left, right } = differenceBySide(source!.bytes!, edited);
+      // Twice over: a little of the change can reach past the edge of a mask, or through the VAE.
+      expect(left).toBeGreaterThan(right * 2);
     });
 
     it('makes a batch, each image with its own seed', async () => {

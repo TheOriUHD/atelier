@@ -64,9 +64,13 @@ export function pickName(list: readonly string[] | undefined, wanted: string | u
   return list?.find((name) => spelling(name) === spelling(wanted));
 }
 
+/** Past this, a picture is more than the model can work on well, as `large` is in `params.ts`. */
+const EDIT_MAX_SCALE = 1.5;
+
 /**
- * The size for an edit: the shape of the picture being changed, because the tool's default of a square would stretch
- * it. `params.ts` only knows what the text model asked for; only the adapter has the image.
+ * The size for an edit. `params.ts` only knows what the text model asked for, and its default is a square; only the
+ * adapter has the image. Changing a picture shouldn't resize it, so it keeps its own size where the model can work at
+ * that, and otherwise its shape at the size the model was made for: a phone photo would be too much for SD 1.5.
  */
 export function editSize(request: Pick<ImageRequest, 'references' | 'width' | 'height' | 'capabilities'>): { width?: number; height?: number } {
   const given = { ...(request.width ? { width: request.width } : {}), ...(request.height ? { height: request.height } : {}) };
@@ -74,5 +78,8 @@ export function editSize(request: Pick<ImageRequest, 'references' | 'width' | 'h
   const size = input ? imageSize(input.bytes) : null;
   const { sizes } = request.capabilities;
   if (!size || size.width === 0 || size.height === 0 || sizes.kind !== 'free') return given;
-  return freeSize(sizes, size.width / size.height, 'medium');
+  const { width, height } = size;
+  if (Math.max(width, height) > sizes.base * EDIT_MAX_SCALE || Math.min(width, height) < sizes.min) return freeSize(sizes, width / height, 'medium');
+  const nearest = (side: number) => Math.max(sizes.multiple, Math.round(side / sizes.multiple) * sizes.multiple);
+  return { width: nearest(width), height: nearest(height) };
 }

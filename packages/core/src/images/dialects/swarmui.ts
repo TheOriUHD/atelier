@@ -166,10 +166,15 @@ export function createSwarmUi(instance: ImageInstance, deps: ImageAdapterDeps): 
           const batch = Number(str(progress.batch_index) ?? num(progress.batch_index) ?? 0);
           const within = Math.min(1, num(progress.overall_percent) ?? 0);
           const fraction = (Math.min(Number.isFinite(batch) ? batch : 0, request.count - 1) + within) / request.count;
-          // It restarts per node of the workflow, and a bar shouldn't run backwards.
+          const current = num(progress.current_percent) ?? 0;
+          const { steps } = request.tuning;
+          // An edit skips the first steps, so only a new picture can count them from this.
+          const counted = steps && current > 0 && request.references.length === 0 ? { step: Math.round(current * steps), steps } : {};
+          // A real server sends two series side by side, with and without previews, and each restarts per node of the
+          // workflow, so only progress past the furthest so far counts: a bar shouldn't run backwards.
           if (fraction > furthest) {
             furthest = fraction;
-            yield { type: 'progress', fraction };
+            yield { type: 'progress', ...counted, fraction };
           }
           const preview = previewOf(progress.preview);
           if (preview) yield preview;

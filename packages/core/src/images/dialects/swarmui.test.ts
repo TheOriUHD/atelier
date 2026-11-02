@@ -129,9 +129,9 @@ describe('swarmui generation', () => {
     });
     expect(events.filter((e) => e.type !== 'image')).toEqual([
       { type: 'loading' },
-      { type: 'progress', fraction: 0.25 },
+      { type: 'progress', step: 3, steps: 20, fraction: 0.25 },
       { type: 'preview', mime: 'image/jpeg', data: JPEG_B64 },
-      { type: 'progress', fraction: 0.75 },
+      { type: 'progress', step: 8, steps: 20, fraction: 0.75 },
       { type: 'finish', reason: 'done' },
     ]);
     expect(imagesOf(events)).toEqual([{ type: 'image', bytes: new Uint8Array(PNG), seed: 1234 }]);
@@ -167,6 +167,24 @@ describe('swarmui generation', () => {
     const t = withSocket([progress(0.5), progress(0.2), { gen_progress: { batch_index: '1', overall_percent: 0.5 } }, image(`data:image/png;base64,${PNG_B64}`), CLOSE]);
     const events = await drain(createSwarmUi(swarm(), t.deps).generate(imageRequest({ count: 2 })));
     expect(events.filter((e) => e.type === 'progress')).toEqual([{ type: 'progress', fraction: 0.25 }, { type: 'progress', fraction: 0.75 }]);
+  });
+
+  it('counts no steps on an edit, which skips the first ones', async () => {
+    const t = withSocket([progress(0.5), image(`data:image/png;base64,${PNG_B64}`), CLOSE]);
+    const events = await drain(createSwarmUi(swarm(), t.deps).generate(imageRequest({ tuning: { steps: 20 }, references: [{ bytes: PNG, mime: 'image/png', name: 'in.png' }] })));
+    expect(events.find((e) => e.type === 'progress')).toEqual({ type: 'progress', fraction: 0.5 });
+  });
+
+  it('follows the two series a real server sends side by side, without going back', async () => {
+    const series = (overall: number, current: number, preview?: string) => ({ gen_progress: { batch_index: '0', request_id: '1001', overall_percent: overall, current_percent: current, ...(preview ? { preview } : {}) } });
+    const t = withSocket([series(0.6458, 1 / 6), series(0.7381, 1 / 6, `data:image/jpeg;base64,${JPEG_B64}`), series(0.6667, 2 / 6), series(0.7619, 2 / 6, `data:image/jpeg;base64,${JPEG_B64}`), series(0.75, 0), series(0.875, 0), image(`data:image/png;base64,${PNG_B64}`), CLOSE]);
+    const events = await drain(createSwarmUi(swarm(), t.deps).generate(imageRequest({ tuning: { steps: 6 } })));
+    expect(events.filter((e) => e.type === 'progress')).toEqual([
+      { type: 'progress', step: 1, steps: 6, fraction: 0.6458 },
+      { type: 'progress', step: 1, steps: 6, fraction: 0.7381 },
+      { type: 'progress', step: 2, steps: 6, fraction: 0.7619 },
+      { type: 'progress', fraction: 0.875 },
+    ]);
   });
 
   it('reports the error the server sends on the socket', async () => {
