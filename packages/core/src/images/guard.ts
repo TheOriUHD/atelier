@@ -1,5 +1,5 @@
 /** Runs an adapter's events so the service always sees exactly one `finish`, whatever goes wrong. */
-import { exceptionError } from '../providers/http.ts';
+import { exceptionError, ProviderHttpError } from '../providers/http.ts';
 import type { ImageEvent, ImageInstance, ImageRequest } from './types.ts';
 
 export async function* guardImages(request: ImageRequest, instance: ImageInstance, run: () => AsyncGenerator<ImageEvent>): AsyncGenerator<ImageEvent> {
@@ -11,6 +11,7 @@ export async function* guardImages(request: ImageRequest, instance: ImageInstanc
     }
   } catch (err) {
     if (request.signal.aborted && !timedOut()) yield { type: 'finish', reason: 'aborted' };
+    else if (err instanceof ProviderHttpError) yield { type: 'finish', reason: 'error', error: err.error };
     else yield { type: 'finish', reason: 'error', error: exceptionError(timedOut() ? request.signal.reason : err, instance) };
     return;
   }

@@ -260,6 +260,9 @@ export class ImageService {
     const images: Extract<ImageEvent, { type: 'image' }>[] = [];
     for await (const event of model.adapter.generate(request)) {
       switch (event.type) {
+        case 'queued':
+          progress.update({ phase: 'queued', ahead: event.ahead }, true);
+          break;
         case 'loading':
           progress.update(event.ahead !== undefined ? { phase: 'queued', ahead: event.ahead } : { phase: 'loading' }, true);
           break;

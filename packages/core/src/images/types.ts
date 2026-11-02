@@ -1,5 +1,5 @@
 /** The image adapter contract (ARCHITECTURE §23): each dialect turns one normalised request into a stream of events. */
-import type { ImageCapabilities, ImageModelInfo, ImageProviderType, ImageTuning, ImageWorkflow, MessageError } from '@atelier/protocol';
+import type { ImageCapabilities, ImageModelInfo, ImageProviderType, ImageTuning, ImageWorkflow, MessageError, SavedImageWorkflow } from '@atelier/protocol';
 import type { ChatGptPort, HealthResult, ProviderFetch } from '../providers/types.ts';
 
 /** A configured image provider with its secrets resolved. */
@@ -53,6 +53,8 @@ export interface ImageRequest {
 export type ImageStopReason = 'done' | 'aborted' | 'refused' | 'error';
 
 export type ImageEvent =
+  /** The server took the job, and others are ahead of it there. */
+  | { type: 'queued'; ahead: number }
   /** The server is loading something before it can start. */
   | { type: 'loading'; what?: string; /** Jobs ahead in the service's own queue. */ ahead?: number }
   | { type: 'progress'; step?: number; steps?: number; fraction?: number; etaMs?: number }
@@ -66,6 +68,13 @@ export type ImageEvent =
 
 export type ListedImageModel = Omit<ImageModelInfo, 'hidden' | 'favorite' | 'order'>;
 
+/** A workflow to read: pasted, in a PNG, or by its path among those saved on the server. */
+export interface ImageWorkflowSource {
+  text?: string | undefined;
+  pngBase64?: string | undefined;
+  saved?: string | undefined;
+}
+
 export interface ImageAdapter {
   readonly type: ImageProviderType;
   listModels(signal?: AbortSignal): Promise<ListedImageModel[]>;
@@ -73,6 +82,10 @@ export interface ImageAdapter {
   generate(request: ImageRequest): AsyncIterable<ImageEvent>;
   /** Unloads the model from the GPU. */
   free?(signal?: AbortSignal): Promise<void>;
+  /** Reads a workflow into a mapped one, for servers that run them. Throws what the person should read. */
+  parseWorkflow?(source: ImageWorkflowSource, signal?: AbortSignal): Promise<ImageWorkflow>;
+  /** The workflows saved on the server. */
+  savedWorkflows?(signal?: AbortSignal): Promise<SavedImageWorkflow[]>;
 }
 
 /** A WebSocket as a stream of its messages. It ends when the socket closes, and throws if it fails. */

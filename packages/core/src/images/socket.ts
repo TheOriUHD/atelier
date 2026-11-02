@@ -22,6 +22,8 @@ export function openSocket(url: string, signal: AbortSignal): Promise<ImageSocke
     ws.onclose = () => {
       closed = true;
       signal.removeEventListener('abort', onAbort);
+      // Closing a socket that's still connecting fires no error, and nothing else would settle this.
+      reject(new Error(`The connection to ${new URL(url).host} closed before it opened.`));
       notify();
     };
     ws.onerror = () => {

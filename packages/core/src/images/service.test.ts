@@ -98,6 +98,16 @@ describe('ImageService', () => {
     expect(first).toMatchObject({ callId: 'c', progress: { phase: 'queued', width: 1024, height: 1024, count: 1 } });
   });
 
+  it('says how many are ahead when the server itself has a queue', async () => {
+    const run = async function* (): AsyncGenerator<ImageEvent> {
+      yield { type: 'queued', ahead: 2 };
+      yield* images();
+    };
+    const t = setup({ run });
+    await t.service.generate({ prompt: 'a cat' }, t.ctx());
+    expect(t.events.some((e) => e.type === 'tool_progress' && e.progress.phase === 'queued' && e.progress.ahead === 2)).toBe(true);
+  });
+
   it('says which models exist when asked for an unknown one', async () => {
     const t = setup();
     const out = await t.service.generate({ prompt: 'x', model: 'nope' }, t.ctx());

@@ -4,6 +4,7 @@ import { createA1111 } from './dialects/a1111.ts';
 import { createBedrock } from './dialects/bedrock.ts';
 import { createBfl } from './dialects/bfl.ts';
 import { createChatImages } from './dialects/chat-images.ts';
+import { createComfyUi } from './dialects/comfyui/index.ts';
 import { createFal } from './dialects/fal.ts';
 import { createGemini } from './dialects/gemini.ts';
 import { createHuggingFace } from './dialects/huggingface.ts';
@@ -31,6 +32,7 @@ const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps
   a1111: createA1111,
   swarmui: createSwarmUi,
   invokeai: createInvokeAi,
+  comfyui: createComfyUi,
 };
 
 export function createImageAdapter(instance: ImageInstance, deps: ImageAdapterDeps): ImageAdapter {

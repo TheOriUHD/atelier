@@ -84,10 +84,25 @@ export const ImageWorkflow = z.object({
     count: ImageWorkflowInput.optional(),
     image: ImageWorkflowInput.optional(),
     mask: ImageWorkflowInput.optional(),
+    /** The node whose images are the result. */
+    output: z.string().max(40).optional(),
   }),
   capabilities: ImageCapabilities.partial().optional(),
 });
 export type ImageWorkflow = z.infer<typeof ImageWorkflow>;
+
+/** A workflow saved on the server, listed so a person can pick one instead of exporting a file. */
+export const SavedImageWorkflow = z.object({ path: z.string(), size: z.number().optional(), modified: z.number().optional() });
+export type SavedImageWorkflow = z.infer<typeof SavedImageWorkflow>;
+
+/** A workflow to read into a mapped one. Saved ones and page-format ones need `providerId`, to ask that server. */
+export const ImageWorkflowSource = z.object({
+  text: z.string().max(512 * 1024).optional(),
+  pngBase64: z.string().max(32 * 1024 * 1024).optional(),
+  saved: z.string().max(500).optional(),
+  providerId: z.string().optional(),
+});
+export type ImageWorkflowSource = z.infer<typeof ImageWorkflowSource>;
 
 export const ImageProviderConfig = z.object({
   id: ProviderId,
