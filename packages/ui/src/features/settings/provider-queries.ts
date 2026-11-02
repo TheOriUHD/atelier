@@ -10,6 +10,14 @@ export function useDetectedProviders() {
   return useQuery({ queryKey: detectKey, queryFn: () => rpc().call('providers.detect', {}), staleTime: 0 });
 }
 
+/** Not under `keys.imageProviders`, so status events don't trigger a rescan. */
+export const detectImageKey = ['imageProviders.detect'] as const;
+
+/** Local image servers on default ports; rescans whenever a page mounts. */
+export function useDetectedImageServers() {
+  return useQuery({ queryKey: detectImageKey, queryFn: () => rpc().call('imageProviders.detect', {}), staleTime: 0 });
+}
+
 /** Stored secrets as masked tails (the plaintext never leaves the backend). */
 export function useSecrets() {
   return useQuery({ queryKey: keys.secrets, queryFn: () => rpc().call('secrets.list', {}) });

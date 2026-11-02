@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the RPC contract; backend events keep caches fresh without polling. */
 import { useEffect } from 'react';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { defaultUserPrefs, type DiffCompare, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { defaultUserPrefs, type AppInfo, type DiffCompare, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
 import { setPath } from './json-path.ts';
 import { rpc } from './rpc.ts';
 
@@ -20,6 +20,10 @@ export const keys = {
   personalProviders: ['personalProviders'] as const,
   /** The person's own image servers on their computers (server mode). */
   personalImageProviders: ['personalImageProviders'] as const,
+  imageModels: ['imageModels'] as const,
+  imageProviders: ['imageProviders'] as const,
+  /** The person's generated images; each list is keyed further by its search and filter. */
+  generatedImages: ['generatedImages'] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['project', id] as const,
   secrets: ['secrets'] as const,
@@ -81,8 +85,12 @@ export function useLiveQueries(): void {
         qc.setQueryData(keys.models, models);
         void qc.invalidateQueries({ queryKey: keys.personalProviders });
       }),
-      rpc().on('imageModels.changed', () => void qc.invalidateQueries({ queryKey: keys.personalImageProviders })),
       rpc().on('providers.changed', (status) => qc.setQueryData(keys.providers, status)),
+      rpc().on('imageModels.changed', (models) => {
+        qc.setQueryData(keys.imageModels, models);
+        void qc.invalidateQueries({ queryKey: keys.personalImageProviders });
+      }),
+      rpc().on('imageProviders.changed', (status) => qc.setQueryData(keys.imageProviders, status)),
       rpc().on('sessions.changed', (summary) => {
         qc.setQueriesData<SessionSummary[]>({ queryKey: ['sessions'] }, (list) => {
           if (!list) return list;
@@ -100,12 +108,14 @@ export function useLiveQueries(): void {
           rechecked.add(summary.workspaceId);
           void qc.invalidateQueries({ queryKey: keys.workspaces });
         }
-        // Artifacts are listed with the chat they belong to (only read again while the Artifacts page is open).
+        // Artifacts and images are listed with the chat they belong to (only read again while their page is open).
         void qc.invalidateQueries({ queryKey: ['artifacts'] });
+        void qc.invalidateQueries({ queryKey: keys.generatedImages });
       }),
       rpc().on('sessions.removed', () => {
         void qc.invalidateQueries({ queryKey: ['sessions'] });
         void qc.invalidateQueries({ queryKey: ['artifacts'] });
+        void qc.invalidateQueries({ queryKey: keys.generatedImages });
         // It may have been a side chat closed in another window.
         void qc.invalidateQueries({ queryKey: ['sideChats'] });
       }),
@@ -243,6 +253,43 @@ export function useProject(id: string) {
 
 export function useAppInfo() {
   return useQuery({ queryKey: keys.appInfo, queryFn: () => rpc().call('app.info', {}) });
+}
+
+/** For code outside React (the Settings page list). A newer app on an older server hides image generation; something must have asked `useAppInfo`. */
+export const imageGenerationOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.imageGeneration;
+
+/** This backend can generate images: false on an older server, and until `app.info` answers. */
+export function useImageGeneration(): boolean {
+  return !!useAppInfo().data?.imageGeneration;
+}
+
+/** Image models the person can pick from (admins also get hidden ones, to unhide them), kept current by `imageModels.changed`. */
+export function useImageModels() {
+  const offered = useImageGeneration();
+  return useQuery({ queryKey: keys.imageModels, queryFn: () => rpc().call('imageModels.list', {}), enabled: offered });
+}
+
+/**
+ * The Images page's sidebar entry: for someone with a model to make images with, or images to look at. Only a person
+ * without models asks about images, as a list of models settles it for everyone else.
+ */
+export function useImagesOffered(): boolean {
+  const offered = useImageGeneration();
+  const { data: models } = useImageModels();
+  const { settings } = useSettings();
+  // In this order: `imageGeneration` is missing from an older server's settings.
+  const usable = offered && !!settings?.imageGeneration.enabled && !!models?.some((m) => !m.hidden);
+  const { data: images } = useQuery({
+    queryKey: [...keys.generatedImages, 'any'],
+    queryFn: () => rpc().call('generatedImages.list', { limit: 1 }),
+    enabled: offered && !!models && !usable,
+  });
+  return offered && (usable || !!images?.items.length);
+}
+
+/** Admins: each image provider's health, kept current by `imageProviders.changed`. */
+export function useImageProviderStatus() {
+  return useQuery({ queryKey: keys.imageProviders, queryFn: () => rpc().call('imageProviders.status', {}) });
 }
 
 /** The person's workspaces (folders on their devices), with whether each can run tools right now. */

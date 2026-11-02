@@ -165,13 +165,13 @@ export function validateProviderForm(
 }
 
 /** A whole number from 1 to `max`, null when empty (automatic), undefined when invalid. */
-function count(text: string, max: number): number | null | undefined {
+export function count(text: string, max: number): number | null | undefined {
   if (!text.trim()) return null;
   const n = Number(text.trim());
   return Number.isInteger(n) && n >= 1 && n <= max ? n : undefined;
 }
 
-function isHttpUrl(text: string): boolean {
+export function isHttpUrl(text: string): boolean {
   try {
     const url = new URL(text);
     return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname;

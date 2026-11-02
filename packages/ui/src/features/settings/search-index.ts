@@ -7,6 +7,7 @@ import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
 import { identityProvidersOffered } from '../auth/sign-in.ts';
 import { desktop, isMac } from '../../lib/platform.ts';
+import { imageGenerationOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
 
@@ -64,6 +65,14 @@ export const SETTINGS_INDEX = [
     label: 'Default model',
     description: 'New chats start with this model. “Server default” follows the one set for everyone.',
     keywords: ['default chat model', 'chat', 'model picker', 'server default'],
+  },
+  {
+    id: 'prefs.models.image',
+    page: 'general',
+    label: 'Default image model',
+    description: 'What makes your images, unless you pick another in a conversation or name one when you ask.',
+    keywords: ['image generation', 'pictures', 'comfyui', 'server default'],
+    available: () => imageGenerationOffered(),
   },
   {
     id: 'notifications.taskFinished',
@@ -300,8 +309,8 @@ export const SETTINGS_INDEX = [
     id: 'usage.overview',
     page: 'usage',
     label: 'Your usage',
-    description: 'Requests, tokens and cost of your chats, Cowork tasks and Code sessions.',
-    keywords: ['tokens', 'requests', 'cost', 'spend', 'statistics', 'dollars', 'everyone'],
+    description: 'Requests, tokens, images and cost of your chats, Cowork tasks and Code sessions.',
+    keywords: ['tokens', 'requests', 'cost', 'spend', 'statistics', 'dollars', 'everyone', 'images'],
   },
   {
     id: 'usage.byDay',
@@ -315,6 +324,14 @@ export const SETTINGS_INDEX = [
     label: 'By model',
     description: 'Tokens, cost and average output speed of each model.',
     keywords: ['models', 'tokens per second', 'speed', 'throughput'],
+  },
+  {
+    id: 'usage.images',
+    page: 'usage',
+    label: 'Images',
+    description: 'Images each model made and what they cost. A cost marked “estimate” comes from a price list, because the service didn’t report one.',
+    keywords: ['image generation', 'pictures', 'cost', 'estimate', 'models'],
+    available: () => imageGenerationOffered(),
   },
   {
     id: 'usage.prices',
@@ -654,6 +671,69 @@ export const SETTINGS_INDEX = [
       'openrouter',
       'vllm',
     ],
+  },
+  {
+    id: 'imageProviders.detect',
+    page: 'image-providers',
+    label: 'Found on this computer',
+    description: 'Image servers answering on their default ports here.',
+    keywords: ['auto-detect', 'scan', 'comfyui', 'forge', 'automatic1111', 'swarmui', 'invokeai', 'localai', 'koboldcpp', 'local'],
+  },
+  {
+    id: 'imageProviders.list',
+    page: 'image-providers',
+    label: 'Image providers',
+    description: 'Where images are made, separate from the providers of text models.',
+    keywords: ['image generation', 'pictures', 'comfyui', 'workflows', 'health', 'gpu'],
+  },
+  {
+    id: 'imageProviders.add',
+    page: 'image-providers',
+    label: 'Add image provider',
+    description: 'Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai.',
+    keywords: ['connect', 'api key', 'base url', 'endpoint', 'comfyui', 'forge', 'automatic1111', 'openai', 'gemini', 'stability', 'black forest labs', 'fal', 'replicate', 'openrouter', 'test image'],
+  },
+  {
+    id: 'imageModels.list',
+    page: 'image-providers',
+    label: 'Image models',
+    description: 'Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler. The text model reads the description when it chooses.',
+    keywords: ['hide', 'favorite', 'visibility', 'description', 'tuning', 'steps', 'guidance', 'cfg', 'sampler', 'scheduler'],
+  },
+  {
+    id: 'models.defaults.image',
+    page: 'image-providers',
+    label: 'Default image model for everyone',
+    description: 'What makes images unless a person or a conversation chooses another.',
+    keywords: ['server default', 'system default', 'image generation'],
+  },
+  {
+    id: 'imageGeneration.enabled',
+    page: 'image-providers',
+    label: 'Let models make images',
+    description: 'Off: conversations don’t get the tool, whichever providers are set up.',
+    keywords: ['turn off', 'disable', 'pictures', 'generate image'],
+  },
+  {
+    id: 'imageGeneration.maxImagesPerTurn',
+    page: 'image-providers',
+    label: 'Images per turn',
+    description: 'How many images one reply can make, so text on a web page can’t run up a bill.',
+    keywords: ['limit', 'cap', 'budget', 'prompt injection'],
+  },
+  {
+    id: 'imageGeneration.maxImagesPerUserPerDay',
+    page: 'image-providers',
+    label: 'Images per person per day',
+    description: 'Counted across all of a person’s conversations, including deleted ones.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'accounts'],
+  },
+  {
+    id: 'imageGeneration.maxSpendPerUserPerDayUsd',
+    page: 'image-providers',
+    label: 'Spend per person per day',
+    description: 'Counts images with a known or estimated cost. Local servers cost nothing here.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'dollars', 'money', 'cost'],
   },
   {
     id: 'models.defaults.chat',

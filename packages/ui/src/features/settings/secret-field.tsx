@@ -11,6 +11,10 @@ export interface SecretFieldProps {
   envVar?: string | undefined;
   /** Switches from the environment variable to a typed key (only with `envVar`). */
   onDropEnv?(): void;
+  /** The key is copied from this provider when saved instead of typed. */
+  copiedFrom?: string | undefined;
+  /** Switches from the copied key to a typed one (only with `copiedFrom`). */
+  onDropCopy?(): void;
   /** Id of the element that labels the input. */
   labelledBy?: string;
   placeholder?: string;
@@ -18,9 +22,12 @@ export interface SecretFieldProps {
 }
 
 /** Masked secret input that shows a stored secret only as its masked tail. */
-export function SecretField({ value, onValueChange, stored, envVar, onDropEnv, labelledBy, placeholder, invalid }: SecretFieldProps) {
+export function SecretField({ value, onValueChange, stored, envVar, onDropEnv, copiedFrom, onDropCopy, labelledBy, placeholder, invalid }: SecretFieldProps) {
   const [replacing, setReplacing] = useState(false);
 
+  if (copiedFrom) {
+    return <SecretBox action={<Button size="xs" variant="ghost" onClick={onDropCopy}>Enter a key</Button>}>The key from {copiedFrom}</SecretBox>;
+  }
   if (envVar) {
     return (
       <SecretBox action={<Button size="xs" variant="ghost" onClick={onDropEnv}>Enter a key</Button>}>

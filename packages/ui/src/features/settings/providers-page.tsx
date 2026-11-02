@@ -103,7 +103,7 @@ function TypeTile({ type, children }: { type: ProviderConfig['type']; children?:
 
 type Health = { tone: 'success' | 'warning' | 'danger' | 'muted'; label: string };
 
-function providerHealth(config: ProviderConfig, status: ProviderStatus | undefined): Health {
+export function providerHealth(config: Pick<ProviderConfig, 'enabled'>, status: ProviderStatus | undefined): Health {
   if (!config.enabled) return { tone: 'muted', label: 'Disabled' };
   if (!status || status.checkedAt === 0) return { tone: 'muted', label: 'Not checked yet' };
   if (!status.ok) return { tone: 'danger', label: 'Unreachable' };
@@ -117,6 +117,15 @@ const DOT_CLASS: Record<Health['tone'], string> = {
   danger: 'bg-danger',
   muted: 'bg-line-stronger',
 };
+
+/** On the corner of a provider's tile: a spinner while it is checked, else its health. */
+export function HealthDot({ health, checking }: { health: Health; checking: boolean }) {
+  return (
+    <span className="absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-full bg-surface">
+      {checking ? <Spinner className="size-3" label="Checking" /> : <span role="img" aria-label={health.label} className={cn('size-2 rounded-full', DOT_CLASS[health.tone])} />}
+    </span>
+  );
+}
 
 function ProviderRow({
   config,
@@ -171,13 +180,7 @@ function ProviderRow({
   return (
     <div className={ITEM_ROW_CLASS}>
       <TypeTile type={config.type}>
-        <span className="absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-full bg-surface">
-          {refreshing ? (
-            <Spinner className="size-3" label="Checking" />
-          ) : (
-            <span role="img" aria-label={health.label} className={cn('size-2 rounded-full', DOT_CLASS[health.tone])} />
-          )}
-        </span>
+        <HealthDot health={health} checking={refreshing} />
       </TypeTile>
       <div className={cn('min-w-0 flex-1', !config.enabled && 'opacity-60')}>
         <div className="flex items-center gap-2">

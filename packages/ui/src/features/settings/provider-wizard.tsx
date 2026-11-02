@@ -72,7 +72,7 @@ export interface ProviderWizardProps extends WizardRequest {
   onSaved?(config: ProviderConfig): void;
 }
 
-type TestState =
+export type TestState =
   | { state: 'idle' }
   | { state: 'testing' }
   | { state: 'done'; status: ProviderStatus }
@@ -421,7 +421,7 @@ function HeadersEditor({
   );
 }
 
-function TestResult({ test }: { test: TestState }) {
+export function TestResult({ test }: { test: TestState }) {
   return (
     <div aria-live="polite">
       {test.state === 'testing' && (

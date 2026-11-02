@@ -9,6 +9,7 @@ import {
   CodeXml,
   Cpu,
   FolderClosed,
+  Images,
   Keyboard,
   KeyRound,
   Laptop,
@@ -24,6 +25,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { desktop } from '../../lib/platform.ts';
+import { imageGenerationOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 
 export type SettingsPageId =
@@ -40,6 +42,7 @@ export type SettingsPageId =
   | 'skills'
   | 'system'
   | 'providers'
+  | 'image-providers'
   | 'models'
   | 'capabilities'
   | 'admin-code'
@@ -78,6 +81,8 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   // This computer: the desktop app's version and updates, launch at login, data folder.
   { id: 'system', label: 'System', icon: Laptop, group: 'Settings', available: () => !!desktop },
   { id: 'providers', label: 'Providers', icon: Plug, group: 'Admin' },
+  // Separate from text providers (ARCHITECTURE §23). An older server has neither the page's calls nor its settings.
+  { id: 'image-providers', label: 'Image providers', icon: Images, group: 'Admin', available: () => imageGenerationOffered() },
   { id: 'models', label: 'Models', icon: Box, group: 'Admin' },
   { id: 'capabilities', label: 'Capabilities', icon: BriefcaseBusiness, group: 'Admin' },
   // Everyone's Code sessions: permission rules and the system AGENTS.md.

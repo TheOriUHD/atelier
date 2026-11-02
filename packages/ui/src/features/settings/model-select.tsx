@@ -2,11 +2,14 @@ import type { ModelInfo } from '@atelier/protocol';
 import { Select, type SelectOption } from '../../components/ui/index.ts';
 import type { Setting } from './use-setting.ts';
 
+/** What a model slot shows of a model: text and image models both have it. */
+type SlotModel = Pick<ModelInfo, 'ref' | 'displayName' | 'providerId' | 'personal'>;
+
 /** Select value for "no model set"; model refs always contain a slash, so it can't collide. */
 const UNSET = 'unset';
 
 /** Whether a model slot points at a model that isn't among the visible ones (removed, hidden, its provider gone). */
-export function isUnavailable(ref: string | undefined, visible: readonly ModelInfo[]): boolean {
+export function isUnavailable(ref: string | undefined, visible: readonly Pick<ModelInfo, 'ref'>[]): boolean {
   return !!ref && !visible.some((m) => m.ref === ref);
 }
 
@@ -20,7 +23,7 @@ export function ModelSelect({
 }: {
   setting: Setting<string | undefined>;
   unsetLabel: string;
-  models: ModelInfo[];
+  models: SlotModel[];
   providerNames: Map<string, string>;
   'aria-labelledby': string;
 }) {

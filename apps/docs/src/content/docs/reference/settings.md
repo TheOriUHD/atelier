@@ -21,6 +21,7 @@ see are hidden in the app.
 | **Transcript width** | Maximum width of the transcript and composer columns. |
 | **Motion** | Reduce animation in streaming responses and other interface elements. |
 | **Default model** | New chats start with this model. “Server default” follows the one set for everyone. |
+| **Default image model** *(only where it works)* | What makes your images, unless you pick another in a conversation or name one when you ask. |
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |
 
@@ -81,9 +82,10 @@ see are hidden in the app.
 
 | Setting | What it does |
 |---|---|
-| **Your usage** | Requests, tokens and cost of your chats, Cowork tasks and Code sessions. |
+| **Your usage** | Requests, tokens, images and cost of your chats, Cowork tasks and Code sessions. |
 | **Tokens by day** | A chart of tokens per day, split by Chat, Cowork and Code. |
 | **By model** | Tokens, cost and average output speed of each model. |
+| **Images** *(only where it works)* | Images each model made and what they cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
 | **Prices** *(admins only)* | Dollars per million tokens, per model, in place of the provider’s list price (Anthropic and OpenAI models without one here use it). A price counts for requests made after it is set. |
 
 ## Settings › Code
@@ -165,6 +167,22 @@ Admins only.
 |---|---|
 | **Detected on this machine** | Local servers on their default ports and API keys in the environment. |
 | **Add provider** | Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, GitHub Copilot, OpenRouter, a ChatGPT plan or any OpenAI-compatible endpoint. |
+
+## Settings › Admin › Image providers
+
+Admins only.
+
+| Setting | What it does |
+|---|---|
+| **Found on this computer** | Image servers answering on their default ports here. |
+| **Image providers** | Where images are made, separate from the providers of text models. |
+| **Add image provider** | Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai. |
+| **Image models** | Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler. The text model reads the description when it chooses. |
+| **Default image model for everyone** | What makes images unless a person or a conversation chooses another. |
+| **Let models make images** | Off: conversations don’t get the tool, whichever providers are set up. |
+| **Images per turn** | How many images one reply can make, so text on a web page can’t run up a bill. |
+| **Images per person per day** | Counted across all of a person’s conversations, including deleted ones. |
+| **Spend per person per day** | Counts images with a known or estimated cost. Local servers cost nothing here. |
 
 ## Settings › Admin › Models
 

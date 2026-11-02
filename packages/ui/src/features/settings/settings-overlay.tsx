@@ -6,7 +6,7 @@ import { Button, Icon, IconButton, Spinner, cn } from '../../components/ui/index
 import { dialogBackdropClass, dialogPopupClass } from '../../components/ui/styles.ts';
 import { useCloseSettings, useOpenSettings } from '../../app/navigation.ts';
 import { useNarrow } from '../../lib/narrow.ts';
-import { useAccount, usePrefs, useSettings } from '../../lib/queries.ts';
+import { useAccount, useAppInfo, usePrefs, useSettings } from '../../lib/queries.ts';
 import { AccountPage } from './account-page.tsx';
 import { AdminCodePage } from './admin-code-page.tsx';
 import { CapabilitiesPage } from './capabilities-page.tsx';
@@ -15,6 +15,7 @@ import { CodePage } from './code-page.tsx';
 import { ConnectorsPage } from './connectors-page.tsx';
 import { FoldersPage } from './folders-page.tsx';
 import { GeneralPage } from './general-page.tsx';
+import { ImageProvidersPage } from './image-providers-page.tsx';
 import { MemoryPage } from './memory-page.tsx';
 import { ModelsPage } from './models-page.tsx';
 import { settingsPage, visiblePages, type SettingsPage, type SettingsPageId } from './pages.ts';
@@ -48,6 +49,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   skills: SkillsPage,
   system: SystemPage,
   providers: ProvidersPage,
+  'image-providers': ImageProvidersPage,
   models: ModelsPage,
   capabilities: CapabilitiesPage,
   'admin-code': AdminCodePage,
@@ -69,6 +71,8 @@ export function SettingsOverlay() {
   const close = useCloseSettings();
   const { account } = useAccount();
   const admin = account?.role === 'admin';
+  // Which pages exist depends on what the backend can do, so the list renders again once it has said.
+  useAppInfo();
   const open = search.settings !== undefined;
   // Keep showing the last page while the dialog animates out.
   const [shown, setShown] = useState(search.settings);
