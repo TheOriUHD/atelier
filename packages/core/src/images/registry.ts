@@ -5,9 +5,7 @@
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { eq, inArray } from 'drizzle-orm';
-import { eq } from 'drizzle-orm';
-import { imagePreset, modelRef, parseModelRef, type DetectedImageServer, type ImageModelInfo, type ImageModelOverride, type ImageProviderConfig, type ImageProviderDraft, type ImageWorkflow, type ImageWorkflowSource, type ProviderStatus, type SavedImageWorkflow, eq, inArray } from 'drizzle-orm';
-import { imagePreset, isPersonalProviderId, type ImageProviderType, type PersonalImageProvider, type PersonalImageProviderDraft } from '@atelier/protocol';
+import { imagePreset, modelRef, parseModelRef, type DetectedImageServer, type ImageModelInfo, type ImageModelOverride, type ImageProviderConfig, type ImageProviderDraft, type ImageWorkflow, type ImageWorkflowSource, type ProviderStatus, type SavedImageWorkflow, isPersonalProviderId, type ImageProviderType, type PersonalImageProvider, type PersonalImageProviderDraft } from '@atelier/protocol';
 import type { SecretStore } from '../secrets/secret-store.ts';
 import type { SettingsService } from '../settings/settings-service.ts';
 import type { Db } from '../store/db.ts';
