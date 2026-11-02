@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CodeXml,
   FolderClosed,
+  Images,
   Keyboard,
   ListFilter,
   Lock,
@@ -45,7 +46,7 @@ import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { recentGroup } from '../lib/dates.ts';
 import { blobUrl } from '../lib/platform.ts';
 import { shortcutText, useShortcutBindings } from '../lib/shortcuts.ts';
-import { useAccount, usePrefs, useProjects, useSessions, useSetPref } from '../lib/queries.ts';
+import { useAccount, useImagesOffered, usePrefs, useProjects, useSessions, useSetPref } from '../lib/queries.ts';
 import { describeError, rpc } from '../lib/rpc.ts';
 import { useUi } from '../lib/ui-store.ts';
 import { logout } from '../features/auth/sign-in.ts';
@@ -72,6 +73,7 @@ const tabOf = (mode: Mode): Tab => (mode === 'code' ? 'code' : 'chat');
 export function Sidebar({ className }: { className?: string }) {
   const tab = tabOf(useMode());
   const split = useCodeSplit();
+  const images = useImagesOffered();
   return (
     <nav
       aria-label="Sidebar"
@@ -109,6 +111,11 @@ export function Sidebar({ className }: { className?: string }) {
             <NavLink to="/artifacts" icon={Shapes}>
               Artifacts
             </NavLink>
+            {images && (
+              <NavLink to="/images" icon={Images}>
+                Images
+              </NavLink>
+            )}
             <NavLink to="/work" icon={BriefcaseBusiness} exact>
               Cowork
             </NavLink>
@@ -184,7 +191,7 @@ function NavLink({
   onClick,
   children,
 }: {
-  to: '/' | '/projects' | '/artifacts' | '/work' | '/customize' | '/code';
+  to: '/' | '/projects' | '/artifacts' | '/images' | '/work' | '/customize' | '/code';
   search?: { mode: 'code' };
   icon: LucideIcon;
   exact?: boolean;

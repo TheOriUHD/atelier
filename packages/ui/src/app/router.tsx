@@ -11,6 +11,7 @@ import { CodePage } from '../features/code/code-page.tsx';
 import { WorkPage } from '../features/work/work-page.tsx';
 import { CoworkHome } from '../features/work/cowork-home.tsx';
 import { ArtifactsPage } from '../features/artifacts/artifacts-page.tsx';
+import { ImagesPage } from '../features/images/images-page.tsx';
 import { CUSTOMIZE_TABS, CustomizePage, type CustomizeSearch } from '../features/customize/customize-page.tsx';
 
 /** Overlays addressable from any page: `?settings=providers&row=providers.add`. */
@@ -57,6 +58,7 @@ const codeSessionRoute = createRoute({
 const projectsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/projects', component: ProjectsPage });
 const projectRoute = createRoute({ getParentRoute: () => rootRoute, path: '/projects/$projectId', component: ProjectPage });
 const artifactsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/artifacts', component: ArtifactsPage });
+const imagesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/images', component: ImagesPage });
 const customizeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/customize',
@@ -85,6 +87,7 @@ const routeTree = rootRoute.addChildren([
   projectsRoute,
   projectRoute,
   artifactsRoute,
+  imagesRoute,
   customizeRoute,
   inviteRoute,
 ]);

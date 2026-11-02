@@ -218,7 +218,13 @@ export const ImageProgress = z.object({
 export type ImageProgress = z.infer<typeof ImageProgress>;
 
 /** A generated image in the person's library. */
-export const GeneratedImage = GeneratedImageMeta.extend({ sessionId: z.string().nullable(), sessionTitle: z.string().nullable(), createdAt: z.number() });
+export const GeneratedImage = GeneratedImageMeta.extend({
+  sessionId: z.string().nullable(),
+  sessionTitle: z.string().nullable(),
+  /** Which page its conversation opens on. */
+  sessionMode: z.enum(['chat', 'work', 'code']).nullable(),
+  createdAt: z.number(),
+});
 export type GeneratedImage = z.infer<typeof GeneratedImage>;
 
 export const IMAGE_ID_PREFIX = 'img_';

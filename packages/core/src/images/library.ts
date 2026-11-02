@@ -1,5 +1,5 @@
 /** The person's generated images, for the Images page. Temporary chats stay out of it. */
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, sql, type SQL } from 'drizzle-orm';
 import { imageId, modelRef, parseModelRef, type GeneratedImage } from '@atelier/protocol';
 import type { Db } from '../store/db.ts';
 import { generatedImages, sessions } from '../store/schema.ts';
@@ -17,25 +17,31 @@ const escapeLike = (text: string) => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 export function generatedImagesFor(db: Db, userId: string, { before, query, ref, limit }: LibraryQuery): { items: GeneratedImage[]; next: number | null; totalBytes: number } {
   const parsed = ref ? parseModelRef(ref) : null;
   const mine = and(eq(generatedImages.userId, userId), eq(generatedImages.hidden, false));
-  const rows = db
-    .select({ image: generatedImages, title: sessions.title })
-    .from(generatedImages)
-    .leftJoin(sessions, eq(sessions.id, generatedImages.sessionId))
-    .where(
-      and(
-        mine,
-        before !== undefined ? lt(generatedImages.createdAt, before) : undefined,
-        query ? sql`${generatedImages.prompt} LIKE ${`%${escapeLike(query)}%`} ESCAPE '\\'` : undefined,
-        parsed ? and(eq(generatedImages.providerId, parsed.providerId), eq(generatedImages.modelId, parsed.modelId)) : undefined,
-      ),
-    )
-    .orderBy(desc(generatedImages.createdAt))
+  const select = (at: SQL | undefined) =>
+    db
+      .select({ image: generatedImages, title: sessions.title, mode: sessions.mode })
+      .from(generatedImages)
+      .leftJoin(sessions, eq(sessions.id, generatedImages.sessionId))
+      .where(
+        and(
+          mine,
+          at,
+          query ? sql`${generatedImages.prompt} LIKE ${`%${escapeLike(query)}%`} ESCAPE '\\'` : undefined,
+          parsed ? and(eq(generatedImages.providerId, parsed.providerId), eq(generatedImages.modelId, parsed.modelId)) : undefined,
+        ),
+      )
+      .orderBy(desc(generatedImages.createdAt));
+  const rows = select(before !== undefined ? lt(generatedImages.createdAt, before) : undefined)
     .limit(limit + 1)
     .all();
-  const page = rows.slice(0, limit);
+  const first = rows.slice(0, limit);
+  const edge = first.at(-1)?.image.createdAt;
+  // The next page starts before `edge`, so the rest of a batch stored in the same millisecond has to come with this one.
+  const split = rows.length > limit && rows[limit]!.image.createdAt === edge;
+  const page = split ? [...first.filter((r) => r.image.createdAt !== edge), ...select(eq(generatedImages.createdAt, edge!)).all()] : first;
   const total = db.select({ bytes: sql<number>`coalesce(sum(${generatedImages.size}), 0)` }).from(generatedImages).where(mine).get();
   return {
-    items: page.map(({ image: g, title }) => ({
+    items: page.map(({ image: g, title, mode }) => ({
       id: imageId(g.blob),
       blob: g.blob,
       mime: g.mime,
@@ -46,6 +52,7 @@ export function generatedImagesFor(db: Db, userId: string, { before, query, ref,
       modelName: g.modelName,
       sessionId: g.sessionId,
       sessionTitle: title ?? null,
+      sessionMode: mode ?? null,
       createdAt: g.createdAt,
       ...(g.revisedPrompt ? { revisedPrompt: g.revisedPrompt } : {}),
       ...(g.negativePrompt ? { negativePrompt: g.negativePrompt } : {}),
@@ -53,7 +60,7 @@ export function generatedImagesFor(db: Db, userId: string, { before, query, ref,
       ...(g.durationMs !== null ? { durationMs: g.durationMs } : {}),
       ...(g.costUsd !== null ? { costUsd: g.costUsd, costEstimated: g.costEstimated } : {}),
     })),
-    next: rows.length > limit ? (page.at(-1)?.image.createdAt ?? null) : null,
+    next: rows.length > limit ? (edge ?? null) : null,
     totalBytes: total?.bytes ?? 0,
   };
 }
