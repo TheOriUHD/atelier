@@ -37,6 +37,8 @@ describe('the services offered', () => {
     expect(hasTypedModels(preset('azure'))).toBe(true);
     expect(hasTypedModels(preset('openai'))).toBe(false);
     expect(hasTypedModels(preset('comfyui'))).toBe(false);
+    // It reports the one model it has loaded, and its dialect has no use for names typed in.
+    expect(hasTypedModels(preset('sd-server'))).toBe(false);
   });
 });
 

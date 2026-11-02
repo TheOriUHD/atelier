@@ -54,7 +54,7 @@ export const runsLocally = (preset: ImagePreset) => preset.group === 'local' || 
 export const mayCostMoney = (preset: ImagePreset) => preset.group !== 'local';
 
 /** Azure and custom servers may report no models either, though no suggestion fits them. */
-export const hasTypedModels = (preset: ImagePreset) => !!preset.suggestedModels || preset.id === 'azure' || preset.id === 'openai-compatible' || preset.id === 'sd-server';
+export const hasTypedModels = (preset: ImagePreset) => !!preset.suggestedModels || preset.id === 'azure' || preset.id === 'openai-compatible';
 
 const NEW_CONFIG: ImageProviderForm['kept'] = { headers: {}, enabled: true };
 
