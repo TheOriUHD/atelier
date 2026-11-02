@@ -509,7 +509,8 @@ async function invoke(sent: Extract<Part, { type: 'tool_call' }>, tool: Describe
     call = { ...call, input: parsed };
   }
   const verdict = opts.authorize ? await opts.authorize(call, tool) : { allow: true as const };
-  if (!verdict.allow) return { content: [{ type: 'text', text: verdict.message }], isError: true };
+  // Quotes what the person typed on the card or what a hook printed: like tool output, it can't open or close Atelier's tags.
+  if (!verdict.allow) return { content: [{ type: 'text', text: escapeTags(verdict.message) }], isError: true };
   const input = 'input' in verdict && verdict.input !== undefined ? verdict.input : call.input;
   if (validate && input !== call.input && !validate(input)) {
     const why = validate.errors?.map((e) => `${e.instancePath || 'input'} ${e.message}`).join('; ') ?? 'invalid input';

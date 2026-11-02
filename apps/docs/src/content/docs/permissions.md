@@ -167,11 +167,17 @@ A permission prompt is titled **Allow Atelier to run …?** (or to edit, write o
 
 | Button | Keys | What it does |
 |---|---|---|
-| **Deny** | `1`, `Esc` | Refuses. The model reads that you declined and is told not to retry the same action unchanged. |
+| **Deny** | `1`, `Esc` | Refuses. The model reads that you declined and is told not to retry the same action unchanged. The reply goes on: it can take another route or ask you. |
+| **Deny with reason…** *(next release)* | `R` | Opens a field. Say why or what to do instead, and **Enter** sends it: the model reads your words as the result of the call and goes on from there. **Esc** puts the field away. |
 | **Always allow** | `2`, `⇧⌘↵` | Allows and remembers it **in this project**. In a chat, for you everywhere. |
 | **Allow once** | `3`, `⌘↵` | Allows this call only. With no **Always allow** (a dangerous command), it is `2`. |
 
 The chevron next to **Always allow** offers **Allow for this session**, **Always allow in this project** and **Always allow everywhere**; the last two show the rule they add. Everywhere means your **Always-allowed actions**. On Windows and Linux, `Ctrl` replaces `⌘` and `Shift` replaces `⇧`.
+
+The cards that ask for themselves (moving to another folder, adding a connector, using apps on your computer) have **Say why…** *(next release)* beside their refusal, which works the same way. A plan's card has **Revise…** for this.
+
+
+
 
 The rule Atelier suggests:
 

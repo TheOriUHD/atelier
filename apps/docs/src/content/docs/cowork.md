@@ -101,8 +101,8 @@ model reviews each action that would otherwise ask you; edits inside the folder 
 configure tools, such as `.git` or `.claude`), ask rules and deleting outside the folder still ask you, and deny rules
 still block. [Permissions](/permissions/) explains every mode and the rules.
 
-When something does need you, the prompt above the message box offers **Deny**, **Always allow** (this project, this
-session or everywhere, from the chevron) and **Allow once**; its keys are in
+When something does need you, the prompt above the message box offers **Deny**, **Deny with reason…** *(next release)*,
+**Always allow** (this project, this session or everywhere, from the chevron) and **Allow once**; its keys are in
 [Keyboard shortcuts](/shortcuts/#answering-a-question-or-permission-prompt).
 
 :::caution

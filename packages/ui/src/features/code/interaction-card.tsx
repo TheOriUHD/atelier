@@ -89,7 +89,7 @@ const MOD = isMac ? '⌘' : 'Ctrl';
 const SHIFT = isMac ? '⇧' : 'Shift';
 const ENTER = isMac ? '↵' : 'Enter';
 
-/** What an ask answers to while it is on screen. Digits count inside the card, outside its text fields. */
+/** What an ask answers to while it is on screen. Digits and letters count inside the card, outside its text fields. */
 interface AskKeys {
   escape?: (() => void) | undefined;
   /** ⌘↵ / Ctrl+Enter: the main action, from the message box as well. */
@@ -97,6 +97,7 @@ interface AskKeys {
   /** ⇧⌘↵: the next one. */
   modShift?: (() => void) | undefined;
   digit?: ((n: number) => void) | undefined;
+  letters?: Record<string, () => void> | undefined;
 }
 
 /** The key caps beside an action's name. They are decoration: the button's name carries the label. */
@@ -167,6 +168,7 @@ function useAskKeys(card: React.RefObject<HTMLElement | null>, keys: AskKeys): v
       if (e.isComposing || e.altKey) return;
       const target = e.target instanceof Element ? e.target : null;
       const typing = !!target?.closest('input, textarea, [contenteditable="true"]');
+      const inside = !!target && !!card.current?.contains(target);
       const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       const keysNow = latest.current;
       if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.shiftKey && keysNow.escape) {
@@ -183,14 +185,71 @@ function useAskKeys(card: React.RefObject<HTMLElement | null>, keys: AskKeys): v
         e.preventDefault();
         e.stopPropagation();
         keysNow.modShift();
-      } else if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !typing && keysNow.digit && card.current?.contains(target)) {
+      } else if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !typing && keysNow.digit && inside) {
         e.preventDefault();
         keysNow.digit(Number(e.key));
+      } else if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !typing && inside) {
+        const letter = keysNow.letters?.[e.key.toLowerCase()];
+        if (!letter) return;
+        // Not typed into the field it may open.
+        e.preventDefault();
+        letter();
       }
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [card]);
+}
+
+/** Saying why along with a refusal: `R` or the card's button opens a field, Enter sends it, Esc puts it away. */
+function useDenyReason(deny: (message: string) => void, sending: boolean) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const message = text.trim();
+  const send = () => {
+    if (!sending && message) deny(message);
+  };
+  const toggle = () => {
+    // The field is going away: back to the ask, where its keys count.
+    if (open) document.activeElement?.closest<HTMLElement>('[data-ask]')?.focus();
+    setOpen(!open);
+  };
+  return { open, toggle, send, message, text, setText };
+}
+
+type DenyReason = ReturnType<typeof useDenyReason>;
+
+/** While the field is open its keys are the only ones: a ⌘↵ there sends the refusal, it must never approve. */
+const withReason = (why: DenyReason, keys: AskKeys): AskKeys => (why.open ? { escape: why.toggle, mod: why.send } : { ...keys, letters: { ...keys.letters, r: why.toggle } });
+
+function ReasonField({ why, sending }: { why: DenyReason; sending: boolean }) {
+  return (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        why.send();
+      }}
+    >
+      <TextField
+        autoFocus
+        aria-label="Why not"
+        placeholder={`Tell ${APP.name} why, or what to do instead`}
+        value={why.text}
+        maxLength={2000}
+        onChange={(e) => why.setText(e.target.value)}
+        className="flex-1"
+      />
+      <Button type="submit" size="md" variant="primary" disabled={sending || !why.message}>
+        Send reason
+      </Button>
+    </form>
+  );
+}
+
+/** The button beside a refusal that isn't called Deny, where "with reason" wouldn't read. */
+function SayWhy({ why, disabled }: { why: DenyReason; disabled: boolean }) {
+  return <Action label="Say why…" caps={['R']} aria-expanded={why.open} disabled={disabled} onClick={why.toggle} />;
 }
 
 /**
@@ -299,9 +358,10 @@ function CallPreview({ request }: { request: PermissionRequest }) {
 }
 
 /**
- * Deny, Always allow (for this project; the chevron picks this session or everywhere, each showing the rule it adds)
- * and Allow once. Digits pick them, Esc denies, ⌘↵ allows once and ⇧⌘↵ always allows. Dangerous commands are approved
- * one call at a time. Without a folder (Chat) there is no project: Always allow is for this person everywhere.
+ * Deny, Deny with reason…, Always allow (for this project; the chevron picks this session or everywhere, each showing the
+ * rule it adds) and Allow once. Digits pick them, `R` opens the reason, Esc denies, ⌘↵ allows once and ⇧⌘↵ always allows.
+ * Dangerous commands are approved one call at a time. Without a folder (Chat) there is no project: Always allow is for
+ * this person everywhere.
  */
 function PermissionPrompt({ request, sending, respond }: { request: PermissionRequest; sending: boolean; respond: Respond }) {
   const root = useContext(WorkspaceRoot);
@@ -313,22 +373,27 @@ function PermissionPrompt({ request, sending, respond }: { request: PermissionRe
   const once = () => run({ behavior: 'allow' });
   const always = () => run({ behavior: 'allow', remember: inProject ? 'project' : 'always' });
   const onceDigit = rememberable ? 3 : 2;
+  const why = useDenyReason((message) => run({ behavior: 'deny', message }), sending);
   return (
     <Card
       title={permissionTitle(request, root)}
       {...(request.warning ? { warning: request.warning } : {})}
-      keys={{
+      keys={withReason(why, {
         escape: deny,
         mod: once,
         modShift: rememberable ? always : undefined,
         digit: (n) => (n === 1 ? deny() : n === 2 && rememberable ? always() : n === onceDigit ? once() : undefined),
-      }}
+      })}
     >
       <CallPreview request={request} />
       {/* "Bash needs your approval." says nothing the card doesn't: only a reason with something in it is shown. */}
       {request.reason && !/needs your approval\.?$/.test(request.reason) && <p className="text-footnote text-fg-muted">{request.reason}</p>}
+      {why.open && <ReasonField why={why} sending={sending} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
-        <Action label="Deny" caps={['1', 'Esc']} disabled={sending} onClick={deny} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Action label="Deny" caps={['1', 'Esc']} disabled={sending} onClick={deny} />
+          <Action label="Deny with reason…" caps={['R']} aria-expanded={why.open} disabled={sending} onClick={why.toggle} />
+        </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {rememberable && (
             <SplitAction
@@ -370,10 +435,11 @@ function FolderRequest({ request, sending, respond }: { request: PermissionReque
   const canBrowse = !!desktop && !host;
   const move = (to: string) => respond({ behavior: 'allow', path: to.trim() });
   const stay = () => !sending && respond({ behavior: 'deny' });
+  const why = useDenyReason((message) => respond({ behavior: 'deny', message }), sending);
   return (
     <Card
       title={path ? 'Work in another folder?' : 'Choose a folder to work in'}
-      keys={{ escape: stay, mod: path.trim() && !sending ? () => move(path) : undefined, digit: (n) => (n === 1 ? stay() : undefined) }}
+      keys={withReason(why, { escape: stay, mod: path.trim() && !sending ? () => move(path) : undefined, digit: (n) => (n === 1 ? stay() : undefined) })}
     >
       {reason && <p className="text-body text-fg-secondary">{reason}</p>}
       <Field label={host ? `Folder on ${host}` : 'Folder'} description={from ? `Now in ${from}` : undefined}>
@@ -393,8 +459,12 @@ function FolderRequest({ request, sending, respond }: { request: PermissionReque
           className="font-mono"
         />
       </Field>
+      {why.open && <ReasonField why={why} sending={sending} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
-        <Action label="Stay here" caps={['1', 'Esc']} disabled={sending} onClick={stay} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Action label="Stay here" caps={['1', 'Esc']} disabled={sending} onClick={stay} />
+          <SayWhy why={why} disabled={sending} />
+        </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {canBrowse && (
             <Button
@@ -445,6 +515,7 @@ function ConnectorRequest({ request, sending, respond }: { request: PermissionRe
     }
   };
   const skip = () => !busy && respond({ behavior: 'deny' });
+  const why = useDenyReason((message) => respond({ behavior: 'deny', message }), busy);
   const where = !server
     ? 'It joins Settings › Connectors on this computer'
     : here
@@ -453,12 +524,16 @@ function ConnectorRequest({ request, sending, respond }: { request: PermissionRe
         ? `It joins your connectors. ${host} is on a computer’s network: allow it in Customize › Connectors in the Atelier desktop app on that computer`
         : 'It joins your connectors';
   return (
-    <Card title={`Add ${name} to your connectors?`} keys={{ escape: skip, mod: () => void add(), digit: (n) => (n === 1 ? skip() : n === 2 ? void add() : undefined) }}>
+    <Card title={`Add ${name} to your connectors?`} keys={withReason(why, { escape: skip, mod: () => void add(), digit: (n) => (n === 1 ? skip() : n === 2 ? void add() : undefined) })}>
       {reason && <p className="text-body text-fg-secondary">{reason}</p>}
       <pre className="rounded-lg bg-code-background px-3 py-2 font-mono text-code break-all whitespace-pre-wrap text-fg inset-ring inset-ring-line">{url}</pre>
       <p className="text-footnote text-fg-muted">{where}, and its tools can be used in this conversation.</p>
+      {why.open && <ReasonField why={why} sending={busy} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
-        <Action label="Don’t add" caps={['1', 'Esc']} disabled={busy} onClick={skip} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Action label="Don’t add" caps={['1', 'Esc']} disabled={busy} onClick={skip} />
+          <SayWhy why={why} disabled={busy} />
+        </div>
         <Action primary label="Add connector" caps={['2', MOD, ENTER]} disabled={busy} onClick={() => void add()} />
       </div>
     </Card>
@@ -525,16 +600,17 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
     }
   };
   const deny = () => !busy && respond({ behavior: 'deny' });
+  const why = useDenyReason((message) => respond({ behavior: 'deny', message }), busy);
   const title = apps.length === 1 ? `Let ${APP.name} use ${apps[0]!.app.name}?` : `Let ${APP.name} use ${apps.length} apps?`;
   return (
     <Card
       title={title}
-      keys={{
+      keys={withReason(why, {
         escape: deny,
         mod: here ? () => void allow(false) : undefined,
         modShift: here ? () => void allow(true) : undefined,
         digit: (n) => (n === 1 ? deny() : !here ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
-      }}
+      })}
     >
       {reason && <p className="text-body text-fg-secondary">{reason}</p>}
       {here && <ComputerPermissions />}
@@ -568,8 +644,12 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
             : `${APP.name} sees only these apps in its screenshots. Taking over your mouse and keyboard asks again, unless Settings › System says otherwise.`
           : `Allow this in the ${APP.name} desktop app on the computer running this session.`}
       </p>
+      {why.open && <ReasonField why={why} sending={busy} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
-        <Action label="Don’t allow" caps={['1', 'Esc']} disabled={busy} onClick={deny} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Action label="Don’t allow" caps={['1', 'Esc']} disabled={busy} onClick={deny} />
+          <SayWhy why={why} disabled={busy} />
+        </div>
         {here && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Action label="Always allow" caps={['2', SHIFT, MOD, ENTER]} disabled={busy} onClick={() => void allow(true)} />
@@ -605,15 +685,16 @@ function FullControlRequest({ sessionId, request, sending, respond }: { sessionI
     }
   };
   const keep = () => !busy && respond({ behavior: 'deny' });
+  const why = useDenyReason((message) => respond({ behavior: 'deny', message }), busy);
   return (
     <Card
       title={`Let ${APP.name} take over your mouse and keyboard?`}
-      keys={{
+      keys={withReason(why, {
         escape: keep,
         mod: here ? () => void allow(false) : undefined,
         modShift: here ? () => void allow(true) : undefined,
         digit: (n) => (n === 1 ? keep() : !here ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
-      }}
+      })}
     >
       {reason && <p className="text-body text-fg-secondary">{reason}</p>}
       {here && <ComputerPermissions />}
@@ -622,8 +703,12 @@ function FullControlRequest({ sessionId, request, sending, respond }: { sessionI
         Hold <Kbd>Esc</Kbd> for a second to take your computer back.
       </p>
       {!here && <p className="text-footnote text-fg-muted">Allow this in the {APP.name} desktop app on the computer running this session.</p>}
+      {why.open && <ReasonField why={why} sending={busy} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
-        <Action label="Keep control" caps={['1', 'Esc']} disabled={busy} onClick={keep} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Action label="Keep control" caps={['1', 'Esc']} disabled={busy} onClick={keep} />
+          <SayWhy why={why} disabled={busy} />
+        </div>
         {here && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Action label="Always allow" caps={['2', SHIFT, MOD, ENTER]} disabled={busy} onClick={() => void allow(true)} />

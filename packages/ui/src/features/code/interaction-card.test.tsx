@@ -232,6 +232,121 @@ describe('permission prompt', () => {
   });
 });
 
+describe('denying with a reason', () => {
+  const why = () => screen.getByRole('textbox', { name: 'Why not' });
+  const edit = permission({ toolName: 'Edit', input: { file_path: '/repo/a.ts', old_string: 'a', new_string: 'b' }, suggestedRule: 'Edit(/repo/**)' });
+
+  it('opens a field on the card, and Enter sends what was typed as the refusal', async () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Deny with reason…' }));
+    expect(document.activeElement).toBe(why());
+    fireEvent.change(why(), { target: { value: '  use pnpm here  ' } });
+    fireEvent.submit(why().closest('form')!);
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny', message: 'use pnpm here' }]));
+  });
+
+  it('opens with R, without typing it into the field', () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    const pressed = fireEvent.keyDown(screen.getByRole('region'), { key: 'r' });
+    expect(pressed).toBe(false);
+    expect(why()).toBeTruthy();
+    expect((why() as HTMLInputElement).value).toBe('');
+    expect(answers()).toEqual([]);
+  });
+
+  it('sends nothing without a reason', () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    fireEvent.keyDown(screen.getByRole('region'), { key: 'r' });
+    fireEvent.change(why(), { target: { value: '   ' } });
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Send reason' }).disabled).toBe(true);
+    fireEvent.submit(why().closest('form')!);
+    expect(answers()).toEqual([]);
+  });
+
+  it('keeps a plain Deny one press, with its keys', async () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny' }]));
+  });
+
+  it('Esc puts the field away instead of denying, and the next Esc denies', async () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    const card = screen.getByRole('region');
+    fireEvent.keyDown(card, { key: 'r' });
+    fireEvent.keyDown(why(), { key: 'Escape' });
+    expect(screen.queryByRole('textbox', { name: 'Why not' })).toBeNull();
+    expect(answers()).toEqual([]);
+    expect(document.activeElement).toBe(card);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny' }]));
+  });
+
+  it('never approves while the person is writing a refusal: ⌘↵ sends it', async () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    fireEvent.keyDown(screen.getByRole('region'), { key: 'r' });
+    fireEvent.change(why(), { target: { value: 'not this one' } });
+    fireEvent.keyDown(why(), { key: 'Enter', metaKey: isMac, ctrlKey: !isMac });
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny', message: 'not this one' }]));
+  });
+
+  it('never approves on ⇧⌘↵ or a digit from the field either', () => {
+    render(inProject(permission({})));
+    fireEvent.keyDown(screen.getByRole('region'), { key: 'r' });
+    fireEvent.keyDown(why(), { key: 'Enter', metaKey: isMac, ctrlKey: !isMac, shiftKey: true });
+    fireEvent.keyDown(why(), { key: '3' });
+    expect(answers()).toEqual([]);
+  });
+
+  it('doesn’t take R typed in the message box', () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    const box = document.createElement('textarea');
+    document.body.append(box);
+    fireEvent.keyDown(box, { key: 'r' });
+    expect(screen.queryByRole('textbox', { name: 'Why not' })).toBeNull();
+    box.remove();
+  });
+
+  it('works on an edit, a connector’s tool and a dangerous command alike', async () => {
+    for (const pending of [edit, permission({ toolName: 'mcp__mail__send', input: { to: 'a' } }), permission({ warning: 'runs as root' })]) {
+      resetBackend({ 'chat.respond': () => ({ ok: true }) });
+      const { unmount } = render(<InteractionCard sessionId="s" pending={pending} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Deny with reason…' }));
+      fireEvent.change(why(), { target: { value: 'no' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send reason' }));
+      await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny', message: 'no' }]));
+      unmount();
+    }
+  });
+
+  const folder = permission({ toolName: 'ChangeDirectory', input: { path: '/work/api', reason: '', from: '/work/app', host: null }, suggestedRule: '' });
+  const connector = permission({ toolName: 'AddConnector', input: { id: 'a', name: 'fusion', url: 'https://mcp.example.com/mcp', reason: '' }, suggestedRule: '' });
+  const access = permission({ toolName: 'ComputerAccess', input: { apps: [{ app: { id: 'a', name: 'Safari' }, tier: 'view', maxTier: 'full' }], reason: '' }, suggestedRule: '' });
+  const control = permission({ toolName: 'FullControl', input: { apps: [], reason: '' }, suggestedRule: '' });
+
+  it.each([
+    ['moving to another folder', folder],
+    ['adding a connector', connector],
+    ['using an app', access],
+    ['taking over the mouse', control],
+  ])('works on the card for %s, which has a refusal of its own', async (_card, pending) => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <InteractionCard sessionId="s" pending={pending} />
+      </QueryClientProvider>,
+    );
+    fireEvent.keyDown(screen.getByRole('region'), { key: 'r' });
+    fireEvent.change(why(), { target: { value: 'not now' } });
+    fireEvent.submit(why().closest('form')!);
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny', message: 'not now' }]));
+  });
+
+  it('those cards still refuse with one press', async () => {
+    render(<InteractionCard sessionId="s" pending={folder} />);
+    fireEvent.keyDown(screen.getByRole('region'), { key: '1' });
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny' }]));
+  });
+});
+
 describe('plan approval', () => {
   const plan = permission({ toolName: 'ExitPlanMode', input: { plan: '## Steps\n1. Write the test' }, reason: 'Approve the plan to start making changes.', suggestedRule: '' });
   const proposed = (onOpenPlan = vi.fn()) => {
