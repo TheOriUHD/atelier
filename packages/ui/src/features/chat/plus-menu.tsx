@@ -155,13 +155,7 @@ function ImageModelRow({ choice }: { choice: ImageModelChoice }) {
   const chosen = groups.flatMap((g) => g.models).find((m) => m.ref === choice.ref);
   const select = (next: string) => choice.onChange(next === DEFAULT_MODEL ? null : next);
   return (
-    <MenuSubmenu
-      label="Image model"
-      icon={ImageIcon}
-      hint={chosen && <span className="block max-w-20 truncate">{chosen.displayName}</span>}
-      triggerClassName={ROW}
-      className="max-h-96 w-72"
-    >
+    <MenuSubmenu label="Image model" icon={ImageIcon} triggerClassName={ROW} className="max-h-96 w-72">
       <MenuRadioGroup value={chosen?.ref ?? DEFAULT_MODEL} onValueChange={select}>
         <MenuRadioItem value={DEFAULT_MODEL} description={fallback?.displayName}>
           Default

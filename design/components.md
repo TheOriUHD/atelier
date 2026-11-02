@@ -222,7 +222,7 @@ Measurements at a 1440-wide window: column left edge = the composer's left edge 
 - **`+` menu (composer, ≈ 250 wide, popover surface, rows 36, icon 16 + label 15, groups separated by dividers):**
   1. "Upload or add files" with the shortcut ⌘U on the right · "Add folder" (folder-plus; in Atelier this makes the new conversation a Cowork task in that folder).
   2. "Skills ›" (submenu of skills; picking one starts it with `/name`) · "Connectors ›" (submenu with a switch per connector for this conversation) · "Add plugins" (opens Customize › Plugins).
-  3. "Image model ›" (with two or more image models: a submenu grouped by provider like the model picker, "Default" first with the model it comes to as its subtitle; the chosen model's name is the row's hint) · a toggle with a trailing blue check: "Research" (deep research: searches broadly and cites).
+  3. "Image model ›" (with two or more image models: a submenu grouped by provider like the model picker, "Default" first with the model it comes to as its subtitle) · a toggle with a trailing blue check: "Research" (deep research: searches broadly and cites).
 
 ## Code panes (layout only)
 

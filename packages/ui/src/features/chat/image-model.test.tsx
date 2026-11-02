@@ -97,12 +97,11 @@ describe('the + menu’s image model', () => {
     await waitFor(() => expect(callsTo('sessions.update')).toEqual([{ id: 's1', imageModel: 'comfy/z-image' }]));
   });
 
-  it('shows the choice, and Default clears it', async () => {
+  it('marks the choice, and Default clears it', async () => {
     setup(MODELS);
     render(<QueryClientProvider client={client()}><SessionBox of={{ ...session, imageModel: 'cloud/gpt-image-2' }} /></QueryClientProvider>);
     await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
-    const row = await openRow();
-    expect(row.textContent).toContain('GPT Image');
+    await openRow();
     const chosen = await screen.findByRole('menuitemradio', { name: 'GPT Image' });
     expect(chosen.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(screen.getByRole('menuitemradio', { name: /^Default/ }));
