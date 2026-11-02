@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-11-02
+
 - **A desktop app no longer breaks when its server updates under it:** while a server updated to 0.3.0, the app could hear about image generation before it had the new settings, and the window showed only "Something went wrong!" until Atelier was quit from Task Manager. It now carries on through an update.
 - **A broken window offers a way back:** if a page ever breaks, the window says what happened and offers **Reload**, instead of a bare error with a button that only hid it.
 - **Windows shortcuts mend themselves:** a desktop, Start menu or taskbar shortcut to Atelier that lost its icon, or points at an Atelier that moved, is fixed when Atelier starts, and after every update Atelier rewrites them so Windows shows the icon again.
