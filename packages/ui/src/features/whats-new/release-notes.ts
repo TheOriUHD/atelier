@@ -1,4 +1,4 @@
-import { Blocks, Clock, Cpu, FileText, Gauge, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,33 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.3.0',
+    intro: 'Atelier makes images now, on your own GPU or through any major service, right in the conversation. Permission cards tell you more, too.',
+    highlights: [
+      {
+        icon: Images,
+        title: 'Image generation',
+        body: 'Add an image provider in Settings › Admin › Image providers: ComfyUI, Forge, SwarmUI, InvokeAI and other servers of your own, or OpenAI, Google, Black Forest Labs, Stability, xAI, OpenRouter, fal, Replicate and more. Then any text model that can call tools can make images in Chat, Code and Cowork. A frame in the final shape shows live progress, and on most local servers you watch the picture form. Ask for a change and it edits that image; in Code and Cowork it can save one to your folder, and Rewind undoes it. Images in the sidebar keeps everything you’ve made. Nothing changes until you add a provider.',
+      },
+      {
+        icon: Cpu,
+        title: 'Text and images on one GPU',
+        body: 'If an image server shares a GPU with a local text model, set Shares a GPU with on its provider: they take turns in one queue, and the text model steps aside while the image renders. On a server, your own ComfyUI or Forge works from your sessions through the desktop app, under Settings › Your models.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'Permission cards say more',
+        body: 'Deny with reason tells the assistant why, so it can take another route. The diff shows real line numbers, and Show the whole file opens the change in place with the code around it, so you can decide without another editor. Settings › Code › Permissions › Explain each change adds a short reason to every edit; it’s off by default because it costs tokens.',
+      },
+      {
+        icon: AppWindow,
+        title: 'Atelier opens as Atelier',
+        body: 'The hidden browser window behind ChatGPT Chat could keep Atelier running after you closed it, and opening Atelier then showed that window instead, with only Task Manager as a way out. Closing Atelier’s last window now quits it, and opening it always shows Atelier.',
+      },
+    ],
+    also: ['Every image that opens big now zooms and pans.', 'A model that can’t see images no longer gets them from tools, which could make a provider refuse the whole request.'],
+  },
   {
     version: '0.2.15',
     intro: 'Connect your identity provider from the desktop app, without going to a browser.',
