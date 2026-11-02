@@ -81,7 +81,7 @@ The **+** button at the left of the footer (**Add files and more**):
 | **Add plugins** | Admins only. Opens **Customize**. |
 | **Research** | A switch, shown while web search is on. See [Research](#research). |
 
-A connector's tools ask before they run, unless a rule allows them. The prompt has **Deny**, **Deny with reason…** *(next release)*, **Always allow** and **Allow once**; the chevron beside **Always allow** offers **Allow in this
+A connector's tools ask before they run, unless a rule allows them. The prompt has **Deny**, **Deny with reason…**, **Always allow** and **Allow once**; the chevron beside **Always allow** offers **Allow in this
 conversation** and **Always allow everywhere**. What you approve with **Always allow** is listed, and can be removed, in
 **Settings › Code › Always-allowed actions**. Web search and fetch, memory and the other built-in tools do not ask. See
 [Permissions](/permissions/).
