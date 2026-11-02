@@ -147,8 +147,17 @@ export class ComfyClient {
     return `${typeof subfolder === 'string' && subfolder ? `${subfolder}/` : ''}${name} [temp]`;
   }
 
+  /**
+   * Lets go of the models. `POST /free` is the obvious way, but it moves the weights from the GPU into RAM on the way out:
+   * on a server with less RAM than the models weigh (Z-Image's are 19 GB, the box this was found on had a 12 GB limit)
+   * that swaps for good and the worker stops taking jobs. A job with no model in it does the same without the detour:
+   * ComfyUI drops what the last graph held, and 12.6 GB of VRAM came back with RAM unchanged.
+   */
   async free(signal: AbortSignal | undefined): Promise<void> {
-    await this.expectOk(await this.postJson('/free', { unload_models: true, free_memory: true }, signal ?? AbortSignal.timeout(15_000)));
+    const limit = signal ?? AbortSignal.timeout(15_000);
+    const graph = { 1: { class_type: 'EmptyImage', inputs: { width: 8, height: 8, batch_size: 1, color: Math.floor(Math.random() * 0xffffff) } }, 2: { class_type: 'PreviewImage', inputs: { images: ['1', 0] } } };
+    const sent = await this.submit(graph, crypto.randomUUID(), crypto.randomUUID(), limit);
+    if (!sent.ok) throw new Error(`${this.instance.name} didn't take the job that lets go of its models.`);
   }
 
   /**

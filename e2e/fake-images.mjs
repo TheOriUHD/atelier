@@ -210,12 +210,13 @@ async function openAiImages(req, res, job, { width, height }, stream) {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const event = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
     let partial = 0;
+    const kind = job.api === 'edits' ? 'image_edit' : 'image_generation';
     const every = Math.max(1, Math.round(PARTIAL_EVERY_MS / plan(job.prompt).stepMs));
     const done = await run(job, width, height, (step, _steps, picture) => {
-      if (step % every === 0) event('image_generation.partial_image', { b64_json: picture().toString('base64'), partial_image_index: partial++ });
+      if (step % every === 0) event(`${kind}.partial_image`, { b64_json: picture().toString('base64'), partial_image_index: partial++ });
     });
     if (!done) return;
-    event('image_generation.completed', { b64_json: imageResult(job, width, height, 0).b64_json, usage: { input_tokens: 40, output_tokens: 1056 } });
+    event(`${kind}.completed`, { b64_json: imageResult(job, width, height, 0).b64_json, usage: { input_tokens: 40, output_tokens: 1056 } });
     return res.end();
   }
   const done = await run(job, width, height, () => {});
@@ -234,7 +235,7 @@ async function openAiRoutes(req, res, url) {
     const field = (name) => parts.find((p) => p.name === name)?.body.toString();
     const images = parts.filter((p) => p.name === 'image' || p.name === 'image[]');
     const job = newJob('edits', { model: field('model'), prompt: field('prompt'), n: Number(field('n') ?? 1), size: field('size'), inputs: images.length, inputBytes: images.reduce((sum, p) => sum + p.body.length, 0) });
-    return openAiImages(req, res, job, parseSize(field('size')), false);
+    return openAiImages(req, res, job, parseSize(field('size')), field('stream') === 'true');
   }
   return false;
 }

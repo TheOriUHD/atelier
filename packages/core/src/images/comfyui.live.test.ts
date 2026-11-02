@@ -2,7 +2,7 @@
  * Runs the ComfyUI adapter against a real server. Skipped unless ATELIER_LIVE_COMFYUI_URL is set.
  *
  * That server is someone's working GPU, so: every job waits for an empty queue or doesn't start, prompts are plain
- * landscapes, results stay in its temp folder (`PreviewImage`) and in memory here, and `POST /free` runs at the end.
+ * landscapes, results stay in its temp folder (`PreviewImage`) and in memory here, and the models are let go at the end.
  * Writing results out needs ATELIER_LIVE_COMFYUI_OUT, and only the general-purpose models ever do.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -258,20 +258,23 @@ describe.skipIf(!URL_)('ComfyUI, on a real server', () => {
     keep('klein.png', result.images[0]!);
   });
 
-  // Last, because a server was once found not starting jobs after this. A graph with no model needs no GPU to prove it.
-  it('frees the GPU, and the server still takes jobs after', { timeout: 120_000 }, async () => {
-    const devices = async () => ((await getJson('/system_stats')).devices as { vram_free: number }[])[0]?.vram_free ?? 0;
-    const before = await devices();
+  // Last, and right after a job, so the models are still loaded: `POST /free` wedged a server in exactly this state.
+  it('frees the GPU, and the server still takes jobs after', { timeout: JOB_MS }, async () => {
+    const model = family('z-image')!;
+    await run(adapter, request(model, { width: 1024, height: 1024, seed: 7001 }));
+    const stats = async () => {
+      const { devices, system } = (await getJson('/system_stats')) as { devices: { vram_free: number }[]; system: { ram_free: number } };
+      return { vram: devices[0]?.vram_free ?? 0, ram: system.ram_free };
+    };
+    const before = await stats();
     await adapter.free?.(AbortSignal.timeout(20_000));
     freed = true;
-    await expect.poll(devices, { timeout: 20_000, interval: 1_000 }).toBeGreaterThanOrEqual(before);
-    console.log(`[live] free VRAM ${(before / 2 ** 30).toFixed(1)} GB -> ${((await devices()) / 2 ** 30).toFixed(1)} GB`);
-    const res = await fetch(`${URL_}/prompt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: { 1: { class_type: 'EmptyImage', inputs: { width: 64, height: 64, batch_size: 1, color: 0 } }, 2: { class_type: 'PreviewImage', inputs: { images: ['1', 0] } } }, client_id: 'atelier-live-check' }) });
-    const { prompt_id: id } = (await res.json()) as { prompt_id: string };
-    try {
-      await expect.poll(async () => Object.keys(await getJson(`/history/${id}`)).length, { timeout: 45_000, interval: 1_000 }).toBe(1);
-    } finally {
-      await fetch(`${URL_}/queue`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ delete: [id] }) });
-    }
+    await expect.poll(async () => (await stats()).vram, { timeout: 30_000, interval: 1_000 }).toBeGreaterThan(before.vram + 2 ** 30);
+    const after = await stats();
+    console.log(`[live] free VRAM ${(before.vram / 2 ** 30).toFixed(1)} GB -> ${(after.vram / 2 ** 30).toFixed(1)} GB, free RAM ${(before.ram / 2 ** 30).toFixed(1)} GB -> ${(after.ram / 2 ** 30).toFixed(1)} GB`);
+    expect(after.ram).toBeGreaterThan(before.ram - 2 ** 30);
+    const again = await run(adapter, request(model, { width: 1024, height: 1024, seed: 7002 }));
+    summary('z-image after freeing', again);
+    expect(again.finish.reason).toBe('done');
   });
 });

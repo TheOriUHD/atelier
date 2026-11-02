@@ -251,15 +251,18 @@ describe('a job', () => {
     expect(server.calls.some((c) => c.url.endsWith('/prompt'))).toBe(false);
   });
 
-  it('frees the GPU with both flags', async () => {
+  // `POST /free` moves the weights into RAM first, which wedged a real server with less RAM than its models weigh.
+  it('frees the GPU with a job that holds no model, and never with /free', async () => {
     const { adapter, server } = setup();
     await adapter.free?.();
-    expect(body(server, '/free')).toEqual({ unload_models: true, free_memory: true });
+    expect(server.calls.some((c) => c.url.endsWith('/free'))).toBe(false);
+    const graph = (body(server, '/prompt') as { prompt: Record<string, { class_type: string }> }).prompt;
+    expect(Object.values(graph).map((n) => n.class_type)).toEqual(['EmptyImage', 'PreviewImage']);
   });
 
-  it('reports a server that refuses to free', async () => {
-    const { adapter } = setup({ routes: { 'POST /free': () => new Response('no', { status: 500 }) } });
-    await expect(adapter.free?.()).rejects.toThrow();
+  it('reports a server that refuses that job', async () => {
+    const { adapter } = setup({ routes: { 'POST /prompt': () => jsonResponse({ error: { message: 'no' } }, 400) } });
+    await expect(adapter.free?.()).rejects.toThrow("didn't take the job");
   });
 });
 
