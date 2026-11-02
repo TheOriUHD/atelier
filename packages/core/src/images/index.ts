@@ -1,10 +1,30 @@
 /** The dialects (ARCHITECTURE §23): one adapter per wire format, and presets for the services that share one. */
 import type { ImageProviderType } from '@atelier/protocol';
+import { createBedrock } from './dialects/bedrock.ts';
+import { createBfl } from './dialects/bfl.ts';
+import { createChatImages } from './dialects/chat-images.ts';
+import { createFal } from './dialects/fal.ts';
+import { createGemini } from './dialects/gemini.ts';
+import { createHuggingFace } from './dialects/huggingface.ts';
+import { createIdeogram } from './dialects/ideogram.ts';
 import { createOpenAiImages } from './dialects/openai-images.ts';
+import { createReplicate } from './dialects/replicate.ts';
+import { createResponsesImage } from './dialects/responses-image.ts';
+import { createStability } from './dialects/stability.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageInstance } from './types.ts';
 
 const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps: ImageAdapterDeps) => ImageAdapter>> = {
   'openai-images': createOpenAiImages,
+  gemini: createGemini,
+  'chat-images': createChatImages,
+  'responses-image': createResponsesImage,
+  bfl: createBfl,
+  stability: createStability,
+  fal: createFal,
+  replicate: createReplicate,
+  huggingface: createHuggingFace,
+  ideogram: createIdeogram,
+  bedrock: createBedrock,
 };
 
 export function createImageAdapter(instance: ImageInstance, deps: ImageAdapterDeps): ImageAdapter {
