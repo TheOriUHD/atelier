@@ -118,6 +118,52 @@ describe('ImageService', () => {
     expect(t.events.some((e) => e.type === 'tool_progress' && e.progress.phase === 'queued' && e.progress.ahead === 2)).toBe(true);
   });
 
+  it('moves on from waiting in line when its turn comes, for services that say nothing more', async () => {
+    const t = setup({ run: async function* () {
+      yield { type: 'image', bytes: PNG };
+      yield { type: 'finish', reason: 'done' };
+    } });
+    await t.service.generate({ prompt: 'a cat' }, t.ctx());
+    const phases = t.events.flatMap((e) => (e.type === 'tool_progress' ? [e.progress.phase] : []));
+    expect([...new Set(phases)]).toEqual(['queued', 'generating', 'finishing']);
+  });
+
+  it('works out the time left from the pace of the steps, when the server only counts steps', async () => {
+    let clock = 0;
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => (clock += 1000));
+    try {
+      const t = setup({ run: async function* () {
+        for (const step of [1, 2, 3, 4]) yield { type: 'progress', step, steps: 8 };
+        yield { type: 'image', bytes: PNG };
+        yield { type: 'finish', reason: 'done' };
+      } });
+      await t.service.generate({ prompt: 'a cat' }, t.ctx());
+      const paced = t.events.flatMap((e) => (e.type === 'tool_progress' && e.progress.etaMs !== undefined ? [e.progress] : []));
+      expect(paced.length).toBeGreaterThan(0);
+      expect(paced.at(-1)).toMatchObject({ step: expect.any(Number), steps: 8 });
+      expect(paced.at(-1)!.etaMs).toBeGreaterThan(0);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('keeps a time the server reports over its own sums', async () => {
+    const t = setup({ run: async function* () {
+      yield { type: 'progress', step: 1, steps: 8, etaMs: 7000 };
+      yield { type: 'image', bytes: PNG };
+      yield { type: 'finish', reason: 'done' };
+    } });
+    await t.service.generate({ prompt: 'a cat' }, t.ctx());
+    expect(t.events.flatMap((e) => (e.type === 'tool_progress' ? [e.progress.etaMs] : [])).filter(Boolean)).toContain(7000);
+  });
+
+  it('shows its images as soon as they are stored, ahead of calls still running beside it', async () => {
+    const t = setup();
+    const output = await t.service.generate({ prompt: 'a cat' }, t.ctx());
+    const last = t.events.findLast((e) => e.type === 'tool_progress');
+    expect(last).toMatchObject({ type: 'tool_progress', progress: { phase: 'finishing', images: output.generated } });
+  });
+
   it('says which models exist when asked for an unknown one', async () => {
     const t = setup();
     const out = await t.service.generate({ prompt: 'x', model: 'nope' }, t.ctx());

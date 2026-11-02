@@ -33,6 +33,8 @@ export const ToolResultPart = z.object({
   isError: z.boolean().optional(),
   /** The images GenerateImage made, for the transcript; the model gets `content`. */
   generated: z.array(GeneratedImageMeta).optional(),
+  /** The image SaveImage wrote, for the transcript's thumbnail: it isn't sent to the model a second time. */
+  saved: z.object({ blob: z.string(), mime: z.string() }).optional(),
 });
 /** A reply's quoted passage: at most this many characters, and this many passages to a message. */
 export const QUOTE_MAX_CHARS = 4_000;

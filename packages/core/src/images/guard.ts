@@ -19,5 +19,8 @@ export async function* guardImages(request: ImageRequest, instance: ImageInstanc
   else yield { type: 'finish', reason: 'done' };
 }
 
-/** A provider said no to the prompt itself: the model hears that it is final. */
-export const refusedError = (name: string, detail?: string) => ({ code: 'provider_refused' as const, message: detail ? `${name} refused this: ${detail}` : `${name} refused this.`, retryable: false });
+/** A provider said no to the prompt itself: the model hears that it is final. `detail` may come with the words of an ordinary failed request around it. */
+export const refusedError = (name: string, detail?: string) => {
+  const reason = detail?.replace(/^.* request failed(?: \(\d+\))?: /, '');
+  return { code: 'provider_refused' as const, message: reason ? `${name} refused this: ${reason}` : `${name} refused this.`, retryable: false };
+};

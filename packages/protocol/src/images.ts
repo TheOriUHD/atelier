@@ -214,6 +214,8 @@ export const ImageProgress = z.object({
   count: z.number().int().positive().optional(),
   /** A small picture of the work so far. */
   preview: z.object({ mime: z.string(), data: z.string().max(400_000) }).optional(),
+  /** The finished images: results only arrive when every call of a step has ended, and parallel calls end one by one. */
+  images: z.array(GeneratedImageMeta).optional(),
 });
 export type ImageProgress = z.infer<typeof ImageProgress>;
 

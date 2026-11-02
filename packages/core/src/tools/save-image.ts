@@ -43,7 +43,7 @@ export function createSaveImageTool(workspace: Pick<Workspace, 'runner'>, deps: 
       if (mime && !EXTENSIONS[mime]?.includes(extension)) return textOutput(`This image is a ${mime.split('/')[1]!.toUpperCase()}: save it with a .${EXTENSIONS[mime]![0]} name, or convert it afterwards.`, true);
       await deps.checkpoint?.(ctx, file_path);
       const { created } = await workspace.runner.call('fs.write', { path: file_path, content: toBase64(bytes), encoding: 'base64', mkdirp: true }, { signal: ctx.signal });
-      return textOutput(`${created ? 'Saved' : 'Replaced'} ${file_path} (${Math.ceil(bytes.byteLength / 1024)} KB).`);
+      return { ...textOutput(`${created ? 'Saved' : 'Replaced'} ${file_path} (${Math.ceil(bytes.byteLength / 1024)} KB).`), saved: { blob, mime: mime ?? 'image/png' } };
     },
   };
 }

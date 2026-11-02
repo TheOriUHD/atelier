@@ -73,6 +73,8 @@ export interface ImageServiceDeps {
 const IDLE_MS = 15 * 60_000;
 const TOTAL_MS = 60 * 60_000;
 const PROGRESS_EVERY_MS = 500;
+/** Steps seen before their pace says anything about how long the rest will take. */
+const ETA_AFTER_STEPS = 2;
 const PREVIEW_EVERY_MS = 1_000;
 const PREVIEW_SIDE = 512;
 const PREVIEW_BYTES = 200_000;
@@ -238,13 +240,23 @@ export class ImageService {
     let previewSent = 0;
     let preview: ImageProgress['preview'];
     let current: ImageProgress = { phase: 'queued', ...shape };
+    // The first step seen: the time before it went to loading, so it's where the pace starts from.
+    let first: { step: number; at: number } | undefined;
+    /** Many servers report steps but no time; their pace tells it. */
+    const paced = (next: Partial<ImageProgress>): Partial<ImageProgress> => {
+      if (next.step === undefined || next.etaMs !== undefined) return next;
+      first ??= { step: next.step, at: Date.now() };
+      const done = next.step - first.step;
+      const steps = next.steps ?? current.steps;
+      return done >= ETA_AFTER_STEPS && steps ? { ...next, etaMs: ((Date.now() - first.at) / done) * Math.max(0, steps - next.step) } : next;
+    };
     const send = (now: number) => {
       sent = now;
       ctx.emit({ type: 'tool_progress', messageId: ctx.messageId, callId: ctx.callId, progress: { ...current, ...(preview ? { preview } : {}) } });
     };
     return {
       update(next: Partial<ImageProgress>, force = false) {
-        current = { ...current, ...next };
+        current = { ...current, ...paced(next) };
         const now = Date.now();
         if (force || now - sent >= PROGRESS_EVERY_MS) send(now);
       },
@@ -332,6 +344,7 @@ export class ImageService {
           return textOutput(failureText(model, finish.error), true);
         }
         const stored = await this.store(images, input, model, session, ctx, { fit, usage, started });
+        progress.update({ images: stored }, true);
         this.reportUsage(model, ctx, session, stored);
         reserved -= stored.length;
         return resultOutput(stored, model, fit.notes, finish.reason === 'error' ? finish.error : undefined, Date.now() - started);
@@ -353,6 +366,8 @@ export class ImageService {
       progress.update({ phase: 'freeing' }, true);
       await this.deps.registry.freeText(model.config, ctx.signal);
     }
+    // Its turn has come: many services say nothing more until the image is there, and this isn't waiting in line any more.
+    progress.update({ phase: 'generating' }, true);
     const idleMs = this.deps.idleMs ?? IDLE_MS;
     const sleep = this.deps.sleep ?? defaultSleep;
     const usage: { costUsd?: number; input?: number; output?: number } = {};

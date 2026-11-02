@@ -15,6 +15,8 @@ export interface ToolOutput {
   isError?: boolean;
   /** What the transcript shows about generated images; the model only gets `content`. */
   generated?: GeneratedImageMeta[];
+  /** The image SaveImage wrote, for the transcript's thumbnail. */
+  saved?: { blob: string; mime: string };
 }
 
 /** What a built-in tool's description depends on: it is a pure function of these, so the tools JSON stays byte-stable. */
