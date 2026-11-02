@@ -216,6 +216,15 @@ describe('invokeai generation', () => {
     expect(imagesOf(events)).toHaveLength(1);
   });
 
+  it('counts only polls that fail in a row, so a long job on a busy server is never given up on', async () => {
+    let poll = 0;
+    const burst = 15;
+    const { deps } = queue([() => item('in_progress'), () => item('completed', DONE)]);
+    const plain = deps.fetch;
+    const flaky = { ...deps, fetch: ((url, init) => (url.endsWith('/i/1') && poll++ % (burst + 1) !== burst ? Promise.reject(new TypeError('fetch failed')) : plain(url, init))) as typeof deps.fetch };
+    expect(finishOf(await drain(createInvokeAi(invoke(), flaky, POLL).generate(imageRequest({ model: 'k-sd1' })))).reason).toBe('done');
+  });
+
   it('gives up on a server that has really gone', async () => {
     const { deps, calls } = queue([]);
     const plain = deps.fetch;

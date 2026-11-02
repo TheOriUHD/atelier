@@ -4,7 +4,8 @@
  * buildSDXLGraph, without their canvas layers.
  *
  * Only SD 1.x, SD 2.x and SDXL are offered. FLUX and the newer families need separately installed encoders and their
- * own node types, and a graph that hasn't been run isn't worth offering: such a model shows nowhere rather than failing.
+ * own node types, so such a model shows nowhere rather than failing. On a real 6.14.3 the SD 1.5 graphs ran end to end;
+ * the SDXL graphs pass its validation, but its machine had too little memory to finish a picture.
  */
 import { modelRef, type ImageCapabilities } from '@atelier/protocol';
 import { bearer, classifyError, httpError, jsonHeaders, probe, ProviderHttpError, requestJson } from '../../providers/http.ts';

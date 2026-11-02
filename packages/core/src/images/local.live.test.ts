@@ -7,6 +7,8 @@
  *   ATELIER_LIVE_INVOKEAI_URL  [ATELIER_LIVE_INVOKEAI_MODEL]
  *   ATELIER_LIVE_LOCALAI_URL   [ATELIER_LIVE_LOCALAI_MODEL]
  * Each image is small and has few steps, so these work on a CPU, slowly: ATELIER_LIVE_IMAGE_TIMEOUT_MS sets how long.
+ * A server needs a small SD 1.5 or SD-Turbo model, and a LoRA in its folder for that test to mean anything. InvokeAI's
+ * first model is the newest, so name the one to use if an SDXL model on a small machine shouldn't be it.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
