@@ -141,6 +141,14 @@ describe('invokeai generation', () => {
     expect(calls.some((c) => c.url.includes('resized.png'))).toBe(false);
   });
 
+  it('trusts the source mapping over the order of the results', async () => {
+    const shuffled = { source_prepared_mapping: { l2i: ['p-3'] }, results: { 'p-3': DONE.results['p-3'], 'p-1': DONE.results['p-1'] } };
+    const { deps, calls } = queue([() => item('completed', shuffled)]);
+    await drain(createInvokeAi(invoke(), deps, POLL).generate(imageRequest({ model: 'k-sd1' })));
+    expect(calls.some((c) => c.url.includes('final.png'))).toBe(true);
+    expect(calls.some((c) => c.url.includes('resized.png'))).toBe(false);
+  });
+
   it('finds the image without a source mapping', async () => {
     const { deps } = queue([() => item('completed', { results: { x: { type: 'image_output', image: { image_name: 'final.png' } } } })]);
     expect(imagesOf(await drain(createInvokeAi(invoke(), deps, POLL).generate(imageRequest({ model: 'k-sd1' }))))).toHaveLength(1);
