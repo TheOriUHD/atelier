@@ -1,5 +1,6 @@
 /** The dialects (ARCHITECTURE §23): one adapter per wire format, and presets for the services that share one. */
 import type { ImageProviderType } from '@atelier/protocol';
+import { createA1111 } from './dialects/a1111.ts';
 import { createBedrock } from './dialects/bedrock.ts';
 import { createBfl } from './dialects/bfl.ts';
 import { createChatImages } from './dialects/chat-images.ts';
@@ -7,13 +8,11 @@ import { createFal } from './dialects/fal.ts';
 import { createGemini } from './dialects/gemini.ts';
 import { createHuggingFace } from './dialects/huggingface.ts';
 import { createIdeogram } from './dialects/ideogram.ts';
+import { createInvokeAi } from './dialects/invokeai.ts';
 import { createOpenAiImages } from './dialects/openai-images.ts';
 import { createReplicate } from './dialects/replicate.ts';
 import { createResponsesImage } from './dialects/responses-image.ts';
 import { createStability } from './dialects/stability.ts';
-import { createA1111 } from './dialects/a1111.ts';
-import { createInvokeAi } from './dialects/invokeai.ts';
-import { createOpenAiImages } from './dialects/openai-images.ts';
 import { createSwarmUi } from './dialects/swarmui.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageInstance } from './types.ts';
 

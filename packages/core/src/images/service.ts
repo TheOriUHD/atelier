@@ -356,7 +356,8 @@ export class ImageService {
         clearTimeout(timer);
         timer = setTimeout(() => idle.abort(new DOMException(`${model.config.name} sent nothing for too long.`, 'TimeoutError')), idleMs);
       };
-      touch();
+      // Servers that report nothing until the image is done are limited by TOTAL_MS instead: only one that started
+      // talking can go quiet.
       const watched: typeof progress = {
         update: (next, force) => (touch(), progress.update(next, force)),
         preview: (mime, data) => (touch(), progress.preview(mime, data)),

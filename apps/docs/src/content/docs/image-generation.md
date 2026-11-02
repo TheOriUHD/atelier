@@ -34,7 +34,6 @@ models** in the desktop app, and it works from sessions on the server while that
 | **KoboldCpp** | Start it with an image model loaded. |
 | **stable-diffusion.cpp** | Use its `sd-server` program. |
 | **LocalAI** | |
-| **Ollama** | Image models in Ollama are experimental. |
 
 :::caution
 ComfyUI and most of these servers have no sign-in. Anyone who can reach the port can use the GPU, so keep them on a network

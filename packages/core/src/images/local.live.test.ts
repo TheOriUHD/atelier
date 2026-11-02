@@ -6,7 +6,6 @@
  *   ATELIER_LIVE_SWARMUI_URL   [ATELIER_LIVE_SWARMUI_MODEL]
  *   ATELIER_LIVE_INVOKEAI_URL  [ATELIER_LIVE_INVOKEAI_MODEL]
  *   ATELIER_LIVE_LOCALAI_URL   [ATELIER_LIVE_LOCALAI_MODEL]
- *   ATELIER_LIVE_OLLAMA_URL    only checks what it lists: current versions make no images
  * Each image is small and has few steps, so these work on a CPU, slowly: ATELIER_LIVE_IMAGE_TIMEOUT_MS sets how long.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -158,24 +157,6 @@ for (const t of targets) {
     });
   });
 }
-
-describe.skipIf(!env('ATELIER_LIVE_OLLAMA_URL'))('live: Ollama', { timeout: 120_000 }, () => {
-  const live = () => adapterFor({ name: 'Ollama', type: 'openai-images', preset: 'ollama', url: env('ATELIER_LIVE_OLLAMA_URL') });
-
-  it('never lists a text model as an image model', async () => {
-    const base = env('ATELIER_LIVE_OLLAMA_URL')!.replace(/\/+$/, '');
-    const models = await live().listModels(AbortSignal.timeout(60_000));
-    for (const model of models) {
-      const shown = (await (await fetch(`${base}/api/show`, { method: 'POST', body: JSON.stringify({ model: model.modelId }) })).json()) as { capabilities?: string[] };
-      expect(shown.capabilities).toContain('image');
-    }
-  });
-
-  it('says what its version can do', async () => {
-    const health = await live().health(AbortSignal.timeout(30_000));
-    if (!health.ok) expect(health.error).toContain('removed image generation');
-  });
-});
 
 it('has a preset for every target, so these run the way people run them', () => {
   for (const t of targets) expect(imagePreset(t.preset)?.type).toBe(t.type);

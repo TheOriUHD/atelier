@@ -211,6 +211,29 @@ describe('ImageService', () => {
     expect(t.released).toHaveBeenCalledOnce();
   });
 
+  it('lets a server that reports nothing work until it is done', async () => {
+    const run = async function* (): AsyncGenerator<ImageEvent> {
+      await new Promise((r) => setTimeout(r, 30));
+      yield* images();
+    };
+    const t = setup({ run });
+    (t.service as unknown as { deps: ImageServiceDeps }).deps.idleMs = 5;
+    expect((await t.service.generate({ prompt: 'x' }, t.ctx())).isError).toBeUndefined();
+  });
+
+  it('gives up on a server that started talking and went quiet', async () => {
+    const run = async function* (request: ImageRequest): AsyncGenerator<ImageEvent> {
+      yield { type: 'progress', step: 1, steps: 4 };
+      await new Promise((r) => request.signal.addEventListener('abort', r));
+      yield { type: 'finish', reason: 'error', error: { code: 'provider_timeout', message: 'It went quiet.' } };
+    };
+    const t = setup({ run, config: { baseUrl: 'http://127.0.0.1:8188' } });
+    (t.service as unknown as { deps: ImageServiceDeps }).deps.idleMs = 5;
+    const out = await t.service.generate({ prompt: 'x' }, t.ctx());
+    expect((out.content[0] as { text: string }).text).toContain('quiet');
+    expect(t.released).toHaveBeenCalledOnce();
+  });
+
   it('stops with the turn', async () => {
     const controller = new AbortController();
     const run = async function* (request: ImageRequest): AsyncGenerator<ImageEvent> {

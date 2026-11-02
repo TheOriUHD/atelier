@@ -1,6 +1,6 @@
 /**
  * The OpenAI images wire format: `POST /v1/images/generations` and `/v1/images/edits`. OpenAI, and most servers that
- * copy it: stable-diffusion.cpp's sd-server, LocalAI, Ollama, Together, xAI, Recraft, LiteLLM, Azure (other paths and
+ * copy it: stable-diffusion.cpp's sd-server, LocalAI, Together, xAI, Recraft, LiteLLM, Azure (other paths and
  * header). `IMAGE_PROVIDER_PRESETS` says which; services differ in what they accept, not in how they're spoken to.
  *
  * Read on 2026-11-02:
@@ -20,7 +20,7 @@ import { guardImages } from '../guard.ts';
 import { multipart, type MultipartField } from '../multipart.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 import { failureOf, imageStream, listedModel, noImage, refusal, usageEvent } from './hosted.ts';
-import { fromImg2Img, localEdit, localFields, localModels, localSeed, OLLAMA_NO_IMAGES, ollamaHealth } from './openai-local.ts';
+import { fromImg2Img, localEdit, localFields, localModels, localSeed } from './openai-local.ts';
 
 /** Model ids that aren't for images, for servers whose list holds everything. */
 const NOT_IMAGES = /embed|whisper|tts|transcri|moderation|rerank|audio|realtime|video|vision/i;
@@ -177,8 +177,7 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
   // OpenAI streams GPT image models only; one image at a time, as previews don't say which image they belong to.
   const stream = request.capabilities.previews && request.count === 1;
   const res = await send(instance, deps, request, stream);
-  if (instance.preset === 'ollama' && res.status === 404) yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: OLLAMA_NO_IMAGES, retryable: false } };
-  else if (!res.ok) yield await failureOf(instance, res);
+  if (!res.ok) yield await failureOf(instance, res);
   else if (stream) yield* imageStream(instance, res, request.signal);
   else yield* eventsFromResult(instance, deps, fromImg2Img(await res.json()), request.signal);
 }
@@ -218,7 +217,6 @@ export function createOpenAiImages(instance: ImageInstance, deps: ImageAdapterDe
     },
     health(signal) {
       if (noList) return Promise.resolve({ ok: true, latencyMs: null, warnings: [] });
-      if (instance.preset === 'ollama') return ollamaHealth(instance, deps, headers(instance), signal);
       return probe(deps, instance, `${instance.baseUrl}/v1/models`, headers(instance), signal);
     },
     generate(request) {

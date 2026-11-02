@@ -177,63 +177,6 @@ describe('LocalAI', () => {
   });
 });
 
-describe('Ollama', () => {
-  const TAGS = { models: [{ name: 'gemma4:latest' }, { name: 'x/z-image-turbo:latest' }, { name: 'nomic-embed-text:latest' }, { name: 'x/flux2-klein:latest' }] };
-  const SHOW: Record<string, string[]> = { 'gemma4:latest': ['completion', 'vision', 'tools'], 'x/z-image-turbo:latest': ['image'], 'nomic-embed-text:latest': ['embedding'], 'x/flux2-klein:latest': ['image'] };
-  const show = (call: RecordedCall) => jsonResponse({ capabilities: SHOW[(call.body as { model: string }).model] ?? [] });
-
-  it('lists a model only when /api/show says it makes images', async () => {
-    const { deps, calls } = adapterDeps({ 'GET /api/tags': () => jsonResponse(TAGS), 'POST /api/show': show });
-    const models = await createOpenAiImages(server('ollama'), deps).listModels();
-    expect(models.map((m) => m.modelId)).toEqual(['x/flux2-klein:latest', 'x/z-image-turbo:latest']);
-    expect(models[1]?.capabilities).toMatchObject({ family: 'z-image', promptStyle: 'natural', negativePrompt: false, seed: true, maxCount: 1, edit: false });
-    expect(calls.filter((c) => c.url.endsWith('/api/show'))).toHaveLength(4);
-    expect(calls.some((c) => c.url.endsWith('/v1/models'))).toBe(false);
-  });
-
-  it('never shows a model it could not ask about', async () => {
-    const { deps } = adapterDeps({ 'GET /api/tags': () => jsonResponse(TAGS), 'POST /api/show': () => new Response('boom', { status: 500 }) });
-    await expect(createOpenAiImages(server('ollama'), deps).listModels()).resolves.toEqual([]);
-  });
-
-  it('shows nothing for a server with only text models', async () => {
-    const { deps } = adapterDeps({ 'GET /api/tags': () => jsonResponse({ models: [{ name: 'gemma4:latest' }] }), 'POST /api/show': show });
-    await expect(createOpenAiImages(server('ollama'), deps).listModels()).resolves.toEqual([]);
-  });
-
-  it('is healthy on an older version, which refuses an empty request with a 400', async () => {
-    const { deps } = adapterDeps({ 'GET /api/tags': () => jsonResponse(TAGS), 'POST /v1/images/generations': () => jsonResponse({ error: { message: 'prompt is required' } }, 400) });
-    await expect(createOpenAiImages(server('ollama'), deps).health()).resolves.toMatchObject({ ok: true });
-  });
-
-  it('says so plainly on a version that removed images', async () => {
-    const { deps } = adapterDeps({ 'GET /api/tags': () => jsonResponse(TAGS) });
-    const health = await createOpenAiImages(server('ollama'), deps).health();
-    expect(health.ok).toBe(false);
-    expect(health.error).toContain('Ollama removed image generation in version 0.33');
-  });
-
-  it('reports a server that is not there as that, not as a missing feature', async () => {
-    const deps = { fetch: async () => Promise.reject(new TypeError('fetch failed')), socket: async () => Promise.reject(new Error('no')) };
-    const health = await createOpenAiImages(server('ollama'), deps).health();
-    expect(health.ok).toBe(false);
-    expect(health.error).not.toContain('removed');
-  });
-
-  it('explains a 404 from the route when a model is run anyway', async () => {
-    const { deps } = adapterDeps({});
-    const finish = finishOf(await drain(createOpenAiImages(server('ollama'), deps).generate(imageRequest({ model: 'x/z-image-turbo' }))));
-    expect(finish.error?.message).toContain('removed image generation');
-  });
-
-  it('sends the fields its route took, and reads base64', async () => {
-    const { deps, calls } = adapterDeps({ 'POST /v1/images/generations': b64 });
-    const events = await drain(createOpenAiImages(server('ollama'), deps).generate(imageRequest({ model: 'x/z-image-turbo', width: 1024, height: 1024, seed: 3 })));
-    expect(bodyOf(calls, 'generations')).toEqual({ model: 'x/z-image-turbo', prompt: 'a red fox', size: '1024x1024', seed: 3, response_format: 'b64_json' });
-    expect(imagesOf(events)).toHaveLength(1);
-  });
-});
-
 describe('servers these changes must leave alone', () => {
   it('keeps listing an unknown compatible server as before', async () => {
     const { deps } = adapterDeps({ 'GET /v1/models': () => jsonResponse({ data: [{ id: 'flux-schnell' }, { id: 'gpt-5' }] }) });

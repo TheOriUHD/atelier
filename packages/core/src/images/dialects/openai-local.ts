@@ -7,12 +7,9 @@
  *   `/v1/images/edits` passes pictures as reference images, which SD models ignore, so edits go to its `/sdapi/v1/img2img`.
  * - LocalAI calls steps `step`, takes the negative prompt after a `|`, and has no `/v1/images/edits`: the input picture
  *   is a `file` field on the generation route. `/v1/models` lists its text models too; `/v1/models/capabilities` tells them apart.
- * - Ollama has no list of image models, only an `image` capability per model in `/api/show`. Version 0.33 removed image
- *   generation and its routes, while models pulled earlier keep reporting the capability, so the route is checked too.
  */
 import type { ImageCapabilities } from '@atelier/protocol';
-import { probe, requestJson } from '../../providers/http.ts';
-import type { HealthResult } from '../../providers/types.ts';
+import { requestJson } from '../../providers/http.ts';
 import { arr, num, rec, str, strings, toBase64 } from '../../providers/util.ts';
 import { HOSTED_DEFAULTS, SQUARE } from '../catalog.ts';
 import { checkpointFamily, checkpointLabel, editSize } from '../families.ts';
@@ -26,10 +23,8 @@ const SD_CPP_MAX_COUNT = 4;
 /** How much an edit may change the picture: enough to act on the prompt, while it stays the same picture. */
 const EDIT_STRENGTH = 0.6;
 /** Enough to fill a Settings page without opening every model at once. */
-const SHOW_AT_ONCE = 6;
 const IMAGE_CAPABILITY = 'image';
 
-export const OLLAMA_NO_IMAGES = 'Ollama removed image generation in version 0.33, so this server can\'t make images. Use an older Ollama, or another image server.';
 
 /** Everything a local server's image model starts from; each server then says what it really takes. */
 const LOCAL: ImageCapabilities = { ...HOSTED_DEFAULTS, family: 'local', sizes: SQUARE, seed: true };
@@ -190,37 +185,9 @@ async function localAiModels(instance: ImageInstance, deps: ImageAdapterDeps, he
   });
 }
 
-async function ollamaModels(instance: ImageInstance, deps: ImageAdapterDeps, headers: Headers, signal?: AbortSignal): Promise<LocalModel[]> {
-  const init = { headers, ...(signal ? { signal } : {}) };
-  const names = arr(rec(await requestJson(deps, instance, `${instance.baseUrl}/api/tags`, init)).models).flatMap((m) => str(rec(m).name) ?? []);
-  const image: string[] = [];
-  const next = names[Symbol.iterator]();
-  const worker = async () => {
-    for (const model of next) {
-      // A model it can't describe is left out: a text model must never show as an image model.
-      const shown = await requestJson(deps, instance, `${instance.baseUrl}/api/show`, { ...init, method: 'POST', body: { model } }).catch(() => null);
-      if (strings(rec(shown).capabilities).includes(IMAGE_CAPABILITY)) image.push(model);
-    }
-  };
-  await Promise.all(Array.from({ length: SHOW_AT_ONCE }, worker));
-  return image.sort().map((id) => {
-    const { traits } = family(id);
-    return { id, capabilities: { ...LOCAL, ...traits, negativePrompt: false, promptStyle: 'natural' as const } };
-  });
-}
-
 /** The models of a server with its own way of telling them apart. Null: use `/v1/models`. */
 export function localModels(instance: ImageInstance, deps: ImageAdapterDeps, headers: Headers, signal?: AbortSignal): Promise<LocalModel[] | null> {
   if (instance.preset === 'sd-server') return sdServerModels(instance, deps, headers, signal);
   if (instance.preset === 'localai') return localAiModels(instance, deps, headers, signal);
-  if (instance.preset === 'ollama') return ollamaModels(instance, deps, headers, signal);
   return Promise.resolve(null);
-}
-
-/** Whether Ollama still has its images route: a real one answers an empty request with a 400. */
-export async function ollamaHealth(instance: ImageInstance, deps: ImageAdapterDeps, headers: Headers, signal?: AbortSignal): Promise<HealthResult> {
-  const health = await probe(deps, instance, `${instance.baseUrl}/api/tags`, headers, signal);
-  if (!health.ok) return health;
-  const res = await deps.fetch(`${instance.baseUrl}/v1/images/generations`, { method: 'POST', headers, body: '{}', signal: signal ?? null });
-  return res.status === 404 ? { ...health, ok: false, error: OLLAMA_NO_IMAGES } : health;
 }
