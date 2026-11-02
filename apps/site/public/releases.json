@@ -1,44 +1,44 @@
 {
-  "version": "0.3.0",
-  "tag": "v0.3.0",
+  "version": "0.3.1",
+  "tag": "v0.3.1",
   "prerelease": false,
-  "publishedAt": "2026-11-02T14:08:50Z",
-  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.3.0",
+  "publishedAt": "2026-11-02T16:47:28Z",
+  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.3.1",
   "assets": {
     "macos-arm64": {
-      "name": "Atelier-0.3.0-arm64.dmg",
-      "size": 146792520,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.0-arm64.dmg"
+      "name": "Atelier-0.3.1-arm64.dmg",
+      "size": 146787562,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.1-arm64.dmg"
     },
     "macos-x64": {
-      "name": "Atelier-0.3.0.dmg",
-      "size": 153382932,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.0.dmg"
+      "name": "Atelier-0.3.1.dmg",
+      "size": 153393043,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.1.dmg"
     },
     "windows": {
-      "name": "Atelier-Setup-0.3.0.exe",
-      "size": 252429553,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.3.0.exe"
+      "name": "Atelier-Setup-0.3.1.exe",
+      "size": 252434124,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.3.1.exe"
     },
     "linux-deb-x64": {
-      "name": "Atelier-0.3.0-amd64.deb",
-      "size": 112836172,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.0-amd64.deb"
+      "name": "Atelier-0.3.1-amd64.deb",
+      "size": 112837800,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.1-amd64.deb"
     },
     "linux-deb-arm64": {
-      "name": "Atelier-0.3.0-arm64.deb",
-      "size": 108042912,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.0-arm64.deb"
+      "name": "Atelier-0.3.1-arm64.deb",
+      "size": 108043828,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.1-arm64.deb"
     },
     "linux-appimage-x64": {
-      "name": "Atelier-0.3.0.AppImage",
-      "size": 141657224,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.0.AppImage"
+      "name": "Atelier-0.3.1.AppImage",
+      "size": 141661806,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.1.AppImage"
     },
     "linux-appimage-arm64": {
-      "name": "Atelier-0.3.0-arm64.AppImage",
-      "size": 143019597,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.0-arm64.AppImage"
+      "name": "Atelier-0.3.1-arm64.AppImage",
+      "size": 143024172,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.3.1-arm64.AppImage"
     }
   }
 }
