@@ -11,6 +11,10 @@ import { createOpenAiImages } from './dialects/openai-images.ts';
 import { createReplicate } from './dialects/replicate.ts';
 import { createResponsesImage } from './dialects/responses-image.ts';
 import { createStability } from './dialects/stability.ts';
+import { createA1111 } from './dialects/a1111.ts';
+import { createInvokeAi } from './dialects/invokeai.ts';
+import { createOpenAiImages } from './dialects/openai-images.ts';
+import { createSwarmUi } from './dialects/swarmui.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageInstance } from './types.ts';
 
 const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps: ImageAdapterDeps) => ImageAdapter>> = {
@@ -25,6 +29,9 @@ const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps
   huggingface: createHuggingFace,
   ideogram: createIdeogram,
   bedrock: createBedrock,
+  a1111: createA1111,
+  swarmui: createSwarmUi,
+  invokeai: createInvokeAi,
 };
 
 export function createImageAdapter(instance: ImageInstance, deps: ImageAdapterDeps): ImageAdapter {
