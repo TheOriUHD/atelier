@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { imagePreset } from '@atelier/protocol';
 import { jsonResponse, type RecordedCall } from '../../providers/__fixtures__/harness.ts';
 import { adapterDeps, drain, finishOf, held, imageInstance, imageRequest, imagesOf, JPEG_B64, PNG_B64, pngOf, WEBP_B64 } from '../__fixtures__/harness.ts';
 import { checkpointFamily } from '../families.ts';
@@ -377,6 +378,89 @@ describe('KoboldCpp', () => {
   it('warns when it runs without an image model', async () => {
     const { deps } = adapterDeps({ 'GET /sdapi/v1/sd-models': () => jsonResponse([]) });
     await expect(createA1111(kobold(), deps, POLL).health()).resolves.toMatchObject({ ok: true, warnings: ['Server has no image model loaded.'] });
+  });
+});
+
+describe('stable-diffusion.cpp sd-server', () => {
+  const server = () => imageInstance('a1111', 'sd-server', 'http://127.0.0.1:1234');
+  // Recorded from a real sd-server, master-1039-290148d, with SD-Turbo on a CPU.
+  const SD_MODELS = [{ config: null, filename: 'sd_turbo-f16-q8_0.gguf', hash: '8888888888', model_name: 'sd_turbo-f16-q8_0', sha256: '8'.repeat(64), title: 'sd_turbo-f16-q8_0' }];
+  const REAL_SAMPLERS = ['default', 'euler', 'euler_a', 'heun', 'dpm++2m'].map((name) => ({ aliases: [name], name, options: {} }));
+  const REAL_SCHEDULERS = ['default', 'discrete', 'karras', 'simple'].map((name) => ({ label: name, name }));
+  const realProgress = (step: number, steps: number, image: string | null) => jsonResponse({ current_image: image, eta_relative: 0, progress: steps ? step / steps : 0, state: { interrupted: false, job: 'txt2img', job_count: 1, job_no: 0, job_timestamp: '0', sampling_step: step, sampling_steps: steps, skipped: false }, textinfo: null });
+  const realResult = () => jsonResponse({ images: [PNG_B64], parameters: {}, info: JSON.stringify({ all_seeds: [1234], seed: 1234, sampler_name: 'euler_a' }) });
+
+  it('is on the a1111 dialect, for its live progress', () => {
+    expect(imagePreset('sd-server')).toMatchObject({ type: 'a1111', baseUrl: 'http://127.0.0.1:1234' });
+  });
+
+  it('lists its one model, with the sampler in its own spelling', async () => {
+    const { deps } = adapterDeps({ 'GET /sdapi/v1/sd-models': () => jsonResponse(SD_MODELS), 'GET /sdapi/v1/samplers': () => jsonResponse(REAL_SAMPLERS), 'GET /sdapi/v1/schedulers': () => jsonResponse(REAL_SCHEDULERS), 'GET /sdapi/v1/loras': () => jsonResponse([]) });
+    const [model, ...rest] = await createA1111(server(), deps, POLL).listModels();
+    expect(rest).toEqual([]);
+    expect(model).toMatchObject({ modelId: 'sd_turbo-f16-q8_0', displayName: 'sd_turbo-f16-q8_0', capabilities: { family: 'sd-turbo', previews: true, edit: true, mask: true, defaults: { steps: 4, guidance: 1, sampler: 'euler_a' } } });
+  });
+
+  it('offers LoRAs by the path it wants back', async () => {
+    const { deps } = adapterDeps({ 'GET /sdapi/v1/sd-models': () => jsonResponse(SD_MODELS), 'GET /sdapi/v1/loras': () => jsonResponse([{ name: 'detail', path: 'loras/detail.safetensors' }]) });
+    expect((await createA1111(server(), deps, POLL).listModels())[0]?.capabilities.loras).toEqual(['loras/detail.safetensors']);
+  });
+
+  it('sends LoRAs as a field, because it ignores tags in the prompt', async () => {
+    const { deps, calls } = adapterDeps({ 'POST /sdapi/v1/txt2img': realResult });
+    await drain(createA1111(server(), deps, { pollMs: 10_000 }).generate(imageRequest({ loras: [{ name: 'loras/detail.safetensors', weight: 0.7 }] })));
+    const body = bodyOf(calls, 'txt2img');
+    expect(body.prompt).toBe('a red fox');
+    expect(body.lora).toEqual([{ path: 'loras/detail.safetensors', multiplier: 0.7 }]);
+  });
+
+  it('chooses no checkpoint and sends no LoRA field without LoRAs', async () => {
+    const { deps, calls } = adapterDeps({ 'POST /sdapi/v1/txt2img': realResult });
+    await drain(createA1111(server(), deps, { pollMs: 10_000 }).generate(imageRequest()));
+    expect(bodyOf(calls, 'txt2img')).not.toHaveProperty('override_settings');
+    expect(bodyOf(calls, 'txt2img')).not.toHaveProperty('lora');
+  });
+
+  it('reports steps, previews and the seed the way a real one does', async () => {
+    const run = script([() => realProgress(0, 0, null), () => realProgress(2, 4, JPEG_B64), () => realProgress(4, 4, JPEG_B64)], realResult);
+    const { deps } = adapterDeps({ 'POST /sdapi/v1/txt2img': run.txt2img, 'GET /sdapi/v1/progress': run.progress });
+    const events = await drain(createA1111(server(), deps, POLL).generate(imageRequest()));
+    expect(events.filter((e) => e.type !== 'image')).toEqual([
+      { type: 'loading' },
+      { type: 'progress', step: 2, steps: 4, fraction: 0.5 },
+      { type: 'preview', mime: 'image/jpeg', data: JPEG_B64 },
+      { type: 'progress', step: 4, steps: 4, fraction: 1 },
+      { type: 'finish', reason: 'done' },
+    ]);
+    expect(imagesOf(events)[0]?.seed).toBe(1234);
+  });
+
+  it('asks no route it lacks when stopped, or to free memory', async () => {
+    const controller = new AbortController();
+    const { deps, calls } = adapterDeps({
+      'POST /sdapi/v1/txt2img': (_call, signal) => new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))),
+      'GET /sdapi/v1/progress': () => (controller.abort(), realProgress(1, 30, null)),
+    });
+    const adapter = createA1111(server(), deps, POLL);
+    expect(finishOf(await drain(adapter.generate(imageRequest({ signal: controller.signal })))).reason).toBe('aborted');
+    expect(calls.some((c) => c.url.endsWith('/interrupt'))).toBe(false);
+    expect(adapter.free).toBeUndefined();
+  });
+
+  it('warns when no model is loaded', async () => {
+    const { deps } = adapterDeps({ 'GET /sdapi/v1/sd-models': () => jsonResponse([]) });
+    await expect(createA1111(server(), deps, POLL).health()).resolves.toMatchObject({ ok: true, warnings: ['Server has no image model loaded.'] });
+  });
+
+  it('says what to do about an old version without these routes', async () => {
+    const { deps } = adapterDeps({});
+    await expect(createA1111(server(), deps, POLL).health()).resolves.toMatchObject({ ok: false, error: "Server's API isn't on. Update stable-diffusion.cpp: this sd-server has no /sdapi/v1 routes." });
+  });
+
+  it('shows its refusal of a LoRA, which comes as a bare error', async () => {
+    const { deps } = adapterDeps({ 'POST /sdapi/v1/txt2img': () => jsonResponse({ error: 'invalid lora path: loras/none.safetensors' }, 400) });
+    const finish = finishOf(await drain(createA1111(server(), deps, { pollMs: 10_000 }).generate(imageRequest())));
+    expect(finish.error?.message).toContain('invalid lora path');
   });
 });
 

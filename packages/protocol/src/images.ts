@@ -263,7 +263,7 @@ export const IMAGE_PROVIDER_PRESETS: readonly ImagePreset[] = [
   { id: 'invokeai', label: 'InvokeAI', type: 'invokeai', group: 'local', baseUrl: 'http://127.0.0.1:9090', key: 'none' },
   { id: 'drawthings', label: 'Draw Things', type: 'a1111', group: 'local', baseUrl: 'http://127.0.0.1:7860', key: 'none', help: 'Turn on the API Server in the app, with HTTP as the protocol.' },
   { id: 'koboldcpp', label: 'KoboldCpp', type: 'a1111', group: 'local', baseUrl: 'http://127.0.0.1:5001', key: 'none', help: 'Start it with an image model loaded.' },
-  { id: 'sd-server', label: 'stable-diffusion.cpp', type: 'openai-images', group: 'local', baseUrl: 'http://127.0.0.1:1234', key: 'none', help: 'Use its sd-server program.' },
+  { id: 'sd-server', label: 'stable-diffusion.cpp', type: 'a1111', group: 'local', baseUrl: 'http://127.0.0.1:1234', key: 'none', help: 'Use its sd-server program.' },
   { id: 'localai', label: 'LocalAI', type: 'openai-images', group: 'local', baseUrl: 'http://127.0.0.1:8080', key: 'optional' },
   { id: 'openai', label: 'OpenAI', type: 'openai-images', group: 'cloud', baseUrl: 'https://api.openai.com', key: 'required', keyUrl: 'https://platform.openai.com/api-keys', sharesKeyWith: 'openai' },
   { id: 'chatgpt', label: 'ChatGPT Plan', type: 'responses-image', group: 'cloud', baseUrl: 'https://chatgpt.com/backend-api/codex', key: 'none', help: 'Uses your ChatGPT Plan sign-in, and your plan’s limits.' },

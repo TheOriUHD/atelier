@@ -2,6 +2,8 @@
  * The AUTOMATIC1111 web API (`/sdapi/v1`): AUTOMATIC1111, Forge, Forge Neo, reForge, SD.Next, KoboldCpp and Draw Things.
  * `txt2img` and `img2img` only answer when the picture is done, so progress comes from polling beside them. The forks
  * agree on those two routes and differ around them, which is what `Flavor` records, taken from each server's source.
+ * stable-diffusion.cpp's sd-server is here too: on a real one these routes report every step with a preview, where its
+ * OpenAI routes say nothing until the end.
  */
 import { modelRef, type ImageCapabilities, type MessageError } from '@atelier/protocol';
 import { bearer, classifyError, extractErrorMessage, jsonHeaders, probe } from '../../providers/http.ts';
@@ -31,6 +33,8 @@ interface Flavor {
   apiOff: string;
   /** Refuses any field it doesn't know, and lists no models: see `drawThingsBody`. */
   strict?: boolean;
+  /** Ignores `<lora:…>` tags, and takes `lora: [{ path, multiplier }]` with the paths it listed. */
+  loraPaths?: boolean;
 }
 
 const WEBUI: Flavor = { progress: true, genkey: false, interrupt: true, checkpoints: true, schedulers: true, free: true, maxCount: 4, mask: true, apiOff: 'Start it with --api.' };
@@ -40,6 +44,9 @@ const FLAVORS: Record<string, Flavor> = {
   sdnext: { ...WEBUI, schedulers: false, apiOff: 'Check the address: SD.Next always has its API on.' },
   // One image per request, one model chosen at start, and it stops a job when the connection drops.
   koboldcpp: { ...WEBUI, genkey: true, interrupt: false, checkpoints: false, free: false, maxCount: 1, apiOff: 'Start it with an image model loaded.' },
+  // A job runs to its end whatever happens to the connection, and there's no route to stop it. Unloading isn't offered
+  // either: the native /sdcpp/v1/models/unload can't bring back a model chosen on the command line.
+  'sd-server': { ...WEBUI, interrupt: false, checkpoints: false, free: false, loraPaths: true, apiOff: 'Update stable-diffusion.cpp: this sd-server has no /sdapi/v1 routes.' },
   // Four routes: txt2img, img2img, and the app's current settings at / and /sdapi/v1/options.
   drawthings: { ...WEBUI, progress: false, interrupt: false, checkpoints: false, schedulers: false, free: false, mask: false, strict: true, apiOff: 'Turn on the API Server in the app, with HTTP as the protocol.' },
 };
@@ -61,8 +68,8 @@ interface ServerLists {
   loras?: string[];
 }
 
-const namesOf = (body: unknown): string[] | undefined => {
-  const names = arr(body).flatMap((item) => str(rec(item).name) ?? []);
+const namesOf = (body: unknown, key = 'name'): string[] | undefined => {
+  const names = arr(body).flatMap((item) => str(rec(item)[key]) ?? []);
   return names.length ? names : undefined;
 };
 
@@ -141,12 +148,18 @@ function loraTags(request: ImageRequest): string {
   return request.loras.map((lora) => ` <lora:${lora.name}:${lora.weight}>`).join('');
 }
 
+/** How the LoRAs of a request reach this server: in the prompt, or as a field of their own. */
+function loraFields(flavor: Flavor, request: ImageRequest): { prompt: string; lora?: { path: string; multiplier: number }[] } {
+  if (!flavor.loraPaths) return { prompt: request.prompt + loraTags(request) };
+  return { prompt: request.prompt, ...(request.loras.length ? { lora: request.loras.map((l) => ({ path: l.name, multiplier: l.weight })) } : {}) };
+}
+
 function webuiBody(flavor: Flavor, request: ImageRequest, genkey: string | undefined): Record<string, unknown> {
   const { steps, guidance, sampler, scheduler } = request.tuning;
   const input = request.references[0];
   const size = input ? editSize(request) : { width: request.width, height: request.height };
   return {
-    prompt: request.prompt + loraTags(request),
+    ...loraFields(flavor, request),
     negative_prompt: request.negativePrompt ?? '',
     ...size,
     batch_size: request.count,
@@ -319,7 +332,7 @@ export function createA1111(instance: ImageInstance, deps: ImageAdapterDeps, opt
     async listModels(signal) {
       if (flavor.strict) return drawThingsModel(signal);
       const [models, samplers, schedulers, loras] = await Promise.all([optional('sd-models', signal), optional('samplers', signal), flavor.schedulers ? optional('schedulers', signal) : null, optional('loras', signal)]);
-      const lists = Object.fromEntries(Object.entries({ samplers: namesOf(samplers), schedulers: namesOf(schedulers), loras: namesOf(loras) }).filter(([, names]) => names)) as ServerLists;
+      const lists = Object.fromEntries(Object.entries({ samplers: namesOf(samplers), schedulers: namesOf(schedulers), loras: namesOf(loras, flavor.loraPaths ? 'path' : 'name') }).filter(([, names]) => names)) as ServerLists;
       const names = arr(models).flatMap((m) => str(rec(m).title) ?? str(rec(m).model_name) ?? []);
       return names.map((name) => listed(name, lists));
     },

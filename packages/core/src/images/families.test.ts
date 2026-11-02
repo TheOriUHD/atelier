@@ -20,6 +20,7 @@ describe('checkpointFamily', () => {
     ['sdxl_turbo_1.0.safetensors', 'sdxl-distilled', 512],
     ['sd_turbo.safetensors', 'sd-turbo', 512],
     ['sd-turbo-Q8_0.gguf', 'sd-turbo', 512],
+    ['sd_turbo-f16-q8_0', 'sd-turbo', 512],
     ['lcm_dreamshaper_v7.safetensors', 'sd15-distilled', 512],
     ['flux1-dev-fp8.safetensors', 'flux', 1024],
     ['flux1-schnell.safetensors', 'flux', 1024],
@@ -60,6 +61,8 @@ describe('checkpointLabel', () => {
 describe('pickName', () => {
   it('finds a name in the spelling the server uses', () => {
     expect(pickName(['karras', 'simple'], 'Karras')).toBe('karras');
+    expect(pickName(['euler', 'euler_a'], 'Euler a')).toBe('euler_a');
+    expect(pickName(['dpm++2m', 'dpm++2s_a'], 'DPM++ 2M')).toBe('dpm++2m');
   });
 
   it('has nothing for a missing name or list', () => {

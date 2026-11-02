@@ -1,6 +1,6 @@
 /**
  * The OpenAI images wire format: `POST /v1/images/generations` and `/v1/images/edits`. OpenAI, and most servers that
- * copy it: stable-diffusion.cpp's sd-server, LocalAI, Together, xAI, Recraft, LiteLLM, Azure (other paths and
+ * copy it: LocalAI, Together, xAI, Recraft, LiteLLM, Azure (other paths and
  * header). `IMAGE_PROVIDER_PRESETS` says which; services differ in what they accept, not in how they're spoken to.
  *
  * Read on 2026-11-02:
@@ -20,7 +20,7 @@ import { guardImages } from '../guard.ts';
 import { multipart, type MultipartField } from '../multipart.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 import { failureOf, imageStream, listedModel, noImage, refusal, usageEvent } from './hosted.ts';
-import { fromImg2Img, localEdit, localFields, localModels, localSeed } from './openai-local.ts';
+import { localEdit, localFields, localModels } from './openai-local.ts';
 
 /** Model ids that aren't for images, for servers whose list holds everything. */
 const NOT_IMAGES = /embed|whisper|tts|transcri|moderation|rerank|audio|realtime|video|vision/i;
@@ -130,7 +130,7 @@ async function* eventsFromResult(instance: ImageInstance, deps: ImageAdapterDeps
     }
     const b64 = str(image.b64_json) ?? str(image.b64);
     const url = str(image.url);
-    const seed = num(image.seed) ?? localSeed(image);
+    const seed = num(image.seed);
     const revisedPrompt = str(image.revised_prompt);
     const extra = { ...(seed !== undefined ? { seed } : {}), ...(revisedPrompt ? { revisedPrompt } : {}) };
     if (b64) yield { type: 'image', bytes: Buffer.from(b64, 'base64'), ...extra };
@@ -179,7 +179,7 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
   const res = await send(instance, deps, request, stream);
   if (!res.ok) yield await failureOf(instance, res);
   else if (stream) yield* imageStream(instance, res, request.signal);
-  else yield* eventsFromResult(instance, deps, fromImg2Img(await res.json()), request.signal);
+  else yield* eventsFromResult(instance, deps, await res.json(), request.signal);
 }
 
 /** `{ data: [...] }`, or Together's bare list, with what each entry says it is. */

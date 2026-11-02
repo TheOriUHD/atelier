@@ -10,6 +10,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { imagePreset, type ImageProviderType } from '@atelier/protocol';
 import { imageSize } from '../providers/image-size.ts';
@@ -42,6 +43,8 @@ interface Target {
   model: string | undefined;
   /** It can report steps while it works. */
   progress: boolean;
+  /** It sends a picture of the work at the few steps these tests run. */
+  previews: boolean;
   /** Not every server has a seed that survives, or stops mid-job. */
   repeatable: boolean;
   stops: boolean;
@@ -49,11 +52,11 @@ interface Target {
 
 const a1111Preset = env('ATELIER_LIVE_A1111_PRESET') ?? 'a1111';
 const targets: Target[] = [
-  { name: `A1111 family (${a1111Preset})`, type: 'a1111', preset: a1111Preset, url: env('ATELIER_LIVE_A1111_URL'), model: env('ATELIER_LIVE_A1111_MODEL'), progress: a1111Preset !== 'drawthings', repeatable: true, stops: a1111Preset !== 'drawthings' },
-  { name: 'sd-server', type: 'openai-images', preset: 'sd-server', url: env('ATELIER_LIVE_SDSERVER_URL'), model: undefined, progress: false, repeatable: true, stops: false },
-  { name: 'SwarmUI', type: 'swarmui', preset: 'swarmui', url: env('ATELIER_LIVE_SWARMUI_URL'), model: env('ATELIER_LIVE_SWARMUI_MODEL'), progress: true, repeatable: true, stops: true },
-  { name: 'InvokeAI', type: 'invokeai', preset: 'invokeai', url: env('ATELIER_LIVE_INVOKEAI_URL'), model: env('ATELIER_LIVE_INVOKEAI_MODEL'), progress: false, repeatable: true, stops: true },
-  { name: 'LocalAI', type: 'openai-images', preset: 'localai', url: env('ATELIER_LIVE_LOCALAI_URL'), model: env('ATELIER_LIVE_LOCALAI_MODEL'), progress: false, repeatable: true, stops: false },
+  { name: `A1111 family (${a1111Preset})`, type: 'a1111', preset: a1111Preset, url: env('ATELIER_LIVE_A1111_URL'), model: env('ATELIER_LIVE_A1111_MODEL'), progress: a1111Preset !== 'drawthings', previews: false, repeatable: true, stops: a1111Preset !== 'drawthings' },
+  { name: 'sd-server', type: 'a1111', preset: 'sd-server', url: env('ATELIER_LIVE_SDSERVER_URL'), model: undefined, progress: true, previews: true, repeatable: true, stops: false },
+  { name: 'SwarmUI', type: 'swarmui', preset: 'swarmui', url: env('ATELIER_LIVE_SWARMUI_URL'), model: env('ATELIER_LIVE_SWARMUI_MODEL'), progress: true, previews: false, repeatable: true, stops: true },
+  { name: 'InvokeAI', type: 'invokeai', preset: 'invokeai', url: env('ATELIER_LIVE_INVOKEAI_URL'), model: env('ATELIER_LIVE_INVOKEAI_MODEL'), progress: false, previews: false, repeatable: true, stops: true },
+  { name: 'LocalAI', type: 'openai-images', preset: 'localai', url: env('ATELIER_LIVE_LOCALAI_URL'), model: env('ATELIER_LIVE_LOCALAI_MODEL'), progress: false, previews: false, repeatable: true, stops: false },
 ];
 
 function adapterFor(target: Pick<Target, 'name' | 'type' | 'preset' | 'url'>): ImageAdapter {
@@ -95,6 +98,34 @@ async function run(adapter: ImageAdapter, request: ImageRequest): Promise<ImageE
   return events;
 }
 
+/** White on the left: what a mask marks for change. */
+function maskOfLeftHalf(width: number, height: number): Uint8Array {
+  const png = new PNG({ width, height });
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4;
+      png.data.fill(x < width / 2 ? 255 : 0, at, at + 3);
+      png.data[at + 3] = 255;
+    }
+  }
+  return PNG.sync.write(png);
+}
+
+/** How far two pictures of one size are apart, per half. */
+function differenceBySide(a: Uint8Array, b: Uint8Array): { left: number; right: number } {
+  const first = PNG.sync.read(Buffer.from(a));
+  const second = PNG.sync.read(Buffer.from(b));
+  const totals = { left: 0, right: 0 };
+  for (let y = 0; y < first.height; y++) {
+    for (let x = 0; x < first.width; x++) {
+      const at = (y * first.width + x) * 4;
+      const side = x < first.width / 2 ? 'left' : 'right';
+      for (let channel = 0; channel < 3; channel++) totals[side] += Math.abs(first.data[at + channel]! - second.data[at + channel]!);
+    }
+  }
+  return totals;
+}
+
 const finished = (events: ImageEvent[]) => events.find((e): e is Extract<ImageEvent, { type: 'finish' }> => e.type === 'finish');
 const imagesIn = (events: ImageEvent[]) => events.filter((e): e is Extract<ImageEvent, { type: 'image' }> => e.type === 'image');
 
@@ -118,6 +149,11 @@ for (const t of targets) {
       expect(sniffMime(image!.bytes!)).not.toBeNull();
       expect(imageSize(image!.bytes!)).toMatchObject({ width: request.width, height: request.height });
       if (t.progress) expect(events.some((e) => e.type === 'progress' || e.type === 'loading')).toBe(true);
+      if (t.previews) {
+        const previews = events.filter((e) => e.type === 'preview');
+        expect(previews.length).toBeGreaterThan(0);
+        for (const preview of previews) expect(sniffMime(Buffer.from(preview.data, 'base64'))).toBe(preview.mime);
+      }
     });
 
     it.skipIf(!t.repeatable)('repeats an image from its seed', async () => {
@@ -137,6 +173,18 @@ for (const t of targets) {
       expect(Buffer.from(imagesIn(events)[0]!.bytes!).equals(Buffer.from(source!.bytes!))).toBe(false);
     });
 
+    it('changes only the area a mask marks', async () => {
+      const model = await pick(live(), t.model);
+      if (!model.capabilities.mask) return;
+      const [source] = imagesIn(await run(live(), smallRequest(model, { seed: 7 })));
+      const { width, height } = imageSize(source!.bytes!)!;
+      const mask = maskOfLeftHalf(width, height);
+      const events = await run(live(), smallRequest(model, { prompt: 'a bright green forest', seed: 8, references: [{ bytes: source!.bytes!, mime: 'image/png', name: 'in.png' }], mask: { bytes: mask, mime: 'image/png', name: 'mask.png' } }));
+      expect(finished(events)).toMatchObject({ reason: 'done' });
+      const { left, right } = differenceBySide(source!.bytes!, imagesIn(events)[0]!.bytes!);
+      expect(left).toBeGreaterThan(right);
+    });
+
     it.skipIf(!t.stops)('stops when told to', async () => {
       const model = await pick(live(), t.model);
       const controller = new AbortController();
@@ -152,8 +200,8 @@ for (const t of targets) {
       expect(finished(await run(live(), smallRequest(model)))).toMatchObject({ reason: 'done' });
     });
 
-    it('frees its memory when asked', async () => {
-      await expect(live().free?.(AbortSignal.timeout(30_000))).resolves.toBeUndefined();
+    it('frees its memory when asked, where it can', async () => {
+      await live().free?.(AbortSignal.timeout(30_000));
     });
   });
 }

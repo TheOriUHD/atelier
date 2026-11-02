@@ -56,10 +56,12 @@ export function checkpointLabel(name: string): string {
     .replace(/\.(?:safetensors|ckpt|gguf|pth?|sft|bin)$/i, '');
 }
 
-/** The sampler a server calls `wanted`, in its own spelling, when it has it. */
+const spelling = (name: string) => name.toLowerCase().replace(/[\s_-]/g, '');
+
+/** The sampler a server calls `wanted`, in its own spelling, when it has it: "Euler a" is `euler_a` on sd-server. */
 export function pickName(list: readonly string[] | undefined, wanted: string | undefined): string | undefined {
   if (!wanted) return undefined;
-  return list?.find((name) => name.toLowerCase() === wanted.toLowerCase());
+  return list?.find((name) => spelling(name) === spelling(wanted));
 }
 
 /**
