@@ -26,6 +26,16 @@ describe('what this computer lends each server', () => {
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ 'https://a.example': { ...NO_LENDING, scratch: true, ssh: [] } });
   });
 
+  it('lends an image server’s address like any other, per server, until the person takes it back', async () => {
+    const server = { kind: 'http', id: 'u-0123456789', baseUrl: 'http://127.0.0.1:8188', allowed: true } as const;
+    await changeLending(file, 'https://a.example', (l) => applyLending(l, server));
+    expect((await readLending(file, 'https://a.example')).http).toEqual([{ id: 'u-0123456789', baseUrl: 'http://127.0.0.1:8188' }]);
+    expect((await readLending(file, 'https://b.example')).http).toEqual([]);
+    await changeLending(file, 'https://a.example', (l) => applyLending(l, { kind: 'http', id: 'u-0123456789', allowed: false }));
+    expect((await readLending(file, 'https://a.example')).http).toEqual([]);
+    expect(() => applyLending(NO_LENDING, { kind: 'http', id: 'u-0123456789', allowed: true })).toThrow('by its URL');
+  });
+
   it('reads a damaged file as nothing allowed', async () => {
     writeFileSync(file, '{"https://a.example": {"scratch": "yes", "ssh": [1]}}');
     expect(await readLending(file, 'https://a.example')).toEqual({ ...NO_LENDING, scratch: false, ssh: [] });

@@ -1,12 +1,13 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { NO_LENDING, RUNNER_PROTOCOL_VERSION, type DeviceLending } from '@atelier/protocol';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MAX_SOCKET_FRAME_BYTES, NO_LENDING, RUNNER_PROTOCOL_VERSION, type DeviceLending, type DeviceSocketLine } from '@atelier/protocol';
 import { hostRunnerBinary } from '@atelier/core';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { deviceServices, withinAddress } from './device-services.ts';
+import { wsServer, type WsServer } from './__fixtures__/ws-server.ts';
+import { deviceServices, withinAddress, withinSocketAddress } from './device-services.ts';
 import { applyLending, connectorFingerprint } from './lending.ts';
 
 const runnerDir = join(import.meta.dirname, '../../../runner/bin');
@@ -156,6 +157,294 @@ describe('addresses lent to a server', () => {
     expect(withinAddress('http://localhost:11434/v10', 'http://localhost:11434/v1')).toBe(false);
     expect(withinAddress('http://localhost:11435/v1', 'http://localhost:11434/v1')).toBe(false);
     expect(withinAddress('https://localhost:11434/v1', 'http://localhost:11434/v1')).toBe(false);
+  });
+});
+
+describe('sockets to addresses lent to a server', () => {
+  let server: WsServer;
+  beforeEach(async () => {
+    server = await wsServer();
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    await server.stop();
+  });
+
+  const lend = (baseUrl = server.http, id = 'comfy') => void (lending = { ...NO_LENDING, http: [{ id, baseUrl }] });
+  type Lent = ReturnType<typeof services>;
+  const open = (lent: Lent, url = `${server.ws}/ws?clientId=1`, headers: Record<string, string> = {}, target = 'comfy') => lent.start({ kind: 'ws', target, url, headers }, () => {});
+  /** What the channel says, as it says it. */
+  const follow = (channel: Awaited<ReturnType<typeof open>>) => {
+    const lines: DeviceSocketLine[] = [];
+    channel.onLine((line) => lines.push(JSON.parse(line) as DeviceSocketLine));
+    return lines;
+  };
+  /** Opens one and waits for it to be up. */
+  const connect = async (lent: Lent, url?: string, headers?: Record<string, string>) => {
+    const channel = await open(lent, url, headers);
+    const lines = follow(channel);
+    await expect.poll(() => lines[0]).toEqual({ open: true });
+    return { channel, lines, client: server.clients.at(-1)! };
+  };
+
+  it('is one of the things this computer offers', () => {
+    expect(services().services).toContain('ws');
+  });
+
+  it('refuses a socket unless the person lent that very address', async () => {
+    const lent = services();
+    await expect(open(lent)).rejects.toMatchObject({ code: 'refused' });
+    lend(server.http, 'another');
+    await expect(open(lent)).rejects.toMatchObject({ code: 'refused' });
+    lend(`http://127.0.0.1:${server.port + 1}`);
+    await expect(open(lent)).rejects.toMatchObject({ code: 'refused' });
+    expect(server.requests).toEqual([]);
+    lend();
+    await connect(lent);
+    expect(server.clients[0]!.url).toBe('/ws?clientId=1');
+  });
+
+  it('refuses anything but a plain ws URL at or below the lent address', async () => {
+    const lent = services();
+    const refused = async (base: string, urls: string[]) => {
+      lend(base);
+      for (const url of urls) await expect(open(lent, url), url).rejects.toMatchObject({ code: 'refused' });
+    };
+    await refused(`${server.http}/comfy`, [
+      `${server.http}/comfy/ws`, // Not a WebSocket URL.
+      `wss://127.0.0.1:${server.port}/comfy/ws`, // TLS where the person lent plain HTTP.
+      `${server.ws}/other`,
+      `${server.ws}/comfyx`,
+      `${server.ws}/comfy/../other`,
+      `${server.ws}/comfy/%2e%2e/other`,
+      `${server.ws}/comfy/..%2fother`,
+      `${server.ws}/comfy/..%5cother`,
+      `${server.ws}/comfy/ws#fragment`,
+      `ws://me:pw@127.0.0.1:${server.port}/comfy/ws`,
+      `ws://me@127.0.0.1:${server.port}/comfy/ws`,
+      `ws://127.0.0.1:${server.port + 1}/comfy/ws`,
+      `ws://127.0.0.1:${server.port}@example.com/comfy/ws`,
+      'ws://example.com/comfy/ws',
+      'ftp://127.0.0.1/comfy/ws',
+    ]);
+    await refused(`https://127.0.0.1:${server.port}`, [`${server.ws}/ws`]); // Plain where the person lent HTTPS.
+    expect(server.requests).toEqual([]);
+  });
+
+  it('knows what is at or below a lent address', () => {
+    expect(withinSocketAddress('ws://localhost:8188/ws?clientId=1', 'http://localhost:8188')).toBe(true);
+    expect(withinSocketAddress('wss://comfy.example/ws', 'https://comfy.example')).toBe(true);
+    expect(withinSocketAddress('wss://comfy.example:443/ws', 'https://comfy.example')).toBe(true);
+    expect(withinSocketAddress('ws://localhost:80/ws', 'http://localhost')).toBe(true);
+    expect(withinSocketAddress('ws://localhost:8188/api/ws', 'http://localhost:8188/api/')).toBe(true);
+    expect(withinSocketAddress('ws://localhost:8188/api', 'http://localhost:8188/api')).toBe(true);
+    expect(withinSocketAddress('ws://comfy.example:443/ws', 'https://comfy.example')).toBe(false);
+    expect(withinSocketAddress('ws://localhost:8188/apix', 'http://localhost:8188/api')).toBe(false);
+    expect(withinSocketAddress('not a url', 'http://localhost:8188')).toBe(false);
+  });
+
+  it('takes only the headers an address signs in with', async () => {
+    const lent = services();
+    lend();
+    for (const name of ['host', 'Host', 'origin', 'cookie', 'connection', 'upgrade', 'sec-websocket-key', 'sec-websocket-protocol', 'x-forwarded-for', 'x-anything']) {
+      await expect(open(lent, undefined, { [name]: 'x' }), name).rejects.toMatchObject({ code: 'refused', message: expect.stringContaining(name) });
+    }
+    await expect(open(lent, undefined, { authorization: 'Bearer a\r\nHost: elsewhere' })).rejects.toMatchObject({ code: 'refused' });
+    expect(server.requests).toEqual([]);
+    await connect(lent, undefined, { Authorization: 'Bearer own' });
+    expect(server.clients[0]!.headers.authorization).toBe('Bearer own');
+  });
+
+  it('carries messages each way, and says when the address closes it', async () => {
+    lend();
+    const { channel, lines, client } = await connect(services());
+    client.text('{"type":"progress"}');
+    client.binary(Buffer.from([1, 2, 3]));
+    await expect.poll(() => lines.length).toBe(3);
+    expect(lines.slice(1)).toEqual([{ text: '{"type":"progress"}' }, { binary: Buffer.from([1, 2, 3]).toString('base64') }]);
+    channel.send(JSON.stringify({ text: 'first' }));
+    channel.send(JSON.stringify({ text: 'second' }));
+    await expect.poll(() => client.received).toEqual(['first', 'second']);
+    client.close();
+    await channel.closed;
+    expect(lines.at(-1)).toEqual({ close: true });
+  });
+
+  it('closes it when the channel closes', async () => {
+    lend();
+    const { channel, client } = await connect(services());
+    channel.kill();
+    await client.closed;
+    await channel.closed;
+  });
+
+  it('closes at once when the person takes the address back', async () => {
+    lend();
+    const lent = services();
+    const { channel, lines, client } = await connect(lent);
+    lending = { ...NO_LENDING };
+    await lent.lendingChanged();
+    expect(lines.at(-1)).toMatchObject({ code: 'refused' });
+    await channel.closed;
+    await client.closed;
+  });
+
+  it('closes when the lent address moves away from it', async () => {
+    lend(`${server.http}/comfy`);
+    const lent = services();
+    const { channel, lines } = await connect(lent, `${server.ws}/comfy/ws`);
+    lend(`${server.http}/elsewhere`);
+    await lent.lendingChanged();
+    expect(lines.at(-1)).toMatchObject({ code: 'refused' });
+    await channel.closed;
+  });
+
+  it('leaves sockets to addresses still lent alone', async () => {
+    lend();
+    const lent = services();
+    const { channel, lines } = await connect(lent);
+    await lent.lendingChanged();
+    expect(lines).toEqual([{ open: true }]);
+    channel.kill();
+  });
+
+  it('reads the lending again before each thing the server sends', async () => {
+    lend();
+    const { channel, lines, client } = await connect(services());
+    lending = { ...NO_LENDING };
+    channel.send(JSON.stringify({ text: 'still here?' }));
+    await channel.closed;
+    expect(lines.at(-1)).toMatchObject({ code: 'refused' });
+    expect(client.received).toEqual([]);
+  });
+
+  it('reads the lending again on a timer for a socket that only listens', async () => {
+    lend();
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const { channel, lines } = await connect(services());
+    lending = { ...NO_LENDING };
+    await vi.advanceTimersByTimeAsync(5_000);
+    await channel.closed;
+    expect(lines.at(-1)).toMatchObject({ code: 'refused' });
+  });
+
+  it('fails closed when what is lent can’t be read', async () => {
+    lend();
+    let broken = false;
+    const lent = deviceServices({ deviceName: 'Laptop', lending: async () => (broken ? Promise.reject(new Error('gone')) : lending), scratchDir: join(dir, 'scratch'), runnerDir: null, ssh: 'ssh', sshDir: join(dir, 'ssh') });
+    const { channel, lines } = await connect(lent);
+    broken = true;
+    await lent.lendingChanged();
+    expect(lines.at(-1)).toMatchObject({ code: 'refused' });
+    await channel.closed;
+  });
+
+  it('ends a socket on a message too large for the link, from either side', async () => {
+    lend();
+    const lent = services();
+    const fromThere = await connect(lent);
+    fromThere.client.binary(Buffer.alloc(MAX_SOCKET_FRAME_BYTES + 1));
+    await fromThere.channel.closed;
+    expect(fromThere.lines).toEqual([{ open: true }, expect.objectContaining({ code: 'too_large' })]);
+
+    const textThere = await connect(lent);
+    textThere.client.text('é'.repeat(MAX_SOCKET_FRAME_BYTES / 2 + 1));
+    await textThere.channel.closed;
+    expect(textThere.lines).toEqual([{ open: true }, expect.objectContaining({ code: 'too_large' })]);
+
+    const fromServer = await connect(lent);
+    fromServer.channel.send(JSON.stringify({ text: 'x'.repeat(MAX_SOCKET_FRAME_BYTES + 1) }));
+    await fromServer.channel.closed;
+    expect(fromServer.lines).toEqual([{ open: true }, expect.objectContaining({ code: 'too_large' })]);
+    expect(fromServer.client.received).toEqual([]);
+  });
+
+  it('carries a message of exactly the largest size', async () => {
+    lend();
+    const { channel, lines, client } = await connect(services());
+    client.binary(Buffer.alloc(MAX_SOCKET_FRAME_BYTES));
+    await expect.poll(() => lines.length, { timeout: 10_000 }).toBe(2);
+    expect(Buffer.from((lines[1] as { binary: string }).binary, 'base64').length).toBe(MAX_SOCKET_FRAME_BYTES);
+    channel.kill();
+  });
+
+  it('holds a limit of sockets per address', async () => {
+    const other = await wsServer();
+    try {
+      lending = { ...NO_LENDING, http: [{ id: 'comfy', baseUrl: server.http }, { id: 'forge', baseUrl: other.http }] };
+      const lent = services();
+      const sockets = await Promise.all(Array.from({ length: 8 }, () => open(lent)));
+      await expect(open(lent)).rejects.toMatchObject({ code: 'refused', message: expect.stringContaining('8 connections') });
+      // Another address has its own.
+      const elsewhere = await lent.start({ kind: 'ws', target: 'forge', url: `${other.ws}/ws`, headers: {} }, () => {});
+      // A closed one leaves room.
+      sockets[0]!.kill();
+      const again = await open(lent);
+      for (const socket of [...sockets, elsewhere, again]) socket.kill();
+    } finally {
+      await other.stop();
+    }
+  });
+
+  it('counts sockets that are still connecting, so a burst can’t pass the limit', async () => {
+    lend();
+    const lent = services();
+    const settled = await Promise.allSettled(Array.from({ length: 12 }, () => open(lent)));
+    expect(settled.filter((s) => s.status === 'fulfilled')).toHaveLength(8);
+    expect(settled.filter((s) => s.status === 'rejected')).toHaveLength(4);
+    for (const s of settled) if (s.status === 'fulfilled') s.value.kill();
+  });
+
+  it('drops what the server sends that it can’t read, and sends nothing for it', async () => {
+    lend();
+    const { channel, client } = await connect(services());
+    for (const line of ['not json', '{}', '[]', '{"text":1}', '{"binary":"AAAA"}', '{"text":"x","more":1}', '{"close":true}']) channel.send(line);
+    channel.send(JSON.stringify({ text: 'good' }));
+    await expect.poll(() => client.received).toEqual(['good']);
+  });
+
+  it('won’t follow a redirect away from the lent address', async () => {
+    const elsewhere = await wsServer();
+    try {
+      lend();
+      server.refuse(`HTTP/1.1 302 Found\r\nLocation: ${elsewhere.ws}/ws\r\nContent-Length: 0\r\n\r\n`);
+      const channel = await open(services());
+      const lines = follow(channel);
+      await channel.closed;
+      expect(lines).toEqual([expect.objectContaining({ error: expect.any(String) })]);
+      expect(elsewhere.requests).toEqual([]);
+    } finally {
+      await elsewhere.stop();
+    }
+  });
+
+  it('says so when nothing answers there', async () => {
+    const closed = await wsServer();
+    await closed.stop();
+    lend(closed.http);
+    const channel = await open(services(), `${closed.ws}/ws`);
+    const lines = follow(channel);
+    await channel.closed;
+    expect(lines).toEqual([{ error: `The connection to 127.0.0.1:${closed.port} failed.` }]);
+  });
+
+  it('gives up on an address that never finishes the handshake', async () => {
+    lend();
+    server.refuse('');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const channel = await open(services());
+    const lines = follow(channel);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await channel.closed;
+    expect(lines.at(-1)).toMatchObject({ code: 'timeout' });
+  });
+});
+
+describe('finding image servers here for a server', () => {
+  it('says which image servers answer on this computer’s default ports', async () => {
+    const found = (await services().request({ op: 'images.detect' })) as { preset: string; baseUrl: string }[];
+    // Whatever runs on this machine, only presets' own addresses can come back.
+    for (const server of found) expect(server.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
   });
 });
 

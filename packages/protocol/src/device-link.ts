@@ -31,11 +31,11 @@ export const DEVICE_LINK_PROTOCOL = 2;
 /**
  * What a device can lend: `runner` (folders trusted on it), `scratch` (a new empty folder per session started without
  * one), `ssh` (SSH hosts reached with the device's own ssh, keys and runner builds), `http` (addresses on the device or
- * its network: personal model servers and connectors), `mcp` (personal connectors that run a program there), `home`
- * (the person's own instructions, skills and Claude Code settings in its home folder), `chatgptChat` (the ChatGPT window
- * of the desktop app there).
+ * its network: personal model servers and connectors), `ws` (WebSockets to those same addresses, for an image server's
+ * progress), `mcp` (personal connectors that run a program there), `home` (the person's own instructions, skills and
+ * Claude Code settings in its home folder), `chatgptChat` (the ChatGPT window of the desktop app there).
  */
-export const DeviceService = z.enum(['runner', 'scratch', 'ssh', 'http', 'mcp', 'home', 'chatgptChat']);
+export const DeviceService = z.enum(['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', 'chatgptChat']);
 export type DeviceService = z.infer<typeof DeviceService>;
 
 /** A personal connector the person allowed to run here, by what runs: see `connectorFingerprintInput`. */
@@ -125,6 +125,8 @@ const HeaderMap = z.record(z.string().max(256), z.string().max(16_384));
  * The device's lines are JSON: `{"head":{"status","headers"}}` first, then `{"chunk":"<base64>"}` for the body as it
  * arrives; the channel closing ends the body. `{"error":"<why>","code":"ECONNREFUSED"}` says the request failed there (`code`
  * when it was the network).
+ * `ws` is one WebSocket from the device to the same kind of address, at or below its base URL; `DeviceSocketLine` and
+ * `DeviceSocketSend` are its lines.
  * `mcp` runs a personal connector's program on the device; its lines are the program's MCP JSON-RPC lines.
  */
 export const DeviceStart = z.discriminatedUnion('kind', [
@@ -139,6 +141,7 @@ export const DeviceStart = z.discriminatedUnion('kind', [
     /** Base64; at most 48 MiB of request. */
     body: z.string().max(64 * 1024 * 1024).optional(),
   }),
+  z.object({ kind: z.literal('ws'), target: z.string().min(1).max(64), url: z.url().max(8192), headers: HeaderMap }),
   z.object({
     kind: z.literal('mcp'),
     connectorId: z.string().min(1).max(64),
@@ -148,6 +151,27 @@ export const DeviceStart = z.discriminatedUnion('kind', [
   }),
 ]);
 export type DeviceStart = z.infer<typeof DeviceStart>;
+
+/** The largest WebSocket message a `ws` channel carries, each way: it travels base64-encoded inside one `Line`. */
+export const MAX_SOCKET_FRAME_BYTES = 32 * 1024 * 1024;
+
+/**
+ * What the device sends in a `ws` channel: `open` once the socket is up, then its messages (`binary` is base64). `close`
+ * says the address closed it; `error` says why there's no socket (`code` when the network or a limit says why). The
+ * channel closing ends it either way.
+ */
+export const DeviceSocketLine = z.union([
+  z.object({ open: z.literal(true) }).strict(),
+  z.object({ text: z.string() }).strict(),
+  z.object({ binary: z.string() }).strict(),
+  z.object({ close: z.literal(true) }).strict(),
+  z.object({ error: z.string().max(500), code: z.string().max(64).optional() }).strict(),
+]);
+export type DeviceSocketLine = z.infer<typeof DeviceSocketLine>;
+
+/** What the server sends in a `ws` channel: a text message for the socket. */
+export const DeviceSocketSend = z.object({ text: z.string() }).strict();
+export type DeviceSocketSend = z.infer<typeof DeviceSocketSend>;
 
 /** A one-shot question to the device; `res` answers it. */
 export const DeviceRequest = z.discriminatedUnion('op', [
@@ -161,6 +185,8 @@ export const DeviceRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('ssh.test'), connection: DeviceSshConnection, answers: SshAnswers }),
   /** The model servers answering on the device's default local ports (Ollama, llama.cpp, LM Studio): `LocalServer[]`. */
   z.object({ op: z.literal('providers.detect') }),
+  /** The image servers answering on the device's default local ports (ComfyUI, Forge, SwarmUI …): `DetectedImageServer[]`. */
+  z.object({ op: z.literal('images.detect') }),
   /** One call to the desktop app's ChatGPT window there (a personal ChatGPT Chat provider); its answer is a string. */
   z.object({
     op: z.literal('chatgptChat'),
@@ -184,6 +210,8 @@ export const REQUEST_SERVICE: Record<DeviceRequest['op'], DeviceService> = {
   'ssh.probe': 'ssh',
   'ssh.test': 'ssh',
   'providers.detect': 'http',
+  // Not `http`: a desktop that only lists that would drop the unknown request and leave the server waiting for an answer.
+  'images.detect': 'ws',
   chatgptChat: 'chatgptChat',
   'home.scan': 'home',
   'home.read': 'home',

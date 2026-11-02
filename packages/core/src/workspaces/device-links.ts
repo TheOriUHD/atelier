@@ -76,15 +76,15 @@ export class DeviceLinkError extends Error {
 const OPEN_TIMEOUT_MS = 15_000;
 /**
  * How long a start may take: reaching an SSH host can include uploading the runner there (up to two minutes); an HTTP
- * request waits for its response's head (a local model server loading a model can take minutes); a program, for npx's
- * first download.
+ * request waits for its response's head (a local model server loading a model can take minutes); a socket's channel opens
+ * at once and says on its lines how connecting went; a program, for npx's first download.
  */
-const START_TIMEOUT_MS: Record<DeviceStart['kind'], number> = { ssh: 150_000, http: 15 * 60_000, mcp: 120_000 };
+const START_TIMEOUT_MS: Record<DeviceStart['kind'], number> = { ssh: 150_000, http: 15 * 60_000, ws: 30_000, mcp: 120_000 };
 const REQUEST_TIMEOUT_MS = 30_000;
 const HELLO_WAIT_MS = 3_000;
 const MISSED_PINGS = 2;
 const LEGACY: DeviceLinkInfo = { services: ['runner'], lending: NO_LENDING, home: null, sep: '/', os: null, app: null };
-const START_SERVICE: Record<DeviceStart['kind'], DeviceService> = { ssh: 'ssh', http: 'http', mcp: 'mcp' };
+const START_SERVICE: Record<DeviceStart['kind'], DeviceService> = { ssh: 'ssh', http: 'http', ws: 'ws', mcp: 'mcp' };
 const linkKey = (userId: string, deviceId: string) => JSON.stringify([userId, deviceId]);
 
 export class DeviceLinks {

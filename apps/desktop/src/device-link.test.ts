@@ -263,14 +263,18 @@ describe('device link version 2', () => {
   function fakeChannel() {
     let onLine: ((line: string) => void) | undefined;
     let end!: () => void;
+    let killed = false;
     const written: string[] = [];
     const channel = {
       send: (line: string) => void written.push(line),
       onLine: (handler: (line: string) => void) => void (onLine = handler),
       closed: new Promise<{ code: null; signal: null }>((r) => (end = () => r({ code: null, signal: null }))),
-      kill: () => end(),
+      kill: () => {
+        killed = true;
+        end();
+      },
     };
-    return { channel, written, say: (line: string) => onLine?.(line), end: () => end() };
+    return { channel, written, say: (line: string) => onLine?.(line), end: () => end(), killed: () => killed };
   }
 
   function linkWith(services: Partial<NonNullable<Parameters<typeof createDeviceLink>[0]['services']>>) {
@@ -346,6 +350,80 @@ describe('device link version 2', () => {
     lent.end();
     await tick();
     expect(s.sent.at(-1)).toEqual({ t: 'closed', channel: 'c1', reason: 'The connection ended.' });
+  });
+
+  it('lends a socket like any started channel: lines both ways, and gone with the link', async () => {
+    const lent = fakeChannel();
+    const asked: unknown[] = [];
+    const l = linkWith({
+      start: async (service) => {
+        asked.push(service);
+        return lent.channel;
+      },
+    });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    const service = { kind: 'ws', target: 'comfy', url: 'ws://127.0.0.1:8188/ws', headers: {} };
+    s.frame({ t: 'start', channel: 'c1', service });
+    await tick();
+    expect(asked).toEqual([service]);
+    expect(s.sent).toContainEqual({ t: 'opened', channel: 'c1' });
+    s.frame({ t: 'line', channel: 'c1', line: '{"text":"hi"}' });
+    expect(lent.written).toEqual(['{"text":"hi"}']);
+    lent.say('{"open":true}');
+    expect(s.sent).toContainEqual({ t: 'line', channel: 'c1', line: '{"open":true}' });
+    s.close(1006);
+    expect(lent.killed()).toBe(true);
+  });
+
+  it('closes a socket when the server closes its channel', async () => {
+    const lent = fakeChannel();
+    const l = linkWith({ start: async () => lent.channel });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    s.frame({ t: 'start', channel: 'c1', service: { kind: 'ws', target: 'comfy', url: 'ws://127.0.0.1:8188/ws', headers: {} } });
+    await tick();
+    s.frame({ t: 'close', channel: 'c1' });
+    expect(lent.killed()).toBe(true);
+  });
+
+  it('closes a socket whose channel was closed while it started', async () => {
+    const lent = fakeChannel();
+    let started!: () => void;
+    const l = linkWith({ start: () => new Promise((resolve) => (started = () => resolve(lent.channel))) });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    s.frame({ t: 'start', channel: 'c1', service: { kind: 'ws', target: 'comfy', url: 'ws://127.0.0.1:8188/ws', headers: {} } });
+    await tick();
+    s.frame({ t: 'close', channel: 'c1' });
+    started();
+    await tick();
+    expect(lent.killed()).toBe(true);
+  });
+
+  it('refuses a start that isn’t a known kind, or a socket without an address', async () => {
+    const start = vi.fn(async () => fakeChannel().channel);
+    const l = linkWith({ start });
+    l.setToken('tok');
+    const s = sockets[0]!;
+    s.open();
+    s.frame({ t: 'start', channel: 'c1', service: { kind: 'ws', target: 'comfy', url: 'not a url', headers: {} } });
+    s.frame({ t: 'start', channel: 'c2', service: { kind: 'ws', target: '', url: 'ws://127.0.0.1:8188/ws', headers: {} } });
+    s.frame({ t: 'start', channel: 'c3', service: { kind: 'ws', target: 'comfy', url: 'ws://127.0.0.1:8188/ws' } });
+    await tick();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('tells the services when the person changes what it lends, so a socket can close', async () => {
+    const lendingChanged = vi.fn(async () => {});
+    const l = linkWith({ lendingChanged });
+    l.setToken('tok');
+    sockets[0]!.open();
+    l.lendingChanged();
+    expect(lendingChanged).toHaveBeenCalledOnce();
   });
 
   it('passes on why a service wasn’t started', async () => {

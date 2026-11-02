@@ -1,4 +1,7 @@
-/** Image servers on this computer's default ports, each proved by a reply only that server gives. */
+/**
+ * Image servers on this computer's default ports, each proved by a reply only that server gives. Found the same way by
+ * the backend's list and by a desktop app asked about its own computer for a server (device services, ARCHITECTURE §21).
+ */
 import { imagePreset, type DetectedImageServer } from '@atelier/protocol';
 
 const DETECT_TIMEOUT_MS = 800;
@@ -31,7 +34,8 @@ export async function detectImageServers(fetch: (url: string, init: RequestInit)
       const preset = imagePreset(p.preset)!;
       if (skip.has(preset.baseUrl)) return;
       try {
-        const res = await fetch(preset.baseUrl + p.path, { method: p.method ?? 'GET', ...(p.method ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}), signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
+        // A redirect is no proof, and following one would send the probe somewhere other than this default port.
+        const res = await fetch(preset.baseUrl + p.path, { method: p.method ?? 'GET', redirect: 'manual', ...(p.method ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}), signal: AbortSignal.timeout(DETECT_TIMEOUT_MS) });
         const body: unknown = await res.json().catch(() => null);
         if (p.accepts(res.status, body)) found.set(preset.id, { preset: preset.id, type: preset.type, baseUrl: preset.baseUrl, label: preset.label });
       } catch {

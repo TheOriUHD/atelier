@@ -1,7 +1,8 @@
 /**
  * What this computer lets each server it signs in to do here (ARCHITECTURE §21), beyond the folders trusted in
  * `trusted-folders.json`: make folders for sessions started without one, reach SSH hosts with this computer's ssh, run
- * the person's own connectors' programs, reach addresses here, and read the person's config in the home folder.
+ * the person's own connectors' programs, reach addresses here (with requests and WebSockets), and read the person's
+ * config in the home folder.
  * Kept per server in `lending.json` (userData) and changed only from this computer's own windows; the device link reads
  * it on every request, so a server can't make this computer do more than the person allowed here.
  */

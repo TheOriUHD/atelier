@@ -1,16 +1,28 @@
 /**
  * What this desktop lends a server beyond runners for trusted folders (ARCHITECTURE §21): a folder for each session
- * started without one, SSH hosts reached with this computer's ssh, keys, known hosts and runner builds, requests to
- * addresses on this computer or its network (personal model servers and connectors), the person's own connectors that
- * run a program here, their config in its home folder, and the app's ChatGPT window. Each needs the person's say-so on
- * this computer (`lending.json`), so a server can't make it do more than they allowed here.
+ * started without one, SSH hosts reached with this computer's ssh, keys, known hosts and runner builds, requests and
+ * WebSockets to addresses on this computer or its network (personal model and image servers, and connectors), the
+ * person's own connectors that run a program here, their config in its home folder, and the app's ChatGPT window. Each
+ * needs the person's say-so on this computer (`lending.json`), so a server can't make it do more than they allowed here.
  */
 import { mkdir, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { APP, DEVICE_LINK_PROTOCOL, UNSAFE_CONNECTOR_ENV, type DeviceHello, type DeviceLending, type DeviceRequest, type DeviceStart } from '@atelier/protocol';
+import {
+  APP,
+  DEVICE_LINK_PROTOCOL,
+  DeviceSocketSend,
+  MAX_SOCKET_FRAME_BYTES,
+  UNSAFE_CONNECTOR_ENV,
+  type DeviceHello,
+  type DeviceLending,
+  type DeviceRequest,
+  type DeviceSocketLine,
+  type DeviceStart,
+} from '@atelier/protocol';
 import {
   bootstrapRunner,
+  detectImageServers,
   detectLocalServers,
   homeFs,
   importClaudeCode,
@@ -67,6 +79,17 @@ const IMPORT_WINDOW_MS = 2 * 60_000;
 /** A runner of an SSH host that failed this soon after it started was probably gone from there: look for it again next time. */
 const EARLY_EXIT_MS = 10_000;
 
+/** Sockets to one lent address at once: a server's image jobs need one each, and no more can run at a time on one GPU. */
+const MAX_SOCKETS_PER_ADDRESS = 8;
+const SOCKET_OPEN_TIMEOUT_MS = 15_000;
+/** How often an open socket's lending is read again, for a change that didn't come through `lendingChanged`. */
+const SOCKET_RECHECK_MS = 5_000;
+/** What a server may put on a socket's handshake: how an address signs people in. Nothing that says who asks or where it goes. */
+const SOCKET_HEADERS = new Set(['authorization', 'x-api-key', 'api-key']);
+
+/** Node's WebSocket (undici) accepts request headers; the DOM typings don't know that. */
+const NodeWebSocket = WebSocket as unknown as new (url: string, init: { headers: Record<string, string> }) => WebSocket;
+
 /** Whether `url` is at or below `base`: the same origin, and the base's path or one under it. */
 export function withinAddress(url: string, base: string): boolean {
   const u = URL.parse(url);
@@ -76,15 +99,27 @@ export function withinAddress(url: string, base: string): boolean {
   return u.pathname === root || u.pathname.startsWith(`${root}/`) || root === '';
 }
 
+/**
+ * Whether a WebSocket's `url` is at or below the lent `base`: `ws:` goes with an `http:` address and `wss:` with `https:`,
+ * never across. Its route is a plain path: an encoded dot or slash could walk out of a base path on a server that decodes
+ * them before routing.
+ */
+export function withinSocketAddress(url: string, base: string): boolean {
+  const u = URL.parse(url);
+  if (!u || (u.protocol !== 'ws:' && u.protocol !== 'wss:') || u.hash || /%2e|%2f|%5c/i.test(u.pathname)) return false;
+  u.protocol = u.protocol === 'ws:' ? 'http:' : 'https:';
+  return withinAddress(u.href, base);
+}
+
 /** A channel whose lines this computer writes (an HTTP response): buffered until the link listens. */
-function lineChannel(onKill: () => void) {
+function lineChannel(onKill: () => void, onSend: (line: string) => void = () => {}) {
   const pending: string[] = [];
   let listener: ((line: string) => void) | null = null;
   let finish!: () => void;
   const closed = new Promise<{ code: null; signal: null }>((r) => (finish = () => r({ code: null, signal: null })));
   let ended = false;
   const channel: RunnerChannel = {
-    send: () => {},
+    send: onSend,
     onLine: (handler) => {
       listener = handler;
       for (const line of pending.splice(0)) handler(line);
@@ -108,6 +143,76 @@ function lineChannel(onKill: () => void) {
   return { channel, emit, end };
 }
 
+/**
+ * One WebSocket to a lent address, as a channel: its lines are `DeviceSocketLine`s, and what the server sends is
+ * `DeviceSocketSend`s, each checked against `stillLent` before it goes out. It ends with the channel, when the address
+ * closes it, or as soon as `recheck` finds it isn't lent any more. Redirects aren't followed: a WebSocket's handshake
+ * fails on one.
+ */
+function lentSocket(url: string, headers: Record<string, string>, stillLent: () => Promise<boolean>, ended: () => void): { channel: RunnerChannel; recheck(): Promise<void> } {
+  const ws = new NodeWebSocket(url, { headers });
+  ws.binaryType = 'arraybuffer';
+  const host = new URL(url).host;
+  let connected = false;
+  let failed = false;
+  let done = false;
+  /** One send at a time, so what the server sends stays in order while each is checked. */
+  let sending = Promise.resolve();
+  const say = (line: DeviceSocketLine) => emit(line);
+  const finish = (last?: DeviceSocketLine) => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    clearInterval(watch);
+    if (last) say(last);
+    ws.close();
+    ended();
+    end();
+  };
+  const tooLarge = () => finish({ error: 'That message is too large for the link.', code: 'too_large' });
+  const recheck = async () => {
+    if (done) return;
+    const lent = await stillLent().catch(() => false);
+    if (!lent) finish({ error: `${host} isn't lent any more.`, code: 'refused' });
+  };
+  const forward = async (line: string) => {
+    if (done) return;
+    let frame: DeviceSocketSend;
+    try {
+      frame = DeviceSocketSend.parse(JSON.parse(line));
+    } catch {
+      return; // Malformed frames from the server are dropped.
+    }
+    if (Buffer.byteLength(frame.text) > MAX_SOCKET_FRAME_BYTES) return tooLarge();
+    await recheck();
+    if (!done && ws.readyState === WebSocket.OPEN) ws.send(frame.text);
+  };
+  const { channel, emit, end } = lineChannel(
+    () => finish(),
+    (line) => void (sending = sending.then(() => forward(line))),
+  );
+  const timer = setTimeout(() => finish({ error: `${host} didn't answer.`, code: 'timeout' }), SOCKET_OPEN_TIMEOUT_MS);
+  timer.unref?.();
+  const watch = setInterval(() => void recheck(), SOCKET_RECHECK_MS);
+  watch.unref?.();
+  ws.onopen = () => {
+    if (done) return;
+    connected = true;
+    clearTimeout(timer);
+    say({ open: true });
+  };
+  ws.onmessage = ({ data }: MessageEvent<string | ArrayBuffer>) => {
+    if (done) return;
+    const text = typeof data === 'string';
+    if ((text ? Buffer.byteLength(data) : data.byteLength) > MAX_SOCKET_FRAME_BYTES) return tooLarge();
+    say(text ? { text: data } : { binary: Buffer.from(data).toString('base64') });
+  };
+  // A WebSocket's error event says nothing about why, by design: there is no network code to pass on here.
+  ws.onerror = () => void (failed = true);
+  ws.onclose = () => finish(connected && !failed ? { close: true } : { error: `The connection to ${host} failed.` });
+  return { channel, recheck };
+}
+
 export type DeviceServices = ReturnType<typeof deviceServices>;
 
 export function deviceServices(o: DeviceServicesOptions) {
@@ -125,9 +230,11 @@ export function deviceServices(o: DeviceServicesOptions) {
   };
   /** Until when the person's import here lets the server read Claude Code's connectors. */
   let importUntil = 0;
+  /** Sockets open or opening, by the address they were lent under. */
+  const sockets = new Map<string, Set<{ recheck(): Promise<void> }>>();
 
   return {
-    services: ['runner', 'scratch', 'ssh', 'http', 'mcp', 'home', ...(o.chatgptChat ? ['chatgptChat'] : [])],
+    services: ['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', ...(o.chatgptChat ? ['chatgptChat'] : [])],
 
     async hello(): Promise<DeviceHello> {
       return { protocol: DEVICE_LINK_PROTOCOL, app: APP.version, services: this.services, lending: await o.lending(), home, sep, os: process.platform, arch: process.arch };
@@ -136,6 +243,11 @@ export function deviceServices(o: DeviceServicesOptions) {
     /** The person opened "Import from Claude Code" in a window here: the server may read its connectors for a while. */
     allowImport(): void {
       importUntil = Date.now() + IMPORT_WINDOW_MS;
+    },
+
+    /** The person changed what this computer lends: a socket to an address they took back closes now. */
+    async lendingChanged(): Promise<void> {
+      await Promise.all([...sockets.values()].flatMap((open) => [...open].map((s) => s.recheck())));
     },
 
     /** Tells `onChange` when the person's config in the home folder changes, so a server reads it again. */
@@ -180,6 +292,8 @@ export function deviceServices(o: DeviceServicesOptions) {
         }
         case 'providers.detect':
           return detectLocalServers(fetchHere);
+        case 'images.detect':
+          return detectImageServers(fetchHere);
         case 'chatgptChat':
           if (!o.chatgptChat) throw new Refusal('unsupported', `${o.deviceName}'s desktop app has no ChatGPT window.`);
           if (!(await o.lending()).chatgptChat) throw new Refusal('refused', `ChatGPT Chat isn't allowed on ${o.deviceName}: add it in the desktop app there.`);
@@ -200,6 +314,7 @@ export function deviceServices(o: DeviceServicesOptions) {
     /** Starts what the server asked for; `log` gets what it writes to stderr. */
     async start(service: DeviceStart, log: (line: string) => void): Promise<RunnerChannel> {
       if (service.kind === 'http') return this.http(service);
+      if (service.kind === 'ws') return this.ws(service);
       if (service.kind === 'mcp') return this.mcp(service, log);
       await allowSsh(service.connection.host);
       if (!o.runnerDir) throw new Refusal('unsupported', `${o.deviceName} has no runner builds to put on SSH hosts.`);
@@ -282,6 +397,29 @@ export function deviceServices(o: DeviceServicesOptions) {
         }
       })();
       return channel;
+    },
+
+    /**
+     * A WebSocket to an address the person lent here, at or below its base URL, on the same terms as `http`: this is read
+     * again for every socket and for everything the server sends over it. The person taking the address back closes it.
+     */
+    async ws(service: Extract<DeviceStart, { kind: 'ws' }>): Promise<RunnerChannel> {
+      const lent = (lending: DeviceLending) => {
+        const address = lending.http.find((a) => a.id === service.target);
+        return !!address && withinSocketAddress(service.url, address.baseUrl);
+      };
+      if (!lent(await o.lending())) throw new Refusal('refused', `${o.deviceName} doesn't lend that address.`);
+      const header = Object.entries(service.headers).find(([name, value]) => !SOCKET_HEADERS.has(name.toLowerCase()) || /[\r\n\0]/.test(value));
+      if (header) throw new Refusal('refused', `${o.deviceName} doesn't let a server set ${header[0]} on a connection.`);
+      const open = sockets.get(service.target) ?? new Set();
+      if (open.size >= MAX_SOCKETS_PER_ADDRESS) throw new Refusal('refused', `${o.deviceName} already has ${MAX_SOCKETS_PER_ADDRESS} connections open to that address.`);
+      const socket = lentSocket(new URL(service.url).href, service.headers, async () => lent(await o.lending()), () => {
+        open.delete(socket);
+        if (open.size === 0 && sockets.get(service.target) === open) sockets.delete(service.target);
+      });
+      open.add(socket);
+      sockets.set(service.target, open);
+      return socket.channel;
     },
   };
 }

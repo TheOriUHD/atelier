@@ -338,6 +338,46 @@ describe('device link version 2', () => {
     expect(sent.at(-1)).toEqual({ t: 'line', channel: start.channel, line: '{"id":1}' });
   });
 
+  it('opens a socket through a device that lends them, and never asks one that doesn’t', async () => {
+    const { sent, receive } = attach();
+    receive({ t: 'hello', hello: { ...HELLO, services: ['runner', 'http'] } });
+    const WS = { kind: 'ws' as const, target: 'comfy', url: 'ws://127.0.0.1:8188/ws', headers: {} };
+    await expect(links.start('ada', 'laptop', WS)).rejects.toMatchObject({ code: 'unsupported', message: expect.stringContaining('update it') });
+    expect(sent.some((f) => f.t === 'start')).toBe(false);
+
+    receive({ t: 'hello', hello: { ...HELLO, services: ['runner', 'http', 'ws'] } });
+    const started = links.start('ada', 'laptop', WS);
+    await tick();
+    const start = sent.find((f) => f.t === 'start') as Extract<ServerToDevice, { t: 'start' }>;
+    expect(start.service).toEqual(WS);
+    receive({ t: 'closed', channel: start.channel, reason: "Laptop doesn't lend that address." });
+    await expect(started).rejects.toMatchObject({ code: 'refused', message: "Laptop doesn't lend that address." });
+  });
+
+  it('gives up on a socket’s channel the device never answers', async () => {
+    const { receive } = attach();
+    receive({ t: 'hello', hello: { ...HELLO, services: ['runner', 'ws'] } });
+    vi.useFakeTimers();
+    const started = links.start('ada', 'laptop', { kind: 'ws', target: 'comfy', url: 'ws://127.0.0.1:8188/ws', headers: {} }).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await started).toMatchObject({ code: 'refused', message: 'The device did not answer.' });
+  });
+
+  it('asks only a desktop that knows how about its image servers: an older one would never answer', async () => {
+    const { sent, receive } = attach();
+    receive({ t: 'hello', hello: { ...HELLO, services: ['runner', 'http'] } });
+    await expect(links.request('ada', 'laptop', { op: 'images.detect' })).rejects.toMatchObject({ code: 'unsupported' });
+    expect(sent.some((f) => f.t === 'req')).toBe(false);
+
+    receive({ t: 'hello', hello: { ...HELLO, services: ['runner', 'http', 'ws'] } });
+    const found = links.request('ada', 'laptop', { op: 'images.detect' });
+    await tick();
+    const req = sent.find((f) => f.t === 'req') as Extract<ServerToDevice, { t: 'req' }>;
+    expect(req.request).toEqual({ op: 'images.detect' });
+    receive({ t: 'res', id: req.id, ok: true, value: [] });
+    expect(await found).toEqual([]);
+  });
+
   it("refuses to start what the device doesn't lend, and fails what's pending when it goes", async () => {
     const { receive, link } = attach();
     receive({ t: 'hello', hello: { ...HELLO, services: ['runner'] } });

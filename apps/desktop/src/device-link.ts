@@ -44,7 +44,7 @@ export interface DeviceLinkOptions {
   runnerBinary: string | null;
   trustedFolders(): Promise<string[]>;
   /** What else this computer lends (version 2); without it, only runners for trusted folders. */
-  services?: Pick<DeviceServices, 'hello' | 'request' | 'start' | 'scratchEnv'> & Partial<Pick<DeviceServices, 'watchHome'>>;
+  services?: Pick<DeviceServices, 'hello' | 'request' | 'start' | 'scratchEnv'> & Partial<Pick<DeviceServices, 'watchHome' | 'lendingChanged'>>;
   openSocket?: OpenSocket;
   spawnRunner?: (binary: string, root: string, env?: Record<string, string>) => RunnerProcess;
 }
@@ -259,6 +259,7 @@ export function createDeviceLink(options: DeviceLinkOptions) {
     },
     /** The person changed what this computer lends the server: tell it. */
     lendingChanged(): void {
+      void options.services?.lendingChanged?.();
       void options.services
         ?.hello()
         .then((hello) => send({ t: 'event', event: 'lending.changed', lending: hello.lending }))
