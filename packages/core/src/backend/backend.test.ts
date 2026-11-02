@@ -1003,7 +1003,7 @@ describe('a person’s own image servers on their desktop', () => {
             const { service } = frame;
             if (service.target !== ID) return reply({ t: 'closed', channel: frame.channel, reason: 'Not lent.' });
             asked.push(`${service.method} ${service.url}`);
-            setTimeout(() => respond(frame.channel, JSON.stringify({ data: [{ id: 'flux' }] })));
+            setTimeout(() => respond(frame.channel, JSON.stringify({ data: [{ id: 'flux', capabilities: ['image'] }] })));
           },
           close: () => {},
         },
