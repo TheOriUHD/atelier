@@ -125,6 +125,15 @@ describe('mapWorkflow', () => {
     expect(mapWorkflow(graph).prompt).toEqual({ node: '6', input: 'text' });
   });
 
+  it('finds no negative prompt where the negative is zeroed out, since no text there could change anything', () => {
+    const graph: Graph = {
+      ...STOCK,
+      20: { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['7', 0] } },
+      3: { class_type: 'KSampler', inputs: { ...STOCK['3']!.inputs, negative: ['20', 0] } },
+    };
+    expect(mapWorkflow(graph).negative).toBeUndefined();
+  });
+
   it('drops a negative that is the same text as the prompt', () => {
     const graph: Graph = { ...STOCK, 3: { class_type: 'KSampler', inputs: { ...STOCK['3']!.inputs, negative: ['6', 0] } } };
     expect(mapWorkflow(graph).negative).toBeUndefined();
