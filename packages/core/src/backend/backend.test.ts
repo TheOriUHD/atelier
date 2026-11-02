@@ -132,6 +132,41 @@ describe('backend projects', () => {
   });
 });
 
+describe('image workflows', () => {
+  const graph = {
+    1: { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: 'model.safetensors' } },
+    2: { class_type: 'CLIPTextEncode', inputs: { clip: ['1', 1], text: 'a prompt' } },
+    3: { class_type: 'EmptyLatentImage', inputs: { width: 512, height: 512, batch_size: 1 } },
+    4: { class_type: 'KSampler', inputs: { model: ['1', 0], positive: ['2', 0], negative: ['2', 0], latent_image: ['3', 0], seed: 1, steps: 20, cfg: 7, sampler_name: 'euler', scheduler: 'normal', denoise: 1 } },
+    5: { class_type: 'VAEDecode', inputs: { samples: ['4', 0], vae: ['1', 2] } },
+    6: { class_type: 'SaveImage', inputs: { images: ['5', 0], filename_prefix: 'x' } },
+  };
+
+  it('reads a workflow into what Atelier can set in it', async () => {
+    const workflow = await client.call('imageProviders.parseWorkflow', { text: JSON.stringify(graph) });
+    expect(workflow).toMatchObject({ name: 'model workflow', map: { prompt: { node: '2', input: 'text' }, output: '6' } });
+  });
+
+  it('gives a refusal as an error the person can read', async () => {
+    const refused = (await client.call('imageProviders.parseWorkflow', { text: JSON.stringify({ nodes: [], links: [] }) }).catch((e: unknown) => e)) as { message: string; data: { code: string } };
+    expect(refused.data.code).toBe('workflow_refused');
+    expect(refused.message).toContain('Save (API)');
+  });
+
+  it('says so when the provider it should ask is gone', async () => {
+    expect(await code(client.call('imageProviders.parseWorkflow', { text: '{}', providerId: 'gone' }))).toBe('workflow_refused');
+    expect(await code(client.call('imageProviders.savedWorkflows', { id: 'gone' }))).toBe('workflow_refused');
+  });
+
+  it('is for admins only', async () => {
+    const { code: invite } = await client.call('invites.create', { role: 'user' });
+    const person = connect();
+    await person.call('auth.acceptInvite', { invite, username: 'cy', name: 'Cy', password: 'cy-password', clientKind: 'web' });
+    expect(await code(person.call('imageProviders.parseWorkflow', { text: '{}' }))).toBe('forbidden');
+    expect(await code(person.call('imageProviders.savedWorkflows', { id: 'x' }))).toBe('forbidden');
+  });
+});
+
 describe('session groups, archive, unread and fork', () => {
   it('files sessions under the person’s groups, archives and marks them quietly, and forks', async () => {
     const group = await client.call('groups.create', { name: 'Aperture' });

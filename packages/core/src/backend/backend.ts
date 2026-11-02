@@ -1217,6 +1217,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const deviceRefusal = (e: unknown): never => {
     throw e instanceof DeviceLinkError ? appError(e.code === 'refused' ? 'forbidden' : 'unsupported', e.message) : e;
   };
+  /** Why a workflow can't be used, or why the server couldn't be asked: either way it's for the person to read. */
+  const workflowRefusal = (e: unknown): never => {
+    throw e instanceof Error ? appError('workflow_refused', e.message) : e;
+  };
   /** A personal provider call's own refusals (an id that isn't theirs, no desktop) as errors the person reads. */
   const modelOp = async <T>(run: () => Promise<T>): Promise<T> => {
     try {
@@ -1628,6 +1632,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     'imageProviders.refresh': ({ id }) => imageRegistry.refresh(id),
+    'imageProviders.parseWorkflow': (source) => imageRegistry.parseWorkflow(source).catch(workflowRefusal),
+    'imageProviders.savedWorkflows': ({ id }) => imageRegistry.savedWorkflows(id).catch(workflowRefusal),
     'imageModels.list': async (_input, ctx) => imageModelsFor(ctx.connection(), await imageRegistry.listModels()),
     'generatedImages.list': ({ before, query, ref, limit }, ctx) => generatedImagesFor(db, me(ctx).id, { ...(before !== undefined ? { before } : {}), ...(query ? { query } : {}), ...(ref ? { ref } : {}), limit: limit ?? 60 }),
 

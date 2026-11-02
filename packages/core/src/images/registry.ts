@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { eq } from 'drizzle-orm';
-import { imagePreset, modelRef, parseModelRef, type DetectedImageServer, type ImageModelInfo, type ImageModelOverride, type ImageProviderConfig, type ImageProviderDraft, type ProviderStatus } from '@atelier/protocol';
+import { imagePreset, modelRef, parseModelRef, type DetectedImageServer, type ImageModelInfo, type ImageModelOverride, type ImageProviderConfig, type ImageProviderDraft, type ImageWorkflow, type ImageWorkflowSource, type ProviderStatus, type SavedImageWorkflow } from '@atelier/protocol';
 import type { SecretStore } from '../secrets/secret-store.ts';
 import type { SettingsService } from '../settings/settings-service.ts';
 import type { Db } from '../store/db.ts';
@@ -15,6 +15,7 @@ import { isAbortError, noAnswerError } from '../providers/http.ts';
 import { defaultLimits, serverName, type RequestScheduler, type ServerLimits } from '../providers/scheduler.ts';
 import type { HealthResult } from '../providers/types.ts';
 import { detectImageServers } from './detect.ts';
+import { readWorkflow } from './dialects/comfyui/workflow.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageAdapterFactory, ImageInstance, ListedImageModel } from './types.ts';
 
 export interface ImageRegistryDeps {
@@ -268,6 +269,25 @@ export class ImageProviderRegistry extends EventEmitter<{ status: [ProviderStatu
     if (await this.deps.secrets.has(`image-provider-${id}`)) await this.deps.secrets.delete(`image-provider-${id}`);
     this.emit('status', this.statusList());
     this.emit('models', await this.listModels());
+  }
+
+  /** Reads a workflow on the server that will run it. Without a server, only what needs none can be read. */
+  async parseWorkflow({ providerId, ...source }: ImageWorkflowSource): Promise<ImageWorkflow> {
+    if (providerId === undefined) return readWorkflow(source);
+    const adapter = await this.adapterOf(providerId);
+    if (!adapter.parseWorkflow) throw new ImageModelUnavailable('This image provider has no workflows.');
+    return adapter.parseWorkflow(source, AbortSignal.timeout(DISCOVERY_TIMEOUT_MS));
+  }
+
+  async savedWorkflows(providerId: string): Promise<SavedImageWorkflow[]> {
+    const adapter = await this.adapterOf(providerId);
+    return adapter.savedWorkflows ? adapter.savedWorkflows(AbortSignal.timeout(DISCOVERY_TIMEOUT_MS)) : [];
+  }
+
+  private async adapterOf(providerId: string): Promise<ImageAdapter> {
+    const config = this.providers.find((p) => p.id === providerId);
+    if (!config) throw new ImageModelUnavailable(`There's no image provider "${providerId}".`);
+    return this.adapterFor(config);
   }
 
   /** Local image servers on default ports that aren't added yet. */

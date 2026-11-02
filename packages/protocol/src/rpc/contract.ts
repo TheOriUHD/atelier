@@ -41,7 +41,7 @@ import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, ProviderStatus, ProviderType } from '../models.ts';
-import { DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft } from '../images.ts';
+import { DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
 import {
@@ -276,6 +276,9 @@ export const contract = {
     'imageProviders.save': { input: ImageProviderDraft, output: ImageProviderConfig },
     'imageProviders.remove': { input: Id, output: Ok },
     'imageProviders.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(ProviderStatus) },
+    /** Reads a workflow into what it can do. A refusal is an error with a message for the person. */
+    'imageProviders.parseWorkflow': { input: ImageWorkflowSource, output: ImageWorkflow },
+    'imageProviders.savedWorkflows': { input: Id, output: z.array(SavedImageWorkflow) },
     'imageModels.list': { input: Empty, output: z.array(ImageModelInfo) },
     /** The person's generated images, newest first; `before` is the `createdAt` of the last one so far. */
     'generatedImages.list': {
@@ -812,6 +815,8 @@ export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNam
   'imageProviders.save',
   'imageProviders.remove',
   'imageProviders.refresh',
+  'imageProviders.parseWorkflow',
+  'imageProviders.savedWorkflows',
   'users.list',
   'users.create',
   'users.update',
