@@ -21,6 +21,8 @@ interface Setup {
   /** What `resolve` adds for a person's own server. */
   personal?: { deviceId: string; fetch: () => Promise<Response> };
   userId?: string | null;
+  /** The session's own choice of model. */
+  imageModel?: string;
 }
 
 async function* images(n = 1): AsyncGenerator<ImageEvent> {
@@ -29,7 +31,7 @@ async function* images(n = 1): AsyncGenerator<ImageEvent> {
   yield { type: 'finish', reason: 'done' };
 }
 
-function setup({ run = () => images(), models = [info()], settings = {}, history = [], config = {}, personal, userId = null }: Setup = {}) {
+function setup({ run = () => images(), models = [info()], settings = {}, history = [], config = {}, personal, userId = null, imageModel }: Setup = {}) {
   const db = openDatabase(':memory:');
   // Rows here point at sessions these tests don't need to make.
   db.$client.exec('PRAGMA foreign_keys = OFF');
@@ -53,6 +55,7 @@ function setup({ run = () => images(), models = [info()], settings = {}, history
       resolved.push(options);
       const found = models.find((m) => m.ref === ref);
       if (!found) throw new ImageModelUnavailable('gone');
+      if (found.available === false) throw new ImageModelUnavailable(`${found.displayName} isn't connected.`);
       return { adapter, info: found, config: configured, ...(personal ? { personal } : {}) };
     },
     hold: async (model: { info: ImageModelInfo }) => (held.push(model.info.modelId), released),
@@ -68,7 +71,7 @@ function setup({ run = () => images(), models = [info()], settings = {}, history
     files: { addGenerated },
     db,
     settings: () => ({ imageGeneration: { enabled: true, maxImagesPerTurn: 8, ...settings }, imageModels: { overrides: {} }, imagePricing: {}, models: { defaults: {}, aliases: {}, overrides: {} } }) as never,
-    session: async () => ({ userId, mode: 'chat', temporary: false }),
+    session: async () => ({ userId, mode: 'chat', temporary: false, ...(imageModel ? { imageModel } : {}) }),
     preferred: async () => undefined,
     isAdmin: async () => false,
     history: async () => history,
@@ -281,6 +284,15 @@ describe('ImageService', () => {
       const both = setup({ userId: 'ada', models: [info(), own({ available: false })] });
       expect(await both.service.available(session)).toBe(true);
       expect(await both.service.modelList(session)).not.toContain('sdxl');
+    });
+
+    it('says the chosen one’s computer is away, rather than quietly using another model', async () => {
+      const away = own({ available: false });
+      const t = setup({ userId: 'ada', models: [info(), away], imageModel: away.ref });
+      const out = await t.service.generate({ prompt: 'a cat' }, t.ctx());
+      expect(out.isError).toBe(true);
+      expect(out.content[0]).toMatchObject({ text: "SDXL isn't connected." });
+      expect(t.requests).toEqual([]);
     });
 
     it('has the computer fetch a URL its server answers with: this server never goes there', async () => {

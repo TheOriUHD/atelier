@@ -291,12 +291,6 @@ export const contract = {
      * (or its ChatGPT window) first, under the draft's id. The ChatGPT Chat calls go to that provider's computer, or
      * without one to the calling desktop (signing in before it is added).
      */
-    'personalImageProviders.list': { input: Empty, output: z.array(PersonalImageProvider) },
-    'personalImageProviders.detect': { input: Empty, output: z.array(DetectedImageServer) },
-    'personalImageProviders.test': { input: PersonalImageProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ImageModelInfo) }) },
-    'personalImageProviders.save': { input: PersonalImageProviderDraft, output: PersonalImageProvider },
-    'personalImageProviders.remove': { input: Id, output: Ok },
-    'personalImageProviders.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(PersonalImageProvider) },
     'personalProviders.list': { input: Empty, output: z.array(PersonalProvider) },
     'personalProviders.detect': { input: Empty, output: z.array(LocalServer) },
     'personalProviders.test': { input: PersonalProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ModelInfo) }) },
@@ -308,6 +302,16 @@ export const contract = {
     'personalProviders.chatgptChat.open': { input: PersonalChatGpt, output: Ok },
     'personalProviders.chatgptChat.hide': { input: PersonalChatGpt, output: Ok },
     'personalProviders.chatgptChat.disconnect': { input: PersonalChatGpt, output: Ok },
+    /**
+     * The caller's own image servers on their computers, any signed-in person's and only their own rows. `detect`, `test`
+     * and adding one run on the desktop app the call comes from, which lends the address first, under the draft's id.
+     */
+    'personalImageProviders.list': { input: Empty, output: z.array(PersonalImageProvider) },
+    'personalImageProviders.detect': { input: Empty, output: z.array(DetectedImageServer) },
+    'personalImageProviders.test': { input: PersonalImageProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ImageModelInfo) }) },
+    'personalImageProviders.save': { input: PersonalImageProviderDraft, output: PersonalImageProvider },
+    'personalImageProviders.remove': { input: Id, output: Ok },
+    'personalImageProviders.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(PersonalImageProvider) },
 
     'sessions.list': {
       input: z.object({

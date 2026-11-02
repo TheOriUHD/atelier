@@ -72,7 +72,7 @@ test('desktop: connects to an Atelier server, signs in, chats through the relay 
 
     // What else the desktop lends, once the person allowed it there (its windows write lending.json; the test writes it):
     // a folder for a session started without one, made on the desktop.
-    expect((await rpc.call('app.info', {})).deviceLink?.services).toEqual(['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'chatgptChat']);
+    expect((await rpc.call('app.info', {})).deviceLink?.services).toEqual(['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat']);
     await expect(rpc.call('sessions.create', { mode: 'code', scratch: {} })).rejects.toThrow(/aren't allowed on/);
     await writeFile(join(configDir, 'chromium', 'lending.json'), JSON.stringify({ [SERVER_URL]: { scratch: true, ssh: ['devbox'] } }));
     const scratchSession = await rpc.call('sessions.create', { mode: 'code', scratch: {} });
@@ -183,7 +183,7 @@ test('desktop: an image server on the desktop makes images for its owner on the 
     const box = page.getByRole('textbox', { name: 'Message' });
     await box.fill(call('GenerateImage', { prompt: 'a small red lighthouse' }));
     await sendWhenIdle(page);
-    await expect.poll(async () => (await admin.call('generatedImages.list', {})).map((i) => i.ref)).toEqual([ref]);
+    await expect.poll(async () => (await admin.call('generatedImages.list', {})).items.map((i) => i.ref)).toEqual([ref]);
     expect(images.asked).toContainEqual({ path: '/v1/images/generations', prompt: 'a small red lighthouse' });
 
     // Settings › System says what this computer lends, by name; taking it back there stops the server reaching it.
@@ -193,7 +193,7 @@ test('desktop: an image server on the desktop makes images for its owner on the 
     await lent.getByRole('button', { name: 'Remove' }).click();
     await expect.poll(async () => (await admin.call('imageModels.list', {})).find((m) => m.ref === ref)?.available).toBe(false);
     const heard = images.asked.length;
-    await expect((async () => admin.call('personalImageProviders.refresh', { id: mine!.id }))()).resolves.toMatchObject([{ online: false }]);
+    expect(await admin.call('personalImageProviders.refresh', { id: mine!.id })).toMatchObject([{ online: false }]);
     expect(images.asked).toHaveLength(heard);
 
     // The desktop goes away: its models stay listed but can't run.
