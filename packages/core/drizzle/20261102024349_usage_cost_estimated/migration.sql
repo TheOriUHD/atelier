@@ -1,0 +1,1 @@
+ALTER TABLE `usage_events` ADD `cost_estimated` integer DEFAULT false NOT NULL;

@@ -62,7 +62,7 @@ export interface ImageServiceDeps {
   readFile?(sessionId: string, path: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;
   /** A finished image's URL; `through` a person's computer when one of their own servers gave it. */
   download(url: string, signal: AbortSignal, through?: ProviderFetch): Promise<DownloadedImage>;
-  recordUsage(entry: { providerId: string; modelId: string; sessionId: string; userId: string | null; mode: string; images: number; costUsd: number | null; durationMs: number }): void;
+  recordUsage(entry: { providerId: string; modelId: string; sessionId: string; userId: string | null; mode: string; images: number; costUsd: number | null; costEstimated: boolean; durationMs: number }): void;
   /** Changed by tests, which don't wait for retries. */
   sleep?(ms: number, signal: AbortSignal): Promise<void>;
   idleMs?: number;
@@ -468,6 +468,7 @@ export class ImageService {
       mode: session.mode,
       images: stored.length,
       costUsd: priced.length ? priced.reduce((sum, s) => sum + s.costUsd!, 0) : null,
+      costEstimated: priced.some((s) => s.costEstimated),
       durationMs: stored[0]?.durationMs ?? 0,
     });
   }

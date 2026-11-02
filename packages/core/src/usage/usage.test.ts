@@ -28,6 +28,23 @@ describe('usage summary', () => {
   });
 });
 
+describe('usage summary of images', () => {
+  it('counts the images of a row and how much of its cost is an estimate', async () => {
+    const db = openDatabase(':memory:');
+    await db.insert(users).values({ id: 'ada', username: 'ada', name: 'ada', role: 'user', passwordHash: 'x', createdAt: 0, updatedAt: 0 });
+    const at = Date.parse('2026-10-13T09:00:00Z');
+    const event = (id: string, extra: Partial<typeof usageEvents.$inferInsert>) =>
+      db.insert(usageEvents).values({ id, ts: at, userId: 'ada', providerId: 'openai-images', modelId: 'gpt-image-2', mode: 'chat', input: 0, output: 0, ...extra });
+    await event('1', { images: 2, costUsd: 0.08, costEstimated: true });
+    await event('2', { images: 1, costUsd: 0.05 });
+    await event('3', { modelId: 'text', input: 100, output: 10 });
+
+    const rows = usageSummary(db, { userId: 'ada', days: 7, timezoneOffset: 0, now: at });
+    expect(rows.find((r) => r.modelId === 'gpt-image-2')).toMatchObject({ images: 3, costUsd: 0.13, estimatedUsd: 0.08, input: 0 });
+    expect(rows.find((r) => r.modelId === 'text')).toMatchObject({ images: 0, estimatedUsd: 0 });
+  });
+});
+
 describe('stats summary', () => {
   it('counts one person’s root sessions in a mode by local day and hour, with sub-agents’ tokens on their parent', async () => {
     const db = openDatabase(':memory:');
@@ -63,6 +80,8 @@ describe('stats summary', () => {
     await event('s2', '2026-09-01T07:01:00Z', 'small', 5000);
     await event('w1', '2026-10-13T07:01:00Z', 'small', 9999);
     await event('b1', '2026-10-13T07:01:00Z', 'small', 9999);
+    // An image has no tokens: it's neither a model on the card nor the favorite.
+    await event('s2', '2026-10-13T07:02:00Z', 'an-image-model', 0, { images: 2 });
 
     const now = at('2026-10-13T12:00:00Z');
     const stats = (opts: { userId?: string; mode?: 'code' | 'work'; days?: number | null; timezoneOffset?: number }) =>

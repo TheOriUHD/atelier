@@ -922,8 +922,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     // Tests point a hosted service's result URLs at a fake server on this machine.
     // From a person's own server the URL goes to their computer, whose lending decides; this server never fetches it.
     download: (url, signal, through) => downloadImage(through ? { fetch: through, allowPrivate: true } : { fetch: httpFetch, allowPrivate: !!platform.env.ATELIER_IMAGE_DOWNLOAD_PRIVATE }, url, signal),
-    recordUsage: ({ providerId, modelId, sessionId, userId, mode, images: count, costUsd, durationMs }) => {
-      void db.insert(usageEvents).values({ id: newId(), ts: Date.now(), userId, providerId, modelId, sessionId, mode, input: 0, output: 0, durationMs, costUsd, images: count }).catch((e: unknown) => platform.logger.error('recording image usage failed', e));
+    recordUsage: ({ providerId, modelId, sessionId, userId, mode, images: count, costUsd, costEstimated, durationMs }) => {
+      void db.insert(usageEvents).values({ id: newId(), ts: Date.now(), userId, providerId, modelId, sessionId, mode, input: 0, output: 0, durationMs, costUsd, costEstimated, images: count }).catch((e: unknown) => platform.logger.error('recording image usage failed', e));
     },
     log: (message, error) => platform.logger.error(message, error),
   });

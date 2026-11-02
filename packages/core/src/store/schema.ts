@@ -372,6 +372,8 @@ export const usageEvents = sqliteTable(
     costUsd: real('cost_usd'),
     /** Images generated (ARCHITECTURE §23); these rows have no tokens. */
     images: integer('images').notNull().default(0),
+    /** The cost comes from a price list, not from the service. These rows outlive `generated_images`, so they say so themselves. */
+    costEstimated: integer('cost_estimated', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [index('usage_ts').on(t.ts)],
 );

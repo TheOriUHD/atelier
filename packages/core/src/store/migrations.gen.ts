@@ -194,5 +194,11 @@ export const migrations: { name: string; statements: string[] }[] = [
       "CREATE INDEX `generated_images_session` ON `generated_images` (`session_id`);",
       "CREATE INDEX `personal_image_providers_user` ON `personal_image_providers` (`user_id`);"
     ]
+  },
+  {
+    "name": "20261102024349_usage_cost_estimated",
+    "statements": [
+      "ALTER TABLE `usage_events` ADD `cost_estimated` integer DEFAULT false NOT NULL;"
+    ]
   }
 ];
