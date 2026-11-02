@@ -7,7 +7,7 @@ import { setPath } from '../../lib/json-path.ts';
 import { keys } from '../../lib/queries.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { callsTo, model, resetBackend, snapshot, user } from './test-backend.ts';
-import { byModel, formatTokens, formatUsd, modeShares, tokensByDay, totals } from './usage-data.ts';
+import { byImageModel, byModel, formatTokens, formatUsd, modeShares, tokensByDay, totals } from './usage-data.ts';
 import { UsagePage } from './usage-page.tsx';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
@@ -215,9 +215,68 @@ describe('Usage page prices (admins)', () => {
   });
 });
 
+describe('images in usage', () => {
+  const images = (extra: Partial<UsageRow>) => usage({ providerId: 'comfy', modelId: 'z-image', input: 0, output: 0, images: 2, ...extra });
+  const IMAGE_MODELS = { 'imageModels.list': () => [{ ref: 'comfy/z-image', providerId: 'comfy', modelId: 'z-image', displayName: 'Z-Image Turbo' }], 'app.info': () => ({ imageGeneration: true }) };
+
+  it('adds images and their cost to the statement, and keeps them out of the tokens', async () => {
+    resetBackend({ ...settingsBackend(), ...IMAGE_MODELS, 'usage.summary': () => [...ROWS, images({ costUsd: 0.08, unpriced: 0 })] });
+    await renderPage();
+    expect(await screen.findByText('6 requests, 10.7K tokens, 2 images, and $0.12 in the last 30 days.')).toBeTruthy();
+    expect(within(screen.getByRole('table', { name: 'By model' })).queryByText('z-image')).toBeNull();
+    expect(within(screen.getByRole('table', { name: 'Images' })).getByRole('row', { name: /2/ }).textContent).toContain('$0.08');
+  });
+
+  it('marks an estimated cost as one, in the statement and on the model', async () => {
+    resetBackend({ ...settingsBackend(), ...IMAGE_MODELS, 'usage.summary': () => [images({ costUsd: 0.08, unpriced: 0, estimatedUsd: 0.08 })] });
+    await renderPage();
+    expect(await screen.findByText('2 images and about $0.08 in the last 30 days.')).toBeTruthy();
+    expect(screen.getByText('$0.08 of the cost is an estimate from a price list.')).toBeTruthy();
+    expect(within(screen.getByRole('table', { name: 'Images' })).getByText('estimate')).toBeTruthy();
+  });
+
+  it('shows only the images when nothing else was used: no zero-token rows, no chart', async () => {
+    resetBackend({ ...settingsBackend(), ...IMAGE_MODELS, 'usage.summary': () => [images({})] });
+    await renderPage();
+    expect(await screen.findByText('2 images in the last 30 days.')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Tokens by day' })).toBeNull();
+    expect(screen.queryByText(/Chart of/)).toBeNull();
+    expect(screen.queryByRole('table', { name: 'By model' })).toBeNull();
+  });
+
+  it('doesn’t count a local image as a request without a price', async () => {
+    resetBackend({ ...settingsBackend(), ...IMAGE_MODELS, 'usage.summary': () => [images({ unpriced: 1 })] });
+    await renderPage();
+    await screen.findByText('2 images in the last 30 days.');
+    expect(screen.queryByText(/without a price/)).toBeNull();
+    expect(within(screen.getByRole('table', { name: 'Images' })).getByText('—')).toBeTruthy();
+  });
+
+  it('names image models and their provider from the image lists', async () => {
+    resetBackend({
+      ...settingsBackend(),
+      ...IMAGE_MODELS,
+      'settings.get': () => snapshot({ imageProviders: [{ id: 'comfy', type: 'comfyui', name: 'Studio GPU', baseUrl: 'http://127.0.0.1:8188', headers: {}, enabled: true }] }),
+      'usage.summary': () => [images({})],
+    });
+    await renderPage();
+    const table = await screen.findByRole('table', { name: 'Images' });
+    expect(await within(table).findByText('Z-Image Turbo')).toBeTruthy();
+    expect(within(table).getByText('Studio GPU')).toBeTruthy();
+  });
+
+  it('counts them apart in the data', () => {
+    const rows = [...ROWS, images({ costUsd: 0.08, unpriced: 0, estimatedUsd: 0.08 }), images({ day: day(1), images: 1 })];
+    expect(totals(rows)).toMatchObject({ requests: 6, tokens: 10_700, images: 3, estimated: 0.08, unpriced: 2 });
+    expect(byModel(rows).map((m) => m.modelId)).not.toContain('z-image');
+    expect(byImageModel(rows)).toEqual([{ ref: 'comfy/z-image', providerId: 'comfy', modelId: 'z-image', images: 3, cost: 0.08, estimated: 0.08 }]);
+    expect(modeShares(rows)).toEqual(modeShares(ROWS));
+  });
+});
+
 describe('usage data', () => {
   it('counts every token a request processed and the cost of the priced ones', () => {
-    expect(totals(ROWS)).toEqual({ requests: 6, input: 1500, output: 700, cacheRead: 8000, cacheWrite: 500, tokens: 10_700, cost: expect.closeTo(0.043), unpriced: 2 });
+    expect(totals(ROWS)).toEqual({ requests: 6, input: 1500, output: 700, cacheRead: 8000, cacheWrite: 500, tokens: 10_700, images: 0, cost: expect.closeTo(0.043), estimated: 0, priced: 4, unpriced: 2 });
   });
 
   it('lists every day of the period in local time, oldest first, quiet days at zero', () => {

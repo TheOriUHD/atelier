@@ -259,7 +259,7 @@ function WindowHeading({
 }
 
 /** "48.2k tokens · $0.12", with the cost when any of the requests had a price. */
-const spent = (t: UsageTotals) => `${formatTokenCount(t.tokens)} tokens${t.unpriced < t.requests ? ` · ${formatUsd(t.cost)}` : ''}`;
+const spent = (t: UsageTotals) => `${formatTokenCount(t.tokens)} tokens${t.priced > 0 ? ` · ${formatUsd(t.cost)}` : ''}`;
 
 /** "5-hour limit", "Weekly limit": a usage window of the plan by its length. */
 export function windowName(minutes: number | null): string {

@@ -10,28 +10,44 @@ const modeOf = (row: UsageRow): ModeKey => (MODES as readonly string[]).includes
 /** Every token a request processed: its whole prompt (`input` excludes cache reads and writes) and its output. */
 export const tokensOf = (r: Pick<UsageRow, 'input' | 'output' | 'cacheRead' | 'cacheWrite'>) => r.input + r.cacheRead + r.cacheWrite + r.output;
 
+/** Image rows count images and dollars: they have no tokens, and a local image with no price isn't a request missing one. */
+export const isImageRow = (r: Pick<UsageRow, 'images'>) => (r.images ?? 0) > 0;
+
 export interface UsageTotals {
+  /** Requests to text models; images are counted apart. */
   requests: number;
   input: number;
   output: number;
   cacheRead: number;
   cacheWrite: number;
   tokens: number;
-  /** Of the priced requests. */
+  images: number;
+  /** Of the priced requests and images. */
   cost: number;
+  /** How much of `cost` comes from a price list rather than from the service. */
+  estimated: number;
+  /** Requests and image rows with a price. */
+  priced: number;
   unpriced: number;
 }
 
 export function totals(rows: readonly UsageRow[]): UsageTotals {
-  const t: UsageTotals = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0, cost: 0, unpriced: 0 };
+  const t: UsageTotals = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0, images: 0, cost: 0, estimated: 0, priced: 0, unpriced: 0 };
   for (const r of rows) {
+    t.cost += r.costUsd ?? 0;
+    t.estimated += r.estimatedUsd ?? 0;
+    if (isImageRow(r)) {
+      t.images += r.images!;
+      t.priced += r.requests - r.unpriced;
+      continue;
+    }
     t.requests += r.requests;
     t.input += r.input;
     t.output += r.output;
     t.cacheRead += r.cacheRead;
     t.cacheWrite += r.cacheWrite;
     t.tokens += tokensOf(r);
-    t.cost += r.costUsd ?? 0;
+    t.priced += r.requests - r.unpriced;
     t.unpriced += r.unpriced;
   }
   return t;
@@ -87,12 +103,13 @@ export interface ModelUsage {
   tokensPerSecond: number | null;
 }
 
-/** One entry per model, most tokens first. */
+/** One entry per text model, most tokens first. */
 export function byModel(rows: readonly UsageRow[]): ModelUsage[] {
   const models = new Map<string, ModelUsage>();
   // Requests behind each model's average speed so far.
   const timed = new Map<string, number>();
   for (const r of rows) {
+    if (isImageRow(r)) continue;
     const ref = `${r.providerId}/${r.modelId}`;
     const m = models.get(ref) ?? { ref, providerId: r.providerId, modelId: r.modelId, requests: 0, tokens: 0, cost: null, unpriced: 0, tokensPerSecond: null };
     m.requests += r.requests;
@@ -107,6 +124,32 @@ export function byModel(rows: readonly UsageRow[]): ModelUsage[] {
     models.set(ref, m);
   }
   return [...models.values()].sort((a, b) => b.tokens - a.tokens);
+}
+
+export interface ImageModelUsage {
+  ref: string;
+  providerId: string;
+  modelId: string;
+  images: number;
+  /** Null when none of its images had a price, as on a local server. */
+  cost: number | null;
+  /** How much of `cost` comes from a price list. */
+  estimated: number;
+}
+
+/** One entry per image model, most images first. */
+export function byImageModel(rows: readonly UsageRow[]): ImageModelUsage[] {
+  const models = new Map<string, ImageModelUsage>();
+  for (const r of rows) {
+    if (!isImageRow(r)) continue;
+    const ref = `${r.providerId}/${r.modelId}`;
+    const m = models.get(ref) ?? { ref, providerId: r.providerId, modelId: r.modelId, images: 0, cost: null, estimated: 0 };
+    m.images += r.images!;
+    m.estimated += r.estimatedUsd ?? 0;
+    if (r.costUsd !== null) m.cost = (m.cost ?? 0) + r.costUsd;
+    models.set(ref, m);
+  }
+  return [...models.values()].sort((a, b) => b.images - a.images);
 }
 
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });

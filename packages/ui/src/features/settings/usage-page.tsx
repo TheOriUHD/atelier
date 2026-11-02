@@ -15,7 +15,7 @@ import {
   TextField,
   formatCount,
 } from '../../components/ui/index.ts';
-import { keys, useAccount, useModels, useSettings } from '../../lib/queries.ts';
+import { keys, useAccount, useImageModels, useModels, useSettings } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useFormSubmit } from '../auth/form.ts';
 import { Cell, DataTable, TableRow } from './data-table.tsx';
@@ -23,7 +23,7 @@ import { settingEntry } from './search-index.ts';
 import { SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
 import { useSetting, type Setting } from './use-setting.ts';
-import { MODES, MODE_LABELS, byModel, formatTokens, formatUsd, modeShares, tokensByDay, totals, type ModeKey } from './usage-data.ts';
+import { MODES, MODE_LABELS, byImageModel, byModel, formatTokens, formatUsd, isImageRow, modeShares, tokensByDay, totals, type ModeKey } from './usage-data.ts';
 
 const UsageChart = lazy(() => import('./usage-chart.tsx'));
 
@@ -50,16 +50,19 @@ type Price = Settings['pricing'][string];
 /** A model's display name and its provider's name, for usage rows and prices. */
 function useModelNames() {
   const { data: models } = useModels();
+  const { data: imageModels } = useImageModels();
   const { settings } = useSettings();
+  // An older server's settings have no image providers.
+  const providers = [...(settings?.providers ?? []), ...(settings?.imageProviders ?? [])];
   return (providerId: string, modelId: string) => ({
-    model: models?.find((m) => m.providerId === providerId && m.modelId === modelId)?.displayName ?? modelId,
-    provider: settings?.providers.find((p) => p.id === providerId)?.name ?? providerId,
+    model: [...(models ?? []), ...(imageModels ?? [])].find((m) => m.providerId === providerId && m.modelId === modelId)?.displayName ?? modelId,
+    provider: providers.find((p) => p.id === providerId)?.name ?? providerId,
   });
 }
 
 const splitRef = (ref: string) => [ref.slice(0, ref.indexOf('/')), ref.slice(ref.indexOf('/') + 1)] as const;
 
-/** Requests, tokens and cost over a period, by day and by model; admins also see everyone's and set prices. */
+/** Requests, tokens, images and cost over a period, by day and by model; admins also see everyone's and set prices. */
 export function UsagePage() {
   const { account } = useAccount();
   const admin = account?.role === 'admin';
@@ -73,7 +76,9 @@ export function UsagePage() {
     placeholderData: keepPreviousData,
     staleTime: 0,
   });
-  const used = !!rows?.length;
+  // Tokens and images have their own sections: an image row has no tokens to chart.
+  const withTokens = rows?.some((r) => !isImageRow(r)) ? rows : null;
+  const withImages = rows?.some(isImageRow) ? rows : null;
 
   return (
     <div className={SERIES}>
@@ -95,8 +100,9 @@ export function UsagePage() {
           rows && <Summary rows={rows} days={days} admin={admin} />
         )}
       </SettingsSection>
-      {used && <DaysSection rows={rows} days={days} />}
-      {used && <ModelsSection rows={rows} />}
+      {withTokens && <DaysSection rows={withTokens} days={days} />}
+      {withTokens && <ModelsSection rows={withTokens} />}
+      {withImages && <ImagesSection rows={withImages} />}
       {admin && <PricesSection />}
     </div>
   );
@@ -105,16 +111,16 @@ export function UsagePage() {
 const conjunction = new Intl.ListFormat('en-US', { type: 'conjunction' });
 const plural = (n: number, one: string, many: string) => `${formatCount(n)} ${n === 1 ? one : many}`;
 
-/** One statement line (serif), then where the tokens went and what has no price. */
+/** One statement line (serif), then where the tokens went, what is only an estimate and what has no price. */
 function Summary({ rows, days, admin }: { rows: UsageRow[]; days: number; admin: boolean }) {
   const t = totals(rows);
   const statement =
-    t.requests === 0
+    t.requests === 0 && t.images === 0
       ? `No usage in the last ${days} days.`
       : `${conjunction.format([
-          plural(t.requests, 'request', 'requests'),
-          `${formatTokens(t.tokens)} tokens`,
-          ...(t.unpriced < t.requests ? [formatUsd(t.cost)] : []),
+          ...(t.requests > 0 ? [plural(t.requests, 'request', 'requests'), `${formatTokens(t.tokens)} tokens`] : []),
+          ...(t.images > 0 ? [plural(t.images, 'image', 'images')] : []),
+          ...(t.priced > 0 ? [`${t.estimated > 0 ? 'about ' : ''}${formatUsd(t.cost)}`] : []),
         ])} in the last ${days} days.`;
   const parts = [
     `${formatTokens(t.input)} input`,
@@ -126,6 +132,7 @@ function Summary({ rows, days, admin }: { rows: UsageRow[]; days: number; admin:
     <div className="flex flex-col gap-1">
       <p className="font-serif text-[20px] leading-7 text-fg">{statement}</p>
       {t.requests > 0 && <p className="text-body text-fg-muted">{parts.join(' · ')}</p>}
+      {t.estimated > 0 && <p className="text-body text-fg-muted">{formatUsd(t.estimated)} of the cost is an estimate from a price list.</p>}
       {t.unpriced > 0 && (
         <p className="text-body text-fg-muted">
           {plural(t.unpriced, 'request', 'requests')} without a price.{admin && ' Add prices below to count their cost.'}
@@ -194,6 +201,43 @@ function ModelsSection({ rows }: { rows: UsageRow[] }) {
                 {m.cost === null ? '—' : formatUsd(m.cost)}
               </Cell>
               <Cell className="text-right tabular-nums">{m.tokensPerSecond === null ? '—' : `${Math.round(m.tokensPerSecond)} tokens/s`}</Cell>
+            </TableRow>
+          );
+        })}
+      </DataTable>
+    </SettingsSection>
+  );
+}
+
+/** Images by model. A local server's images have no price, which is no cause for a warning. */
+function ImagesSection({ rows }: { rows: UsageRow[] }) {
+  const entry = settingEntry('usage.images');
+  const names = useModelNames();
+  return (
+    <SettingsSection id="usage.images" title={entry.label} description={entry.description}>
+      <DataTable
+        label={entry.label}
+        columns={[
+          { label: 'Model' },
+          { label: 'Images', className: 'w-24 text-right' },
+          { label: 'Cost', className: 'w-36 text-right' },
+        ]}
+      >
+        {byImageModel(rows).map((m) => {
+          const name = names(m.providerId, m.modelId);
+          return (
+            <TableRow key={m.ref}>
+              <Cell title={m.ref}>
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate text-fg">{name.model}</span>
+                  <span className="shrink-0 text-footnote text-fg-muted">{name.provider}</span>
+                </span>
+              </Cell>
+              <Cell className="text-right tabular-nums">{formatCount(m.images)}</Cell>
+              <Cell className="text-right tabular-nums">
+                {m.cost === null ? '—' : formatUsd(m.cost)}
+                {m.estimated > 0 && <span className="ml-1.5 text-footnote text-fg-muted">estimate</span>}
+              </Cell>
             </TableRow>
           );
         })}
