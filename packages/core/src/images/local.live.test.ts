@@ -111,6 +111,8 @@ function maskOfLeftHalf(width: number, height: number): Uint8Array {
   return PNG.sync.write(png);
 }
 
+const pixels = (bytes: Uint8Array) => PNG.sync.read(Buffer.from(bytes)).data;
+
 /** How far two pictures of one size are apart, per half. */
 function differenceBySide(a: Uint8Array, b: Uint8Array): { left: number; right: number } {
   const first = PNG.sync.read(Buffer.from(a));
@@ -161,7 +163,8 @@ for (const t of targets) {
       const first = imagesIn(await run(live(), smallRequest(model, { seed: 1234 })))[0];
       const second = imagesIn(await run(live(), smallRequest(model, { seed: 1234 })))[0];
       expect(first?.seed ?? 1234).toBe(1234);
-      expect(Buffer.from(second!.bytes!).equals(Buffer.from(first!.bytes!))).toBe(true);
+      // Pixels, not files: InvokeAI writes its graph into each PNG, with an id of its own.
+      expect(pixels(second!.bytes!).equals(pixels(first!.bytes!))).toBe(true);
     });
 
     it('changes an image it is given', async () => {
@@ -197,7 +200,8 @@ for (const t of targets) {
       expect(finished(events)).toMatchObject({ reason: 'done' });
       const images = imagesIn(events);
       expect(images).toHaveLength(2);
-      expect(images.map((image) => image.seed)).toEqual([100, 101]);
+      // InvokeAI runs a batch last to first; each image still says its own seed.
+      expect(images.map((image) => image.seed).sort()).toEqual([100, 101]);
       expect(Buffer.from(images[0]!.bytes!).equals(Buffer.from(images[1]!.bytes!))).toBe(false);
     });
 

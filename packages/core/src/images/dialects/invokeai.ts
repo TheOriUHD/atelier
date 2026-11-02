@@ -7,7 +7,7 @@
  * own node types, and a graph that hasn't been run isn't worth offering: such a model shows nowhere rather than failing.
  */
 import { modelRef, type ImageCapabilities } from '@atelier/protocol';
-import { bearer, classifyError, httpError, jsonHeaders, probe, requestJson } from '../../providers/http.ts';
+import { bearer, classifyError, httpError, jsonHeaders, probe, ProviderHttpError, requestJson } from '../../providers/http.ts';
 import { arr, num, rec, str } from '../../providers/util.ts';
 import { checkpointFamily, checkpointLabel, editSize } from '../families.ts';
 import { guardImages } from '../guard.ts';
@@ -15,6 +15,8 @@ import { multipart } from '../multipart.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 
 const POLL_MS = 500;
+/** About ten seconds. A server under load drops the odd poll while its job runs on, and giving up would orphan that job. */
+const POLL_FAILURES_ALLOWED = 20;
 const STOP_TIMEOUT_MS = 5_000;
 const MAX_COUNT = 4;
 /** How much an edit may change the picture: enough to act on the prompt, while it stays the same picture. */
@@ -22,6 +24,11 @@ const EDIT_STRENGTH = 0.6;
 /** `is_intermediate`: its gallery shouldn't fill up with what Atelier already keeps. */
 const NOT_FOR_THE_GALLERY = true;
 const OUTPUT_NODE = 'l2i';
+/**
+ * On the two VAE nodes, as the app sets it. `i2l` otherwise runs in float16: a real CPU sat on one small image for nine
+ * minutes without finishing, and Invoke's own `l2i` notes that the SD VAE overflows to black images at that precision.
+ */
+const VAE_PRECISION = { fp32: true };
 const NOISE_NODE = 'noise';
 
 /** Invoke's one list of samplers, schedules included. */
@@ -95,7 +102,7 @@ export function buildGraph(model: Record<string, unknown>, request: ImageRequest
     denoising_start: inputImage ? 1 - EDIT_STRENGTH : 0,
     denoising_end: 1,
   });
-  add(OUTPUT_NODE, 'l2i', { is_intermediate: NOT_FOR_THE_GALLERY, use_cache: false });
+  add(OUTPUT_NODE, 'l2i', { ...VAE_PRECISION, is_intermediate: NOT_FOR_THE_GALLERY, use_cache: false });
 
   const edges: Edge[] = [
     edge('loader', 'unet', 'denoise'),
@@ -110,7 +117,7 @@ export function buildGraph(model: Record<string, unknown>, request: ImageRequest
   ];
   if (inputImage) {
     add('resize', 'img_resize', { image: { image_name: inputImage }, ...size, is_intermediate: NOT_FOR_THE_GALLERY });
-    add('i2l', 'i2l');
+    add('i2l', 'i2l', VAE_PRECISION);
     edges.push(edge('resize', 'image', 'i2l'), edge('loader', 'vae', 'i2l'), edge('i2l', 'latents', 'denoise'));
   }
   return { id: crypto.randomUUID(), nodes, edges };
@@ -151,11 +158,25 @@ export function createInvokeAi(instance: ImageInstance, deps: ImageAdapterDeps, 
     return new Uint8Array(await res.arrayBuffer());
   };
 
-  /** Follows one queue item to its end. Every poll counts as news: the server just said the job is alive. */
+  /**
+   * Follows one queue item to its end. Every poll counts as news: the server just said the job is alive. A real server
+   * only fills in `session.results` when the job ends, so all the queue can say is that it's running: live steps travel
+   * on the app's socket.io channel, which isn't spoken here.
+   */
   async function* follow(request: ImageRequest, id: number, index: number, count: number, open: Set<number>): AsyncGenerator<ImageEvent, boolean> {
-    let loading = false;
+    let failures = 0;
     for (;;) {
-      const item = rec(await requestJson(deps, instance, `${queue}/i/${id}`, { headers: headers(), signal: request.signal }));
+      let body: unknown;
+      try {
+        body = await requestJson(deps, instance, `${queue}/i/${id}`, { headers: headers(), signal: request.signal });
+        failures = 0;
+      } catch (error) {
+        const passing = error instanceof ProviderHttpError ? error.error.retryable : true;
+        if (request.signal.aborted || !passing || ++failures > POLL_FAILURES_ALLOWED) throw error;
+        await sleep(pollMs, request.signal);
+        continue;
+      }
+      const item = rec(body);
       const session = rec(item.session);
       switch (str(item.status)) {
         case 'completed': {
@@ -177,15 +198,10 @@ export function createInvokeAi(instance: ImageInstance, deps: ImageAdapterDeps, 
           if (request.signal.aborted) return false;
           yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: `The job was cancelled in ${instance.name}.`, retryable: false } };
           return false;
-        case 'in_progress': {
-          const done = Object.keys(rec(session.results)).length;
-          const total = Object.keys(rec(rec(session.graph).nodes)).length;
-          if (done === 0) {
-            if (!loading) yield { type: 'loading' };
-            loading = true;
-          } else yield { type: 'progress', ...(total ? { fraction: (index + Math.min(1, done / total)) / count } : {}) };
+        case 'in_progress':
+          // A batch is the one thing that moves: which of its images is under way.
+          yield { type: 'progress', ...(count > 1 ? { fraction: index / count } : {}) };
           break;
-        }
       }
       await sleep(pollMs, request.signal);
       if (request.signal.aborted) return false;

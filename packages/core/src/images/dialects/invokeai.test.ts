@@ -82,7 +82,7 @@ describe('invokeai graphs', () => {
       negative: { type: 'compel', prompt: 'blurry' },
       noise: { type: 'noise', seed: 42, width: 512, height: 768, use_cpu: true },
       denoise: { type: 'denoise_latents', steps: 20, cfg_scale: 7, scheduler: 'euler_a', denoising_start: 0, denoising_end: 1 },
-      l2i: { type: 'l2i', is_intermediate: true, use_cache: false },
+      l2i: { type: 'l2i', fp32: true, is_intermediate: true, use_cache: false },
     });
     expect(wire(graph).sort()).toEqual(
       [
@@ -109,6 +109,7 @@ describe('invokeai graphs', () => {
     const graph = buildGraph(SD1, imageRequest({ tuning: { steps: 20 }, references: [{ bytes: pngOf(1000, 500), mime: 'image/png', name: 'in.png' }] }), 42, 'uploaded.png') as Graph;
     expect(graph.nodes.resize).toMatchObject({ type: 'img_resize', image: { image_name: 'uploaded.png' }, width: 728, height: 360 });
     expect(graph.nodes.noise).toMatchObject({ width: 728, height: 360 });
+    expect(graph.nodes.i2l).toMatchObject({ type: 'i2l', fp32: true });
     expect(graph.nodes.denoise?.denoising_start).toBeCloseTo(0.4);
     expect(wire(graph)).toEqual(expect.arrayContaining(['resize.image -> i2l.image', 'loader.vae -> i2l.vae', 'i2l.latents -> denoise.latents']));
   });
@@ -124,13 +125,13 @@ describe('invokeai graphs', () => {
 
 describe('invokeai generation', () => {
   it('queues a graph, follows the item and fetches the image', async () => {
-    const { deps, calls } = queue([() => item('pending'), () => item('in_progress'), () => item('in_progress', { results: { a: {} } }), () => item('completed', DONE)]);
+    const { deps, calls } = queue([() => item('pending'), () => item('in_progress'), () => item('in_progress'), () => item('completed', DONE)]);
     const events = await drain(createInvokeAi(invoke(), deps, POLL).generate(imageRequest({ model: 'k-sd1', seed: 42 })));
     const { prepend, batch } = enqueued(calls);
     expect(prepend).toBe(false);
     expect(batch).toMatchObject({ runs: 1, origin: 'atelier', data: [[{ node_path: 'noise', field_name: 'seed', items: [42] }]] });
     expect(batch.graph.nodes.loader).toMatchObject({ type: 'main_model_loader' });
-    expect(events.filter((e) => e.type !== 'image')).toEqual([{ type: 'loading' }, { type: 'progress', fraction: 1 / 3 }, { type: 'finish', reason: 'done' }]);
+    expect(events.filter((e) => e.type !== 'image')).toEqual([{ type: 'progress' }, { type: 'progress' }, { type: 'finish', reason: 'done' }]);
     expect(imagesOf(events)).toEqual([{ type: 'image', bytes: new Uint8Array(PNG), seed: 42 }]);
   });
 
@@ -168,6 +169,20 @@ describe('invokeai generation', () => {
     expect(imagesOf(events).map((e) => e.seed)).toEqual([11, 12]);
   });
 
+  it('says which image of a batch is under way, the only thing that moves while a real server works', async () => {
+    const finishedItem = () => item('completed', DONE);
+    let second = 0;
+    const { deps } = adapterDeps({
+      'GET /api/v2/models/i/k-sd1': () => jsonResponse(SD1),
+      'POST /api/v1/queue/default/enqueue_batch': () => jsonResponse({ item_ids: [1, 2] }, 201),
+      'GET /api/v1/queue/default/i/1': finishedItem,
+      'GET /api/v1/queue/default/i/2': () => (second++ === 0 ? item('in_progress') : finishedItem()),
+      'GET /api/v1/images/i/final.png/full': () => new Response(PNG),
+    });
+    const events = await drain(createInvokeAi(invoke(), deps, POLL).generate(imageRequest({ model: 'k-sd1', count: 2 })));
+    expect(events.filter((e) => e.type === 'progress')).toEqual([{ type: 'progress', fraction: 0.5 }]);
+  });
+
   it('uploads an input picture first, as multipart bytes', async () => {
     const seen: { contentType?: string; bytes?: number } = {};
     const { deps, calls } = queue([() => item('completed', DONE)], { 'POST /api/v1/images/upload': () => jsonResponse({ image_name: 'up.png' }, 201) });
@@ -187,6 +202,41 @@ describe('invokeai generation', () => {
     expect(seen.contentType).toMatch(/^multipart\/form-data; boundary=/);
     expect(seen.bytes).toBeGreaterThan(PNG.byteLength);
     expect(enqueued(calls).batch.graph.nodes.resize).toMatchObject({ image: { image_name: 'up.png' } });
+  });
+
+  it('keeps following a job through a poll or two that fail, as a real server under load drops them', async () => {
+    let poll = 0;
+    const { deps } = queue([
+      () => item('completed', DONE),
+    ]);
+    const plain = deps.fetch;
+    const flaky = { ...deps, fetch: ((url, init) => (url.endsWith('/i/1') && poll++ < 3 ? Promise.reject(new TypeError('fetch failed')) : plain(url, init))) as typeof deps.fetch };
+    const events = await drain(createInvokeAi(invoke(), flaky, POLL).generate(imageRequest({ model: 'k-sd1' })));
+    expect(finishOf(events).reason).toBe('done');
+    expect(imagesOf(events)).toHaveLength(1);
+  });
+
+  it('gives up on a server that has really gone', async () => {
+    const { deps, calls } = queue([]);
+    const plain = deps.fetch;
+    const gone = { ...deps, fetch: ((url, init) => (url.endsWith('/i/1') ? Promise.reject(new TypeError('fetch failed')) : plain(url, init))) as typeof deps.fetch };
+    const finish = finishOf(await drain(createInvokeAi(invoke(), gone, POLL).generate(imageRequest({ model: 'k-sd1' }))));
+    expect(finish).toMatchObject({ reason: 'error', error: { code: 'provider_offline' } });
+    expect(calls.length).toBeLessThan(5);
+  });
+
+  it('does not wait out a queue item that no longer exists', async () => {
+    let polls = 0;
+    const { deps } = queue([() => (polls++, jsonResponse({ detail: 'Queue item with id 1 not found in queue default' }, 404))]);
+    const finish = finishOf(await drain(createInvokeAi(invoke(), deps, POLL).generate(imageRequest({ model: 'k-sd1' }))));
+    expect(finish.reason).toBe('error');
+    expect(polls).toBe(1);
+  });
+
+  it('keeps following a job through a poll the server answers with a 500', async () => {
+    let polls = 0;
+    const { deps } = queue([() => (polls++ === 0 ? new Response('busy', { status: 500 }) : item('completed', DONE))]);
+    expect(finishOf(await drain(createInvokeAi(invoke(), deps, POLL).generate(imageRequest({ model: 'k-sd1' })))).reason).toBe('done');
   });
 
   it('reports a failed job with Invoke\'s reason', async () => {
