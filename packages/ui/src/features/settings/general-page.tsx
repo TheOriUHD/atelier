@@ -121,9 +121,9 @@ function DefaultImageModelRow() {
   const setting = usePref<string | undefined>(['models', 'image']);
   const { data: models = [] } = useImageModels();
   const { settings } = useSettings();
-  const providerNames = useMemo(() => new Map(settings?.imageProviders.map((p) => [p.id, p.name])), [settings?.imageProviders]);
+  const providerNames = useMemo(() => new Map(settings?.imageProviders?.map((p) => [p.id, p.name])), [settings?.imageProviders]);
   const visible = models.filter((m) => !m.hidden);
-  if (!settings?.imageGeneration.enabled || (visible.length === 0 && !setting.value)) return null;
+  if (!settings?.imageGeneration?.enabled || (visible.length === 0 && !setting.value)) return null;
   const server = visible.find((m) => m.ref === settings?.models.defaults.image) ?? visible[0];
   const named = server ? ` (${server.displayName})` : '';
   const warning = isUnavailable(setting.value, visible) ? `This model is no longer available. Your images use the server default${named} until you choose another.` : null;

@@ -43,13 +43,13 @@ export function ImageProvidersPage() {
   const list = settingEntry('imageProviders.list');
   // The dialog reads the provider from settings, so what it saves shows at once.
   const [workflows, setWorkflows] = useState<{ open: boolean; id?: string }>({ open: false });
-  const shown = settings?.imageProviders.find((p) => p.id === workflows.id);
+  const shown = settings?.imageProviders?.find((p) => p.id === workflows.id);
 
   return (
     <>
       <DetectedSection />
       <SettingsSection id="imageProviders.list" title={list.label} description={list.description}>
-        {settings?.imageProviders.map((config, index) => (
+        {settings?.imageProviders?.map((config, index) => (
           <ImageProviderRow
             key={config.id}
             config={config}
@@ -234,7 +234,7 @@ function ImageModelsSection() {
   const { data: listed = [] } = useImageModels();
   const { settings } = useSettings();
   const models = useMemo(() => listed.filter((m) => !m.personal), [listed]);
-  const providerNames = useMemo(() => new Map(settings?.imageProviders.map((p) => [p.id, p.name])), [settings?.imageProviders]);
+  const providerNames = useMemo(() => new Map(settings?.imageProviders?.map((p) => [p.id, p.name])), [settings?.imageProviders]);
   const groups = useMemo(() => {
     const byProvider = new Map<string, ImageModelInfo[]>();
     for (const m of models) byProvider.set(m.providerId, [...(byProvider.get(m.providerId) ?? []), m]);

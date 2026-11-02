@@ -5,12 +5,13 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, powerSaveBlocker, protocol, safeStorage, session, shell, systemPreferences, utilityProcess, webContents, type UtilityProcess, type WebContents } from 'electron';
 import { AppWindows } from './app-windows.ts';
+import { fileExists, repairShortcuts, shortcutPaths } from './shortcuts.ts';
 import { ChatGptChatBrowser } from './chatgpt-chat.ts';
 import { connectIdentity } from './connect-identity.ts';
 import { autoUpdater } from 'electron-updater';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { access, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir, networkInterfaces } from 'node:os';
 import { basename, join, normalize, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -907,6 +908,40 @@ app.whenReady().then(async () => {
   }
 });
 
+/**
+ * Windows: Atelier's shortcuts get their icon and target back when something broke them, and after an update they're
+ * rewritten anyway, so Windows reads the icon again (shortcuts.ts). Tests point it at a folder of their own.
+ */
+async function repairOwnShortcuts(): Promise<void> {
+  const testDir = process.env.ATELIER_SHORTCUT_TEST_DIR;
+  if (process.platform !== 'win32' || (!app.isPackaged && !testDir)) return;
+  const exe = process.env.ATELIER_SHORTCUT_TEST_EXE ?? process.execPath;
+  const marker = join(app.getPath('userData'), 'shortcuts-version');
+  const checked = (await readFile(marker, 'utf8').catch(() => '')).trim();
+  const paths = testDir ? [join(testDir, 'Atelier.lnk')] : shortcutPaths(process.env, app.getPath('desktop'));
+  const repaired = repairShortcuts(paths, exe, {
+    exists: fileExists,
+    read: (path) => {
+      try {
+        const link = shell.readShortcutLink(path);
+        return { target: link.target, ...(link.icon ? { icon: link.icon } : {}), ...(link.iconIndex !== undefined ? { iconIndex: link.iconIndex } : {}) };
+      } catch {
+        return null;
+      }
+    },
+    update: (path, link) => {
+      try {
+        return shell.writeShortcutLink(path, 'update', link);
+      } catch {
+        return false;
+      }
+    },
+    refreshIcons: () => execFile(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'ie4uinit.exe'), ['-show'], () => {}),
+  }, checked !== app.getVersion());
+  if (repaired.length) logMain(`shortcuts rewritten: ${repaired.join(', ')}`);
+  await writeFile(marker, app.getVersion()).catch(() => {});
+}
+
 async function startApp(): Promise<void> {
   // A packaged app has its icon in the bundle; run from the bare Electron binary (development), the Dock would show
   // Electron's.
@@ -972,6 +1007,8 @@ async function startApp(): Promise<void> {
   startBackend();
   registerIpc();
   createWindow();
+  // After the window: a slow disk mustn't hold up the start.
+  setTimeout(() => void repairOwnShortcuts().catch((e: unknown) => logMain(`shortcut check failed: ${describe(e)}`)), 3000);
   app.on('activate', () => {
     if (atelierWindows().length === 0) createWindow();
   });

@@ -278,7 +278,7 @@ export function useImagesOffered(): boolean {
   const { data: models } = useImageModels();
   const { settings } = useSettings();
   // In this order: `imageGeneration` is missing from an older server's settings.
-  const usable = offered && !!settings?.imageGeneration.enabled && !!models?.some((m) => !m.hidden);
+  const usable = offered && !!settings?.imageGeneration?.enabled && !!models?.some((m) => !m.hidden);
   const { data: images } = useQuery({
     queryKey: [...keys.generatedImages, 'any'],
     queryFn: () => rpc().call('generatedImages.list', { limit: 1 }),

@@ -5,6 +5,7 @@ import { defaultSettings, defaultUserPrefs, type ImageModelInfo, type SessionSum
 import { backend, callsTo, model, resetBackend, snapshot } from '../settings/test-backend.ts';
 import { Composer } from './composer.tsx';
 import { useNewImageModel, useSessionImageModel } from './image-model.ts';
+import { keys, useImagesOffered } from '../../lib/queries.ts';
 import type { Attachments } from './use-attachments.ts';
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({ ...(await importOriginal<object>()), useNavigate: () => vi.fn() }));
@@ -161,5 +162,42 @@ describe('when the row shows', () => {
     render(<QueryClientProvider client={client()}><SessionBox of={session} /></QueryClientProvider>);
     expect((await menuItems()).map((i) => i.textContent)).not.toContainEqual(expect.stringContaining('Image model'));
     expect(callsTo('imageModels.list')).toEqual([]);
+  });
+});
+
+describe('an older server’s settings', () => {
+  // While a server updates, the app can hear the new server's capabilities before its settings, which then still lack
+  // every image setting: a desktop crashed on exactly that in 0.3.0.
+  it('never breaks the window while a server updates under it', async () => {
+    resetBackend({
+      'app.info': () => ({ imageGeneration: true }),
+      'imageModels.list': () => MODELS,
+      'prefs.get': () => defaultUserPrefs(),
+      'generatedImages.list': () => ({ items: [], next: null, totalBytes: 0 }),
+      'settings.get': () => {
+        const old = snapshot();
+        const effective = old.effective as Partial<Settings>;
+        delete effective.imageGeneration;
+        delete effective.imageProviders;
+        delete effective.imageModels;
+        delete effective.imagePricing;
+        return old;
+      },
+      'slash.list': () => [],
+    });
+    function Probe() {
+      const offered = useImagesOffered();
+      const choice = useSessionImageModel(session);
+      return <p>{`offered ${offered}, choice ${choice ? 'shown' : 'hidden'}`}</p>;
+    }
+    const qc = client();
+    // Held in the app's cache as it is, not as an answer parsed again, which would fill in the defaults.
+    const old = snapshot();
+    for (const key of ['imageGeneration', 'imageProviders', 'imageModels', 'imagePricing'] as const) delete (old.effective as Partial<Settings>)[key];
+    qc.setQueryData(keys.settings, old);
+    qc.setQueryData(keys.appInfo, { imageGeneration: true });
+    qc.setQueryData(keys.imageModels, MODELS);
+    render(<QueryClientProvider client={qc}><Probe /><SessionBox of={session} /></QueryClientProvider>);
+    await waitFor(() => expect(screen.getByText(/^offered (true|false), choice hidden$/)).toBeTruthy());
   });
 });

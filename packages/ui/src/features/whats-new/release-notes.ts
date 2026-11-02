@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,23 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.3.1',
+    intro: 'Fixes from the first day of 0.3.0.',
+    highlights: [
+      {
+        icon: AppWindow,
+        title: 'Updating a server no longer breaks the app',
+        body: 'A desktop app connected to a server that was updating to 0.3.0 could show only “Something went wrong!” until it was quit from Task Manager. It now carries on through the update, and if a window ever breaks, it says what happened and offers Reload.',
+      },
+      {
+        icon: Link,
+        title: 'Windows shortcuts mend themselves',
+        body: 'A desktop, Start menu or taskbar shortcut to Atelier that lost its icon, or points at an Atelier that moved, is fixed when Atelier starts. After every update Atelier rewrites them, so Windows shows the icon again.',
+      },
+    ],
+    also: [],
+  },
   {
     version: '0.3.0',
     intro: 'Atelier makes images now, on your own GPU or through any major service, right in the conversation. Permission cards tell you more, too.',

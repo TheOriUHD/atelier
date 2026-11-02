@@ -56,7 +56,7 @@ export function ImageModelDialog({ model, open, onOpenChange }: ImageModelDialog
 
 function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): void }) {
   const { settings } = useSettings();
-  const current = settings?.imageModels.overrides[model.ref] ?? {};
+  const current = settings?.imageModels?.overrides[model.ref] ?? {};
   const [form, setForm] = useState(() => toForm(current));
   const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);

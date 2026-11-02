@@ -53,7 +53,7 @@ export function useImageModelGroups(): ImageModelGroup[] {
   const models = useVisibleImageModels();
   const { settings } = useSettings();
   return useMemo(() => {
-    const names = new Map(settings?.imageProviders.map((p) => [p.id, p.name]));
+    const names = new Map(settings?.imageProviders?.map((p) => [p.id, p.name]));
     return imageModelGroups(models, (id) => names.get(id));
   }, [models, settings?.imageProviders]);
 }
@@ -70,7 +70,7 @@ function useOffered(): boolean {
   const models = useVisibleImageModels();
   const { settings } = useSettings();
   // In this order: `imageGeneration` is missing from an older server's settings, which has no image models either.
-  return models.length >= 2 && !!settings?.imageGeneration.enabled;
+  return models.length >= 2 && !!settings?.imageGeneration?.enabled;
 }
 
 /** For a conversation that exists: saved on it, from its next image. */

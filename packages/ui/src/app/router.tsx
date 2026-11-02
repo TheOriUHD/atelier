@@ -1,4 +1,5 @@
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router';
+import { AppError } from './app-error.tsx';
 import { AppShell } from './app-shell.tsx';
 import { recalledTab, startHash } from './last-tab.ts';
 import { HomePage } from '../features/chat/home-page.tsx';
@@ -99,7 +100,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Hash history: the desktop app is served from app:// and the web build from any base path.
-export const router = createRouter({ routeTree, history: createHashHistory(), scrollRestoration: false });
+export const router = createRouter({ routeTree, history: createHashHistory(), scrollRestoration: false, defaultErrorComponent: AppError });
 
 declare module '@tanstack/react-router' {
   interface Register {
