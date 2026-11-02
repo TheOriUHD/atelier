@@ -54,7 +54,7 @@ export type ImageStopReason = 'done' | 'aborted' | 'refused' | 'error';
 
 export type ImageEvent =
   /** The server is loading something before it can start. */
-  | { type: 'loading'; what?: string }
+  | { type: 'loading'; what?: string; /** Jobs ahead in the service's own queue. */ ahead?: number }
   | { type: 'progress'; step?: number; steps?: number; fraction?: number; etaMs?: number }
   /** A picture of the work so far, base64. */
   | { type: 'preview'; mime: string; data: string }

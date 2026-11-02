@@ -261,7 +261,7 @@ export class ImageService {
     for await (const event of model.adapter.generate(request)) {
       switch (event.type) {
         case 'loading':
-          progress.update({ phase: 'loading' }, true);
+          progress.update(event.ahead !== undefined ? { phase: 'queued', ahead: event.ahead } : { phase: 'loading' }, true);
           break;
         case 'progress':
           progress.update({ phase: 'generating', ...(event.step !== undefined ? { step: event.step } : {}), ...(event.steps !== undefined ? { steps: event.steps } : {}), ...(event.fraction !== undefined ? { fraction: event.fraction } : {}), ...(event.etaMs !== undefined ? { etaMs: event.etaMs } : {}) });
