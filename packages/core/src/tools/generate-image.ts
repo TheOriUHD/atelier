@@ -20,7 +20,7 @@ function describe({ tier, has }: DescribeContext): string {
     '- Use it when the person asks for a picture, photo, illustration, logo or anything else to look at.' + (has('inline_visual') || has('artifact') ? ' Charts, diagrams and anything drawn from data or code belong in an artifact or visual instead.' : ''),
     '- Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.',
     "- A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.",
-    '- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want.' + (has('Read') ? ' A path to an image file in the folder works too.' : ''),
+    '- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want.' + (has('Read') ? ' For an image file in the folder, open it with Read first: that gives you its id.' : ''),
     '- `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.',
     "- If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.",
     '- The images appear by themselves: never paste their ids or links into your reply.',
@@ -28,7 +28,7 @@ function describe({ tier, has }: DescribeContext): string {
   ].join('\n');
 }
 
-const REFERENCE = { type: 'string', description: 'An image id like img_ab12cd34, or a path in the folder.' };
+const REFERENCE = { type: 'string', pattern: '^img_[0-9a-f]{8}$', description: 'An image id like img_ab12cd34.' };
 
 export function createGenerateImageTool(deps: GenerateImageDeps): Tool<GenerateImageInput> {
   return {
@@ -70,7 +70,7 @@ export function createGenerateImageTool(deps: GenerateImageDeps): Tool<GenerateI
       properties: {
         prompt: { type: 'string', minLength: 1, maxLength: 8000 },
         aspect_ratio: { type: 'string' },
-        reference_images: { type: 'array', items: { type: 'string' }, maxItems: 16 },
+        reference_images: { type: 'array', items: { type: 'string', pattern: '^img_[0-9a-f]{8}$' }, maxItems: 16 },
         model: { type: 'string' },
       },
       required: ['prompt'],

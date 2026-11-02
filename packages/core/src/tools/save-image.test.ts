@@ -26,6 +26,15 @@ describe('SaveImage', () => {
     expect(output.saved).toEqual({ blob: SHA, mime: 'image/png' });
   });
 
+  it('refuses bytes that are not an image, so it can’t write any file through a fake one', async () => {
+    const { call } = setup();
+    const history: Message[] = [{ id: 't', sessionId: 's', parentId: null, role: 'tool', parts: [{ type: 'tool_result', callId: 'x', content: [{ type: 'image', mime: 'image/png', blob: SHA }] }], model: null, usage: null, stopReason: null, error: null, kind: 'normal', summarizesThroughId: null, createdAt: 0 }];
+    const tool = createSaveImageTool({ runner: { call } } as never, { history: async () => history, read: async () => new TextEncoder().encode('#!/bin/sh\nrm -rf /\n') });
+    const output = await tool.run({ image: imageId(SHA), file_path: 'deploy/run.sh' }, ctx);
+    expect(output.isError).toBe(true);
+    expect(call).not.toHaveBeenCalled();
+  });
+
   it('refuses a name that doesn’t match the image', async () => {
     const { tool, call } = setup();
     const output = await tool.run({ image: imageId(SHA), file_path: 'public/hero.jpg' }, ctx);

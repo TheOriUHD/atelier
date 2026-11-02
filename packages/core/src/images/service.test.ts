@@ -260,6 +260,54 @@ describe('ImageService', () => {
     expect(t.requests[0]?.references).toHaveLength(1);
   });
 
+  it('takes no file paths: a file reaches a provider through Read, which has permissions', async () => {
+    const t = setup();
+    const out = await t.service.generate({ prompt: 'x', reference_images: ['.env'] }, t.ctx());
+    expect(out.isError).toBe(true);
+    expect((out.content[0] as { text: string }).text).toContain('Read');
+    expect(t.requests).toHaveLength(0);
+  });
+
+  it('refuses an id whose bytes are not an image, whatever they were stored as', async () => {
+    const sha = 'c'.repeat(64);
+    const message = { id: 'm', sessionId: 's', parentId: null, role: 'tool', parts: [{ type: 'tool_result', callId: 'r', content: [{ type: 'image', mime: 'image/png', blob: sha }] }], model: null, usage: null, stopReason: null, error: null, kind: 'normal', summarizesThroughId: null, createdAt: 0 } as Message;
+    const t = setup({ history: [message] });
+    (t.service as unknown as { deps: ImageServiceDeps }).deps.blobs = { put: async () => ({}) as never, read: async () => new TextEncoder().encode('SECRET=1') };
+    const out = await t.service.generate({ prompt: 'x', reference_images: [imageId(sha)] }, t.ctx());
+    expect((out.content[0] as { text: string }).text).toContain("isn't an image");
+    expect(t.requests).toHaveLength(0);
+  });
+
+  it('counts images under way towards the daily limit, across sessions', async () => {
+    let release = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const run = async function* (): AsyncGenerator<ImageEvent> {
+      await gate;
+      yield* images();
+    };
+    const t = setup({ run, settings: { maxImagesPerUserPerDay: 1 } });
+    const deps = (t.service as unknown as { deps: ImageServiceDeps }).deps;
+    deps.session = async () => ({ userId: 'u', mode: 'chat', temporary: false });
+    const first = t.service.generate({ prompt: 'a' }, { ...t.ctx(), sessionId: 's1' });
+    await vi.waitFor(() => expect(t.requests).toHaveLength(1));
+    const second = await t.service.generate({ prompt: 'b' }, { ...t.ctx(), sessionId: 's2' });
+    expect((second.content[0] as { text: string }).text).toContain('limit of 1 images a day');
+    release();
+    expect((await first).isError).toBeUndefined();
+  });
+
+  it('skips a preview too large to decode here', async () => {
+    const huge = Buffer.alloc(4_000_000);
+    huge.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0x4e, 0x20, 0, 0, 0x4e, 0x20]);
+    const run = async function* (): AsyncGenerator<ImageEvent> {
+      yield { type: 'preview', mime: 'image/png', data: huge.toString('base64') };
+      yield* images();
+    };
+    const t = setup({ run });
+    await t.service.generate({ prompt: 'x' }, t.ctx());
+    expect(t.events.some((e) => e.type === 'tool_progress' && e.progress.preview)).toBe(false);
+  });
+
   it('downloads what a hosted service only links to', async () => {
     const run = async function* (): AsyncGenerator<ImageEvent> {
       yield { type: 'image', url: 'https://cdn.example.com/a.png' };

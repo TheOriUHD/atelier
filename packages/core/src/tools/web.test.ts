@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { blockedAddress } from './address-guard.ts';
 import { createWebFetchTool, htmlToMarkdown } from './web-fetch.ts';
 import { createWebSearchTool } from './web-search.ts';
 import { SearchService, type SearchConfig } from '../search/service.ts';
@@ -150,5 +151,41 @@ describe('WebSearch', () => {
     const missing = tool({ provider: 'tavily' }, () => new Response('', { status: 500 }));
     await missing.t.run({ query: 'atelier' }, ctx);
     expect(missing.calls[0]!.url).not.toContain('tavily');
+  });
+});
+
+describe('the address guard and IPv6', () => {
+  it.each([
+    ['::ffff:7f00:1', 'this machine'],
+    ['::ffff:127.0.0.1', 'this machine'],
+    ['::ffff:a9fe:a9fe', 'a link-local address (cloud metadata)'],
+    ['::ffff:a00:1', 'a private network address'],
+    ['::7f00:1', 'this machine'],
+    ['64:ff9b::7f00:1', 'this machine'],
+    ['64:ff9b::a9fe:a9fe', 'a link-local address (cloud metadata)'],
+    ['2002:7f00:1::', 'this machine'],
+    ['2002:c0a8:101::', 'a private network address'],
+    ['0:0:0:0:0:ffff:7f00:1', 'this machine'],
+    ['::1', 'this machine'],
+    ['::', 'this machine'],
+    ['0:0:0:0:0:0:0:1', 'this machine'],
+    ['fe80::1', 'a link-local address'],
+    ['fe80::1%eth0', 'a link-local address'],
+    ['febf::1', 'a link-local address'],
+    ['fc00::1', 'a private network address'],
+    ['fd12:3456::1', 'a private network address'],
+    ['ff02::1', 'a multicast address'],
+  ])('refuses %s', (ip, why) => {
+    expect(blockedAddress(ip, false)).toBe(why);
+  });
+
+  it.each(['2606:4700:4700::1111', '2001:4860:4860::8888', '::ffff:8.8.8.8', '::ffff:808:808', '93.184.216.34', '2002:808:808::', '64:ff9b::808:808'])('lets %s through', (ip) => {
+    expect(blockedAddress(ip, false)).toBeNull();
+  });
+
+  it('keeps private networks open when they are allowed, but never this machine', () => {
+    expect(blockedAddress('::ffff:a00:1', true)).toBeNull();
+    expect(blockedAddress('fd12::1', true)).toBeNull();
+    expect(blockedAddress('::ffff:7f00:1', true)).toBe('this machine');
   });
 });

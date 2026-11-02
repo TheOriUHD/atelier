@@ -458,6 +458,33 @@ describe('decide', () => {
   });
 });
 
+describe('image tools', () => {
+  const save = (file_path: string) => ({ name: 'SaveImage', input: { image: 'img_ab12cd34', file_path } });
+  const generate = { name: 'GenerateImage', input: { prompt: 'a cat' } };
+  const inDeploy = '/work/app/deploy/run.png';
+
+  it('holds SaveImage to Edit rules like any write', () => {
+    for (const mode of ['auto', 'acceptEdits', 'bypassPermissions', 'default'] as const) expect(decide(save(inDeploy), ctx({ deny: ['Edit(/deploy/**)'] }, mode)).behavior).toBe('deny');
+    expect(decide(save(inDeploy), ctx({ ask: ['Edit(/deploy/**)'] }, 'auto')).behavior).toBe('ask');
+  });
+
+  it('lets the Edit rule Always allow offers cover the save it was offered for', () => {
+    const rule = suggestRule(save('/work/app/assets/hero.png'), paths);
+    expect(rule).toBe('Edit(/assets/**)');
+    expect(decide(save('/work/app/assets/hero.png'), ctx({ allow: [rule] })).behavior).toBe('allow');
+  });
+
+  it('makes images without review in Auto, and asks in Ask', () => {
+    expect(decide(generate, ctx({}, 'auto')).behavior).toBe('allow');
+    expect(decide(generate, ctx({}, 'default')).behavior).toBe('ask');
+    expect(decide(generate, ctx({}, 'plan')).behavior).toBe('deny');
+  });
+
+  it('keeps a deny rule on GenerateImage in every mode', () => {
+    expect(decide(generate, ctx({ deny: ['GenerateImage'] }, 'auto')).behavior).toBe('deny');
+  });
+});
+
 describe('a chat sandbox', () => {
   const sandbox = { root: '/home/sandbox/chats/u1/chat-1', home: '/home/sandbox', confined: true, flavor: 'posix' as const };
   const bash = (command: string, s = sandbox) => sandboxDecide({ name: 'Bash', input: { command } }, s);

@@ -2654,13 +2654,15 @@ Makes images from a text description and shows them in the conversation. A local
       "type": "array",
       "items": {
         "type": "string",
-        "description": "An image id like img_ab12cd34, or a path in the folder."
+        "pattern": "^img_[0-9a-f]{8}$",
+        "description": "An image id like img_ab12cd34."
       },
       "maxItems": 16,
       "description": "Images to change or to work from."
     },
     "mask": {
       "type": "string",
+      "pattern": "^img_[0-9a-f]{8}$",
       "description": "An image id: white where the first reference image may change."
     },
     "model": {

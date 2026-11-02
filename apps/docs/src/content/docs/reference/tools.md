@@ -1266,7 +1266,7 @@ Makes images from a text description and shows them in the conversation. A local
 - Use it when the person asks for a picture, photo, illustration, logo or anything else to look at. Charts, diagrams and anything drawn from data or code belong in an artifact or visual instead.
 - Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.
 - A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.
-- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want. A path to an image file in the folder works too.
+- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want. For an image file in the folder, open it with Read first: that gives you its id.
 - `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.
 - If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.
 - The images appear by themselves: never paste their ids or links into your reply.

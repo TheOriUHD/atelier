@@ -88,6 +88,12 @@ const SOCKET_RECHECK_MS = 5_000;
 const SOCKET_HEADERS = new Set(['authorization', 'x-api-key', 'api-key']);
 
 /** Node's WebSocket (undici) accepts request headers; the DOM typings don't know that. */
+/** Headers a server may not set on a request here: they say who asks or which site is meant, which would reach past a lent address. */
+const ROUTING_HEADERS = /^(host|forwarded|x-forwarded-.*|x-real-ip|proxy-.*)$/i;
+
+/** A request's headers without those. */
+export const lentHeaders = (headers: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(headers).filter(([name]) => !ROUTING_HEADERS.test(name)));
+
 const NodeWebSocket = WebSocket as unknown as new (url: string, init: { headers: Record<string, string> }) => WebSocket;
 
 /** Whether `url` is at or below `base`: the same origin, and the base's path or one under it. */
@@ -95,6 +101,9 @@ export function withinAddress(url: string, base: string): boolean {
   const u = URL.parse(url);
   const b = URL.parse(base);
   if (!u || !b || u.origin !== b.origin || u.username || u.password) return false;
+  // `..` written with encoded dots or slashes survives URL parsing, and a proxy that decodes before routing walks out of
+  // the base path. An encoded slash alone stays: model ids and ComfyUI's `/userdata/workflows%2F…` need it.
+  if (u.pathname.replace(/%2e/gi, '.').replace(/%2f|%5c/gi, '/').split('/').includes('..')) return false;
   const root = b.pathname.replace(/\/+$/, '');
   return u.pathname === root || u.pathname.startsWith(`${root}/`) || root === '';
 }
@@ -377,7 +386,7 @@ export function deviceServices(o: DeviceServicesOptions) {
         try {
           const response = await fetchHere(service.url, {
             method: service.method,
-            headers: service.headers,
+            headers: lentHeaders(service.headers),
             ...(service.body ? { body: Buffer.from(service.body, 'base64') } : {}),
             signal: abort.signal,
             redirect: 'manual',

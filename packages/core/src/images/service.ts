@@ -10,7 +10,7 @@ import type { Db } from '../store/db.ts';
 import { generatedImages, usageEvents } from '../store/schema.ts';
 import type { FileRepo } from '../files/file-repo.ts';
 import { imageSize } from '../providers/image-size.ts';
-import { fitImage } from '../providers/images.ts';
+import { fitImage, sniffMime } from '../providers/images.ts';
 import { isLocalServer } from '../providers/scheduler.ts';
 import type { ProviderFetch } from '../providers/types.ts';
 import { toBase64 } from '../providers/util.ts';
@@ -58,8 +58,6 @@ export interface ImageServiceDeps {
   history(sessionId: string): Promise<Message[]>;
   /** When the turn the session is in started. */
   turnStart(sessionId: string): Promise<number>;
-  /** An image file in the session's folder, for `reference_images` given as paths. */
-  readFile?(sessionId: string, path: string, signal: AbortSignal): Promise<{ bytes: Uint8Array; mime: string }>;
   /** A finished image's URL; `through` a person's computer when one of their own servers gave it. */
   download(url: string, signal: AbortSignal, through?: ProviderFetch): Promise<DownloadedImage>;
   recordUsage(entry: { providerId: string; modelId: string; sessionId: string; userId: string | null; mode: string; images: number; costUsd: number | null; costEstimated: boolean; durationMs: number }): void;
@@ -78,6 +76,8 @@ const ETA_AFTER_STEPS = 2;
 const PREVIEW_EVERY_MS = 1_000;
 const PREVIEW_SIDE = 512;
 const PREVIEW_BYTES = 200_000;
+const MAX_PREVIEW_CHARS = 16_000_000;
+const MAX_PREVIEW_PIXELS = 4_000_000;
 const RETRY_DELAYS_MS = [2_000, 6_000];
 const MAX_INPUT_SIDE = 2048;
 const MAX_INPUT_BYTES = 20 * 1024 * 1024;
@@ -115,6 +115,8 @@ function imagesIn(messages: readonly Message[]): Map<string, string> {
 export class ImageService {
   /** Images made or under way per session this turn, so parallel calls can't all slip under the limit. */
   private turns = new Map<string, { since: number; count: number }>();
+  /** Images under way per person, which usage doesn't show yet: sessions started together can't all slip under the daily limit. */
+  private underWay = new Map<string, number>();
 
   constructor(private readonly deps: ImageServiceDeps) {}
 
@@ -141,23 +143,22 @@ export class ImageService {
     return this.deps.registry.resolve(match.ref, { admin: await this.deps.isAdmin(session.userId), userId: session.userId });
   }
 
-  private async inputImage(sessionId: string, reference: string, signal: AbortSignal): Promise<ImageInput> {
-    let bytes: Uint8Array;
-    let mime: string;
-    if (reference.startsWith(IMAGE_ID_PREFIX)) {
-      // Only this conversation's images: a model can't reach anything else by guessing hashes.
-      const known = imagesIn(await this.deps.history(sessionId));
-      const sha = known.get(reference);
-      if (!sha) throw new ImageCallError(`There's no image ${reference} in this conversation.${known.size ? ` Images here: ${[...known.keys()].join(', ')}.` : ''}`);
-      bytes = await this.deps.blobs.read(sha);
-      mime = 'image/png';
-    } else {
-      if (!this.deps.readFile) throw new ImageCallError(`"${reference}" isn't an image id, and this conversation has no folder to read it from.`);
-      ({ bytes, mime } = await this.deps.readFile(sessionId, reference, signal));
-    }
+  /**
+   * An input image, by its id only. Paths aren't taken: this tool goes unreviewed, so a path would let a prompt-injected
+   * model send any file in the folder to a provider. A file comes in through Read, which has permissions, and gets an id.
+   */
+  private async inputImage(sessionId: string, reference: string): Promise<ImageInput> {
+    if (!reference.startsWith(IMAGE_ID_PREFIX)) throw new ImageCallError(`"${reference}" isn't an image id. To use an image file, open it with Read first, then pass the id you get.`);
+    // Only this conversation's images: a model can't reach anything else by guessing hashes.
+    const known = imagesIn(await this.deps.history(sessionId));
+    const sha = known.get(reference);
+    if (!sha) throw new ImageCallError(`There's no image ${reference} in this conversation.${known.size ? ` Images here: ${[...known.keys()].join(', ')}.` : ''}`);
+    const bytes = await this.deps.blobs.read(sha);
+    const mime = sniffMime(bytes);
+    if (!mime) throw new ImageCallError(`${reference} isn't an image.`);
     const fitted = fitImage(bytes, mime, MAX_INPUT_SIDE, MAX_INPUT_BYTES);
     if (!fitted.ok) throw new ImageCallError(`The image ${reference} ${fitted.reason}.`);
-    return { bytes: fitted.image.bytes, mime: fitted.image.mime, name: `input-${reference.replace(/[^\w.-]+/g, '_')}.${fitted.image.mime.split('/')[1]}` };
+    return { bytes: fitted.image.bytes, mime: fitted.image.mime, name: `input-${reference}.${fitted.image.mime.split('/')[1]}` };
   }
 
   /** The models as the text model reads them, the person's choice first. */
@@ -223,15 +224,24 @@ export class ImageService {
         .from(usageEvents)
         .where(and(eq(usageEvents.userId, userId), gte(usageEvents.ts, midnight), gte(usageEvents.images, 1)))
         .get();
-      if (maxImagesPerUserPerDay !== undefined && (today?.images ?? 0) + count > maxImagesPerUserPerDay) throw new ImageCallError(`This account has reached its limit of ${maxImagesPerUserPerDay} images a day. Tell the person; an admin can change it.`);
+      if (maxImagesPerUserPerDay !== undefined && (today?.images ?? 0) + (this.underWay.get(userId) ?? 0) + count > maxImagesPerUserPerDay) throw new ImageCallError(`This account has reached its limit of ${maxImagesPerUserPerDay} images a day. Tell the person; an admin can change it.`);
       if (maxSpendPerUserPerDayUsd !== undefined && (today?.cost ?? 0) >= maxSpendPerUserPerDayUsd) throw new ImageCallError(`This account has reached its limit of $${maxSpendPerUserPerDayUsd} of images a day. Tell the person; an admin can change it.`);
     }
     this.turns.set(sessionId, { since, count: made + count });
+    if (userId) this.underWay.set(userId, (this.underWay.get(userId) ?? 0) + count);
   }
 
   private release(sessionId: string, count: number): void {
     const turn = this.turns.get(sessionId);
     if (turn) turn.count = Math.max(0, turn.count - count);
+  }
+
+  /** The job is over: what it made is in usage now, and the rest was never made. */
+  private settle(userId: string | null, count: number): void {
+    if (!userId || count === 0) return;
+    const left = (this.underWay.get(userId) ?? 0) - count;
+    if (left > 0) this.underWay.set(userId, left);
+    else this.underWay.delete(userId);
   }
 
   /** Reports progress at a pace the connection and the page can take, and keeps previews small. */
@@ -306,8 +316,11 @@ export class ImageService {
     const started = Date.now();
     /** Counted towards the limit and not made, handed back at the end. */
     let reserved = 0;
+    let underWay = 0;
+    let userId: string | null = null;
     try {
       const session = await this.deps.session(ctx.sessionId);
+      userId = session.userId;
       const model = await this.pick(session, input.model);
       const fit = fitParams(
         model.info.capabilities,
@@ -328,9 +341,10 @@ export class ImageService {
       );
       await this.checkLimits(ctx.sessionId, session.userId, fit.count);
       reserved = fit.count;
+      underWay = fit.count;
 
-      const references = await Promise.all((input.reference_images ?? []).slice(0, fit.references).map((r) => this.inputImage(ctx.sessionId, r, ctx.signal)));
-      const mask = input.mask && fit.mask ? await this.inputImage(ctx.sessionId, input.mask, ctx.signal) : undefined;
+      const references = await Promise.all((input.reference_images ?? []).slice(0, fit.references).map((r) => this.inputImage(ctx.sessionId, r)));
+      const mask = input.mask && fit.mask ? await this.inputImage(ctx.sessionId, input.mask) : undefined;
 
       const progress = this.progressReporter(ctx, { ...(fit.width ? { width: fit.width } : {}), ...(fit.height ? { height: fit.height } : {}), count: fit.count });
       progress.update({}, true);
@@ -358,6 +372,7 @@ export class ImageService {
       throw error;
     } finally {
       if (reserved > 0) this.release(ctx.sessionId, reserved);
+      this.settle(userId, underWay);
     }
   }
 
@@ -505,7 +520,12 @@ function perImageCost(settings: Settings, model: ResolvedImageModel, fit: Return
 
 function shrinkPreview(mime: string, data: string): ImageProgress['preview'] {
   if (data.length <= PREVIEW_BYTES) return { mime, data };
-  const fitted = fitImage(Buffer.from(data, 'base64'), mime, PREVIEW_SIDE, PREVIEW_BYTES);
+  // Decoded on the backend's main thread, once a second, at a size a server chooses: a huge one is simply skipped.
+  if (data.length > MAX_PREVIEW_CHARS) return undefined;
+  const bytes = Buffer.from(data, 'base64');
+  const size = imageSize(bytes);
+  if (!size || size.width * size.height > MAX_PREVIEW_PIXELS) return undefined;
+  const fitted = fitImage(bytes, mime, PREVIEW_SIDE, PREVIEW_BYTES);
   return fitted.ok ? { mime: fitted.image.mime, data: toBase64(fitted.image.bytes) } : undefined;
 }
 

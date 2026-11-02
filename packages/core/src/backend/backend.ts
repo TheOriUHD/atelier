@@ -64,7 +64,6 @@ import { generatedImagesFor } from '../images/library.ts';
 import { ImageProviderRegistry } from '../images/registry.ts';
 import { ImageService, type ImageSessionFacts } from '../images/service.ts';
 import { openSocket } from '../images/socket.ts';
-import { sniffMime } from '../providers/images.ts';
 import { connectorContext } from '../permissions/engine.ts';
 import { hostRunnerBinary } from '../workspaces/runner-client.ts';
 import { codeContext } from '../workspaces/code-context.ts';
@@ -911,14 +910,6 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     isAdmin: async (userId) => !userId || (await accounts.get(userId)).role === 'admin',
     history: (id) => sessions.history(id),
     turnStart: async (id) => (db.$client.prepare(`SELECT COALESCE(MAX(created_at), 0) AS at FROM messages WHERE session_id = ? AND role = 'user'`).get(id) as { at: number }).at,
-    readFile: async (id, path, signal) => {
-      const row = await sessions.getRow(id);
-      const workspace = row?.workspaceId && row.userId ? await workspaceManager.open(row.userId, row.workspaceId) : null;
-      if (!workspace) throw new Error('This conversation has no folder.');
-      const { content } = await workspace.runner.call('fs.read', { path, encoding: 'base64' }, { signal });
-      const bytes = Buffer.from(content, 'base64');
-      return { bytes, mime: sniffMime(bytes) ?? 'application/octet-stream' };
-    },
     // Tests point a hosted service's result URLs at a fake server on this machine.
     // From a person's own server the URL goes to their computer, whose lending decides; this server never fetches it.
     download: (url, signal, through) => downloadImage(through ? { fetch: through, allowPrivate: true } : { fetch: httpFetch, allowPrivate: !!platform.env.ATELIER_IMAGE_DOWNLOAD_PRIVATE }, url, signal),

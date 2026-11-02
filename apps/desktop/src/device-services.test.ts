@@ -7,7 +7,7 @@ import { hostRunnerBinary } from '@atelier/core';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { wsServer, type WsServer } from './__fixtures__/ws-server.ts';
-import { deviceServices, withinAddress, withinSocketAddress } from './device-services.ts';
+import { deviceServices, lentHeaders, withinAddress, withinSocketAddress } from './device-services.ts';
 import { applyLending, connectorFingerprint } from './lending.ts';
 
 const runnerDir = join(import.meta.dirname, '../../../runner/bin');
@@ -559,5 +559,22 @@ describe('the config in the home folder', () => {
     await expect(lent.request({ op: 'mcp.import' })).rejects.toMatchObject({ code: 'refused' });
     lent.allowImport();
     expect(await lent.request({ op: 'mcp.import' })).toMatchObject([{ name: 'docs', config: { type: 'stdio', command: 'npx', args: ['docs-mcp'] } }]);
+  });
+});
+
+describe('what `http` lets a server send to a lent address', () => {
+  it('refuses a way out of the base path spelled with encoded dots or slashes', () => {
+    const base = 'http://proxy.lan/comfy';
+    expect(withinAddress('http://proxy.lan/comfy/..%2f..%2fadmin', base)).toBe(false);
+    expect(withinAddress('http://proxy.lan/comfy/%2e%2e/admin', base)).toBe(false);
+    expect(withinAddress('http://proxy.lan/comfy/%2E%2E%5cadmin', base)).toBe(false);
+  });
+
+  it('keeps an encoded slash that goes nowhere, which ComfyUI and model ids need', () => {
+    expect(withinAddress('http://proxy.lan/comfy/userdata/workflows%2Fmine.json', 'http://proxy.lan/comfy')).toBe(true);
+  });
+
+  it('drops headers that would pick another site behind the same address', () => {
+    expect(lentHeaders({ Host: 'other.lan', Forwarded: 'x', 'X-Forwarded-Host': 'y', 'x-real-ip': '1.1.1.1', 'Proxy-Authorization': 'z', authorization: 'Bearer k', 'content-type': 'application/json' })).toEqual({ authorization: 'Bearer k', 'content-type': 'application/json' });
   });
 });

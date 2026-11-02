@@ -15,6 +15,7 @@ import { createReplicate } from './dialects/replicate.ts';
 import { createResponsesImage } from './dialects/responses-image.ts';
 import { createStability } from './dialects/stability.ts';
 import { createSwarmUi } from './dialects/swarmui.ts';
+import { guardedImageFetch } from './fetch-guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageInstance } from './types.ts';
 
 const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps: ImageAdapterDeps) => ImageAdapter>> = {
@@ -38,5 +39,5 @@ const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps
 export function createImageAdapter(instance: ImageInstance, deps: ImageAdapterDeps): ImageAdapter {
   const create = DIALECTS[instance.type];
   if (!create) throw new Error(`${instance.name}: this kind of image provider isn't available yet.`);
-  return create(instance, deps);
+  return create(instance, { ...deps, fetch: guardedImageFetch(deps.fetch) });
 }

@@ -39,8 +39,10 @@ export function createSaveImageTool(workspace: Pick<Workspace, 'runner'>, deps: 
       if (!blob) return textOutput(`There's no image ${image} in this conversation.`, true);
       const bytes = await deps.read(blob);
       const mime = sniffMime(bytes);
+      // Bytes that only claim to be an image (Read takes a file's extension at its word) aren't saved: this isn't a way to write any file.
+      if (!mime) return textOutput(`${image} isn't an image.`, true);
       const extension = file_path.split('.').pop()?.toLowerCase() ?? '';
-      if (mime && !EXTENSIONS[mime]?.includes(extension)) return textOutput(`This image is a ${mime.split('/')[1]!.toUpperCase()}: save it with a .${EXTENSIONS[mime]![0]} name, or convert it afterwards.`, true);
+      if (!EXTENSIONS[mime]?.includes(extension)) return textOutput(`This image is a ${mime.split('/')[1]!.toUpperCase()}: save it with a .${EXTENSIONS[mime]![0]} name, or convert it afterwards.`, true);
       await deps.checkpoint?.(ctx, file_path);
       const { created } = await workspace.runner.call('fs.write', { path: file_path, content: toBase64(bytes), encoding: 'base64', mkdirp: true }, { signal: ctx.signal });
       return { ...textOutput(`${created ? 'Saved' : 'Replaced'} ${file_path} (${Math.ceil(bytes.byteLength / 1024)} KB).`), saved: { blob, mime: mime ?? 'image/png' } };

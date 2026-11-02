@@ -2231,6 +2231,8 @@ export class ChatService {
         // Tool results carry images too (screenshots, Read, connectors, generated ones): a model that can't see them
         // would have the whole request refused.
         else if (p.type === 'tool_result' && !info.capabilities.vision && p.content.some((c) => c.type === 'image')) parts.push({ ...p, content: p.content.map((c) => (c.type === 'image' ? { type: 'text' as const, text: `[An image${imageIds ? ` (${imageId(c.blob)})` : ''}, which this model cannot view.]` } : c)) });
+        // An image a tool brought in (Read, a screenshot) gets an id too, so it can be edited or saved. GenerateImage says its own.
+        else if (p.type === 'tool_result' && imageIds && !p.generated && p.content.some((c) => c.type === 'image')) parts.push({ ...p, content: p.content.flatMap((c) => (c.type === 'image' ? [c, { type: 'text' as const, text: `[Image ${imageId(c.blob)}]` }] : [c])) });
         else if (p.type === 'document' && !(p.mime === 'application/pdf' && info.capabilities.pdf)) {
           parts.push(
             canExtractText(p.mime)

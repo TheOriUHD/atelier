@@ -2036,3 +2036,42 @@ describe('answerDanglingToolCalls', () => {
     expect(answerDanglingToolCalls(out)).toEqual(out);
   });
 });
+
+describe('images in a request', () => {
+  const SHA = 'ab'.repeat(32);
+  const ID = `img_${SHA.slice(0, 8)}`;
+  const images = { generate: async () => ({ content: [] }), available: async () => true, modelList: async () => '- img/m (M): prompt in plain sentences' };
+  const seeing: ModelInfo = { ...info, capabilities: { ...info.capabilities, vision: true } };
+
+  /** A conversation where a tool brought an image in, then the next request as the model gets it. */
+  async function requestAfterToolImage(model: ModelInfo, extra: Partial<ChatServiceDeps> = {}) {
+    const chat = service({ resolve: async () => ({ adapter: echoAdapter(seen), info: model }) }, undefined, extra);
+    const s = await repo.create({ mode: 'chat' });
+    const user = await repo.insertMessage({ id: 'u', sessionId: s.id, parentId: null, role: 'user', parts: [{ type: 'text', text: 'Look' }], model: null, usage: null, stopReason: null, error: null, kind: 'normal', summarizesThroughId: null });
+    const call = await repo.insertMessage({ id: 'a', sessionId: s.id, parentId: user.id, role: 'assistant', parts: [{ type: 'tool_call', id: 'c', name: 'Read', input: { file_path: 'a.png' } }], model: null, usage: null, stopReason: 'tool_use', error: null, kind: 'normal', summarizesThroughId: null });
+    await repo.insertMessage({ id: 't', sessionId: s.id, parentId: call.id, role: 'tool', parts: [{ type: 'tool_result', callId: 'c', content: [{ type: 'image', mime: 'image/png', blob: SHA }] }], model: null, usage: null, stopReason: null, error: null, kind: 'normal', summarizesThroughId: null });
+    await repo.update(s.id, { headMessageId: 't' });
+    await chat.send(s.id, [{ type: 'text', text: 'And now?' }]);
+    await chat.settle(s.id);
+    // The title's request comes first and sees only the first message.
+    return seen.at(-1)!.messages.flatMap((m) => m.parts).filter((p) => p.type === 'tool_result').flatMap((p) => p.content);
+  }
+
+  it('gives a model that cannot see a tool result’s image words instead of pixels', async () => {
+    const content = await requestAfterToolImage(info);
+    expect(content).toHaveLength(1);
+    expect(content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('cannot view') });
+  });
+
+  it('leaves it for a model that can see', async () => {
+    expect((await requestAfterToolImage(seeing)).some((c) => c.type === 'image')).toBe(true);
+  });
+
+  it('names an image a tool brought in, so a session with image tools can use it', async () => {
+    expect(await requestAfterToolImage(seeing, { images })).toContainEqual({ type: 'text', text: `[Image ${ID}]` });
+  });
+
+  it('keeps ids out of a request with no image tools, so nothing changes for anyone else', async () => {
+    expect(JSON.stringify(await requestAfterToolImage(seeing))).not.toContain(ID);
+  });
+});
