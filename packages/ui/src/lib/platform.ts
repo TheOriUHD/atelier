@@ -13,7 +13,7 @@ export type LendingChange =
   /** A personal connector that runs a program here: allowed by what runs, taken back by id. */
   | { kind: 'connector'; id: string; allowed: true; name: string; command: string; args: string[]; envKeys: string[] }
   | { kind: 'connector'; id: string; allowed: false }
-  /** An address the server may reach from here (a model server or connector on this computer or its network). */
+  /** An address the server may reach from here (a model or image server, or a connector, on this computer or its network). */
   | { kind: 'http'; id: string; allowed: true; baseUrl: string }
   | { kind: 'http'; id: string; allowed: false }
   | { kind: 'chatgptChat'; allowed: boolean }

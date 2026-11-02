@@ -6,6 +6,7 @@ import { relativeTime } from '../../lib/dates.ts';
 import { changeLending, useConnection, useLending } from '../../lib/lending.ts';
 import { desktop, isMac, openExternal, os, type LendingChange, type UpdateChannel, type UpdateStatus } from '../../lib/platform.ts';
 import { ComputerUseSection } from './computer-use-section.tsx';
+import { usePersonalImageServers } from './personal-image-servers.tsx';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useWrite } from './use-setting.ts';
 
@@ -66,11 +67,17 @@ function LentSection() {
   const lending = useLending();
   const { data: connection } = useConnection();
   const { error, run } = useWrite();
+  const { data: imageServers } = usePersonalImageServers();
   const allowed = lending.allowed;
   const shown = (['scratch', 'ssh', 'mcp', 'http', 'chatgptChat', 'home'] as const).filter((s) => lending.lends(s));
   if (!lending.server || !allowed || !shown.length) return null;
   const server = connection?.serverUrl ? new URL(connection.serverUrl).host : 'the server';
   const change = (c: LendingChange) => void run(() => changeLending(c));
+  /** An image server is known by its name here; other addresses by themselves. */
+  const addressLabel = (a: { id: string; baseUrl: string }) => {
+    const name = imageServers?.find((s) => s.id === a.id)?.name;
+    return name ? `${name} · ${a.baseUrl}` : a.baseUrl;
+  };
   return (
     <SettingsSection title={`What ${server} can do here`}>
       {lending.lends('home') && (
@@ -95,7 +102,7 @@ function LentSection() {
       )}
       {lending.lends('http') && (
         <SettingRow id="system.lendHttp" stacked error={error}>
-          <LentList items={allowed.http.map((a) => ({ key: a.id, label: a.baseUrl, remove: () => change({ kind: 'http', id: a.id, allowed: false }) }))} />
+          <LentList items={allowed.http.map((a) => ({ key: a.id, label: addressLabel(a), remove: () => change({ kind: 'http', id: a.id, allowed: false }) }))} />
         </SettingRow>
       )}
       {lending.lends('chatgptChat') && (

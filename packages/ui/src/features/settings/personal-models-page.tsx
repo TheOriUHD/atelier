@@ -33,6 +33,7 @@ import { keys } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { ChatGptChatSteps, type ChatGptChatWindow } from './chatgpt-chat-sign-in.tsx';
 import { ITEM_ROW_CLASS, ItemTile } from './item-row.tsx';
+import { HEALTH_DOT_CLASS, PersonalImageServers, serverHealth } from './personal-image-servers.tsx';
 import { plural } from './provider-wizard.tsx';
 import { settingEntry } from './search-index.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
@@ -104,6 +105,7 @@ export function PersonalModelsPage() {
           </SettingRow>
         )}
       </SettingsSection>
+      <PersonalImageServers here={here} />
       <AddServerDialog key={adding.key} open={adding.open} onOpenChange={(open) => setAdding((a) => ({ ...a, open }))} />
       <Dialog open={chatgpt} onOpenChange={(open) => (open ? setChatgpt(true) : leaveChatgpt())}>
         <DialogContent title="Add ChatGPT Chat">
@@ -172,22 +174,11 @@ function FoundHere() {
   );
 }
 
-type Health = { tone: 'success' | 'danger' | 'muted'; label: string };
-
-function health(p: PersonalProvider): Health {
-  if (!p.enabled) return { tone: 'muted', label: 'Turned off' };
-  if (!p.online) return { tone: 'muted', label: 'Not connected' };
-  if (!p.status) return { tone: 'muted', label: 'Not checked yet' };
-  return p.status.ok ? { tone: 'success', label: 'Connected' } : { tone: 'danger', label: 'Unreachable' };
-}
-
-const DOT_CLASS: Record<Health['tone'], string> = { success: 'bg-success', danger: 'bg-danger', muted: 'bg-line-stronger' };
-
 function PersonalRow({ provider: p, here }: { provider: PersonalProvider; here: boolean }) {
   const qc = useQueryClient();
   const [checking, setChecking] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const state = health(p);
+  const state = serverHealth(p);
   const failed = (e: unknown) => void toast.error(describeError(e).message);
   const meta = [
     `On ${p.deviceName}${here ? ' (this computer)' : ''}`,
@@ -213,7 +204,7 @@ function PersonalRow({ provider: p, here }: { provider: PersonalProvider; here: 
     <div className={ITEM_ROW_CLASS}>
       <ItemTile icon={p.type === 'chatgpt-chat' ? MessageSquare : Server}>
         <span className="absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-full bg-surface">
-          {checking ? <Spinner className="size-3" label="Checking" /> : <span role="img" aria-label={state.label} className={cn('size-2 rounded-full', DOT_CLASS[state.tone])} />}
+          {checking ? <Spinner className="size-3" label="Checking" /> : <span role="img" aria-label={state.label} className={cn('size-2 rounded-full', HEALTH_DOT_CLASS[state.tone])} />}
         </span>
       </ItemTile>
       <div className={cn('min-w-0 flex-1', (!p.enabled || !p.online) && 'opacity-60')}>

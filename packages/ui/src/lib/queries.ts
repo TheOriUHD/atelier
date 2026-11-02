@@ -18,6 +18,8 @@ export const keys = {
   providers: ['providers'] as const,
   /** The person's own model servers and ChatGPT Chat on their computers (server mode). */
   personalProviders: ['personalProviders'] as const,
+  /** The person's own image servers on their computers (server mode). */
+  personalImageProviders: ['personalImageProviders'] as const,
   projects: ['projects'] as const,
   project: (id: string) => ['project', id] as const,
   secrets: ['secrets'] as const,
@@ -79,6 +81,7 @@ export function useLiveQueries(): void {
         qc.setQueryData(keys.models, models);
         void qc.invalidateQueries({ queryKey: keys.personalProviders });
       }),
+      rpc().on('imageModels.changed', () => void qc.invalidateQueries({ queryKey: keys.personalImageProviders })),
       rpc().on('providers.changed', (status) => qc.setQueryData(keys.providers, status)),
       rpc().on('sessions.changed', (summary) => {
         qc.setQueriesData<SessionSummary[]>({ queryKey: ['sessions'] }, (list) => {
@@ -117,6 +120,7 @@ export function useLiveQueries(): void {
         // What this computer lends may have changed in another of its windows (the server hears it and says so).
         void qc.invalidateQueries({ queryKey: keys.lending });
         void qc.invalidateQueries({ queryKey: keys.personalProviders });
+        void qc.invalidateQueries({ queryKey: keys.personalImageProviders });
       }),
       rpc().on('extensions.changed', () => {
         for (const queryKey of [keys.skills, keys.plugins, ['slash']]) void qc.invalidateQueries({ queryKey });

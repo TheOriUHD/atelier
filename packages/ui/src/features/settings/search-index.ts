@@ -574,7 +574,7 @@ export const SETTINGS_INDEX = [
     page: 'system',
     label: 'Addresses reached from here',
     description: 'Model servers and connectors on this computer or its network that the server may reach through it.',
-    keywords: ['ollama', 'lm studio', 'llama.cpp', 'localhost', 'network', 'models', 'server', 'lend', 'allow'],
+    keywords: ['ollama', 'lm studio', 'llama.cpp', 'comfyui', 'forge', 'image server', 'localhost', 'network', 'models', 'server', 'lend', 'allow'],
     available: () => !isLocal(),
   },
   {
@@ -605,7 +605,7 @@ export const SETTINGS_INDEX = [
     page: 'personal-models',
     label: 'Found on this computer',
     description: 'Model servers answering on their default ports here (Ollama, llama.cpp, LM Studio).',
-    keywords: ['auto-detect', 'scan', 'ollama', 'llama.cpp', 'lm studio', 'local', 'my models'],
+    keywords: ['auto-detect', 'scan', 'ollama', 'llama.cpp', 'lm studio', 'comfyui', 'forge', 'image server', 'local', 'my models'],
     available: () => !!desktop,
   },
   {
@@ -613,7 +613,7 @@ export const SETTINGS_INDEX = [
     page: 'personal-models',
     label: 'Models on your computers',
     description: 'Model servers and ChatGPT Chat on your own computers. Only you see their models, and only while that computer is connected.',
-    keywords: ['personal', 'my models', 'local models', 'ollama', 'llama.cpp', 'lm studio', 'chatgpt chat', 'computer', 'desktop', 'offline'],
+    keywords: ['personal', 'my models', 'local models', 'ollama', 'llama.cpp', 'lm studio', 'chatgpt chat', 'comfyui', 'forge', 'swarmui', 'invokeai', 'image server', 'image generation', 'computer', 'desktop', 'offline'],
   },
   {
     id: 'personalModels.add',
