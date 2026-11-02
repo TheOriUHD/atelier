@@ -15,7 +15,7 @@ test('Usage counts a chat’s tokens by model, from what the provider reported',
   await chat(page);
   await page.goto('/#/?settings=usage');
   const dialog = page.getByRole('dialog', { name: 'Settings' });
-  await expect(dialog.getByText(/^\d+ requests? and [\d.,]+K? tokens in the last 30 days\.$/)).toBeVisible();
+  await expect(dialog.getByText(/^\d+ requests? and [\d.,]+[KM]? tokens in the last 30 days\.$/)).toBeVisible();
   // The fake model reports its prompt and output tokens and their timing; nothing has a price.
   const row = dialog.getByRole('table', { name: 'By model' }).getByRole('row').filter({ hasText: 'fake-chat:8b' });
   await expect(row).toContainText('Fake Ollama');

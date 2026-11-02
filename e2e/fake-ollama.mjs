@@ -19,7 +19,7 @@
  * so is a loop's note after it. Title requests (system prompt asks for a title) get a fixed title, suggested-reply requests
  * "commit it". Compaction requests (a `<transcript>` or
  * `<partial-summaries>` message) get a summary saying how many tool calls are done, so a scripted task carries on
- * after it. Prompt token counts are the request's size at four characters a token.
+ * after it. Prompt token counts are the request's size at four characters a token, images left out.
  *
  * Usage: node e2e/fake-ollama.mjs [port=11500]
  */
@@ -32,6 +32,8 @@ const MODELS = [
   { name: 'fake-vision:4b', capabilities: ['completion', 'vision'], ctx: 8192 },
   // Small enough that a scripted Code task compacts on the way (context.desktop.spec.ts).
   { name: 'fake-tiny:1b', capabilities: ['completion', 'tools'], ctx: 8192 },
+  // Sees the images its tools return (images.web.spec.ts); fake-vision has no tools.
+  { name: 'fake-eyes:8b', capabilities: ['completion', 'tools', 'vision'], ctx: 200000 },
 ];
 
 const MARKDOWN = `## Sorting at a glance
@@ -104,7 +106,8 @@ async function chat(req, res) {
   }
   res.writeHead(200, { 'content-type': 'application/x-ndjson' });
   const send = (message, extra = {}) => res.write(JSON.stringify({ model: body.model, created_at: new Date().toISOString(), message: { role: 'assistant', content: '', ...message }, done: false, ...extra }) + '\n');
-  const promptTokens = Math.ceil(JSON.stringify([messages, body.tools ?? []]).length / 4);
+  // Without the images' base64, which would count for millions of tokens.
+  const promptTokens = Math.ceil(JSON.stringify([messages.map(({ images: _images, ...text }) => text), body.tools ?? []]).length / 4);
   const done = (evalCount) =>
     res.end(
       JSON.stringify({ model: body.model, message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: promptTokens, eval_count: evalCount, eval_duration: evalCount * 25e6, total_duration: evalCount * 30e6 }) + '\n',

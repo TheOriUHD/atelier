@@ -35,7 +35,7 @@ test('desktop: a model server on the desktop serves its owner on the server, thr
     await adding.getByRole('textbox', { name: 'Address' }).fill(`http://127.0.0.1:${OWN_PORT}`);
     await adding.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(settings.getByText('Laptop Ollama')).toBeVisible();
-    await expect(settings.getByText(/4 models/)).toBeVisible();
+    await expect(settings.getByText(/5 models/)).toBeVisible();
 
     const admin = await signedInClient('admin', PASSWORD);
     const [mine] = await admin.call('personalProviders.list', {});

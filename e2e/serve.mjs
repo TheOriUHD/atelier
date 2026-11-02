@@ -1,15 +1,20 @@
-// Playwright webServer: the scripted fake Ollama plus the built web server on a temp data dir.
+// Playwright webServer: the scripted fakes (Ollama, image server, identity provider) plus the built web server on a temp data dir.
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 // Overridable so several checkouts can run their E2E suites at once (see e2e/fixtures.ts).
-const [ollamaPort, webPort, oidcPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360), Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362)];
+const [ollamaPort, webPort, oidcPort, imagesPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360), Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362), Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610)];
 const dataDir = await mkdtemp(join(tmpdir(), 'atelier-e2e-web-'));
 await writeFile(
   join(dataDir, 'settings.json'),
-  JSON.stringify({ providers: [{ id: 'fake', type: 'ollama', name: 'Fake Ollama', baseUrl: `http://127.0.0.1:${ollamaPort}` }] }),
+  JSON.stringify({
+    providers: [{ id: 'fake', type: 'ollama', name: 'Fake Ollama', baseUrl: `http://127.0.0.1:${ollamaPort}` }],
+    // As IMAGE_SETTINGS in e2e/fixtures.ts, without the price: the usage specs count on nothing having one.
+    imageProviders: [{ id: 'fake-images', type: 'openai-images', preset: 'openai-compatible', name: 'Fake Images', baseUrl: `http://127.0.0.1:${imagesPort}` }],
+    models: { overrides: { 'fake/fake-eyes:8b': { promptTier: 'full' } } },
+  }),
 );
 
 // Extensions for e2e/extensions-settings.web.spec.ts: two skills (one recorded as installed by Atelier) and a plugin.
@@ -37,6 +42,7 @@ await Promise.all([
 const children = [
   spawn(process.execPath, ['e2e/fake-ollama.mjs', String(ollamaPort)], { stdio: 'inherit' }),
   spawn(process.execPath, ['e2e/fake-oidc.mjs', String(oidcPort)], { stdio: 'inherit' }),
+  spawn(process.execPath, ['e2e/fake-images.mjs', String(imagesPort)], { stdio: 'inherit' }),
   // The setup project (e2e/auth.setup.ts) creates the admin with this token (SETUP_TOKEN in fixtures.ts).
   spawn(process.execPath, ['apps/server/dist/server.mjs'], {
     stdio: 'inherit',

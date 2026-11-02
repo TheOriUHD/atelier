@@ -8,6 +8,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const FAKE_OLLAMA_PORT = Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510);
 export const WEB_PORT = Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360);
 export const FAKE_OIDC_PORT = Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362);
+export const FAKE_IMAGES_PORT = Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610);
 
 /** e2e/serve.mjs starts the web server with this as ATELIER_SETUP_TOKEN. */
 export const SETUP_TOKEN = 'atelier-e2e-setup-token';
@@ -45,6 +46,53 @@ export async function tempRepo(files: Record<string, string> = { 'README.md': '#
   git('add', '.');
   git('commit', '-qm', 'Initial commit');
   return repo;
+}
+
+/** Settings for the scripted fake image server (e2e/fake-images.mjs), for `tempConfigDir`; e2e/serve.mjs gives the web server the same, unpriced. */
+export const IMAGE_SETTINGS = {
+  imageProviders: [{ id: 'fake-images', type: 'openai-images', preset: 'openai-compatible', name: 'Fake Images', baseUrl: `http://127.0.0.1:${FAKE_IMAGES_PORT}` }],
+  imagePricing: { 'fake-images/gpt-image-fake': { perImage: 0.04 } },
+  // The full prompt: compact models don't get GenerateImage's `count`.
+  models: { overrides: { 'fake/fake-eyes:8b': { promptTier: 'full' } } },
+};
+
+/** What the fake image server was asked to do, oldest first. */
+export interface FakeImageJob {
+  api: string;
+  model: string | null;
+  prompt: string;
+  n: number;
+  size: string | null;
+  inputs: number;
+  inputBytes: number;
+  stopped: boolean;
+}
+
+export async function fakeImageJobs(): Promise<FakeImageJob[]> {
+  return (await fetch(`http://127.0.0.1:${FAKE_IMAGES_PORT}/__log`)).json() as Promise<FakeImageJob[]>;
+}
+
+/**
+ * Turns the progress of a running image into `stages`, for what the OpenAI images format has no words for: a queue, a GPU
+ * to free, steps. The rest of the pipeline is the real one. Each stage takes one of the previews, which the fake server
+ * sends evenly apart (the updates around them come all at once), and the last stage holds. Only a stage that is
+ * generating shows its preview.
+ */
+export async function scriptProgress(page: Page, stages: readonly Record<string, unknown>[]): Promise<void> {
+  let next = 0;
+  await page.routeWebSocket(/\/api\/ws$/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const parsed = JSON.parse(String(message)) as { params?: { event?: { type?: string; progress?: Record<string, unknown> } } };
+      const event = parsed.params?.event;
+      if (event?.type !== 'tool_progress') return ws.send(message);
+      if (!event.progress?.preview) return next < stages.length ? undefined : ws.send(message);
+      const stage = stages[Math.min(next++, stages.length - 1)]!;
+      event.progress = { ...event.progress, ...stage, ...(stage.phase === 'generating' ? {} : { preview: undefined }) };
+      ws.send(JSON.stringify(parsed));
+    });
+  });
 }
 
 /** For Code specs: the fake model turns each `call <Tool> <json>` line into one tool call, then replies with the last result. */
