@@ -29,10 +29,10 @@ models** in the desktop app, and it works from sessions on the server while that
 | **ComfyUI** | Your models appear with no setup, and you can import your own workflows. Shows the picture forming as it works. |
 | **Forge**, **AUTOMATIC1111**, **SD.Next**, **reForge** | Start them with `--api`. Shows the picture forming. |
 | **SwarmUI** | Live progress works on a server without accounts. With accounts, you see the image when it's done. |
-| **InvokeAI** | SD 1.x, SD 2.x and SDXL models. |
+| **InvokeAI** | SD 1.x, SD 2.x and SDXL models. It shows that it's working, but no step counts. |
 | **Draw Things** | Turn on the API Server in the app, with HTTP as the protocol. It uses the model open in the app, and shows no progress. For edits, sides must be multiples of 64. |
 | **KoboldCpp** | Start it with an image model loaded. It makes one image at a time. |
-| **stable-diffusion.cpp** | Use its `sd-server` program. |
+| **stable-diffusion.cpp** | Use a recent `sd-server`. Shows live progress, but Stop can't end a job on the server: it finishes in the background. |
 | **LocalAI** | |
 
 :::caution
