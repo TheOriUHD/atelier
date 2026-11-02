@@ -20,8 +20,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function renderPage(prefs = defaultUserPrefs()) {
-  resetBackend({ 'settings.get': () => snapshot(), 'models.list': () => [], 'prefs.get': () => prefs, 'prefs.set': () => prefs });
+function renderPage(prefs = defaultUserPrefs(), extra: Record<string, () => unknown> = {}) {
+  resetBackend({ 'settings.get': () => snapshot(), 'models.list': () => [], 'prefs.get': () => prefs, 'prefs.set': () => prefs, ...extra });
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })}>
       <TooltipProvider>
@@ -52,5 +52,52 @@ describe('task notifications', () => {
       expect.stringContaining('Notifications are blocked for Atelier'),
       expect.stringContaining('Notifications are blocked for Atelier'),
     ]);
+  });
+});
+
+describe('the default image model', () => {
+  const image = (modelId: string, extra = {}) => ({ ref: `comfy/${modelId}`, providerId: 'comfy', modelId, displayName: modelId, hidden: false, ...extra });
+  const offered = (models: unknown[]) => ({ 'app.info': () => ({ imageGeneration: true }), 'imageModels.list': () => models });
+
+  it('is chosen from the visible models, with the server’s default named', async () => {
+    renderPage(defaultUserPrefs(), {
+      ...offered([image('z-image'), image('sdxl', { hidden: true })]),
+      'settings.get': () => snapshot({ models: { ...snapshot().effective.models, defaults: { image: 'comfy/z-image' } } }),
+    });
+    const select = await screen.findByRole('combobox', { name: 'Default image model' });
+    expect(select.textContent).toContain('Server default (z-image)');
+    fireEvent.click(select);
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Server default (z-image)', 'z-image']);
+  });
+
+  it('sets the person’s own preference', async () => {
+    renderPage(defaultUserPrefs(), offered([image('z-image')]));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Default image model' }));
+    const option = await screen.findByRole('option', { name: 'z-image' });
+    // Base UI only accepts mouse clicks that started on the option.
+    fireEvent.pointerDown(option, { pointerType: 'mouse' });
+    fireEvent.click(option);
+    await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['models', 'image'], value: 'comfy/z-image' }]));
+  });
+
+  it('warns about a model that has gone', async () => {
+    const prefs = defaultUserPrefs();
+    prefs.models.image = 'comfy/gone';
+    renderPage(prefs, offered([image('z-image')]));
+    expect(await screen.findByText(/This model is no longer available. Your images use the server default \(z-image\)/)).toBeTruthy();
+  });
+
+  it('has nothing to show before there are image models', async () => {
+    renderPage(defaultUserPrefs(), offered([]));
+    await screen.findByRole('combobox', { name: 'Default model' });
+    await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
+    expect(screen.queryByRole('combobox', { name: 'Default image model' })).toBeNull();
+  });
+
+  it('stays away on an older server', async () => {
+    renderPage(defaultUserPrefs(), { 'app.info': () => ({}) });
+    await waitFor(() => expect(callsTo('app.info')).toHaveLength(1));
+    expect(screen.queryByRole('combobox', { name: 'Default image model' })).toBeNull();
+    expect(callsTo('imageModels.list')).toEqual([]);
   });
 });

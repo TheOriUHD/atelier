@@ -2,7 +2,7 @@ import { useMemo, useReducer } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import type { UserPrefs } from '@atelier/protocol';
 import { SegmentedControl, Select, Switch, type SegmentedControlItem } from '../../components/ui/index.ts';
-import { useModels, useSettings } from '../../lib/queries.ts';
+import { useImageGeneration, useImageModels, useModels, useSettings } from '../../lib/queries.ts';
 import { notificationsBlocked } from '../work/notifications.ts';
 import { isUnavailable, ModelSelect } from './model-select.tsx';
 import type { SettingId } from './search-index.ts';
@@ -44,6 +44,7 @@ const MOTION: SegmentedControlItem<Appearance['motion']>[] = [
 
 export function GeneralPage() {
   const chatFont = usePref<Appearance['chatFont']>(['appearance', 'chatFont']);
+  const images = useImageGeneration();
   return (
     <>
       <SettingsSection title="Appearance">
@@ -65,6 +66,7 @@ export function GeneralPage() {
       </SettingsSection>
       <SettingsSection title="Chat">
         <DefaultModelRow />
+        {images && <DefaultImageModelRow />}
       </SettingsSection>
       <SettingsSection title="Notifications">
         <NotificationRow id="notifications.taskFinished" field="taskFinished" />
@@ -110,6 +112,24 @@ function DefaultModelRow() {
   return (
     <SettingRow id="prefs.models.chat" setting={setting} error={warning}>
       {(label) => <ModelSelect {...label} setting={setting} unsetLabel={unsetLabel} models={visible} providerNames={providerNames} />}
+    </SettingRow>
+  );
+}
+
+/** There's nothing to choose from until an image provider is added, or while image generation is off. */
+function DefaultImageModelRow() {
+  const setting = usePref<string | undefined>(['models', 'image']);
+  const { data: models = [] } = useImageModels();
+  const { settings } = useSettings();
+  const providerNames = useMemo(() => new Map(settings?.imageProviders.map((p) => [p.id, p.name])), [settings?.imageProviders]);
+  const visible = models.filter((m) => !m.hidden);
+  if (!settings?.imageGeneration.enabled || (visible.length === 0 && !setting.value)) return null;
+  const server = visible.find((m) => m.ref === settings?.models.defaults.image) ?? visible[0];
+  const named = server ? ` (${server.displayName})` : '';
+  const warning = isUnavailable(setting.value, visible) ? `This model is no longer available. Your images use the server default${named} until you choose another.` : null;
+  return (
+    <SettingRow id="prefs.models.image" setting={setting} error={warning}>
+      {(label) => <ModelSelect {...label} setting={setting} unsetLabel={`Server default${named}`} models={visible} providerNames={providerNames} />}
     </SettingRow>
   );
 }
