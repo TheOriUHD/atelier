@@ -2,31 +2,47 @@
  * The OpenAI images wire format: `POST /v1/images/generations` and `/v1/images/edits`. OpenAI, and most servers that
  * copy it: stable-diffusion.cpp's sd-server, LocalAI, Ollama, Together, xAI, Recraft, LiteLLM, Azure (other paths and
  * header). `IMAGE_PROVIDER_PRESETS` says which; services differ in what they accept, not in how they're spoken to.
+ *
+ * Read on 2026-11-02:
+ * - OpenAI: https://developers.openai.com/api/reference/resources/images/methods/generate,
+ *   https://developers.openai.com/api/reference/resources/images/methods/edit,
+ *   https://developers.openai.com/api/docs/guides/image-generation
+ * - Azure: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/dall-e
+ * - xAI: https://docs.x.ai/developers/rest-api-reference/inference/images
+ * - Together: https://docs.together.ai/reference/post-images-generations
+ * - Recraft: https://www.recraft.ai/docs/api-reference/endpoints, https://www.recraft.ai/docs/api-reference/appendix
  */
-import { imagePreset, modelRef, type ImageCapabilities } from '@atelier/protocol';
-import { httpError, probe, requestJson } from '../../providers/http.ts';
-import { parseSSE } from '../../providers/sse.ts';
-import { arr, num, rec, str } from '../../providers/util.ts';
-import { HOSTED_DEFAULTS, OPENAI_MODELS, SQUARE } from '../catalog.ts';
-import { guardImages, refusedError } from '../guard.ts';
+import { imagePreset, type ImageCapabilities } from '@atelier/protocol';
+import { probe, requestJson } from '../../providers/http.ts';
+import { arr, dataUrl, isRecord, num, rec, str } from '../../providers/util.ts';
+import { GPT_IMAGE_1, HOSTED_DEFAULTS, lookUp, OPENAI_MODELS, RECRAFT_MODEL_IDS, RECRAFT_MODELS, SQUARE, TOGETHER_MODELS, XAI_MODEL_IDS, XAI_MODELS, type ModelTable } from '../catalog.ts';
+import { guardImages } from '../guard.ts';
 import { multipart, type MultipartField } from '../multipart.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
+import { failureOf, imageStream, listedModel, noImage, refusal, usageEvent } from './hosted.ts';
 
 /** Model ids that aren't for images, for servers whose list holds everything. */
-const NOT_IMAGES = /embed|whisper|tts|transcri|moderation|rerank|audio|realtime/i;
+const NOT_IMAGES = /embed|whisper|tts|transcri|moderation|rerank|audio|realtime|video|vision/i;
 /** On a hosted service that also lists text models, what an image model looks like. */
-const LOOKS_LIKE_IMAGES = /image|dall-e|flux|stable-?diffusion|sdxl|imagine|recraft/i;
+const LOOKS_LIKE_IMAGES = /image|flux|stable-?diffusion|sdxl|imagine|recraft/i;
 
 const LOCAL_CAPABILITIES: ImageCapabilities = { ...HOSTED_DEFAULTS, family: 'local', sizes: SQUARE, seed: true };
 
+const TABLES: Record<string, ModelTable> = { xai: XAI_MODELS, together: TOGETHER_MODELS, recraft: RECRAFT_MODELS };
+/** Models a service doesn't report, or that should show even when its list can't be read. */
+const KNOWN_IDS: Record<string, readonly string[]> = { xai: XAI_MODEL_IDS, recraft: RECRAFT_MODEL_IDS };
+
 function capabilitiesFor(instance: ImageInstance, modelId: string): ImageCapabilities {
   const local = imagePreset(instance.preset)?.group === 'local';
-  const base = local ? LOCAL_CAPABILITIES : HOSTED_DEFAULTS;
-  const known = OPENAI_MODELS.find(([match]) => match.test(modelId))?.[1];
-  return { ...base, ...known };
+  // Azure names deployments anything, and every image model it still offers is a GPT Image model.
+  const base = local ? LOCAL_CAPABILITIES : isAzure(instance) ? { ...HOSTED_DEFAULTS, ...GPT_IMAGE_1 } : HOSTED_DEFAULTS;
+  const capabilities = lookUp(TABLES[instance.preset ?? ''] ?? OPENAI_MODELS, modelId, base);
+  // Azure shows streaming on its `/openai/v1` route only, and the deployment route is the one its edits use.
+  return isAzure(instance) ? { ...capabilities, previews: false } : capabilities;
 }
 
 const isAzure = (instance: ImageInstance) => instance.preset === 'azure';
+/** Azure's sample says "or later"; this is the one its edits and streaming pages are written against. */
 const AZURE_API_VERSION = '2025-04-01-preview';
 
 function headers(instance: ImageInstance, json = true): Record<string, string> {
@@ -40,30 +56,77 @@ function endpoint(instance: ImageInstance, model: string, action: 'generations' 
 }
 
 const sizeOf = (r: ImageRequest) => (r.width && r.height ? `${r.width}x${r.height}` : undefined);
+const many = (r: ImageRequest) => (r.count > 1 ? { n: r.count } : {});
+const asDataUrl = (image: ImageRequest['references'][number]) => dataUrl(image.mime, image.bytes);
 
-/** The fields every request shares, leaving out what a service doesn't take. */
-function fields(instance: ImageInstance, request: ImageRequest): Record<string, unknown> {
+/** OpenAI's fields, which the servers that copy it take as well. */
+function openAiFields(instance: ImageInstance, request: ImageRequest): Record<string, unknown> {
   const gpt = request.capabilities.family === 'gpt-image';
   const size = sizeOf(request);
   return {
     model: request.model,
     prompt: instance.preset === 'localai' && request.negativePrompt ? `${request.prompt}|${request.negativePrompt}` : request.prompt,
-    ...(request.count > 1 ? { n: request.count } : {}),
+    ...many(request),
     ...(size ? { size } : {}),
     ...(gpt ? { quality: request.quality === 'draft' ? 'low' : request.quality === 'high' ? 'high' : 'medium' } : {}),
     ...(gpt && request.transparent ? { background: 'transparent', output_format: 'png' } : {}),
     ...(request.seed !== undefined ? { seed: request.seed } : {}),
-    ...(instance.preset === 'together' ? { response_format: 'base64', steps: request.tuning.steps } : {}),
     // GPT image models always answer in base64 and refuse the field.
-    ...(!gpt && instance.preset !== 'together' && instance.preset !== 'xai' ? { response_format: 'b64_json' } : {}),
+    ...(gpt ? {} : { response_format: 'b64_json' }),
   };
 }
+
+/** How a service words the same thing, where that isn't OpenAI's way. */
+const FIELDS: Record<string, (request: ImageRequest) => Record<string, unknown>> = {
+  xai: (r) => ({
+    model: r.model,
+    prompt: r.prompt,
+    ...many(r),
+    ...(r.aspectRatio ? { aspect_ratio: r.aspectRatio } : {}),
+    ...(r.sizeClass ? { resolution: r.sizeClass } : {}),
+    response_format: 'b64_json',
+  }),
+  together: (r) => ({
+    model: r.model,
+    prompt: r.prompt,
+    ...many(r),
+    ...(r.width && r.height ? { width: r.width, height: r.height } : {}),
+    ...(r.negativePrompt ? { negative_prompt: r.negativePrompt } : {}),
+    ...(r.seed !== undefined ? { seed: r.seed } : {}),
+    ...(r.tuning.steps !== undefined ? { steps: r.tuning.steps } : {}),
+    ...(r.tuning.guidance !== undefined ? { guidance_scale: r.tuning.guidance } : {}),
+    response_format: 'base64',
+    output_format: 'png',
+    // FLUX.1 Kontext takes `image_url`, everything else `reference_images`, and never both.
+    ...(r.references.length === 0 ? {} : /kontext/i.test(r.model) ? { image_url: asDataUrl(r.references[0]!) } : { reference_images: r.references.map(asDataUrl) }),
+  }),
+  recraft: (r) => ({
+    model: r.model,
+    prompt: r.prompt,
+    ...many(r),
+    ...(r.aspectRatio ? { size: r.aspectRatio } : {}),
+    ...(r.negativePrompt ? { negative_prompt: r.negativePrompt } : {}),
+    ...(r.seed !== undefined ? { random_seed: r.seed } : {}),
+    response_format: 'b64_json',
+    image_format: 'png',
+  }),
+};
+
+const fields = (instance: ImageInstance, request: ImageRequest) => FIELDS[instance.preset ?? '']?.(request) ?? openAiFields(instance, request);
 
 const PARTIAL_IMAGES = 2;
 
 async function* eventsFromResult(instance: ImageInstance, deps: ImageAdapterDeps, body: unknown, signal: AbortSignal): AsyncGenerator<ImageEvent> {
-  for (const item of arr(rec(body).data)) {
+  const items = arr(rec(body).data);
+  let images = 0;
+  let blocked = false;
+  for (const item of items) {
     const image = rec(item);
+    // xAI's way of leaving one out.
+    if (image.respect_moderation === false) {
+      blocked = true;
+      continue;
+    }
     const b64 = str(image.b64_json) ?? str(image.b64);
     const url = str(image.url);
     const seed = num(image.seed);
@@ -76,93 +139,78 @@ async function* eventsFromResult(instance: ImageInstance, deps: ImageAdapterDeps
       if (!res.ok) throw new Error(`Fetching the image failed (${res.status}).`);
       yield { type: 'image', bytes: new Uint8Array(await res.arrayBuffer()), ...extra };
     } else if (url) yield { type: 'image', url, ...extra };
+    else continue;
+    images++;
   }
+  const usage = usageEvent(rec(body).usage);
+  if (usage) yield usage;
+  yield images > 0 ? { type: 'finish', reason: 'done' } : blocked ? refusal(instance) : noImage(instance);
 }
 
-async function* streamed(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest): AsyncGenerator<ImageEvent> {
-  const res = await deps.fetch(endpoint(instance, request.model, 'generations'), {
-    method: 'POST',
-    headers: headers(instance),
-    body: JSON.stringify({ ...fields(instance, request), stream: true, partial_images: PARTIAL_IMAGES }),
-    signal: request.signal,
-  });
-  if (!res.ok) {
-    yield* failed(instance, res);
-    return;
-  }
-  if (!res.body) throw new Error(`${instance.name} sent an empty answer.`);
-  for await (const event of parseSSE(res.body, request.signal)) {
-    const data = rec(JSON.parse(event.data));
-    const type = str(data.type) ?? event.event ?? '';
-    const b64 = str(data.b64_json);
-    if (type.endsWith('partial_image') && b64) yield { type: 'preview', mime: 'image/png', data: b64 };
-    else if (type.endsWith('completed') && b64) {
-      yield { type: 'image', bytes: Buffer.from(b64, 'base64') };
-      const usage = rec(data.usage);
-      const input = num(usage.input_tokens);
-      const output = num(usage.output_tokens);
-      if (input !== undefined || output !== undefined) yield { type: 'usage', ...(input !== undefined ? { input } : {}), ...(output !== undefined ? { output } : {}) };
-    }
-  }
-  yield { type: 'finish', reason: 'done' };
+/** A multipart edit, in OpenAI's field names. */
+function editBody(instance: ImageInstance, request: ImageRequest, extra: Record<string, string> = {}) {
+  const form: MultipartField[] = Object.entries({ ...fields(instance, request), ...extra }).map(([name, value]) => ({ name, value: String(value) }));
+  for (const image of request.references) form.push({ name: request.references.length > 1 ? 'image[]' : 'image', filename: image.name, mime: image.mime, bytes: image.bytes });
+  if (request.mask) form.push({ name: 'mask', filename: request.mask.name, mime: request.mask.mime, bytes: request.mask.bytes });
+  return multipart(form);
 }
 
-/** A refusal is the provider's answer to the prompt, not a fault: the tool says so, and the model doesn't retry it. */
-async function* failed(instance: ImageInstance, res: Response): AsyncGenerator<ImageEvent> {
-  const error = await httpError(res, instance);
-  if (res.status === 400 && /moderation|safety|content.?policy|refused|blocked/i.test(error.message)) yield { type: 'finish', reason: 'refused', error: refusedError(instance.name, error.message) };
-  else yield { type: 'finish', reason: 'error', error };
-}
-
-async function* plain(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest): AsyncGenerator<ImageEvent> {
+function send(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, stream: boolean): Promise<Response> {
+  const extra = stream ? { stream: true, partial_images: PARTIAL_IMAGES } : {};
   const editing = request.references.length > 0;
-  let res: Response;
-  if (editing) {
-    const form: MultipartField[] = Object.entries(fields(instance, request)).map(([name, value]) => ({ name, value: String(value) }));
-    for (const image of request.references) form.push({ name: request.references.length > 1 ? 'image[]' : 'image', filename: image.name, mime: image.mime, bytes: image.bytes });
-    if (request.mask) form.push({ name: 'mask', filename: request.mask.name, mime: request.mask.mime, bytes: request.mask.bytes });
-    const { body, contentType } = multipart(form);
-    res = await deps.fetch(endpoint(instance, request.model, 'edits'), { method: 'POST', headers: { ...headers(instance, false), 'content-type': contentType }, body, signal: request.signal });
-  } else {
-    res = await deps.fetch(endpoint(instance, request.model, 'generations'), { method: 'POST', headers: headers(instance), body: JSON.stringify(fields(instance, request)), signal: request.signal });
+  const json = (url: string, body: Record<string, unknown>) => deps.fetch(url, { method: 'POST', headers: headers(instance), body: JSON.stringify({ ...body, ...extra }), signal: request.signal });
+  // xAI's edits are JSON, and Together's go in the generation request.
+  if (editing && instance.preset === 'xai') {
+    const images = request.references.map((image) => ({ url: asDataUrl(image), type: 'image_url' }));
+    return json(endpoint(instance, request.model, 'edits'), { ...fields(instance, request), ...(images.length > 1 ? { images } : { image: images[0] }) });
   }
-  if (!res.ok) {
-    yield* failed(instance, res);
-    return;
-  }
-  yield* eventsFromResult(instance, deps, await res.json(), request.signal);
-  yield { type: 'finish', reason: 'done' };
+  if (!editing || instance.preset === 'together') return json(endpoint(instance, request.model, 'generations'), fields(instance, request));
+  const { body, contentType } = editBody(instance, request, stream ? { stream: 'true', partial_images: String(PARTIAL_IMAGES) } : {});
+  return deps.fetch(endpoint(instance, request.model, 'edits'), { method: 'POST', headers: { ...headers(instance, false), 'content-type': contentType }, body, signal: request.signal });
+}
+
+async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest): AsyncGenerator<ImageEvent> {
+  // OpenAI streams GPT image models only; one image at a time, as previews don't say which image they belong to.
+  const stream = request.capabilities.previews && request.count === 1;
+  const res = await send(instance, deps, request, stream);
+  if (!res.ok) yield await failureOf(instance, res);
+  else if (stream) yield* imageStream(instance, res, request.signal);
+  else yield* eventsFromResult(instance, deps, await res.json(), request.signal);
+}
+
+/** `{ data: [...] }`, or Together's bare list, with what each entry says it is. */
+function reported(body: unknown): { id: string; type?: string; name?: string }[] {
+  const list = Array.isArray(body) ? body : arr(rec(body).data);
+  return list.filter(isRecord).flatMap((m) => {
+    const id = str(m.id);
+    const type = str(m.type);
+    const name = str(m.display_name);
+    return id ? [{ id, ...(type ? { type } : {}), ...(name ? { name } : {}) }] : [];
+  });
 }
 
 export function createOpenAiImages(instance: ImageInstance, deps: ImageAdapterDeps): ImageAdapter {
-  const listed = (modelId: string, source: ListedImageModel['source']): ListedImageModel => ({
-    ref: modelRef(instance.id, modelId),
-    providerId: instance.id,
-    modelId,
-    displayName: modelId,
-    capabilities: capabilitiesFor(instance, modelId),
-    source,
-  });
-  const typedIn = () => instance.models.map((id) => listed(id, 'default'));
+  const listed = (modelId: string, source: ListedImageModel['source'], displayName?: string) => listedModel(instance, modelId, capabilitiesFor(instance, modelId), source, displayName ? { displayName } : {});
   const local = imagePreset(instance.preset)?.group === 'local';
+  const known = KNOWN_IDS[instance.preset ?? ''] ?? [];
+  /** Azure names deployments and Recraft has no list of models: those are typed in or known. */
+  const noList = isAzure(instance) || instance.preset === 'recraft';
+  const typedIn = () => [...new Set([...instance.models, ...known])].map((id) => listed(id, instance.models.includes(id) ? 'default' : 'catalog'));
   return {
     type: 'openai-images',
     async listModels(signal) {
-      // Azure names deployments, and some services report nothing: those are typed in.
-      if (isAzure(instance)) return typedIn();
+      if (noList) return typedIn();
       const body = await requestJson(deps, instance, `${instance.baseUrl}/v1/models`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
-      const ids = arr(rec(body).data).flatMap((m) => str(rec(m).id) ?? []);
-      const useful = ids.filter((id) => !NOT_IMAGES.test(id) && (local || LOOKS_LIKE_IMAGES.test(id)));
-      const typed = new Set(instance.models);
-      return [...typedIn(), ...useful.filter((id) => !typed.has(id)).map((id) => listed(id, 'detected'))];
+      const entries = reported(body).filter((m) => !NOT_IMAGES.test(m.id) && (m.type ? m.type === 'image' : local || LOOKS_LIKE_IMAGES.test(m.id)));
+      const seen = new Set([...instance.models, ...known]);
+      return [...typedIn(), ...entries.filter((m) => !seen.has(m.id)).map((m) => listed(m.id, 'detected', m.name))];
     },
     health(signal) {
-      if (isAzure(instance)) return Promise.resolve({ ok: true, latencyMs: null, warnings: [] });
+      if (noList) return Promise.resolve({ ok: true, latencyMs: null, warnings: [] });
       return probe(deps, instance, `${instance.baseUrl}/v1/models`, headers(instance), signal);
     },
     generate(request) {
-      const preview = request.capabilities.previews && request.references.length === 0 && request.count === 1;
-      return guardImages(request, instance, () => (preview ? streamed(instance, deps, request) : plain(instance, deps, request)));
+      return guardImages(request, instance, () => run(instance, deps, request));
     },
   };
 }

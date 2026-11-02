@@ -1,13 +1,40 @@
 /**
  * List prices for images, where a service doesn't say what a call cost. These go stale, so the UI shows them as
  * estimates; a price the admin set, or a cost the service reported, always wins.
+ *
+ * Only prices read on the vendors' own pages. Left out because the page shows none for them: Black Forest Labs (its
+ * submit answer gives the cost), Ideogram, fal, Replicate, Hugging Face, Bedrock's Stability models. OpenRouter and xAI
+ * report the cost of each call.
  */
 import type { ImagePrice } from '@atelier/protocol';
 
 /** Checked against the vendors' price pages on 2026-11-02; keyed by the start of the model id. */
 const LIST_PRICES: readonly (readonly [RegExp, ImagePrice])[] = [
-  [/^dall-e-3/, { bySize: { '1024x1024': 0.04, '1024x1792': 0.08, '1792x1024': 0.08 } }],
-  [/^dall-e-2/, { bySize: { '1024x1024': 0.02, '512x512': 0.018, '256x256': 0.016 } }],
+  // OpenAI bills tokens, and every call says how many. `bySize` is the medium-quality figure, for a server that doesn't.
+  [/^gpt-image-2\.5/, { input: 5, output: 30 }],
+  [/^gpt-image-2/, { input: 5, output: 30, bySize: { '1024x1024': 0.053, '1024x1536': 0.041, '1536x1024': 0.041 } }],
+  [/^gpt-image-1\.5|^chatgpt-image-latest/, { input: 5, output: 32, bySize: { '1024x1024': 0.034, '1024x1536': 0.05, '1536x1024': 0.05 } }],
+  [/^gpt-image-1-mini/, { input: 2, output: 8, bySize: { '1024x1024': 0.011, '1024x1536': 0.015, '1536x1024': 0.015 } }],
+  [/^gemini-nano-banana-2\.1/, { bySize: { '1K': 0.0336, '2K': 0.0504 } }],
+  [/^gemini-3\.1-flash-lite-image/, { bySize: { '1K': 0.0336 } }],
+  [/^gemini-3\.1-flash-image/, { bySize: { '512': 0.045, '1K': 0.067, '2K': 0.101 } }],
+  [/^gemini-3-pro-image/, { bySize: { '1K': 0.134, '2K': 0.134 } }],
+  [/^gemini-2\.5-flash-image/, { perImage: 0.039 }],
+  [/^grok-imagine-image-quality/, { perImage: 0.05 }],
+  [/^grok-imagine-image-2/, { perImage: 0.04 }],
+  [/^grok-imagine-image/, { perImage: 0.02 }],
+  [/^recraftv4_1_flash/, { perImage: 0.007 }],
+  [/^recraftv4_1(?:_utility)?$/, { perImage: 0.035 }],
+  [/^recraftv4$|^recraftv3$/, { perImage: 0.04 }],
+  [/^recraftv2$/, { perImage: 0.022 }],
+  [/^stable-image-ultra/, { perImage: 0.08 }],
+  [/^stable-image-core/, { perImage: 0.03 }],
+  [/^sd3\.5-large-turbo/, { perImage: 0.04 }],
+  [/^sd3\.5-large/, { perImage: 0.065 }],
+  [/^sd3\.5-medium/, { perImage: 0.035 }],
+  // Together's per-image figures are "estimates, not rates" by its own account; these are its per-megapixel ones.
+  [/^black-forest-labs\/FLUX\.1(?:\.1-pro|-kontext-pro)/, { perMegapixel: 0.04 }],
+  [/^black-forest-labs\/FLUX\.1-kontext-max/, { perMegapixel: 0.08 }],
 ];
 
 export function listImagePrice(modelId: string): ImagePrice | null {
