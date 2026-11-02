@@ -97,7 +97,7 @@ describe('ImageService', () => {
     expect(out.generated?.[0]).toMatchObject({ id, prompt: 'a cat', seed: 7, modelName: 'Model', width: 512, height: 512 });
     expect(t.addGenerated).toHaveBeenCalledOnce();
     expect(t.db.select().from(generatedImages).all()).toHaveLength(1);
-    expect(t.usage).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'img', images: 1, mode: 'chat' }));
+    expect(t.usage).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'img', images: 1, mode: 'chat', costEstimated: false }));
     expect(t.released).toHaveBeenCalledOnce();
   });
 

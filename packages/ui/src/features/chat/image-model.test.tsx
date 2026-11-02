@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { defaultUserPrefs, type ImageModelInfo, type SessionSummary, type Settings } from '@atelier/protocol';
+import { defaultSettings, defaultUserPrefs, type ImageModelInfo, type SessionSummary, type Settings } from '@atelier/protocol';
 import { backend, callsTo, model, resetBackend, snapshot } from '../settings/test-backend.ts';
 import { Composer } from './composer.tsx';
 import { useNewImageModel, useSessionImageModel } from './image-model.ts';
@@ -67,7 +67,7 @@ async function openRow() {
 
 describe('the + menu’s image model', () => {
   it('lists the visible models by provider, with Default first naming what it comes to', async () => {
-    setup(MODELS, { models: { ...snapshot().effective.models, defaults: { image: 'cloud/gpt-image-2' } } });
+    setup(MODELS, { models: { ...defaultSettings().models, defaults: { image: 'cloud/gpt-image-2' } } });
     render(<QueryClientProvider client={client()}><SessionBox of={session} /></QueryClientProvider>);
     await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
     await openRow();
@@ -81,7 +81,7 @@ describe('the + menu’s image model', () => {
   it('puts a person’s own default ahead of the server’s', async () => {
     const prefs = defaultUserPrefs();
     prefs.models.image = 'comfy/z-image';
-    setup(MODELS, { models: { ...snapshot().effective.models, defaults: { image: 'cloud/gpt-image-2' } } }, prefs);
+    setup(MODELS, { models: { ...defaultSettings().models, defaults: { image: 'cloud/gpt-image-2' } } }, prefs);
     render(<QueryClientProvider client={client()}><SessionBox of={session} /></QueryClientProvider>);
     await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
     await openRow();

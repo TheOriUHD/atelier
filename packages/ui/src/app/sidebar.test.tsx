@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultUserPrefs, type Mode, type Project, type SessionSummary, type SettingsPath, type WorkspaceSummary } from '@atelier/protocol';
 import { TooltipProvider } from '../components/ui/index.ts';
-import { backend, callsTo, resetBackend } from '../features/settings/test-backend.ts';
+import { backend, callsTo, resetBackend, snapshot } from '../features/settings/test-backend.ts';
 import { setPath } from '../lib/json-path.ts';
 import { useUi } from '../lib/ui-store.ts';
 import { Sidebar } from './sidebar.tsx';
@@ -91,48 +91,6 @@ function renderSidebar(url: string) {
 
 const nav = () => screen.findByRole('navigation', { name: 'Sidebar' });
 const links = (el: HTMLElement) => within(el).getAllByRole('link').map((a) => a.textContent);
-
-describe('the Images entry', () => {
-  const links = () => screen.findAllByRole('link');
-  const offered = (models: unknown[], images: unknown[] = []) => {
-    Object.assign(backend.handlers, { 'app.info': () => ({ imageGeneration: true }), 'imageModels.list': () => models, 'generatedImages.list': () => ({ items: images, next: null, totalBytes: 0 }) });
-  };
-
-  it('shows for someone with an image model, without asking about images', async () => {
-    offered([{ ref: 'comfy/z-image', hidden: false }]);
-    renderSidebar('/');
-    expect(await screen.findByRole('link', { name: 'Images' }, { timeout: 5000 })).toBeTruthy();
-    expect(callsTo('generatedImages.list')).toEqual([]);
-  });
-
-  it('shows for someone who made images before their model went', async () => {
-    offered([], [{ id: 'img_1' }]);
-    renderSidebar('/');
-    expect(await screen.findByRole('link', { name: 'Images' }, { timeout: 5000 })).toBeTruthy();
-  });
-
-  it('doesn’t show with no models and no images, or only hidden models', async () => {
-    offered([{ ref: 'comfy/sdxl', hidden: true }]);
-    renderSidebar('/');
-    await waitFor(() => expect(callsTo('generatedImages.list')).toHaveLength(1));
-    expect((await links()).map((l) => l.textContent)).not.toContain('Images');
-  });
-
-  it('doesn’t show on an older server, which isn’t asked', async () => {
-    Object.assign(backend.handlers, { 'app.info': () => ({}) });
-    renderSidebar('/');
-    await waitFor(() => expect(callsTo('app.info')).toHaveLength(1));
-    expect((await links()).map((l) => l.textContent)).not.toContain('Images');
-    expect(callsTo('imageModels.list')).toEqual([]);
-  });
-
-  it('isn’t in Code’s tab', async () => {
-    offered([{ ref: 'comfy/z-image', hidden: false }]);
-    renderSidebar('/code');
-    await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
-    expect((await links()).map((l) => l.textContent)).not.toContain('Images');
-  });
-});
 
 describe('Sidebar', () => {
   it('has two mode tabs; Chat lists New, Projects, Artifacts, Cowork and Customize, and More opens in place', async () => {
@@ -389,5 +347,55 @@ describe('Sidebar', () => {
     expect(links(none)).toEqual(['Try an idea', 'Quick script']);
     fireEvent.click(within(none).getByRole('button', { name: 'New session with no folder' }));
     expect(router.state.location.search).toEqual({ workspace: 'none' });
+  });
+});
+
+describe('the Images entry', () => {
+  const links = () => screen.findAllByRole('link');
+  const offered = (models: unknown[], images: unknown[] = []) => {
+    Object.assign(backend.handlers, { 'app.info': () => ({ imageGeneration: true }), 'settings.get': () => snapshot(), 'imageModels.list': () => models, 'generatedImages.list': () => ({ items: images, next: null, totalBytes: 0 }) });
+  };
+
+  it('shows for someone with an image model, without asking about images', async () => {
+    offered([{ ref: 'comfy/z-image', hidden: false }]);
+    renderSidebar('/');
+    expect(await screen.findByRole('link', { name: 'Images' }, { timeout: 5000 })).toBeTruthy();
+    expect(callsTo('generatedImages.list')).toEqual([]);
+  });
+
+  it('shows for someone who made images before their model went', async () => {
+    offered([], [{ id: 'img_1' }]);
+    renderSidebar('/');
+    expect(await screen.findByRole('link', { name: 'Images' }, { timeout: 5000 })).toBeTruthy();
+  });
+
+  it('doesn’t show with no models and no images, or only hidden models', async () => {
+    offered([{ ref: 'comfy/sdxl', hidden: true }]);
+    renderSidebar('/');
+    await waitFor(() => expect(callsTo('generatedImages.list')).toHaveLength(1));
+    expect((await links()).map((l) => l.textContent)).not.toContain('Images');
+  });
+
+  it('doesn’t show on an older server, which isn’t asked', async () => {
+    Object.assign(backend.handlers, { 'app.info': () => ({}) });
+    renderSidebar('/');
+    await waitFor(() => expect(callsTo('app.info')).toHaveLength(1));
+    expect((await links()).map((l) => l.textContent)).not.toContain('Images');
+    expect(callsTo('imageModels.list')).toEqual([]);
+  });
+
+  it('doesn’t show while image generation is off, unless there are images to look at', async () => {
+    offered([{ ref: 'comfy/z-image', hidden: false }]);
+    Object.assign(backend.handlers, { 'settings.get': () => snapshot({ imageGeneration: { enabled: false, maxImagesPerTurn: 8 } }) });
+    renderSidebar('/');
+    await waitFor(() => expect(callsTo('generatedImages.list')).toHaveLength(1));
+    expect((await links()).map((l) => l.textContent)).not.toContain('Images');
+  });
+
+  it('isn’t in Code’s tab', async () => {
+    offered([{ ref: 'comfy/z-image', hidden: false }]);
+    renderSidebar('/code');
+    await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
+    expect((await links()).map((l) => l.textContent)).not.toContain('Images');
   });
 });

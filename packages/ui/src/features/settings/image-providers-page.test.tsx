@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { DetectedImageServer, ImageModelInfo, ImageProviderConfig, ProviderStatus, Settings, SettingsPath } from '@atelier/protocol';
+import { defaultSettings, type DetectedImageServer, type ImageModelInfo, type ImageProviderConfig, type ProviderStatus, type Settings, type SettingsPath } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
 import { setPath } from '../../lib/json-path.ts';
 import { keys, useLiveQueries } from '../../lib/queries.ts';
@@ -206,7 +206,7 @@ describe('image models', () => {
   });
 
   it('warns when the default model has gone, and offers only visible ones', async () => {
-    renderPage({ models: { ...snapshot().effective.models, defaults: { image: 'comfy/gone' } } }, models);
+    renderPage({ models: { ...defaultSettings().models, defaults: { image: 'comfy/gone' } } }, models);
     await screen.findByRole('table', { name: 'ComfyUI models' });
     expect(screen.getByText(/no longer available/)).toBeTruthy();
     fireEvent.click(screen.getByRole('combobox', { name: 'Default image model for everyone' }));

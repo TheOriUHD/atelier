@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultUserPrefs } from '@atelier/protocol';
+import { defaultSettings, defaultUserPrefs } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
 import { GeneralPage } from './general-page.tsx';
 import { callsTo, resetBackend, snapshot } from './test-backend.ts';
@@ -62,7 +62,7 @@ describe('the default image model', () => {
   it('is chosen from the visible models, with the server’s default named', async () => {
     renderPage(defaultUserPrefs(), {
       ...offered([image('z-image'), image('sdxl', { hidden: true })]),
-      'settings.get': () => snapshot({ models: { ...snapshot().effective.models, defaults: { image: 'comfy/z-image' } } }),
+      'settings.get': () => snapshot({ models: { ...defaultSettings().models, defaults: { image: 'comfy/z-image' } } }),
     });
     const select = await screen.findByRole('combobox', { name: 'Default image model' });
     expect(select.textContent).toContain('Server default (z-image)');
@@ -89,6 +89,13 @@ describe('the default image model', () => {
 
   it('has nothing to show before there are image models', async () => {
     renderPage(defaultUserPrefs(), offered([]));
+    await screen.findByRole('combobox', { name: 'Default model' });
+    await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
+    expect(screen.queryByRole('combobox', { name: 'Default image model' })).toBeNull();
+  });
+
+  it('goes while an admin has image generation off', async () => {
+    renderPage(defaultUserPrefs(), { ...offered([image('z-image')]), 'settings.get': () => snapshot({ imageGeneration: { enabled: false, maxImagesPerTurn: 8 } }) });
     await screen.findByRole('combobox', { name: 'Default model' });
     await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
     expect(screen.queryByRole('combobox', { name: 'Default image model' })).toBeNull();

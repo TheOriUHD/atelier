@@ -337,7 +337,7 @@ function GpuOptions({ form, partners, update }: { form: ImageProviderForm; partn
         </span>
         <Switch aria-labelledby="image-free-after-run" checked={form.freeAfterRun} onCheckedChange={(freeAfterRun) => update((f) => ({ ...f, freeAfterRun }))} />
       </div>
-      <p className="text-footnote text-fg-muted">
+      <p className="text-footnote text-fg-secondary">
         {form.sharesGpuWith ? 'The text model unloads for each image and reloads afterwards, so the next reply starts later.' : 'Unloading frees the GPU for other work, and the next image loads its model again.'}
       </p>
     </section>
@@ -393,12 +393,12 @@ function TestImage({ draft, preset, models }: { draft: ImageProviderDraft; prese
           Make a test image
         </Button>
       </div>
-      <p id="image-test-note" className="text-footnote text-fg-muted">
+      <p id="image-test-note" className="text-footnote text-fg-secondary">
         {mayCostMoney(preset) ? `This is a real request to ${preset.label} and may cost money.` : 'Makes one small image. The first one takes longer while the model loads.'}
       </p>
       <div aria-live="polite">
         {result.state === 'running' && (
-          <p className="flex items-center gap-2 text-body text-fg-muted">
+          <p className="flex items-center gap-2 text-body text-fg-secondary">
             <Spinner />
             Making an image…
           </p>
@@ -407,7 +407,7 @@ function TestImage({ draft, preset, models }: { draft: ImageProviderDraft; prese
         {result.state === 'done' && (
           <figure>
             <img src={blobUrl(result.image.blob)} alt="What the test made" className="max-h-64 max-w-full rounded-lg" />
-            <figcaption className="mt-2 text-footnote text-fg-muted tabular-nums">
+            <figcaption className="mt-2 text-footnote text-fg-secondary tabular-nums">
               Made in {seconds(result.image.durationMs)} · {result.image.width}×{result.image.height}
             </figcaption>
           </figure>
