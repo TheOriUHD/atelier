@@ -68,6 +68,12 @@ interface ServerLists {
   loras?: string[];
 }
 
+/**
+ * A checkpoint's name without the hash in its title. The hash appears once the server has computed it, which on a real
+ * Forge happens on first use, so a title can't be what a person's saved choice points at. The bare name always resolves.
+ */
+const checkpointId = (title: string) => title.replace(/\s*\[[0-9a-f]{6,}\]\s*$/i, '');
+
 const namesOf = (body: unknown, key = 'name'): string[] | undefined => {
   const names = arr(body).flatMap((item) => str(rec(item)[key]) ?? []);
   return names.length ? names : undefined;
@@ -130,7 +136,7 @@ function previewEvent(image: unknown): ImageEvent | null {
 }
 
 /** `info` is a JSON string on most servers, an object on some, and empty on others. */
-function seedsOf(info: unknown): { seed?: number; seeds: number[] } {
+function factsOf(info: unknown): { seed?: number; seeds: number[]; model?: string } {
   let parsed: unknown = info;
   if (typeof info === 'string') {
     try {
@@ -139,9 +145,16 @@ function seedsOf(info: unknown): { seed?: number; seeds: number[] } {
       parsed = null;
     }
   }
-  const { seed, all_seeds } = rec(parsed);
+  const { seed, all_seeds, sd_model_name } = rec(parsed);
   const first = num(seed);
-  return { ...(first !== undefined ? { seed: first } : {}), seeds: arr(all_seeds).flatMap((s) => num(s) ?? []) };
+  const model = str(sd_model_name);
+  return { ...(first !== undefined ? { seed: first } : {}), seeds: arr(all_seeds).flatMap((s) => num(s) ?? []), ...(model ? { model } : {}) };
+}
+
+/** Whether the server used the checkpoint it was asked for. It reports `folder_name`, for a file at `folder/name.ext`. */
+function ranAsAsked(asked: string, used: string | undefined): boolean {
+  const label = checkpointLabel(asked);
+  return !used || used === label || used.endsWith(`_${label}`);
 }
 
 function loraTags(request: ImageRequest): string {
@@ -171,7 +184,10 @@ function webuiBody(flavor: Flavor, request: ImageRequest, genkey: string | undef
     ...(scheduler && flavor.schedulers ? { scheduler } : {}),
     send_images: true,
     save_images: false,
-    ...(flavor.checkpoints ? { override_settings: { sd_model_checkpoint: request.model } } : {}),
+    // Left at 10, a model of 4 or 8 steps never shows a preview. The server only draws one when it's polled, so this
+    // costs a picture a second at most. If the option was never saved, Forge doesn't restore it, so it stays at 1 in the
+    // server's memory until a restart; it isn't written to its config.
+    ...(flavor.checkpoints ? { override_settings: { sd_model_checkpoint: request.model, show_progress_every_n_steps: 1 } } : {}),
     ...(genkey ? { genkey } : {}),
     ...(input ? { init_images: [toBase64(input.bytes)], denoising_strength: EDIT_STRENGTH, resize_mode: 0 } : {}),
     ...(input && request.mask ? { mask: toBase64(request.mask.bytes), inpainting_fill: FILL_FROM_ORIGINAL, mask_blur: MASK_BLUR } : {}),
@@ -288,7 +304,8 @@ export function createA1111(instance: ImageInstance, deps: ImageAdapterDeps, opt
         // Only news goes out, so a server that hangs mid-job still trips the service's silence limit.
         seen = `${step}/${steps}/${fraction}`;
         const eta = num(body.eta_relative);
-        yield { type: 'progress', step, steps, fraction, ...(eta && eta > 0 ? { etaMs: Math.round(eta * 1000) } : {}) };
+        // Before a step has finished it's a division by its 0.01 starting point: minutes, for a job of seconds.
+        yield { type: 'progress', step, steps, fraction, ...(eta && eta > 0 && step > 0 ? { etaMs: Math.round(eta * 1000) } : {}) };
       }
       const preview = str(body.current_image);
       if (preview && preview !== lastPreview) {
@@ -316,7 +333,12 @@ export function createA1111(instance: ImageInstance, deps: ImageAdapterDeps, opt
       }
       const answer = rec(await res.json());
       const images = strings(answer.images).slice(0, request.count);
-      const { seed, seeds } = seedsOf(answer.info);
+      const { seed, seeds, model } = factsOf(answer.info);
+      // It takes a name it doesn't know without a word and uses whatever it has loaded, which is not what was asked for.
+      if (flavor.checkpoints && !ranAsAsked(request.model, model)) {
+        yield { type: 'finish', reason: 'error', error: { code: 'model_not_found', message: `${instance.name} doesn't have ${checkpointLabel(request.model)} any more, and used ${model} instead. Refresh it in Settings.`, retryable: false } };
+        return;
+      }
       for (const [i, image] of images.entries()) {
         const known = seeds[i] ?? (seed !== undefined ? seed + i : (body.seed as number | undefined));
         yield { type: 'image', bytes: Buffer.from(withoutDataPrefix(image), 'base64'), ...(known !== undefined && known >= 0 ? { seed: known } : {}) };
@@ -332,9 +354,11 @@ export function createA1111(instance: ImageInstance, deps: ImageAdapterDeps, opt
     async listModels(signal) {
       if (flavor.strict) return drawThingsModel(signal);
       const [models, samplers, schedulers, loras] = await Promise.all([optional('sd-models', signal), optional('samplers', signal), flavor.schedulers ? optional('schedulers', signal) : null, optional('loras', signal)]);
-      const lists = Object.fromEntries(Object.entries({ samplers: namesOf(samplers), schedulers: namesOf(schedulers), loras: namesOf(loras, flavor.loraPaths ? 'path' : 'name') }).filter(([, names]) => names)) as ServerLists;
+      // Forge corrects a scheduler's `name` to its `label` with a warning on every run, so the label is what's sent.
+      const scheduling = namesOf(schedulers, 'label') ?? namesOf(schedulers);
+      const lists = Object.fromEntries(Object.entries({ samplers: namesOf(samplers), schedulers: scheduling, loras: namesOf(loras, flavor.loraPaths ? 'path' : 'name') }).filter(([, names]) => names)) as ServerLists;
       const names = arr(models).flatMap((m) => str(rec(m).title) ?? str(rec(m).model_name) ?? []);
-      return names.map((name) => listed(name, lists));
+      return names.map((name) => listed(checkpointId(name), lists));
     },
     health(signal) {
       return probe(deps, instance, url(flavor.strict ? 'options' : 'sd-models'), headers(), signal, async (res, latencyMs) => {

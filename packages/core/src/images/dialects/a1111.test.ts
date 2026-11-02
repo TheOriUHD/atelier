@@ -14,7 +14,7 @@ const CHECKPOINTS = [
   { title: 'sdxl/juggernautXL_v9.safetensors [c9e3e68f89]', model_name: 'sdxl_juggernautXL_v9', hash: 'c9e3e68f89', sha256: 'y', filename: '/m/sdxl/juggernautXL_v9.safetensors', config: null },
 ];
 const SAMPLERS = [{ name: 'DPM++ 2M', aliases: ['k_dpmpp_2m'], options: {} }, { name: 'Euler a', aliases: [], options: {} }];
-const SCHEDULERS = [{ name: 'automatic', label: 'Automatic' }, { name: 'karras', label: 'Karras' }];
+const SCHEDULERS = [{ name: 'automatic', label: 'Automatic', aliases: null, default_rho: -1, need_inner_model: false }, { name: 'karras', label: 'Karras', aliases: null, default_rho: 7, need_inner_model: false }];
 const LORAS = [{ name: 'add_detail', alias: 'add_detail', path: '/m/lora/add_detail.safetensors', metadata: {} }];
 
 const txt2img = (over: Record<string, unknown> = {}) =>
@@ -54,13 +54,13 @@ describe('a1111 models', () => {
     });
     const models = await createA1111(a1111(), deps, POLL).listModels();
     expect(models.map((m) => [m.modelId, m.displayName, m.capabilities.family])).toEqual([
-      ['v1-5-pruned-emaonly.safetensors [6ce0161689]', 'v1-5-pruned-emaonly', 'sd15'],
-      ['sdxl/juggernautXL_v9.safetensors [c9e3e68f89]', 'juggernautXL_v9', 'sdxl'],
+      ['v1-5-pruned-emaonly.safetensors', 'v1-5-pruned-emaonly', 'sd15'],
+      ['sdxl/juggernautXL_v9.safetensors', 'juggernautXL_v9', 'sdxl'],
     ]);
     const [sd15, sdxl] = models.map((m) => m.capabilities);
-    expect(sd15).toMatchObject({ promptStyle: 'tags', negativePrompt: true, previews: true, edit: true, mask: true, sizes: { base: 512, multiple: 8 }, samplers: ['DPM++ 2M', 'Euler a'], loras: ['add_detail'], defaults: { steps: 25, guidance: 7, sampler: 'DPM++ 2M', scheduler: 'karras' } });
+    expect(sd15).toMatchObject({ promptStyle: 'tags', negativePrompt: true, previews: true, edit: true, mask: true, sizes: { base: 512, multiple: 8 }, samplers: ['DPM++ 2M', 'Euler a'], loras: ['add_detail'], defaults: { steps: 25, guidance: 7, sampler: 'DPM++ 2M', scheduler: 'Karras' } });
     // The server has no such sampler, so it isn't a default.
-    expect(sdxl?.defaults).toEqual({ steps: 30, guidance: 6, scheduler: 'karras' });
+    expect(sdxl?.defaults).toEqual({ steps: 30, guidance: 6, scheduler: 'Karras' });
     expect(sdxl?.sizes).toMatchObject({ base: 1024 });
   });
 
@@ -93,7 +93,7 @@ describe('a1111 generation', () => {
   it('sends what the API takes, chooses the checkpoint per request, and reads seeds from info', async () => {
     const { deps, calls } = adapterDeps({ 'POST /sdapi/v1/txt2img': () => txt2img({ images: [PNG_B64, PNG_B64], info: JSON.stringify({ seed: 7, all_seeds: [7, 8] }) }) });
     const request = imageRequest({
-      model: 'dreamshaper.safetensors [879db523c3]',
+      model: 'dreamshaper.safetensors',
       negativePrompt: 'blurry',
       count: 2,
       seed: 7,
@@ -115,10 +115,39 @@ describe('a1111 generation', () => {
       scheduler: 'karras',
       send_images: true,
       save_images: false,
-      override_settings: { sd_model_checkpoint: 'dreamshaper.safetensors [879db523c3]' },
+      override_settings: { sd_model_checkpoint: 'dreamshaper.safetensors', show_progress_every_n_steps: 1 },
     });
     expect(imagesOf(events).map((e) => e.seed)).toEqual([7, 8]);
     expect(finishOf(events).reason).toBe('done');
+  });
+
+  it('keeps a checkpoint\'s id when the server adds its hash to the title, as real Forge does on first use', async () => {
+    const before = adapterDeps({ 'GET /sdapi/v1/sd-models': () => jsonResponse([{ title: 'model.safetensors', model_name: 'model', hash: null }]) });
+    const after = adapterDeps({ 'GET /sdapi/v1/sd-models': () => jsonResponse([{ title: 'model.safetensors [e9476a1372]', model_name: 'model', hash: 'e9476a1372' }]) });
+    const [first] = await createA1111(a1111(), before.deps, POLL).listModels();
+    const [second] = await createA1111(a1111(), after.deps, POLL).listModels();
+    expect(second?.ref).toBe(first?.ref);
+    expect(second?.modelId).toBe('model.safetensors');
+  });
+
+  it.each([
+    ['model.safetensors', 'model'],
+    ['sdxl/juggernautXL_v9.safetensors', 'sdxl_juggernautXL_v9'],
+  ])('accepts %s reported back as %s', async (model, used) => {
+    const { deps } = adapterDeps({ 'POST /sdapi/v1/txt2img': () => txt2img({ info: JSON.stringify({ seed: 1, all_seeds: [1], sd_model_name: used }) }) });
+    expect(finishOf(await drain(createA1111(a1111(), deps, { pollMs: 10_000 }).generate(imageRequest({ model })))).reason).toBe('done');
+  });
+
+  it('says so when the server quietly used another checkpoint, instead of passing it off as the one asked for', async () => {
+    const { deps } = adapterDeps({ 'POST /sdapi/v1/txt2img': () => txt2img({ info: JSON.stringify({ seed: 1, all_seeds: [1], sd_model_name: 'other' }) }) });
+    const events = await drain(createA1111(a1111(), deps, { pollMs: 10_000 }).generate(imageRequest({ model: 'gone.safetensors' })));
+    expect(imagesOf(events)).toEqual([]);
+    expect(finishOf(events)).toMatchObject({ reason: 'error', error: { code: 'model_not_found', message: "Server doesn't have gone any more, and used other instead. Refresh it in Settings." } });
+  });
+
+  it('keeps going when a server does not say which checkpoint it used', async () => {
+    const { deps } = adapterDeps({ 'POST /sdapi/v1/txt2img': () => txt2img() });
+    expect(finishOf(await drain(createA1111(a1111(), deps, { pollMs: 10_000 }).generate(imageRequest({ model: 'x' })))).reason).toBe('done');
   });
 
   it('asks for a random seed and keeps the one the server chose', async () => {
@@ -206,6 +235,13 @@ describe('a1111 progress', () => {
       { type: 'finish', reason: 'done' },
     ]);
     expect(imagesOf(events)).toHaveLength(1);
+  });
+
+  it('gives no time left until a step has finished, when the sum is only its starting value', async () => {
+    const run = script([() => jsonResponse({ progress: 0.01, eta_relative: 401.5, state: { job_count: 1, sampling_step: 0, sampling_steps: 25 } }), () => jsonResponse({ progress: 0.05, eta_relative: 136, state: { job_count: 1, sampling_step: 1, sampling_steps: 25 } })]);
+    const { deps } = adapterDeps({ 'POST /sdapi/v1/txt2img': run.txt2img, 'GET /sdapi/v1/progress': run.progress });
+    const events = await drain(createA1111(a1111(), deps, POLL).generate(imageRequest()));
+    expect(events.filter((e) => e.type === 'progress')).toEqual([{ type: 'progress', step: 0, steps: 25, fraction: 0.01 }, { type: 'progress', step: 1, steps: 25, fraction: 0.05, etaMs: 136_000 }]);
   });
 
   it('stops polling once the image is in', async () => {

@@ -52,7 +52,7 @@ interface Target {
 
 const a1111Preset = env('ATELIER_LIVE_A1111_PRESET') ?? 'a1111';
 const targets: Target[] = [
-  { name: `A1111 family (${a1111Preset})`, type: 'a1111', preset: a1111Preset, url: env('ATELIER_LIVE_A1111_URL'), model: env('ATELIER_LIVE_A1111_MODEL'), progress: a1111Preset !== 'drawthings', previews: false, repeatable: true, stops: a1111Preset !== 'drawthings' },
+  { name: `A1111 family (${a1111Preset})`, type: 'a1111', preset: a1111Preset, url: env('ATELIER_LIVE_A1111_URL'), model: env('ATELIER_LIVE_A1111_MODEL'), progress: a1111Preset !== 'drawthings', previews: a1111Preset !== 'drawthings', repeatable: true, stops: a1111Preset !== 'drawthings' },
   { name: 'sd-server', type: 'a1111', preset: 'sd-server', url: env('ATELIER_LIVE_SDSERVER_URL'), model: undefined, progress: true, previews: true, repeatable: true, stops: false },
   { name: 'SwarmUI', type: 'swarmui', preset: 'swarmui', url: env('ATELIER_LIVE_SWARMUI_URL'), model: env('ATELIER_LIVE_SWARMUI_MODEL'), progress: true, previews: false, repeatable: true, stops: true },
   { name: 'InvokeAI', type: 'invokeai', preset: 'invokeai', url: env('ATELIER_LIVE_INVOKEAI_URL'), model: env('ATELIER_LIVE_INVOKEAI_MODEL'), progress: false, previews: false, repeatable: true, stops: true },
@@ -183,6 +183,35 @@ for (const t of targets) {
       expect(finished(events)).toMatchObject({ reason: 'done' });
       const { left, right } = differenceBySide(source!.bytes!, imagesIn(events)[0]!.bytes!);
       expect(left).toBeGreaterThan(right);
+    });
+
+    it('makes a batch, each image with its own seed', async () => {
+      const model = await pick(live(), t.model);
+      if (model.capabilities.maxCount < 2) return;
+      const events = await run(live(), smallRequest(model, { count: 2, seed: 100 }));
+      expect(finished(events)).toMatchObject({ reason: 'done' });
+      const images = imagesIn(events);
+      expect(images).toHaveLength(2);
+      expect(images.map((image) => image.seed)).toEqual([100, 101]);
+      expect(Buffer.from(images[0]!.bytes!).equals(Buffer.from(images[1]!.bytes!))).toBe(false);
+    });
+
+    it('applies a LoRA it lists', async () => {
+      const model = await pick(live(), t.model);
+      const lora = model.capabilities.loras?.[0];
+      if (!lora) return;
+      const plain = imagesIn(await run(live(), smallRequest(model, { seed: 3 })))[0];
+      const events = await run(live(), smallRequest(model, { seed: 3, loras: [{ name: lora, weight: 1 }] }));
+      expect(finished(events)).toMatchObject({ reason: 'done' });
+      expect(Buffer.from(imagesIn(events)[0]!.bytes!).equals(Buffer.from(plain!.bytes!))).toBe(false);
+    });
+
+    it('says so when a checkpoint is gone, rather than quietly using another', async () => {
+      if (t.type !== 'a1111' || t.preset === 'sd-server' || t.preset === 'koboldcpp' || t.preset === 'drawthings') return;
+      const model = await pick(live(), t.model);
+      const events = await run(live(), smallRequest({ ...model, modelId: 'no-such-checkpoint.safetensors' }));
+      expect(finished(events)).toMatchObject({ reason: 'error', error: { code: 'model_not_found' } });
+      expect(imagesIn(events)).toEqual([]);
     });
 
     it.skipIf(!t.stops)('stops when told to', async () => {
