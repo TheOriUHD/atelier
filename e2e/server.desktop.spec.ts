@@ -1,11 +1,13 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test, type ElectronApplication } from '@playwright/test';
 import { launchDesktop, PASSWORD } from './desktop-app.ts';
-import { sendWhenIdle, tempConfigDir } from './fixtures.ts';
-import { FAKE_SSH, PORT, SERVER_URL, SETUP_TOKEN, signedInClient, waitForHealth } from './server-mode.ts';
+import { call, sendWhenIdle, tempConfigDir } from './fixtures.ts';
+import { connectDesktop, FAKE_SSH, PORT, SERVER_URL, SETUP_TOKEN, signedInClient, startServer, stopServer, waitForHealth } from './server-mode.ts';
 
 test('desktop: connects to an Atelier server, signs in, chats through the relay and lends its runner', async () => {
   // The server's data dir gets the same settings as the other tests: the scripted fake Ollama.
@@ -111,6 +113,98 @@ test('desktop: connects to an Atelier server, signs in, chats through the relay 
     const gone = new Promise((resolve) => server.once('exit', resolve));
     server.kill();
     await gone;
+    const retry = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 };
+    await rm(configDir, retry);
+    await rm(dataDir, retry);
+  }
+});
+
+/** A 1×1 PNG. */
+const PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+/** An image server with the OpenAI images API on this computer, only reachable by what runs here; what it was asked. */
+async function fakeImageServer(): Promise<{ server: Server; url: string; asked: { path: string; prompt?: string }[] }> {
+  const asked: { path: string; prompt?: string }[] = [];
+  const server = createServer((req, res) => {
+    let text = '';
+    req.on('data', (d: Buffer) => (text += d.toString()));
+    req.on('end', () => {
+      const path = req.url ?? '';
+      asked.push({ path, ...(text ? { prompt: (JSON.parse(text) as { prompt: string }).prompt } : {}) });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(path === '/v1/models' ? { data: [{ id: 'fake-flux' }] } : { data: [{ b64_json: PIXEL }] }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, asked };
+}
+
+test('desktop: an image server on the desktop makes images for its owner on the server, through the desktop, while it is connected', async () => {
+  const dataDir = await tempConfigDir();
+  const configDir = await tempConfigDir();
+  const images = await fakeImageServer();
+  const server = await startServer(dataDir);
+  let app: ElectronApplication | undefined;
+  try {
+    app = await launchDesktop(configDir);
+    const page = await app.firstWindow();
+    await connectDesktop(page);
+
+    // Settings › Your models, on this desktop: its image server, added by its address. The desktop lends the address first.
+    await page.evaluate(() => (location.hash = '#/?settings=personal-models'));
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('button', { name: 'Add image server' }).click();
+    const adding = page.getByRole('dialog', { name: 'Add image server' });
+    await adding.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'OpenAI-compatible images' }).click();
+    await adding.getByRole('textbox', { name: 'Name' }).fill('Laptop images');
+    await adding.getByRole('textbox', { name: 'Address' }).fill(images.url);
+    await adding.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(settings.getByText('Laptop images')).toBeVisible();
+    await expect(settings.getByText(/1 model/)).toBeVisible();
+
+    const admin = await signedInClient('admin', PASSWORD);
+    const [mine] = await admin.call('personalImageProviders.list', {});
+    expect(mine).toMatchObject({ name: 'Laptop images', type: 'openai-images', online: true, status: { ok: true } });
+    const lending = JSON.parse(await readFile(join(configDir, 'chromium', 'lending.json'), 'utf8')) as Record<string, { http: unknown[] }>;
+    expect(lending[SERVER_URL]?.http).toEqual([{ id: mine!.id, baseUrl: images.url }]);
+    const ref = `${mine!.id}/fake-flux`;
+    expect((await admin.call('imageModels.list', {})).find((m) => m.ref === ref)).toMatchObject({ personal: { deviceName: mine!.deviceName }, available: true });
+
+    // Only its owner sees it.
+    const { temporaryPassword } = await admin.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+    const bob = await signedInClient('bob', temporaryPassword);
+    await bob.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+    expect((await bob.call('imageModels.list', {})).some((m) => m.personal)).toBe(false);
+    expect(await bob.call('personalImageProviders.list', {})).toEqual([]);
+
+    // A chat's model asks for an image; the desktop makes the request, and the image lands on the server.
+    await page.keyboard.press('Escape');
+    const box = page.getByRole('textbox', { name: 'Message' });
+    await box.fill(call('GenerateImage', { prompt: 'a small red lighthouse' }));
+    await sendWhenIdle(page);
+    await expect.poll(async () => (await admin.call('generatedImages.list', {})).map((i) => i.ref)).toEqual([ref]);
+    expect(images.asked).toContainEqual({ path: '/v1/images/generations', prompt: 'a small red lighthouse' });
+
+    // Settings › System says what this computer lends, by name; taking it back there stops the server reaching it.
+    await page.evaluate(() => (location.hash = '#/?settings=system'));
+    const lent = settings.getByRole('listitem').filter({ hasText: `Laptop images · ${images.url}` });
+    await expect(lent).toBeVisible();
+    await lent.getByRole('button', { name: 'Remove' }).click();
+    await expect.poll(async () => (await admin.call('imageModels.list', {})).find((m) => m.ref === ref)?.available).toBe(false);
+    const heard = images.asked.length;
+    await expect((async () => admin.call('personalImageProviders.refresh', { id: mine!.id }))()).resolves.toMatchObject([{ online: false }]);
+    expect(images.asked).toHaveLength(heard);
+
+    // The desktop goes away: its models stay listed but can't run.
+    await app.close();
+    app = undefined;
+    await expect.poll(async () => (await admin.call('personalImageProviders.list', {}))[0]?.online).toBe(false);
+    expect((await admin.call('imageModels.list', {})).find((m) => m.ref === ref)?.available).toBe(false);
+  } finally {
+    await app?.close();
+    await stopServer(server);
+    images.server.close();
     const retry = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 };
     await rm(configDir, retry);
     await rm(dataDir, retry);
