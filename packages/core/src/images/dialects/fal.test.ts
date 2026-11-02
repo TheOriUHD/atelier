@@ -25,7 +25,7 @@ describe('fal.ai', () => {
     expect(calls[0]?.headers.authorization).toBe(`Key ${KEY}`);
     expect(calls[0]?.body).toEqual({ prompt: 'a red lighthouse', image_size: { width: 1024, height: 768 }, num_images: 2, seed: 5, output_format: 'png' });
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual(['/fal-ai/flux/schnell', '/fal-ai/flux/requests/abc/status', '/fal-ai/flux/requests/abc/status', '/fal-ai/flux/requests/abc/status', '/fal-ai/flux/requests/abc']);
-    expect(out).toContainEqual({ type: 'loading', ahead: 2 });
+    expect(out).toContainEqual({ type: 'queued', ahead: 2 });
     expect(out).toContainEqual({ type: 'progress' });
     expect(imagesOf(out)).toEqual([{ type: 'image', url: 'https://v3.fal.media/files/a.png', seed: 5 }]);
     expect(finishOf(out).reason).toBe('done');

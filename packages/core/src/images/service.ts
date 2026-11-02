@@ -280,7 +280,7 @@ export class ImageService {
           progress.update({ phase: 'queued', ahead: event.ahead }, true);
           break;
         case 'loading':
-          progress.update(event.ahead !== undefined ? { phase: 'queued', ahead: event.ahead } : { phase: 'loading' }, true);
+          progress.update({ phase: 'loading' }, true);
           break;
         case 'progress':
           progress.update({ phase: 'generating', ...(event.step !== undefined ? { step: event.step } : {}), ...(event.steps !== undefined ? { steps: event.steps } : {}), ...(event.fraction !== undefined ? { fraction: event.fraction } : {}), ...(event.etaMs !== undefined ? { etaMs: event.etaMs } : {}) });

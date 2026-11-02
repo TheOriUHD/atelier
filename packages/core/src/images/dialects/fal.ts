@@ -100,7 +100,7 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
         const answer = rec(await status.json());
         const state = str(answer.status);
         const position = num(answer.queue_position);
-        if (state === 'IN_QUEUE') yield { type: 'loading', ...(position !== undefined ? { ahead: position } : {}) };
+        if (state === 'IN_QUEUE') yield position !== undefined ? { type: 'queued', ahead: position } : { type: 'loading' };
         else if (state === 'IN_PROGRESS') yield { type: 'progress' };
         else if (state === 'COMPLETED') {
           const error = str(answer.error);
