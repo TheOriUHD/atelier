@@ -4,14 +4,8 @@ import type { SelectOption } from '../../components/ui/index.ts';
 
 export type WorkflowMap = ImageWorkflow['map'];
 
-interface Slot {
-  key: keyof WorkflowMap;
-  label: string;
-  /** Which inputs can fill it, so a long workflow's list stays short. */
-  kind: 'text' | 'number';
-}
-
-export const WORKFLOW_SLOTS: readonly Slot[] = [
+/** `kind` says which inputs can fill a slot, so a long workflow's list stays short. */
+export const WORKFLOW_SLOTS = [
   { key: 'prompt', label: 'Prompt', kind: 'text' },
   { key: 'negative', label: 'Negative prompt', kind: 'text' },
   { key: 'seed', label: 'Seed', kind: 'number' },
@@ -24,7 +18,10 @@ export const WORKFLOW_SLOTS: readonly Slot[] = [
   { key: 'count', label: 'Images per run', kind: 'number' },
   { key: 'image', label: 'Input image', kind: 'text' },
   { key: 'mask', label: 'Mask', kind: 'text' },
-];
+] as const;
+
+type Slot = (typeof WORKFLOW_SLOTS)[number];
+export type SlotKey = Slot['key'];
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -70,7 +67,7 @@ export function slotOptions(workflow: Pick<ImageWorkflow, 'graph' | 'map'>, slot
 }
 
 /** The map with one slot set, or gone on null. */
-export function withSlot(map: WorkflowMap, key: keyof WorkflowMap, input: ImageWorkflowInput | null): WorkflowMap {
+export function withSlot(map: WorkflowMap, key: SlotKey, input: ImageWorkflowInput | null): WorkflowMap {
   if (input) return { ...map, [key]: input };
   const { [key]: _gone, ...rest } = map;
   return rest as WorkflowMap;

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ImageModelInfo, ImageProviderConfig, ProviderConfig, ProviderStatus } from '@atelier/protocol';
+import { imagePreset, type ImageModelInfo, type ImageProviderConfig, type ProviderConfig, type ProviderStatus } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
 import { keys } from '../../lib/queries.ts';
 import { ImageProviderWizard } from './image-provider-wizard.tsx';
@@ -16,7 +16,7 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
 
 const ok: ProviderStatus = { providerId: 'x', ok: true, latencyMs: 12, modelCount: 2, warnings: [], checkedAt: 1 };
 
-export function imageModel(modelId: string, extra: Partial<ImageModelInfo> = {}): ImageModelInfo {
+function imageModel(modelId: string, extra: Partial<ImageModelInfo> = {}): ImageModelInfo {
   return {
     ref: `comfyui/${modelId}`,
     providerId: 'comfyui',
@@ -79,7 +79,7 @@ describe('choosing a service', () => {
   it('shows how to start a server, and asks no key of it', async () => {
     setup();
     await choose('Forge');
-    expect(screen.getByText('Start it with --api. Forge Neo and reForge work the same way.')).toBeTruthy();
+    expect(screen.getByText(imagePreset('forge')!.help!)).toBeTruthy();
     expect(screen.queryByText('API key')).toBeNull();
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe('http://127.0.0.1:7860');
   });
@@ -96,7 +96,7 @@ describe('the key', () => {
     setup();
     await choose('OpenAI');
     fireEvent.click(screen.getByRole('button', { name: 'Get a key' }));
-    expect(platform.openExternal).toHaveBeenCalledWith('https://platform.openai.com/api-keys');
+    expect(platform.openExternal).toHaveBeenCalledWith(imagePreset('openai')!.keyUrl);
     save();
     expect(await screen.findByText('OpenAI needs an API key.')).toBeTruthy();
     expect(callsTo('imageProviders.save')).toEqual([]);
@@ -126,14 +126,15 @@ describe('typed-in models', () => {
     setup();
     await choose('fal.ai');
     fireEvent.change(screen.getByPlaceholderText('Paste your API key'), { target: { value: 'k' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove fal-ai/flux-2/pro' }));
+    const [kept, removed] = imagePreset('fal')!.suggestedModels!;
+    fireEvent.click(screen.getByRole('button', { name: `Remove ${removed}` }));
     const field = screen.getByRole('textbox', { name: 'Model id to add' });
     fireEvent.change(field, { target: { value: 'fal-ai/recraft-v3' } });
     // Enter adds to the list; it must not save the provider.
     fireEvent.keyDown(field, { key: 'Enter' });
     expect(callsTo('imageProviders.save')).toEqual([]);
     save();
-    await waitFor(() => expect(callsTo('imageProviders.save')[0]).toMatchObject({ models: ['fal-ai/flux/schnell', 'fal-ai/recraft-v3'] }));
+    await waitFor(() => expect(callsTo('imageProviders.save')[0]).toMatchObject({ models: [kept, 'fal-ai/recraft-v3'] }));
   });
 
   it('isn’t offered for a service that lists its own', async () => {

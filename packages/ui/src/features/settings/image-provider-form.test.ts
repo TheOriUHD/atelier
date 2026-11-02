@@ -47,7 +47,7 @@ describe('a new form', () => {
   });
 
   it('offers a service’s suggested models', () => {
-    expect(newImageProviderForm(preset('fal'), noTaken).models).toEqual(['fal-ai/flux/schnell', 'fal-ai/flux-2/pro']);
+    expect(newImageProviderForm(preset('fal'), noTaken).models).toEqual(preset('fal').suggestedModels);
   });
 
   it('lets the id follow the name until it was edited by hand', () => {
