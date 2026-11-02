@@ -43,8 +43,22 @@ try {
   process.exit(1);
 }
 const work = mkdtempSync(join(tmpdir(), 'atelier-sig-'));
-const wrangler = (file, path) =>
+const put = (file, path) =>
   execFileSync('npx', ['wrangler', 'r2', 'object', 'put', `${BUCKET}/${channel}/${file}`, '--file', path, '--remote'], { stdio: 'inherit', cwd: new URL('.', import.meta.url).pathname });
+/** Cloudflare's API answers a large upload now and then with a 401 or a 502 that the next try doesn't get: try again, waiting longer each time. */
+const ATTEMPTS = 4;
+const wrangler = (file, path) => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return put(file, path);
+    } catch (e) {
+      if (attempt >= ATTEMPTS) throw e;
+      const wait = 15 * attempt;
+      console.warn(`put ${file} failed (try ${attempt} of ${ATTEMPTS}), again in ${wait} s`);
+      execFileSync('sleep', [String(wait)]);
+    }
+  }
+};
 try {
   let count = 0;
   for (const name of files) {
