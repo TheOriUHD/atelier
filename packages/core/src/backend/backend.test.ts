@@ -77,6 +77,29 @@ describe('personal session controls', () => {
   });
 });
 
+describe('explaining each change', () => {
+  const overrides = async (id: string) => {
+    const db = openDatabase(join(dir, 'atelier.db'));
+    try {
+      return (await new SessionRepo(db).getRow(id))?.overrides;
+    } finally {
+      db.$client.close();
+    }
+  };
+
+  it('is off by default and settled when a session starts, so flipping it leaves running sessions alone', async () => {
+    const before = await client.call('sessions.create', { mode: 'code' });
+    expect(await overrides(before.id)).not.toHaveProperty('explainChanges');
+    await client.call('prefs.set', { path: ['code', 'explainChanges'], value: true });
+    const started = await client.call('sessions.create', { mode: 'code' });
+    expect(await overrides(started.id)).toMatchObject({ explainChanges: true });
+    expect(await overrides(before.id)).not.toHaveProperty('explainChanges');
+    await client.call('prefs.set', { path: ['code', 'explainChanges'], value: false });
+    expect(await overrides(started.id)).toMatchObject({ explainChanges: true });
+    expect(await overrides((await client.call('sessions.create', { mode: 'code' })).id)).not.toHaveProperty('explainChanges');
+  });
+});
+
 describe('the file behind a permission card', () => {
   it('is only there for an open card in a session the person may see', async () => {
     const session = await client.call('sessions.create', { mode: 'code' });

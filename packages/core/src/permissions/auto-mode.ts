@@ -29,20 +29,30 @@ const escapeTags = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 const said = (m: Message) => m.parts.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('\n').trim();
 
+/**
+ * An Edit's or Write's `reason` (Settings › Code › Explain each change) is the agent arguing for its own call, and it
+ * may have been talked into it by what it read: the review judges what the call does.
+ */
+function withoutPlea(name: string, input: unknown): unknown {
+  if ((name !== 'Edit' && name !== 'Write') || !input || typeof input !== 'object') return input ?? {};
+  const { reason: _, ...rest } = input as Record<string, unknown>;
+  return rest;
+}
+
 /** The review request: the person's words, what the agent did, and the call to judge. */
 export function reviewInput({ conversation, agent, call, reason, cwd }: ReviewSubject): string {
   const requests = conversation.filter((m) => m.role === 'user' && m.kind === 'normal').map(said).filter(Boolean).slice(-REQUESTS);
   const task = agent?.find((m) => m.role === 'user');
   const actions = (agent ?? conversation)
     .flatMap((m) => (m.role === 'assistant' ? m.parts : []))
-    .flatMap((p) => (p.type === 'tool_call' && !LOOKUPS.has(p.name) ? [`- ${p.name} ${clip(JSON.stringify(p.input ?? {}), 400)}`] : []))
+    .flatMap((p) => (p.type === 'tool_call' && !LOOKUPS.has(p.name) ? [`- ${p.name} ${clip(JSON.stringify(withoutPlea(p.name, p.input)), 400)}`] : []))
     .slice(-ACTIONS);
   return [
     `<project>${escapeTags(cwd ?? 'none')}</project>`,
     `<person_messages>\n${requests.map((r) => `<message>${escapeTags(clip(r, 2000))}</message>`).join('\n')}\n</person_messages>`,
     ...(task ? [`<subagent_task>${escapeTags(clip(said(task), 2000))}</subagent_task>`] : []),
     `<earlier_actions>\n${escapeTags(actions.join('\n') || '(none)')}\n</earlier_actions>`,
-    `<pending_action tool="${escapeTags(call.name)}">\n${escapeTags(clip(JSON.stringify(call.input ?? {}, null, 1), 8000))}\n</pending_action>`,
+    `<pending_action tool="${escapeTags(call.name)}">\n${escapeTags(clip(JSON.stringify(withoutPlea(call.name, call.input), null, 1), 8000))}\n</pending_action>`,
     `<note>${escapeTags(reason)}</note>`,
   ].join('\n\n');
 }

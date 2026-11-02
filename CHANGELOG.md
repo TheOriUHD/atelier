@@ -8,6 +8,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 - **Models that can't see images no longer get them from tools:** a screenshot or a file a tool returned could make a provider refuse the whole request for a model with no vision.
 - **Say why when you deny:** a permission card now has **Deny with reason…** (or press `R`), and the folder, connector and computer use cards have **Say why…**. Type what you want instead and press Enter: the assistant reads your words and carries on another way. **Deny** on its own is still one press.
 - **See where a change lands:** the diff on a permission card shows the real line numbers of the file, old and new where they differ, and **Show the whole file** (or `F`) opens the whole file with the change in place and scrolled to it. You can allow or deny from there with the same keys, except that Esc just leaves the view. It works in a browser too, on SSH hosts and in folders a desktop lends. A file that can't be read shows the diff as before.
+- **Explain each change:** with Settings › Code › Permissions › Explain each change on, the assistant gives a short reason for each edit, shown under the title of the permission card. It is off by default because every edit then costs a few more tokens, and new sessions pick it up.
 
 ## [0.2.15] — 2026-10-31
 

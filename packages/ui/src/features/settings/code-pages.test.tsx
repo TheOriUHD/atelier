@@ -139,6 +139,15 @@ describe('Code page', () => {
     await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['code', 'transcriptView'], value: 'verbose' }]));
   });
 
+  it('leaves “Explain each change” off, says what it costs, and writes it to the person’s preferences', async () => {
+    await renderPage(<CodePage />);
+    const change = row('code.explainChanges');
+    expect(change.getByRole('switch', { name: 'Explain each change' }).getAttribute('aria-checked')).toBe('false');
+    expect(document.querySelector('[data-setting-row="code.explainChanges"]')!.textContent).toContain('uses a few more tokens');
+    fireEvent.click(change.getByRole('switch', { name: 'Explain each change' }));
+    await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['code', 'explainChanges'], value: true }]));
+  });
+
   it('writes the commit author to the person’s preferences', async () => {
     await renderPage(<CodePage />);
     for (const [name, value] of [['Commit author name', 'Ada Lovelace'], ['Commit author email', 'ada@example.com']] as const) {

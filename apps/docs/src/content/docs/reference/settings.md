@@ -91,6 +91,7 @@ see are hidden in the app.
 | Setting | What it does |
 |---|---|
 | **Always-allowed actions** | What you approved with “Always allow” in a permission prompt. These rules apply in your Code and Cowork sessions and to connector tools in chats, on top of the rules your admin set. |
+| **Explain each change** | Before each edit, Atelier says why in one short sentence, and a permission prompt shows it under the title. Every edit uses a few more tokens, whether a prompt shows or not. New sessions pick this up; a running one keeps what it started with. |
 | **Code appearance** | Syntax highlighting for code: one theme for the light app theme, one for the dark. |
 | **Default transcript view** | How Code sessions open: tool calls as usual, with thinking expanded, or with every call’s details expanded. Each session can switch in its header. |
 | **Suggested replies** | After a reply in Code or Cowork, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply. |

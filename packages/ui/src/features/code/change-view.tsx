@@ -39,6 +39,7 @@ export function ChangeView({
   sessionId,
   interactionId,
   title,
+  reason,
   language,
   change,
   onClose,
@@ -47,6 +48,7 @@ export function ChangeView({
   sessionId: string;
   interactionId: string;
   title: string;
+  reason: string;
   language: string;
   /** What the card shows, for a file that can't be: the card's question stands either way. */
   change: DiffRow[];
@@ -76,6 +78,7 @@ export function ChangeView({
           <div className="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
             <div className="flex min-w-0 flex-col gap-1">
               <BaseDialog.Title className="text-section-heading break-words text-fg">{title}</BaseDialog.Title>
+              {reason && <p className="line-clamp-3 text-body break-words text-fg-secondary">{reason}</p>}
               {note && <p className="text-footnote text-fg-muted">{note}</p>}
             </div>
             <BaseDialog.Close render={<IconButton icon={X} label="Close" iconSize="md" className="shrink-0" />} />

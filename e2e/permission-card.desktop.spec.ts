@@ -130,6 +130,46 @@ test('desktop Code: the view shows a new file as new, and what a Write changes i
   }
 });
 
+test('desktop Code: Explain each change is off until turned on, then edits say why on the card', async () => {
+  test.setTimeout(120_000);
+  const configDir = await tempConfigDir();
+  const repo = await tempRepo({ 'a.txt': 'one\n' });
+  const app = await launchDesktop(configDir);
+  try {
+    const page = await app.firstWindow();
+    await setUpLocal(page);
+    await openFolder(app, page, repo);
+    const box = page.getByRole('textbox', { name: 'Message', exact: true });
+    const edit = call('Edit', { file_path: 'a.txt', old_string: 'one', new_string: 'two', reason: 'The count was off by one.' });
+
+    // Off: the field isn't in the tool's schema at all, so a call that sends it is refused and nothing asks.
+    await box.fill(edit);
+    await box.press('Enter');
+    await expect(page.getByText(/Tool result: Error: Invalid input for Edit/)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Allow Atelier to edit a.txt?' })).toHaveCount(0);
+
+    await page.evaluate(() => void (window.location.hash = '#/?settings=code'));
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('switch', { name: 'Explain each change' }).click();
+    await expect(settings.getByRole('switch', { name: 'Explain each change' })).toBeChecked();
+    await settings.getByRole('button', { name: 'Close' }).click();
+
+    // The session that was running keeps its tools; a new one has the field.
+    await page.getByRole('radio', { name: 'Code' }).click();
+    await page.getByRole('button', { name: `New session in ${basename(repo)}` }).click();
+    await box.fill(edit);
+    await sendWhenIdle(page);
+    const card = page.getByRole('region', { name: 'Allow Atelier to edit a.txt?' });
+    await expect(card).toContainText('The count was off by one.');
+    await card.getByRole('button', { name: 'Allow once' }).click();
+    await expect.poll(() => readFile(join(repo, 'a.txt'), 'utf8')).toBe('two\n');
+  } finally {
+    await app.close();
+    await rm(configDir, { recursive: true, force: true });
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
 test('server mode: a folder lent by a desktop gives the card its line and its file, and a reason reaches the model', async () => {
   test.setTimeout(120_000);
   const dataDir = await tempConfigDir();

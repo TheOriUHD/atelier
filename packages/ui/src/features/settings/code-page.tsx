@@ -26,6 +26,7 @@ export function CodePage() {
   const transcriptView = usePref<TranscriptView>(['code', 'transcriptView']);
   const suggestions = usePref<boolean>(['code', 'suggestions']);
   const allow = usePref<string[]>(['permissions', 'allow']);
+  const explainChanges = usePref<boolean>(['code', 'explainChanges']);
   const authorName = usePref<string>(['git', 'authorName']);
   const authorNameDraft = useDraftText(authorName);
   const authorEmail = usePref<string>(['git', 'authorEmail']);
@@ -57,6 +58,9 @@ export function CodePage() {
         </SettingRow>
       </SettingsSection>
       <SettingsSection title="Permissions">
+        <SettingRow id="code.explainChanges" setting={explainChanges}>
+          {(label) => <Switch {...label} checked={explainChanges.value} onCheckedChange={(v) => void explainChanges.set(v)} />}
+        </SettingRow>
         <ListRow
           id="prefs.permissions.allow"
           setting={allow}

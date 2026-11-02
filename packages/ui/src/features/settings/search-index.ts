@@ -334,6 +334,14 @@ export const SETTINGS_INDEX = [
     keywords: ['permissions', 'rules', 'always allow', 'approve', 'bash', 'claude code', 'connector', 'chat'],
   },
   {
+    id: 'code.explainChanges',
+    page: 'code',
+    label: 'Explain each change',
+    description:
+      'Before each edit, Atelier says why in one short sentence, and a permission prompt shows it under the title. Every edit uses a few more tokens, whether a prompt shows or not. New sessions pick this up; a running one keeps what it started with.',
+    keywords: ['reason', 'justification', 'why', 'rationale', 'permission', 'edit', 'write', 'tokens'],
+  },
+  {
     id: 'code.syntaxTheme',
     page: 'code',
     label: 'Code appearance',

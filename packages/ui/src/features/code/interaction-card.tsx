@@ -399,6 +399,8 @@ function PermissionPrompt({ sessionId, interactionId, request, sending, respond 
   const [wholeFile, setWholeFile] = useState(false);
   const change = fileChange(request);
   const title = permissionTitle(request, root);
+  // The model's own words on why, with "Explain each change" on.
+  const reason = change ? str(asRecord(request.input).reason).trim() : '';
   const actions = (
     <>
       {why.open && <ReasonField why={why} sending={sending} />}
@@ -445,12 +447,13 @@ function PermissionPrompt({ sessionId, interactionId, request, sending, respond 
         letters: change ? { f: () => setWholeFile(true) } : undefined,
       })}
     >
+      {reason && <p className="line-clamp-3 text-body break-words text-fg-secondary">{reason}</p>}
       <CallPreview request={request} />
       {/* "Bash needs your approval." says nothing the card doesn't: only a reason with something in it is shown. */}
       {request.reason && !/needs your approval\.?$/.test(request.reason) && <p className="text-footnote text-fg-muted">{request.reason}</p>}
       {!wholeFile && actions}
       {wholeFile && change && (
-        <ChangeView sessionId={sessionId} interactionId={interactionId} title={title} language={languageOf(change.path)} change={change.rows} onClose={() => setWholeFile(false)}>
+        <ChangeView sessionId={sessionId} interactionId={interactionId} title={title} reason={reason} language={languageOf(change.path)} change={change.rows} onClose={() => setWholeFile(false)}>
           {actions}
         </ChangeView>
       )}

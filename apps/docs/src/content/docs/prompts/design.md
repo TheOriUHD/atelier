@@ -108,7 +108,11 @@ second breakpoint.
   ChatSearch, ChatRead, artifact`), then connector tools by name
   (`BUILTIN_TOOLS`, `orderTools` in `src/tools/types.ts`).
 - **Descriptions.** A built-in tool's description is a function of the tier, the mode and which other tools the
-  session has, and nothing else, so the tools JSON is byte-stable and only names tools that exist.
+  session has, and nothing else, so the tools JSON is byte-stable and only names tools that exist. One setting adds to
+  this without touching it: a session started with the person's "Explain each change" on has `explainChanges` in its
+  overrides, and for it Edit and Write are wrapped (`withChangeReason` in `tools/code/files.ts`) with an optional `reason`
+  and a line telling the model to fill it in. It is read once, when the session is created, and a sub-agent inherits it,
+  so a session's tools don't change under it however the setting moves, and with the setting off no byte differs.
 - **Compact examples.** Core tools (`Read, Edit, Write, Bash, Grep, Glob, TodoWrite, AskUser`) carry a
   `compactExample` with placeholder values (`"<path>"`, `"<exact text from the file>"`). Compact cores render one
   example line per present core tool, as `Name {json}` or, for prompted tools, as `<tool_call>{…}</tool_call>`.
@@ -374,8 +378,8 @@ command again).
 | Tool | Notes |
 |---|---|
 | Read | Text, images, PDFs, and a directory's entries (one per line, `/` after folders, up to 500); line numbers aren't part of the file; no checking existence through the shell first; no re-reading after an edit. |
-| Write | New files and complete rewrites; read before overwriting; no unrequested docs. Undoes tag escaping. |
-| Edit | Exact, unique `old_string` (or `replace_all`), kept short; on "not found", read again and copy less; several edits to one file run in order. Undoes tag escaping. |
+| Write | New files and complete rewrites; read before overwriting; no unrequested docs. Undoes tag escaping. With "Explain each change" (§1.3): `reason`, one short sentence the permission card shows. |
+| Edit | Exact, unique `old_string` (or `replace_all`), kept short; on "not found", read again and copy less; several edits to one file run in order. Undoes tag escaping. With "Explain each change" (§1.3): `reason`, as for Write. |
 | Glob / Grep | Names versus contents; `output_mode`, `glob`, `type`, `head_limit`; ripgrep escaping; independent searches together. Undo tag escaping in the pattern. |
 | Bash | Current directory persists, file tools resolve from the root; non-interactive; background for servers; output cut in the middle; repeat what matters. In Code: the commit procedure, the commands that discard work, and the pull-request procedure. Undoes tag escaping in the command. |
 | BashOutput / KillShell | Both take the ID Bash returned for a background command. |

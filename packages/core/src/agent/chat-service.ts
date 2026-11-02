@@ -83,6 +83,7 @@ import { renderSkill, renderSkillList, type Skill } from '../extensions/skills.t
 import { renderCommand, type Command } from '../extensions/commands.ts';
 import { agentModel, agentPrompt, GENERAL_PURPOSE, type AgentDef } from '../extensions/agents.ts';
 import { CHANGE_TOOLS, changePreview, editPosition } from '../tools/code/change-preview.ts';
+import { withChangeReason } from '../tools/code/files.ts';
 import { createCodeTools } from '../tools/code/index.ts';
 import type { BackgroundCommands } from '../tools/code/bash.ts';
 import { BackgroundTasks } from './background-tasks.ts';
@@ -1809,6 +1810,8 @@ export class ChatService {
         this.codeTools.get(workspace) ??
         createCodeTools(workspace, { blobs: this.deps.blobs, background, ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) });
       this.codeTools.set(workspace, code);
+      // Settled when the session began, so its tools stay byte-stable however the setting changes (docs/PROMPTS.md §1.3).
+      if (session.overrides.explainChanges === true) code = code.map((t) => (CHANGE_TOOLS.has(t.name) ? withChangeReason(t) : t));
     }
     // Sub-agents can't ask the person anything and don't delegate further; a defined one keeps to its tool list.
     if (session.parentSessionId) {
@@ -1950,7 +1953,7 @@ export class ChatService {
         permissionMode: parent.permissionMode,
         parentSessionId: parent.id,
         title: task.description,
-        overrides: { thinking: parent.overrides.thinking !== false, originClient: parent.overrides.originClient, remoteControl: parent.overrides.remoteControl !== false, ...(def ? { agent: def.name } : {}) },
+        overrides: { thinking: parent.overrides.thinking !== false, originClient: parent.overrides.originClient, remoteControl: parent.overrides.remoteControl !== false, ...(parent.overrides.explainChanges === true ? { explainChanges: true } : {}), ...(def ? { agent: def.name } : {}) },
       });
       await this.linkChild(call.messageId, call.callId, child.id);
     } catch (error) {

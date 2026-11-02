@@ -136,6 +136,28 @@ export function applyEdit(content: string, input: EditInput): { updated: string;
   return { updated, line: content.slice(0, at).split('\n').length, matches: count };
 }
 
+/**
+ * Edit or Write with the optional `reason` the person's "Explain each change" asks for. It wraps the tool for one
+ * session instead of changing it: tools are shared between a workspace's sessions, and with the setting off nothing of
+ * this reaches a request.
+ */
+export function withChangeReason(tool: Tool): Tool {
+  const describe = tool.description;
+  return {
+    ...tool,
+    description: (ctx) =>
+      [
+        typeof describe === 'string' ? describe : describe(ctx),
+        ctx.tier === 'compact' ? '- `reason`: why this change is needed, in one short sentence.' : '- Fill in `reason` on every call: one short sentence on why this change is needed. The person reads it when they are asked to approve the change.',
+      ].join('\n'),
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: { ...(tool.inputSchema.properties as Record<string, unknown>), reason: { type: 'string', description: 'Why this change is needed, in one short sentence the person reads before approving it.' } },
+    },
+    ...(tool.compactExample ? { compactExample: { ...tool.compactExample, reason: '<why, in one short sentence>' } } : {}),
+  };
+}
+
 export function createFileTools(workspace: Workspace, blobs?: Pick<BlobStore, 'put'>, checkpoint?: Checkpoint): Tool[] {
   const { runner } = workspace;
 

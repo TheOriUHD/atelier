@@ -323,8 +323,10 @@ export const UserPrefs = z.object({
       transcriptView: TranscriptView.default('normal'),
       /** After a reply in Code and Cowork, a short guess at the next message shows in the message box (Tab puts it in). */
       suggestions: z.boolean().default(true),
+      /** Edit and Write get a short `reason` the permission card shows. Costs tokens on every edit, and a session keeps what it started with. */
+      explainChanges: z.boolean().default(false),
     })
-    .default({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true }),
+    .default({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true, explainChanges: false }),
   sidebar: SidebarView.default({
     status: 'active',
     environments: ['local', 'cloud', 'remote', 'ssh'],

@@ -1702,7 +1702,16 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         workspaceId: folder ?? null,
         permissionMode: permissionMode ?? null,
         groupId: groupId && (await groups.get(userId, groupId)) ? groupId : null,
-        overrides: { ...(off?.length ? { connectorsOff: off } : {}), ...(research ? { research } : {}), ...(imageModel ? { imageModel } : {}), thinking: thinking ?? (await prefs.get(userId)).thinking, remoteControl: remoteControl ?? true, originClient: ctx.connection().auth?.sessionId },
+        overrides: {
+          ...(off?.length ? { connectorsOff: off } : {}),
+          ...(research ? { research } : {}),
+          ...(imageModel ? { imageModel } : {}),
+          thinking: thinking ?? (await prefs.get(userId)).thinking,
+          remoteControl: remoteControl ?? true,
+          originClient: ctx.connection().auth?.sessionId,
+          // Read once: a session's tools don't change under it when the person flips the setting (docs/PROMPTS.md §1.3).
+          ...((await prefs.get(userId)).code.explainChanges ? { explainChanges: true } : {}),
+        },
         temporary: temporary ? (await prefs.get(userId)).privacy.temporaryChats : null,
       });
       // Nothing lists a temporary chat, so there is nothing to tell other windows.

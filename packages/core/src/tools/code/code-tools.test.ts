@@ -13,6 +13,7 @@ import { hostRunnerBinary, RunnerClient } from '../../workspaces/runner-client.t
 import type { RunnerCalls, Workspace } from '../../workspaces/workspace.ts';
 import type { Tool, ToolContext, ToolOutput } from '../types.ts';
 import { changePreview, editPosition } from './change-preview.ts';
+import { withChangeReason } from './files.ts';
 import { createCodeTools } from './index.ts';
 
 const binary = hostRunnerBinary(join(import.meta.dirname, '../../../../../runner/bin'));
@@ -290,6 +291,13 @@ describe.skipIf(!built)('code tools', { timeout: 30_000 }, () => {
       });
       expect(text(all)).toContain('(2 replacements; the first is shown)');
       expect(readFileSync(at('dup.txt'), 'utf8')).toBe('x = 2\nx = 2\n');
+    });
+
+    it('takes a `reason` where the session asks for one, and doesn’t write it anywhere', async () => {
+      write('why.txt', 'old\n');
+      const out = await withChangeReason(tools.get('Edit')!).run({ file_path: 'why.txt', old_string: 'old', new_string: 'new', reason: 'Because.' }, ctx());
+      expect(out.isError).toBeUndefined();
+      expect(readFileSync(at('why.txt'), 'utf8')).toBe('new\n');
     });
 
     it('fails without clobbering when the file changes between its read and its write', async () => {

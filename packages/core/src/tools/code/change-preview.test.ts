@@ -1,8 +1,10 @@
 import { RpcError, RunnerErrorCode } from '@atelier/protocol';
 import { describe, expect, it } from 'vitest';
 import type { RunnerCalls } from '../../workspaces/workspace.ts';
-import { applyEdit } from './files.ts';
+import { applyEdit, createFileTools, withChangeReason } from './files.ts';
 import { changePreview, changeRows, editPosition } from './change-preview.ts';
+import type { DescribeContext, Tool } from '../types.ts';
+import type { Workspace } from '../../workspaces/workspace.ts';
 
 const ENOENT = new RpcError(RunnerErrorCode.IO, 'no such file', { code: 'ENOENT' });
 const OUTSIDE = new RpcError(RunnerErrorCode.PathOutsideWorkspace, 'outside the workspace');
@@ -170,5 +172,29 @@ describe('what the full view gets', () => {
 
   it('a call without a path can’t be shown', async () => {
     await expect(changePreview(runnerWith(FILE), { name: 'Edit', input: {} })).resolves.toEqual({ state: 'unreadable', rows: [] });
+  });
+});
+
+describe('the reason an edit tool asks for', () => {
+  const tools = new Map(createFileTools({ runner: runnerWith(FILE) } as unknown as Workspace).map((t) => [t.name, t]));
+  const describeIn = (tool: Tool, tier: DescribeContext['tier']) => (tool.description as (ctx: DescribeContext) => string)({ tier, mode: 'code', has: () => true });
+
+  it.each(['Edit', 'Write'])('%s gets an optional `reason` and is told to fill it in', (name) => {
+    const plain = tools.get(name)!;
+    const wrapped = withChangeReason(plain);
+    expect((wrapped.inputSchema.properties as Record<string, unknown>).reason).toMatchObject({ type: 'string' });
+    expect(wrapped.inputSchema.required).toEqual(plain.inputSchema.required);
+    expect(wrapped.inputSchema.additionalProperties).toBe(false);
+    expect(describeIn(wrapped, 'full')).toBe(`${describeIn(plain, 'full')}\n- Fill in \`reason\` on every call: one short sentence on why this change is needed. The person reads it when they are asked to approve the change.`);
+    expect(describeIn(wrapped, 'compact')).toContain(describeIn(plain, 'compact'));
+    expect(wrapped.compactExample).toMatchObject({ ...plain.compactExample, reason: '<why, in one short sentence>' });
+  });
+
+  it('leaves the tool itself as it was: a workspace’s sessions share it', () => {
+    const plain = tools.get('Edit')!;
+    const before = JSON.stringify([plain.inputSchema, plain.compactExample]);
+    withChangeReason(plain);
+    expect(JSON.stringify([plain.inputSchema, plain.compactExample])).toBe(before);
+    expect((plain.inputSchema.properties as Record<string, unknown>).reason).toBeUndefined();
   });
 });

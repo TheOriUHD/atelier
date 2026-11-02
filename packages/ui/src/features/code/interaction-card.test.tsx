@@ -394,8 +394,30 @@ describe('where a change lands', () => {
   });
 });
 
+describe('the reason an edit gives', () => {
+  const edit = (input: Record<string, unknown>) => permission({ toolName: 'Edit', input: { file_path: '/repo/a.ts', old_string: 'a', new_string: 'b', ...input }, suggestedRule: 'Edit(/repo/**)' });
+
+  it('shows under the title, before the change', () => {
+    render(<InteractionCard sessionId="s" pending={edit({ reason: 'The loop was off by one.' })} />);
+    const card = screen.getByRole('region');
+    const note = within(card).getByText('The loop was off by one.');
+    expect(note.compareDocumentPosition(card.querySelector('[data-kind]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('is left out when the model gave none', () => {
+    render(<InteractionCard sessionId="s" pending={edit({ reason: '   ' })} />);
+    expect(screen.getByRole('region').querySelector('p')).toBeNull();
+  });
+
+  it('only counts on a change: a connector’s `reason` is one of its arguments', () => {
+    render(<InteractionCard sessionId="s" pending={permission({ toolName: 'mcp__tickets__close', input: { reason: 'duplicate' } })} />);
+    expect(screen.queryByText('duplicate')).toBeNull();
+    expect(screen.getByRole('region').textContent).toContain('"reason": "duplicate"');
+  });
+});
+
 describe('the whole file', () => {
-  const edit = permission({ toolName: 'Edit', input: { file_path: '/repo/a.py', old_string: 'b', new_string: 'B' }, suggestedRule: 'Edit(/repo/**)', position: { line: 2, matches: 1 } });
+  const edit = permission({ toolName: 'Edit', input: { file_path: '/repo/a.py', old_string: 'b', new_string: 'B', reason: 'Why not.' }, suggestedRule: 'Edit(/repo/**)', position: { line: 2, matches: 1 } });
   const write = permission({ toolName: 'Write', input: { file_path: '/repo/new.py', content: 'x\n' }, suggestedRule: 'Edit(/repo/**)' });
   const ready: ChangePreview = {
     state: 'ready',
@@ -423,10 +445,11 @@ describe('the whole file', () => {
   };
   const shown = (view: HTMLElement) => [...view.querySelectorAll('[data-kind]')].map((r) => r.lastElementChild!.textContent);
 
-  it('asks for the file behind this card', async () => {
+  it('asks for the file behind this card, and reads the model’s reason in it too', async () => {
     const view = await open(edit);
     await waitFor(() => expect(shown(view)).toEqual(['a', 'b', 'B', 'c']));
     expect(callsTo('chat.changePreview')).toEqual([{ sessionId: 's', interactionId: 'i1' }]);
+    expect(view.textContent).toContain('Why not.');
   });
 
   it('opens at the change', async () => {

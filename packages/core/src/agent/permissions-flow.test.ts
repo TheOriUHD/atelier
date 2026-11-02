@@ -494,6 +494,38 @@ describe('permission prompts', () => {
     });
   });
 
+  describe('“Explain each change”', () => {
+    const fakeWorkspace = { id: 'w1', root: '/work/app', home: '/home/me', os: 'darwin', shell: '/bin/zsh', host: null, deviceId: null, pathSep: '/', shellFor: async () => 'shell', runner: { call: async () => ({}), on: () => () => {} } } as unknown as Workspace;
+    const toolDefs = async (overrides: Record<string, unknown>) => {
+      const chat = service(writer, null, undefined, {}, { workspace: async () => fakeWorkspace });
+      const row = await repo.getRow((await repo.create({ mode: 'code', userId: null, workspaceId: 'w1', overrides })).id);
+      const tools = await (chat as unknown as { toolsFor: (r: unknown) => Promise<Tool[]> }).toolsFor(row);
+      return new Map(tools.map((t) => [t.name, t]));
+    };
+    const schema = (tool: Tool | undefined) => JSON.stringify(tool?.inputSchema);
+
+    it('leaves every tool alone in a session that didn’t start with it', async () => {
+      const off = await toolDefs({});
+      expect((off.get('Edit')!.inputSchema.properties as Record<string, unknown>).reason).toBeUndefined();
+      expect((off.get('Write')!.inputSchema.properties as Record<string, unknown>).reason).toBeUndefined();
+    });
+
+    it('adds `reason` to Edit and Write only', async () => {
+      const [off, on] = [await toolDefs({}), await toolDefs({ explainChanges: true })];
+      expect((on.get('Edit')!.inputSchema.properties as Record<string, unknown>).reason).toBeDefined();
+      expect((on.get('Write')!.inputSchema.properties as Record<string, unknown>).reason).toBeDefined();
+      for (const name of off.keys()) if (name !== 'Edit' && name !== 'Write' && name !== 'Agent') expect(schema(on.get(name)), name).toBe(schema(off.get(name)));
+    });
+
+    it('goes by the session, so the setting changing mid-session leaves its tools byte-stable', async () => {
+      const prefs = { ...quietPrefs(), code: { ...quietPrefs().code, explainChanges: true } };
+      const chat = service(writer, null, undefined, {}, { workspace: async () => fakeWorkspace, person: async () => ({ prefs, name: 'Tester', safeguards: 'inherit' as const }) });
+      const row = await repo.getRow((await repo.create({ mode: 'code', userId: null, workspaceId: 'w1' })).id);
+      const tools = await (chat as unknown as { toolsFor: (r: unknown) => Promise<Tool[]> }).toolsFor(row);
+      expect((tools.find((t) => t.name === 'Edit')!.inputSchema.properties as Record<string, unknown>).reason).toBeUndefined();
+    });
+  });
+
   it('remembers "allow for this session"', async () => {
     const chat = service();
     const s = await repo.create({ mode: 'code', userId: null });

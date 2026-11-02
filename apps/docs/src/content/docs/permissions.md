@@ -180,6 +180,7 @@ The cards that ask for themselves (moving to another folder, adding a connector,
 
 **The whole file** *(next release)*. **Show the whole file**, the button at the top right of an Edit's or Write's card (or `F`), opens the file with the change in place, scrolled to it, read as it is at that moment. A new file shows as new, and a Write over a file shows what changes in it. **Deny**, **Deny with reason…**, **Always allow** and **Allow once** are there too, with the same keys, except that `Esc` only leaves the view. Up to 5,000 lines show; a longer file keeps the part around the change and says how many lines it left out. Files that can't be shown (binary, over 16 MiB, or changed so that the edit no longer applies) say so and show the diff.
 
+**Explain each change** *(next release)*. With **Settings › Code › Permissions › Explain each change** on, the model gives a short reason for each edit, and the card shows it under the title. It is off by default: every Edit and Write then costs a few more tokens, in every mode, also when no card shows. A session keeps what it started with, so turning it on applies to new sessions. The reviewer in Auto mode doesn't see the reason: it judges what the edit does.
 
 The rule Atelier suggests:
 
