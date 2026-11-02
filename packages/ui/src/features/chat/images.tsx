@@ -32,6 +32,7 @@ export interface ViewedImage extends LightboxImage {
 /** "Read", "Screenshot", "Take snapshot": a tool's name as the preview's footer shows it. */
 export function toolLabel(name: string): string {
   if (/screenshot/i.test(name) || name === 'ComputerAction') return 'Screenshot';
+  if (name === 'SaveImage') return 'Saved image';
   const words = (name.startsWith('mcp__') ? name.slice(name.lastIndexOf('__') + 2) : name).replace(/[_-]+/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
@@ -41,7 +42,8 @@ export function viewedImages(steps: readonly ActivityStepView[]): ViewedImage[] 
   return steps.flatMap((step) => {
     if (step.kind !== 'tool' || !step.result) return [];
     const tool = toolLabel(step.call.name);
-    return step.result.content.flatMap((c) => (c.type === 'image' ? [{ src: blobUrl(c.blob), alt: `${tool} image`, tool }] : []));
+    const parts = step.result.saved ? [{ type: 'image' as const, ...step.result.saved }] : step.result.content;
+    return parts.flatMap((c) => (c.type === 'image' ? [{ src: blobUrl(c.blob), alt: `${tool} image`, tool }] : []));
   });
 }
 

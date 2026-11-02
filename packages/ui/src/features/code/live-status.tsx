@@ -25,7 +25,7 @@ export const LiveStatus = memo(function LiveStatus({ sessionId, withActivity = f
   const changed = useRef({ tokens: -1, at: 0 });
   if (status && status.tokens !== changed.current.tokens) changed.current = { tokens: status.tokens, at: Date.now() };
   // A run of tool calls says what it does in its own live line in Code's compact transcript; Chat's summary has none between steps.
-  if (!status || (compact && status.activity && !withActivity && status.phase !== 'retrying')) return null;
+  if (!status || status.image || (compact && status.activity && !withActivity && status.phase !== 'retrying')) return null;
   const retrying = status.phase === 'retrying';
   const quiet = status.generating && status.rate ? now - changed.current.at - QUIET_MS : 0;
   const estimated = quiet > 0 ? Math.floor((quiet / 1000) * status.rate!) : 0;

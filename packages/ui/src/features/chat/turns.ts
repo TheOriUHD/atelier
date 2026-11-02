@@ -1,4 +1,4 @@
-import type { Message, TextPart, ThinkingPart, ToolCallPart, ToolResultPart } from '@atelier/protocol';
+import type { ImageProgress, Message, TextPart, ThinkingPart, ToolCallPart, ToolResultPart } from '@atelier/protocol';
 
 /** How the transcript is laid out: each user message, then everything the assistant did until the next one. */
 export type Turn =
@@ -47,6 +47,8 @@ export type ActivityStepView =
       since: number;
       /** Live output while it runs (Bash). */
       output: string | undefined;
+      /** How far it is while it runs (GenerateImage). */
+      progress?: ImageProgress | undefined;
     };
 
 export interface RunState {
@@ -54,6 +56,7 @@ export interface RunState {
   busy: boolean;
   streamingMessageId: string | null;
   toolOutput: Record<string, string>;
+  toolProgress?: Record<string, ImageProgress> | undefined;
 }
 
 /** Whether `ref` is the part currently streaming in. */
@@ -71,6 +74,7 @@ export function stepView(ref: ActivityStep, results: Map<string, ToolResultPart>
     running: run.busy && !result,
     since: ref.message.createdAt,
     output: run.toolOutput[ref.part.id],
+    progress: run.toolProgress?.[ref.part.id],
   };
 }
 
@@ -79,11 +83,16 @@ export type TurnItem =
   | { kind: 'thinking'; ref: PartRef<ThinkingPart> }
   | { kind: 'artifact'; ref: PartRef<ToolCallPart> }
   | { kind: 'visual'; ref: PartRef<ToolCallPart> }
+  /** A generated image: seen, not a step of the work, so it leaves the run in Chat, Code and Cowork alike. */
+  | { kind: 'image'; ref: PartRef<ToolCallPart> }
   /** A run of tool calls, with the thinking between them, shown as one collapsible summary. */
   | { kind: 'activity'; key: string; steps: ActivityStep[] }
   | { kind: 'error'; message: Message }
   /** The model provider ended the reply itself (its own content filter). */
   | { kind: 'refusal'; message: Message };
+
+/** Tool calls the transcript shows as items of their own, not as steps of an activity run. */
+const OWN_ITEM: Record<string, 'artifact' | 'visual' | 'image'> = { artifact: 'artifact', inline_visual: 'visual', GenerateImage: 'image' };
 
 /** What an assistant turn renders, in order. Thinking only joins an activity run when the run has a tool call. */
 export function turnItems(messages: readonly Message[]): TurnItem[] {
@@ -98,11 +107,11 @@ export function turnItems(messages: readonly Message[]): TurnItem[] {
     if (message.role !== 'assistant') continue;
     message.parts.forEach((part, index) => {
       const key = `${message.id}:${index}`;
-      if (part.type === 'thinking' || (part.type === 'tool_call' && part.name !== 'artifact' && part.name !== 'inline_visual'))
-        run.push({ key, message, index, part } as ActivityStep);
+      const own = part.type === 'tool_call' && Object.hasOwn(OWN_ITEM, part.name) ? OWN_ITEM[part.name] : undefined;
+      if (part.type === 'thinking' || (part.type === 'tool_call' && !own)) run.push({ key, message, index, part } as ActivityStep);
       else if (part.type === 'tool_call') {
         flush();
-        items.push({ kind: part.name === 'inline_visual' ? 'visual' : 'artifact', ref: { key, message, index, part } });
+        items.push({ kind: own!, ref: { key, message, index, part } });
       } else if (part.type === 'text' && part.text.trim()) {
         flush();
         items.push({ kind: 'text', ref: { key, message, index, part } });

@@ -95,6 +95,15 @@ describe('applyEvent', () => {
     expect(applyEvent(waiting, { type: 'queued', ahead: null }).queued).toBeNull();
   });
 
+  it('keeps the latest progress per call, until the results arrive', () => {
+    let s = applyEvent(base, { type: 'tool_progress', messageId: 'a1', callId: 'c1', progress: { phase: 'queued', ahead: 2 } });
+    s = applyEvent(s, { type: 'tool_progress', messageId: 'a1', callId: 'c2', progress: { phase: 'loading' } });
+    s = applyEvent(s, { type: 'tool_progress', messageId: 'a1', callId: 'c1', progress: { phase: 'generating', step: 3, steps: 8 } });
+    expect(s.toolProgress).toEqual({ c1: { phase: 'generating', step: 3, steps: 8 }, c2: { phase: 'loading' } });
+    s = applyEvent(s, { type: 'message', message: msg('t1', 'a1', 'tool', '') });
+    expect(s.toolProgress).toEqual({});
+  });
+
   it('tracks the task list, the open question and live tool output', () => {
     let s = applyEvent(base, { type: 'todos', todos: [{ content: 'Run tests', status: 'in_progress' }] });
     s = applyEvent(s, { type: 'pending', pending: { kind: 'question', id: 'q', payload: {} } });

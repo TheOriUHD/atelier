@@ -99,6 +99,25 @@ describe('turnItems', () => {
   });
 });
 
+describe('turnItems and generated images', () => {
+  const call = (id: string, name: string) => ({ type: 'tool_call', id, name, input: {} }) as const;
+
+  it('takes GenerateImage out of the activity run, in order, to stand on its own', () => {
+    const items = turnItems([m('a', 'assistant', { parts: [call('1', 'Read'), call('2', 'GenerateImage'), call('3', 'Bash')] })]);
+    expect(items.map((item) => item.kind)).toEqual(['activity', 'image', 'activity']);
+    const image = items[1] as Extract<TurnItem, { kind: 'image' }>;
+    expect(image.ref.part.id).toBe('2');
+  });
+
+  it('leaves SaveImage in the run: it is a file edit like any other', () => {
+    expect(turnItems([m('a', 'assistant', { parts: [call('1', 'SaveImage')] })]).map((item) => item.kind)).toEqual(['activity']);
+  });
+
+  it('isn’t fooled by a tool named after an object’s built-ins', () => {
+    expect(turnItems([m('a', 'assistant', { parts: [call('1', 'constructor')] })]).map((item) => item.kind)).toEqual(['activity']);
+  });
+});
+
 describe('stepView', () => {
   const call = (id: string) => ({ type: 'tool_call' as const, id, name: 'Bash', input: {} });
   const messages = [
@@ -114,6 +133,14 @@ describe('stepView', () => {
     expect(stepView(done, results, run)).toMatchObject({ kind: 'tool', running: false, since: 5, output: undefined });
     expect(stepView(open, results, run)).toMatchObject({ kind: 'tool', running: true, output: 'tick' });
     expect(stepView(open, results, { ...run, busy: false })).toMatchObject({ running: false });
+  });
+
+  it('carries a running image’s progress, and leaves other calls without', () => {
+    const image: ActivityStep = { key: 'a:0', message: m('a', 'assistant'), index: 0, part: { type: 'tool_call', id: 'img', name: 'GenerateImage', input: {} } };
+    const progress = { phase: 'generating', step: 3, steps: 28 } as const;
+    expect(stepView(image, new Map(), { busy: true, streamingMessageId: null, toolOutput: {}, toolProgress: { img: progress } })).toMatchObject({ progress });
+    expect(stepView(image, new Map(), { busy: true, streamingMessageId: null, toolOutput: {}, toolProgress: {} })).toMatchObject({ progress: undefined });
+    expect(stepView(image, new Map(), { busy: true, streamingMessageId: null, toolOutput: {} })).toMatchObject({ progress: undefined });
   });
 
   it('marks the last part of the streaming message as active thinking', () => {

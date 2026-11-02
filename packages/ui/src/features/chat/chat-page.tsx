@@ -12,6 +12,7 @@ import { InteractionCard } from '../code/interaction-card.tsx';
 import { SelectionReply } from './selection-reply.tsx';
 import { LiveStatus } from '../code/live-status.tsx';
 import { Composer, FileDropZone, type ComposerHandle } from './composer.tsx';
+import { ComposerImages, useImageReference } from './generated-images.tsx';
 import { CoworkOffer } from './cowork-offer.tsx';
 import { useSessionSend } from './outbox.tsx';
 import { ModelPicker } from './model-picker.tsx';
@@ -34,7 +35,7 @@ export function ChatPage() {
   const { data: models } = useModels();
   const [pickingModel, setPickingModel] = useState(false);
   const attachments = useAttachments(live.session?.temporary ? undefined : draftKeys.session(sessionId));
-  const { ref: scroller, atBottom, followSmooth, onScroll } = useFollowScroll(live.messages);
+  const { ref: scroller, atBottom, followSmooth, onScroll } = useFollowScroll(live);
   const session = live.session;
   const connectors = useSessionConnectors(session);
   const research = useSessionResearch(session);
@@ -53,6 +54,7 @@ export function ChatPage() {
 
   const composer = useRef<ComposerHandle>(null);
   const sending = useSessionSend({ sessionId, busy: streaming, outbox: live.outbox, attachments, composer, follow: followSmooth });
+  const imageReference = useImageReference(attachments, composer);
 
   if (live.status === 'error')
     return (
@@ -81,13 +83,15 @@ export function ChatPage() {
                   <Spinner label="Loading conversation" />
                 </div>
               ) : (
-                <Transcript
-                  sessionId={sessionId}
-                  live={live}
-                  status={<LiveStatus sessionId={sessionId} withActivity />}
-                  outbox={sending.actions}
-                  footer={temporary ? undefined : <CoworkOffer sessionId={sessionId} messages={live.messages} running={streaming || live.outbox.length > 0} />}
-                />
+                <ComposerImages.Provider value={imageReference}>
+                  <Transcript
+                    sessionId={sessionId}
+                    live={live}
+                    status={<LiveStatus sessionId={sessionId} withActivity />}
+                    outbox={sending.actions}
+                    footer={temporary ? undefined : <CoworkOffer sessionId={sessionId} messages={live.messages} running={streaming || live.outbox.length > 0} />}
+                  />
+                </ComposerImages.Provider>
               )}
             </div>
             {!atBottom && <ScrollToBottom onClick={followSmooth} working={live.session?.status === 'running'} />}

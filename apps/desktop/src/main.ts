@@ -65,7 +65,8 @@ const isMac = process.platform === 'darwin';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } },
-  { scheme: `${APP.scheme}-blob`, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  // corsEnabled: pages may read a stored file's bytes, not just show it (Copy on an image), with the header blobResponse sets.
+  { scheme: `${APP.scheme}-blob`, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   { scheme: `${APP.scheme}-artifact`, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   { scheme: PAGES_SCHEME, privileges: PAGES_PRIVILEGES },
 ]);
@@ -372,6 +373,8 @@ function blobResponse({ body, mime }: NonNullable<BlobBody>): Response {
       'Content-Disposition': inline ? 'inline' : 'attachment',
       'Content-Security-Policy': "default-src 'none'; sandbox",
       'X-Content-Type-Options': 'nosniff',
+      // Atelier's own pages only: an artifact's sandbox has another origin, and the Browser pane another session.
+      'Access-Control-Allow-Origin': DEV_URL ? new URL(DEV_URL).origin : 'app://ui',
     },
   });
 }

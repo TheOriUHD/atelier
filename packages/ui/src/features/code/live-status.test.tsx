@@ -97,6 +97,18 @@ describe('LiveStatus context fill', () => {
     expect(status.textContent).toContain('Retry 3 of 10');
     expect(status.textContent).toContain('7s');
   });
+  it('leaves a running image to its frame, and comes back once the image is there', async () => {
+    show('s-image', context(20_000, 32_000));
+    await settle();
+    expect(screen.getByRole('status')).toBeTruthy();
+    send('s-image', { type: 'part', messageId: 'a1', index: 0, part: { type: 'tool_call', id: 'c1', name: 'GenerateImage', input: { prompt: 'A kite' } } });
+    act(() => vi.advanceTimersByTime(150));
+    expect(screen.queryByRole('status')).toBeNull();
+    send('s-image', { type: 'message', message: { ...message('t1', 'tool'), parentId: 'a1', parts: [{ type: 'tool_result', callId: 'c1', content: [{ type: 'text', text: 'Generated.' }] }] } });
+    act(() => vi.advanceTimersByTime(150));
+    expect(screen.getByRole('status')).toBeTruthy();
+  });
+
   it('shows how full the window is next to the output tokens, growing with the streaming reply', async () => {
     show('s-fill', context(20_000, 32_000));
     await settle();

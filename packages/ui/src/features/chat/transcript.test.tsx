@@ -87,6 +87,19 @@ describe('Transcript', () => {
     expect(within(dialog).getByText('2 of 2')).toBeTruthy();
   });
 
+  it('shows a generated image in the transcript itself, big, with the reply’s actions under it', () => {
+    const generated = { id: 'img_1', blob: 'shaI', mime: 'image/png', width: 1536, height: 1024, prompt: 'A kite', ref: 'p/m', modelName: 'M' };
+    show([
+      asked,
+      message('a1', 'assistant', { parentId: 'u1', parts: [{ type: 'tool_call', id: 'c1', name: 'GenerateImage', input: { prompt: 'A kite' } }], stopReason: 'tool_use' }),
+      message('t1', 'tool', { parentId: 'a1', parts: [{ type: 'tool_result', callId: 'c1', content: [{ type: 'image', mime: 'image/png', blob: 'shaI' }], generated: [generated] }] }),
+    ]);
+    expect(screen.getByRole('button', { name: 'Open image: A kite' })).toBeTruthy();
+    // Not on a summary line of what the run did.
+    expect(screen.queryByText(/^Used /)).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(2);
+  });
+
   it('offers Continue under a reply a restart cut off, which carries on instead of starting over', async () => {
     backend.handlers['chat.continue'] = () => ({ ok: true });
     const state = live([asked, message('a1', 'assistant', { parentId: 'u1', parts: [{ type: 'text', text: 'It began' }] })]);

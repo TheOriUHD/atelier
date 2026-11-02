@@ -6,7 +6,7 @@
 import type { ContextUsage, Message, RunPhase } from '@atelier/protocol';
 import { queuedLabel, type LiveSessionState } from '../../lib/live-session.ts';
 import { PHASE_TEXTS } from '../chat/run-phase.tsx';
-import { turnItems } from '../chat/turns.ts';
+import { toolResults, turnItems } from '../chat/turns.ts';
 
 /** "980", "1.2k", "804.2k", "1M". */
 export function formatTokenCount(n: number): string {
@@ -80,6 +80,8 @@ const TOOL_VERBS: Record<string, string> = {
   Grep: 'Searching',
   Write: 'Writing',
   Edit: 'Editing',
+  GenerateImage: 'Making an image',
+  SaveImage: 'Saving an image',
   WebSearch: 'Searching the web',
   WebFetch: 'Reading the web',
   Agent: 'Running a sub-agent',
@@ -98,6 +100,8 @@ export interface LiveStatus {
   tokens: number;
   /** The turn ends in a run of tool calls: in the compact transcript its live line says what runs, not this one. */
   activity: boolean;
+  /** The last thing on screen is an image being made, whose frame says how it is going. */
+  image: boolean;
   /** Whether output tokens are counted (a compaction writes no reply to count). */
   counts: boolean;
   /** Requests ahead of this one on the model's server, or null when it isn't waiting in line. */
@@ -127,11 +131,13 @@ export function liveStatus(state: LiveSessionState): LiveStatus | null {
   const streaming = state.streamingMessageId ? turn.find((m) => m.id === state.streamingMessageId) : undefined;
   const generating = !!streaming && !streaming.usage && streamedChars(state, streaming) > 0;
   const phase = state.queued === null && !state.compacting ? state.phase : null;
-  const activity = turnItems(turn).at(-1)?.kind === 'activity';
+  const end = turnItems(turn).at(-1);
+  const activity = end?.kind === 'activity';
+  const image = end?.kind === 'image' && !toolResults(turn).has(end.ref.part.id);
   const context = liveContext(state);
   const window = { contextUsed: context?.used ?? null, contextLimit: context?.limit ?? null };
-  if (command) return { verb: 'Compacting conversation', phase: null, since: command.createdAt, tokens: 0, counts: false, queued: null, activity: false, rate: null, generating: false, ...window };
-  return { verb: verb(state, turn), phase, retryAttempt: phase === 'retrying' ? state.retryAttempt : undefined, since: state.messages[start]?.createdAt ?? 0, tokens, counts: !state.compacting, queued: state.queued, activity, rate: replyRate(state.messages), generating, ...window };
+  if (command) return { verb: 'Compacting conversation', phase: null, since: command.createdAt, tokens: 0, counts: false, queued: null, activity: false, image: false, rate: null, generating: false, ...window };
+  return { verb: verb(state, turn), phase, retryAttempt: phase === 'retrying' ? state.retryAttempt : undefined, since: state.messages[start]?.createdAt ?? 0, tokens, counts: !state.compacting, queued: state.queued, activity, image, rate: replyRate(state.messages), generating, ...window };
 }
 
 function replyRate(messages: Message[]): number | null {

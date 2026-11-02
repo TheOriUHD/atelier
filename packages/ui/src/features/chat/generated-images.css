@@ -1,0 +1,54 @@
+/* GeneratedImages (design/components.md › GeneratedImages). The tallest a call's images may stand, wherever they are. */
+.at-image-frames {
+  --at-image-max-height: min(72dvh, 760px);
+}
+
+/*
+ * The sheen across an empty frame. It moves on `transform`, so it stays smooth while a reply streams, and it rests
+ * out of sight between sweeps: a frame can be on screen for minutes, and steady motion would pull at the eye.
+ */
+.at-image-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transition: opacity var(--at-duration-slow) var(--at-ease-out);
+}
+.at-image-sheen::before {
+  content: '';
+  position: absolute;
+  /* Twice the frame's width and a band in the middle: at either end of the sweep it is just out of sight. */
+  inset: 0 -50%;
+  background: linear-gradient(102deg, transparent 32%, var(--at-color-fill-field) 50%, transparent 68%);
+  animation: at-image-sheen 3200ms var(--at-ease-standard) infinite;
+}
+@keyframes at-image-sheen {
+  0% {
+    transform: translateX(-50%);
+  }
+  72%,
+  100% {
+    transform: translateX(50%);
+  }
+}
+
+/* The global reduced-motion rule shortens animations, and a looping one would flicker: this one is taken away. */
+@media (prefers-reduced-motion: reduce) {
+  .at-image-sheen::before {
+    animation: none;
+    display: none;
+  }
+}
+:root[data-motion='reduced'] .at-image-sheen::before {
+  animation: none;
+  display: none;
+}
+
+/* Each picture of the work so far fades in over the one before it. */
+@keyframes at-image-preview-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

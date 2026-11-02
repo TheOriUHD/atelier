@@ -39,6 +39,7 @@ describe('viewedImages', () => {
   it('names connector tools by their own name', () => {
     expect(toolLabel('mcp__files__view_image')).toBe('View image');
     expect(toolLabel('Read')).toBe('Read');
+    expect(toolLabel('SaveImage')).toBe('Saved image');
   });
 });
 

@@ -1,6 +1,6 @@
 import { memo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, FileText, History, Pencil, Repeat, RotateCcw } from 'lucide-react';
-import { messageText, unescapeTags, type ArtifactSummary, type Message, type ModelInfo, type Notice, type Part, type RunPhase, type SessionStatus } from '@atelier/protocol';
+import { messageText, unescapeTags, type ArtifactSummary, type ImageProgress, type Message, type ModelInfo, type Notice, type Part, type RunPhase, type SessionStatus } from '@atelier/protocol';
 import { Badge, Button, Icon, IconButton, Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, ThinkingDots, cn, toast } from '../../components/ui/index.ts';
 import { ITEM_GAPS, LINE, ROW_GAPS } from './rows.ts';
 import { blobUrl } from '../../lib/platform.ts';
@@ -17,6 +17,7 @@ import { MessageError, ProviderStopped, ThinkingBlock, ToolActivity } from './pa
 import { PhaseText, usePhaseText } from './run-phase.tsx';
 import { ArtifactCard } from './artifact-card.tsx';
 import { InlineVisual } from './inline-visual.tsx';
+import { GeneratedImages } from './generated-images.tsx';
 import { ZoomableImage } from './images.tsx';
 import { CopyButton } from './copy-button.tsx';
 import { ReadAloudButton } from './read-aloud.tsx';
@@ -91,6 +92,7 @@ export function Transcript({
             // Only the last turn can still be streaming tool input or output; earlier turns keep stable props.
             toolInputs={turn === last ? live.toolInputs : NONE}
             toolOutput={turn === last ? live.toolOutput : NONE}
+            toolProgress={turn === last ? live.toolProgress : undefined}
             siblings={live.siblings[turn.messages[0]!.id]}
             activity={activity}
             last={turn === last}
@@ -338,6 +340,7 @@ interface AssistantTurnProps {
   artifacts: Record<string, ArtifactSummary>;
   toolInputs: Record<string, string>;
   toolOutput: Record<string, string>;
+  toolProgress: Record<string, ImageProgress> | undefined;
   siblings: string[] | undefined;
   activity: ActivityView;
   last: boolean;
@@ -365,6 +368,7 @@ const AssistantTurn = memo(function AssistantTurn({
   artifacts,
   toolInputs,
   toolOutput,
+  toolProgress,
   siblings,
   activity: Activity,
   last,
@@ -384,7 +388,7 @@ const AssistantTurn = memo(function AssistantTurn({
   const model = models?.find((m) => m.ref === final.model);
   const items = turnItems(messages);
   const streaming = (ref: PartRef<unknown>) => isStreaming(ref, streamingMessageId);
-  const run = { busy: running, streamingMessageId, toolOutput };
+  const run = { busy: running, streamingMessageId, toolOutput, toolProgress };
   // A reply that has shown nothing yet, while the status line below speaks for it: no empty row (the column's gap
   // around it would push the status line far from the message).
   if (running && items.length === 0 && !placeholder) return null;
@@ -402,6 +406,10 @@ const AssistantTurn = memo(function AssistantTurn({
           return <Activity key={item.key} steps={item.steps.map((ref) => stepView(ref, results, run))} live={running && item === items.at(-1)} turnSince={running ? turnSince : undefined} />;
         case 'visual':
           return <InlineVisual key={item.ref.key} call={item.ref.part} result={results.get(item.ref.part.id)} partialInput={toolInputs[item.ref.key]} running={running} />;
+        case 'image': {
+          const step = stepView(item.ref, results, run);
+          return step.kind === 'tool' ? <GeneratedImages key={item.ref.key} step={step} waiting={status === 'waiting'} /> : null;
+        }
         case 'artifact': {
           const result = results.get(item.ref.part.id);
           return (
@@ -436,7 +444,7 @@ const AssistantTurn = memo(function AssistantTurn({
   // Where the turn begins and ends, for the column's spacing: a turn of calls and thinking is one muted line; a reply
   // that can be copied or retried is followed by the row of its actions, which only exists then.
   const isLine = (item: (typeof items)[number]) => item.kind === 'activity' || item.kind === 'thinking';
-  const replied = items.some((item) => item.kind === 'text' || item.kind === 'artifact' || item.kind === 'visual');
+  const replied = items.some((item) => item.kind === 'text' || item.kind === 'artifact' || item.kind === 'visual' || item.kind === 'image');
   const showActions = !running && replied;
   const rowFirst = items[0] && isLine(items[0]) ? 'line' : undefined;
   const rowLast = showActions ? 'actions' : items.at(-1) && isLine(items.at(-1)!) ? 'line' : undefined;

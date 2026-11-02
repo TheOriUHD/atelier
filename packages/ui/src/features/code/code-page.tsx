@@ -32,6 +32,7 @@ import { useSessionImageModel } from '../chat/image-model.ts';
 import { useSessionSend } from '../chat/outbox.tsx';
 import { useAttachments } from '../chat/use-attachments.ts';
 import { ArtifactPaneContext } from '../chat/artifact-card.tsx';
+import { ComposerImages, useImageReference } from '../chat/generated-images.tsx';
 import { ArtifactPane, INITIAL_ARTIFACT_PANE, shownArtifact, useShownArtifacts, type ArtifactPaneState } from './artifact-pane.tsx';
 import { BrowserPages, BrowserPane } from './browser-pane.tsx';
 import { DiffPane } from './diff-review.tsx';
@@ -265,6 +266,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   };
 
   const sending = useSessionSend({ sessionId, busy, outbox: live.outbox, attachments, composer, follow: followSmooth });
+  const imageReference = useImageReference(attachments, composer);
 
   const renderPane = (frame: PaneFrameState) => {
     switch (frame.pane) {
@@ -353,22 +355,24 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                         ) : (
                           // Cards decide whether they start open when they mount, so a new view mounts the transcript afresh.
                           <TranscriptDetail.Provider key={view} value={view}>
-                            <Transcript
-                              sessionId={sessionId}
-                              live={live}
-                              activity={CodeActivity}
-                              rewind={{ messageIds: rewindable, onRewind: rewindTo }}
-                              status={<LiveStatus sessionId={sessionId} />}
-                              outbox={sending.actions}
-                              footer={
-                                (live.pending || running > 0) && (
-                                  <>
-                                    {live.pending && <NeedsInput />}
-                                    {running > 0 && <RunningTasksChip count={running} onOpen={() => sessionTasks.open()} />}
-                                  </>
-                                )
-                              }
-                            />
+                            <ComposerImages.Provider value={imageReference}>
+                              <Transcript
+                                sessionId={sessionId}
+                                live={live}
+                                activity={CodeActivity}
+                                rewind={{ messageIds: rewindable, onRewind: rewindTo }}
+                                status={<LiveStatus sessionId={sessionId} />}
+                                outbox={sending.actions}
+                                footer={
+                                  (live.pending || running > 0) && (
+                                    <>
+                                      {live.pending && <NeedsInput />}
+                                      {running > 0 && <RunningTasksChip count={running} onOpen={() => sessionTasks.open()} />}
+                                    </>
+                                  )
+                                }
+                              />
+                            </ComposerImages.Provider>
                           </TranscriptDetail.Provider>
                         )}
                       </div>

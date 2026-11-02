@@ -24,6 +24,7 @@ import type { ActivityStepView } from '../chat/turns.ts';
 import { useSessionConnectors } from '../chat/connector-switches.ts';
 import { useSessionImageModel } from '../chat/image-model.ts';
 import { useSessionSend } from '../chat/outbox.tsx';
+import { ComposerImages, useImageReference } from '../chat/generated-images.tsx';
 import { useAttachments } from '../chat/use-attachments.ts';
 import { InteractionCard } from '../code/interaction-card.tsx';
 import { SelectionReply } from '../chat/selection-reply.tsx';
@@ -93,6 +94,7 @@ export function WorkPage() {
 
   const composer = useRef<ComposerHandle>(null);
   const sending = useSessionSend({ sessionId, busy, outbox: live.outbox, attachments, composer, follow: followSmooth });
+  const imageReference = useImageReference(attachments, composer);
 
   if (live.status === 'error')
     return (
@@ -133,14 +135,16 @@ export function WorkPage() {
                       </div>
                     ) : (
                       <>
-                        <Transcript
-                          sessionId={sessionId}
-                          live={live}
-                          activity={WorkActivity}
-                          status={<LiveStatus sessionId={sessionId} withActivity />}
-                          outbox={sending.actions}
-                          footer={!live.pending && workspace && latestFiles.length > 0 && <OutputFiles files={latestFiles} workspace={workspace} onOpen={open} />}
-                        />
+                        <ComposerImages.Provider value={imageReference}>
+                          <Transcript
+                            sessionId={sessionId}
+                            live={live}
+                            activity={WorkActivity}
+                            status={<LiveStatus sessionId={sessionId} withActivity />}
+                            outbox={sending.actions}
+                            footer={!live.pending && workspace && latestFiles.length > 0 && <OutputFiles files={latestFiles} workspace={workspace} onOpen={open} />}
+                          />
+                        </ComposerImages.Provider>
                         {/* Narrow windows: the progress goes under the transcript instead of beside it. */}
                         {!preview && panel('mx-auto max-w-[calc(var(--at-transcript-max)+48px)] px-6 pb-10 @4xl:hidden max-md:px-4')}
                       </>
