@@ -57,11 +57,13 @@ export function codexFetch(inner: ProviderFetch, auth: ChatGptPort): ProviderFet
   return async (input, init) => {
     const path = new URL(input).pathname;
     const models = path.endsWith('/models');
-    const target = models ? `${CHATGPT_BASE_URL}/models?client_version=${await codexClientVersion(inner)}` : `${CHATGPT_BASE_URL}/responses`;
+    // Image routes keep their own path and body (images/dialects/responses-image.ts).
+    const images = path.match(/\/images\/(?:generations|edits)$/)?.[0];
+    const target = models ? `${CHATGPT_BASE_URL}/models?client_version=${await codexClientVersion(inner)}` : `${CHATGPT_BASE_URL}${images ?? '/responses'}`;
 
     let body = init.body;
     let sessionId: string = randomUUID();
-    if (!models && typeof body === 'string') {
+    if (!models && !images && typeof body === 'string') {
       const json = rec(JSON.parse(body));
       for (const key of DROPPED) delete json[key];
       json.store = false;
@@ -91,7 +93,7 @@ export function codexFetch(inner: ProviderFetch, auth: ChatGptPort): ProviderFet
       headers.set('session-id', sessionId);
       headers.set('x-codex-installation-id', credentials.installationId);
       headers.set('user-agent', 'Atelier');
-      if (!models) headers.set('accept', 'text/event-stream');
+      if (!models && !images) headers.set('accept', 'text/event-stream');
       const res = await inner(target, { ...init, headers, ...(body !== undefined ? { body } : {}) });
       auth.observe(res.headers);
       return res;

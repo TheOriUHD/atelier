@@ -39,6 +39,23 @@ describe('ChatGPT Plan images', () => {
     expect(imagesOf(out)[0]?.revisedPrompt).toBe('A red lighthouse at dawn');
   });
 
+  it('uses the image route Codex uses when the backend has it', async () => {
+    const { fetch, calls } = fakeFetch({ 'POST /backend-api/codex/images/generations': () => jsonResponse({ data: [{ b64_json: PNG_B64, revised_prompt: 'At dawn' }] }) });
+    const out = await events(adapter(fetch).generate(request({ width: 1024, height: 1024 })));
+    expect(calls[0]?.url).toContain('/images/generations');
+    expect(calls[0]?.headers).toMatchObject({ authorization: 'Bearer access', 'chatgpt-account-id': 'account' });
+    expect(calls[0]?.headers?.accept).toBeUndefined();
+    expect(calls[0]?.body).toMatchObject({ model: 'gpt-image-2', prompt: 'a red lighthouse', size: '1024x1024', n: 1 });
+    expect(imagesOf(out)[0]?.revisedPrompt).toBe('At dawn');
+    expect(calls.some((c) => c.url.endsWith('/responses'))).toBe(false);
+  });
+
+  it('edits through the image route, sending input images as JSON', async () => {
+    const { fetch, calls } = fakeFetch({ 'POST /backend-api/codex/images/edits': () => jsonResponse({ data: [{ b64_json: PNG_B64 }] }) });
+    await events(adapter(fetch).generate(request({ references: [INPUT] })));
+    expect(calls[0]?.body).toMatchObject({ images: [{ image_url: `data:image/png;base64,${PNG_B64}` }] });
+  });
+
   it('falls back on a known text model when the account list can’t be read', async () => {
     const { fetch, calls } = fakeFetch({ 'GET /@openai/codex/latest': () => jsonResponse({ version: '1.0.0' }), [ROUTE]: () => streamResponse(sse([{ data: completed }])) });
     await events(adapter(fetch).generate(request()));

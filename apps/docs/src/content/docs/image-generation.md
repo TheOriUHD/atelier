@@ -43,12 +43,19 @@ you trust.
 
 ### Cloud
 
-**OpenAI**, **Google Gemini**, **Black Forest Labs**, **Stability AI**, **xAI**, **Ideogram**, **Recraft**, **Azure
-OpenAI** and **Amazon Bedrock** connect with a key. **ChatGPT Plan** uses the ChatGPT Plan you've already signed in to, and
-your plan's limits. If you've added OpenAI as a text provider, **Use the key from OpenAI** saves pasting it again.
+**OpenAI**, **Google Gemini**, **Vertex AI**, **Black Forest Labs**, **Stability AI**, **xAI**, **Ideogram**, **Recraft**,
+**Azure OpenAI** and **Amazon Bedrock** connect with a key. If you've added OpenAI as a text provider, **Use the key from
+OpenAI** saves pasting it again.
+
+- **ChatGPT Plan** uses the ChatGPT Plan you've already signed in to, and your plan's limits. OpenAI doesn't document this
+  route, so it may stop working or not be open to every plan.
+- **Amazon Bedrock** takes a Bedrock API key, or `ACCESS_KEY:SECRET` with an optional `:SESSION_TOKEN`. It offers Stability's
+  models, in `us-west-2`.
+- **Vertex AI** uses express mode, and you type in the model ids.
 
 **OpenRouter**, **fal.ai**, **Replicate**, **Together AI** and **Hugging Face** give you many models with one key. For
-services that don't list their models, type the model ids in the form.
+services that don't list their models, type the model ids in the form. On Hugging Face an id can name a provider, as in
+`org/model:replicate`.
 
 Any other server with `/v1/images/generations`, such as LiteLLM, works as **OpenAI-compatible images**.
 
@@ -121,5 +128,5 @@ the workflow into its PNGs, and some cloud services add a content credential.
 | **Start it with --api** | Forge and AUTOMATIC1111 only answer requests with that flag. |
 | **Missing model** | The workflow names a file that isn't on the server. |
 | The GPU ran out of memory | Close other models, set **Shares a GPU with**, or use a smaller size. |
-| The provider refused the prompt | That's the provider's filter, and it's final. The assistant won't reword it to get past it. |
+| The provider refused the prompt | That's the provider's filter, and it's final. The assistant won't reword it to get past it. A blurred or filtered image counts as refused, and isn't kept. |
 | No previews on a personal image server | Update the desktop app. |

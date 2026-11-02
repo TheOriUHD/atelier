@@ -5,9 +5,10 @@
  *
  * The events and the tool are OpenAI's public Responses API:
  * https://developers.openai.com/api/docs/guides/image-generation (read on 2026-11-02).
- * Codex's own source (openai/codex, codex-rs/protocol/src/models.rs) confirms the `image_generation_call` item. Its own
- * image tool has moved to a client-side call of `images/generations` on the same backend (codex-rs/codex-api), which
- * `codexFetch` doesn't reach today.
+ * Codex's own source (openai/codex, codex-rs/codex-api) has moved its image tool to `images/generations` and
+ * `images/edits` on the same backend, JSON only, so that route goes first. The Responses request stays as the way
+ * back for an account or a backend that doesn't have it yet; `codex-rs/protocol/src/models.rs` confirms its
+ * `image_generation_call` item.
  */
 import { CHATGPT_BASE_URL } from '../../providers/chatgpt-auth.ts';
 import { codexFetch } from '../../providers/chatgpt.ts';
@@ -22,6 +23,8 @@ import { failure, listedModel, noImage, soundsRefused, refusal, streamedError } 
 
 /** Named so it matches no price: images on a plan are paid for by the plan. */
 const MODEL_ID = 'chatgpt-plan-image';
+/** What Codex asks the image route for. */
+const DIRECT_MODEL = 'gpt-image-2';
 /** The Responses request needs a text model to call the tool; this one when the account's list can't be read. */
 const FALLBACK_TEXT_MODEL = 'gpt-5.5';
 /** Codex sends at most this many inputs. */
@@ -60,6 +63,40 @@ async function turnedDown(instance: ImageInstance, res: Response): Promise<Extra
   if (res.status === 429 || res.status >= 500 || res.status === 401) return failure(error);
   if (soundsRefused(raw) && !/image_generation|tool/i.test(raw)) return refusal(instance, error.message);
   return failure({ code: 'provider_error', message: `The ChatGPT Plan backend didn't accept this image request (${res.status}), so images may not be available on this plan through Atelier. It said: ${redact(error.message, instance)}`, retryable: false });
+}
+
+/** What Codex itself sends. Answers in one piece, so this route has no previews. */
+function directBody(request: ImageRequest): Record<string, unknown> {
+  return {
+    model: DIRECT_MODEL,
+    prompt: request.prompt,
+    n: 1,
+    quality: request.quality === 'draft' ? 'low' : request.quality === 'high' ? 'high' : 'medium',
+    ...(request.width && request.height ? { size: `${request.width}x${request.height}` } : {}),
+    ...(request.transparent ? { background: 'transparent' } : {}),
+    ...(request.references.length ? { images: request.references.map((image) => ({ image_url: dataUrl(image.mime, image.bytes) })) } : {}),
+  };
+}
+
+/** Tries the image route; null when this backend doesn't have it. */
+async function* direct(instance: ImageInstance, fetch: ProviderFetch, request: ImageRequest): AsyncGenerator<ImageEvent, boolean> {
+  const route = request.references.length ? 'edits' : 'generations';
+  const res = await fetch(`${CHATGPT_BASE_URL}/images/${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(directBody(request)), signal: request.signal });
+  if (res.status === 404 || res.status === 405) return false;
+  if (!res.ok) {
+    yield await turnedDown(instance, res);
+    return true;
+  }
+  let images = 0;
+  for (const item of arr(rec(await res.json()).data)) {
+    const b64 = str(rec(item).b64_json);
+    if (!b64) continue;
+    images++;
+    const revisedPrompt = str(rec(item).revised_prompt);
+    yield { type: 'image', bytes: Buffer.from(b64, 'base64'), ...(revisedPrompt ? { revisedPrompt } : {}) };
+  }
+  yield images > 0 ? { type: 'finish', reason: 'done' } : noImage(instance, undefined);
+  return true;
 }
 
 async function* run(instance: ImageInstance, fetch: ProviderFetch, request: ImageRequest, textModel: string): AsyncGenerator<ImageEvent> {
@@ -142,6 +179,7 @@ export function createResponsesImage(instance: ImageInstance, deps: ImageAdapter
     },
     generate(request) {
       return guardImages(request, instance, async function* () {
+        if (await (yield* direct(instance, fetch, request))) return;
         textModel ??= pickTextModel();
         yield* run(instance, fetch, request, await textModel);
       });
