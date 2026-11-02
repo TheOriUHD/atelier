@@ -1017,6 +1017,28 @@ The assistant in Code and Cowork sees and uses apps on the person's computer (`p
 
 **Settings › System › Computer use** (`computer-use-section.tsx`) reads `computer:status` and writes through `computer:*` IPC; main tells every window on a change (`computer:changed`). Tests run a stand-in helper (`e2e/fake-computer.mjs` via `ATELIER_COMPUTER_HELPER`).
 
+## 23. Image generation
+
+Image providers are a system of their own beside the text providers (`packages/core/src/images/`), in `settings.imageProviders`: `validate()` drops a whole top-level key when one entry is bad, and `ProviderType` is hard-coded in about 30 places, so sharing them would put the text providers at risk for nothing.
+
+**Dialects and presets.** `ImageProviderType` is a wire format (`comfyui`, `a1111`, `swarmui`, `invokeai`, `openai-images`, `gemini`, `chat-images`, `responses-image`, `bfl`, `stability`, `fal`, `replicate`, `huggingface`, `ideogram`, `bedrock`). `IMAGE_PROVIDER_PRESETS` lists the services; a service on a known format is a preset, not code. An adapter's `generate()` yields `ImageEvent`s and ends in exactly one `finish` (`guard.ts`).
+
+**One generation.** `ImageService.generate`, called by the `GenerateImage` tool: pick the model (the call, then the session's `overrides.imageModel`, `prefs.models.image`, `models.defaults.image`); check limits, counting calls in flight; `fitParams` turns aspect ratio and size name into what the model takes and says what it dropped; find input images, only in this session's messages; take a slot; free the GPU if shared; follow the adapter; download hosted results through `download.ts`; store; record usage. Hosted services get two retries on retryable errors. A refusal is final.
+
+**Capabilities.** `ImageCapabilities` per model say what it takes. Lists come from the provider where it has one; `catalog.ts` only improves defaults, so a new model needs no release.
+
+**The tools.** `GenerateImage` changes nothing but the provider's bill, so Chat, Auto and Bypass run it unasked and a per-turn limit stands in for review; Ask asks; Plan refuses. It is `concurrent`, and the scheduler orders calls per server. `SaveImage` is in `EDIT_TOOLS`, so a write to the folder gets the permissions, Rewind and Output files of any edit. Both exist only with an image model, so prompts and tools stay byte-identical without one. Sub-agents don't get them: their images wouldn't show in the parent conversation. Compact models get a smaller `compactSchema`. The tool's description can't name models (descriptions depend only on tier, mode and tools), so the list goes in a `notes/image-models` context note when it changes.
+
+**Ids.** The model calls an image `img_` + 8 hex of its hash. `prepareHistory` adds the id after attachments in sessions with these tools, and non-vision models get the id instead of pixels, in tool results too. Ids resolve only among images in the session's own messages. Old generated images leave requests in steps like screenshots (`keepRecentGenerated`); their ids stay in the text.
+
+**Progress.** `tool_progress` events carry `ImageProgress`: not stored, the latest per call kept for snapshots (like `tool_output`), cleared when results arrive. At most 2 updates and 1 preview a second; previews over 200 KB are shrunk to 512 px.
+
+**Storage.** A blob, a `files` row with `kind: 'generated'` (so export and cleanup work) and a `generated_images` row for the Images page and limits. `ToolResultPart.generated` holds what the transcript shows; providers only see `content`. Daily limits count from `usage_events`, which outlive a deleted chat.
+
+**One GPU.** `RequestScheduler.hold` takes a slot for work that isn't a text stream. With `sharesGpuWith`, the job queues on the text provider's server as `exclusive`, so nothing runs beside it, and `registry.freeGpu` unloads what the server holds (Ollama: `/api/ps`, then `keep_alive: 0`). `freeAfterRun` calls the adapter's `free()`. A tool call holds no text slot while it runs, so this can't deadlock.
+
+**Server mode.** Personal image servers use `personal_image_providers` and the `http` device service with `lending.http`, plus a `ws` device service with the same checks, for ComfyUI and SwarmUI progress. A desktop without `ws` falls back to polling, with no previews. `app.info.imageGeneration` hides the feature on older servers.
+
 ## 20. Decisions
 
 - **Q1 Repo, CI and updates.** The source is a GitHub repository; releases are published from it.

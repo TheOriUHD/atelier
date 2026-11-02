@@ -67,6 +67,9 @@ On the desktop, Atelier also reads and writes folders it shares with other agent
 
 Atelier keeps no application log; see [Troubleshooting](/troubleshooting/#reading-logs).
 
+Generated images are blobs like attachments, with a row in `generated_images` for the **Images** page. They go with their
+conversation, and they're included when you export your data.
+
 ### What is encrypted and what is not
 
 - **Encrypted:** provider API keys, connector tokens, sign-ins for ChatGPT Plan and GitHub Copilot, saved SSH

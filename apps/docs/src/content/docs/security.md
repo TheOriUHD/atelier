@@ -317,6 +317,17 @@ their content hash, so any signed-in account that knew a 256-bit hash could fetc
 but it is an address, not a grant); and an admin can reset a password and thereby take over an account. See
 [Accounts](/accounts/#what-admins-can-and-cannot-see).
 
+## Image generation
+
+Making an image sends the prompt and any input images to the image provider, and Atelier stores what comes back.
+
+- **Remote results.** The app's content rules refuse remote images, so the backend fetches a hosted service's result itself. That URL comes from a remote service, so it gets WebFetch's treatment: private addresses are refused, every redirect is checked, the provider's key is never sent to another host, downloads stop at 64 MB, and the bytes must really be an image. SVG is never shown inline.
+- **Spending.** Each turn can make at most 8 images (an admin can change it), so text on a web page can't run up a bill. Admins can also set limits per person per day.
+- **Other people's images.** A model can only use images from its own conversation as input. Generated images are stored like other files, so `/api/blobs` applies: any signed-in account that knows a file's full hash can fetch it.
+- **Hidden models.** A model an admin hides can't be used by anyone else, even by name.
+- **Local servers.** ComfyUI and most local servers have no sign-in: anyone who can reach the port can use them. Keep them on a network you trust.
+- **Image servers on a desktop.** A server reaches a person's own image server through their desktop, only at addresses that person lent from that desktop, over HTTP and WebSocket. Each new connection and request checks the lending list again, and taking an address back closes its open connections.
+
 ## Secrets
 
 - Provider keys, connector tokens and sign-ins (ChatGPT Plan, GitHub Copilot, GitHub tokens, saved SSH passwords) are stored
