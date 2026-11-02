@@ -17,6 +17,7 @@ import type { HookInput } from '../hooks/hooks.ts';
 import { textOutput, type Tool } from '../tools/types.ts';
 import type { Workspace } from '../workspaces/workspace.ts';
 import { ChatService, type ChatServiceDeps } from './chat-service.ts';
+import type { InteractionBroker } from './interactions.ts';
 
 const quietPrefs = () => { const prefs = defaultUserPrefs(); return { ...prefs, code: { ...prefs.code, suggestions: false } }; };
 
@@ -404,6 +405,93 @@ describe('permission prompts', () => {
     expect(seen[0]).toContain('The person declined and said: put them in docs/ instead');
     expect(await reply(chat, s.id)).toMatchObject({ text: 'another way' });
     expect(writes).toBe(0);
+  });
+
+  describe('a card for an Edit', () => {
+    const editor: ProviderAdapter = {
+      ...writer,
+      async *stream(req): AsyncIterable<StreamEvent> {
+        if (req.system.some((b) => b.text.includes('short title'))) {
+          yield { type: 'text', delta: 'Title' };
+          yield { type: 'finish', reason: 'end' };
+          return;
+        }
+        if (req.messages.at(-1)?.role === 'tool') {
+          yield { type: 'text', delta: 'done' };
+          yield { type: 'finish', reason: 'end' };
+          return;
+        }
+        yield { type: 'tool_call_start', id: 'e1', name: 'Edit' };
+        yield { type: 'tool_call_end', id: 'e1', input: { file_path: 'src/a.py', old_string: 'two', new_string: 'TWO' } };
+        yield { type: 'finish', reason: 'tool_use' };
+      },
+    };
+    const editTool: Tool = { name: 'Edit', description: 'Edit a file', inputSchema: { type: 'object' }, readOnly: false, run: async () => textOutput('edited') };
+    const onRunner = (call: (method: string, params: { path: string }, options?: { signal?: AbortSignal }) => Promise<unknown>) =>
+      ({ workspace: async () => ({ id: 'w1', root: '/work/app', host: null, deviceId: null, pathSep: '/', runner: { call, on: () => () => {} } }) as unknown as Workspace }) as Partial<ChatServiceDeps>;
+    const asked = async (extra: Partial<ChatServiceDeps>) => {
+      const chat = service(editor, [editTool], undefined, {}, extra);
+      const s = await repo.create({ mode: 'code', userId: null, workspaceId: 'w1' });
+      await chat.send(s.id, [{ type: 'text', text: 'change it' }]);
+      await until(() => lastPending() !== null);
+      return { chat, s, pending: lastPending()!, request: lastPending()!.payload as PermissionRequest };
+    };
+    const done = async (chat: ChatService, id: string) => {
+      chat.respond(id, lastPending()!.id, { behavior: 'deny' });
+      await chat.settle(id);
+    };
+    const file = async (_method: string, params: { path: string }) => ({ content: 'one\ntwo\nthree\n', binary: false, truncated: false, path: params.path });
+
+    it('says where the change lands, read through the session’s workspace', async () => {
+      const { chat, s, request } = await asked(onRunner(file));
+      expect(request.position).toEqual({ line: 2, matches: 1 });
+      await done(chat, s.id);
+    });
+
+    it('still asks, without numbers, when the file can’t be read', async () => {
+      const { chat, s, request } = await asked(
+        onRunner(async () => {
+          throw new Error('Host unreachable');
+        }),
+      );
+      expect(request).not.toHaveProperty('position');
+      await done(chat, s.id);
+    });
+
+    it('still asks, without numbers, when the workspace can’t be opened', async () => {
+      const { chat, s, request } = await asked({
+        workspace: async () => {
+          throw new Error('Not connected');
+        },
+      });
+      expect(request).not.toHaveProperty('position');
+      await done(chat, s.id);
+    });
+
+    it('doesn’t wait long for a host that doesn’t answer', async () => {
+      const { chat, s, request } = await asked(onRunner(() => new Promise(() => {})));
+      expect(request).not.toHaveProperty('position');
+      await done(chat, s.id);
+    });
+
+    it('shows the file on request, read then, and only while the card is open', async () => {
+      const { chat, s, pending } = await asked(onRunner(file));
+      expect(await chat.changePreview(s.id, pending.id)).toMatchObject({ state: 'ready', rows: [{ text: 'one' }, { kind: 'remove', text: 'two', line: 2 }, { kind: 'add', text: 'TWO', line: 2 }, { text: 'three' }] });
+      expect(await chat.changePreview('another', pending.id)).toBeNull();
+      await done(chat, s.id);
+      expect(await chat.changePreview(s.id, pending.id)).toBeNull();
+    });
+
+    it('has nothing to show for a card that isn’t about a file', async () => {
+      const chat = service(writer, [writeTool as Tool], undefined, {}, onRunner(file));
+      const s = await repo.create({ mode: 'code', userId: null, workspaceId: 'w1' });
+      const broker = (chat as unknown as { interactions: InteractionBroker }).interactions;
+      const answered = broker.ask(s.id, 'permission', { callId: 'c', toolName: 'Bash', input: {}, reason: '', suggestedRule: '' }, new AbortController().signal, null);
+      await until(() => lastPending() !== null);
+      await expect(chat.changePreview(s.id, lastPending()!.id)).resolves.toEqual({ state: 'unreadable', rows: [] });
+      broker.respond(s.id, lastPending()!.id, { behavior: 'deny' });
+      await answered;
+    });
   });
 
   it('remembers "allow for this session"', async () => {

@@ -12,6 +12,8 @@ export interface DiffRow {
   text: string;
   /** Line number on the row's side (the old file for removals, the new one otherwise), when known. */
   line?: number;
+  /** A context row's line in the old file, when known: a change above it may have moved it. */
+  oldLine?: number;
 }
 
 export interface FileDiff {
@@ -42,6 +44,17 @@ export function editRows(oldText: string, newText: string): DiffRow[] {
     ...b.slice(head, b.length - tail).map((text): DiffRow => ({ kind: 'add', text })),
     ...a.slice(a.length - tail).map((text): DiffRow => ({ kind: 'context', text })),
   ];
+}
+
+/** An Edit's rows numbered from the line its text starts at in the file, both before and after the change. */
+export function numberRows(rows: DiffRow[], start: number): DiffRow[] {
+  let oldLine = start;
+  let newLine = start;
+  return rows.map((row): DiffRow => {
+    if (row.kind === 'remove') return { ...row, line: oldLine++ };
+    if (row.kind === 'add') return { ...row, line: newLine++ };
+    return row.kind === 'context' ? { ...row, line: newLine++, oldLine: oldLine++ } : row;
+  });
 }
 
 /** A Write: every line of the new contents is added. */
@@ -111,17 +124,28 @@ const GUTTER: Record<DiffRow['kind'], [sign: string, className: string]> = {
   hunk: ['', ''],
 };
 
+/** One column of the gutter's line numbers. */
+function LineNumber({ value, digits, className }: { value: number | undefined; digits: number; className: string }) {
+  return (
+    <span className={cn('w-[38px] shrink-0 text-right select-none', className)} style={digits > 4 ? { width: `${digits + 1}ch` } : undefined}>
+      {value}
+    </span>
+  );
+}
+
 export function InlineDiff({
   rows,
   language,
   lineNumbers = false,
   hunkAction,
+  className,
 }: {
   rows: DiffRow[];
   language: string;
   lineNumbers?: boolean;
   /** Ends each `@@` row, shown while its hunk is hovered or focused (the Diff tab's Reject). */
   hunkAction?: (hunk: number) => ReactNode;
+  className?: string;
 }) {
   // Each side is highlighted as one document, so tokens spanning lines (strings, comments) keep their colors.
   const side = (kind: DiffRow['kind']) => rows.filter((r) => r.kind === 'context' || r.kind === kind).map((r) => r.text).join('\n');
@@ -143,15 +167,19 @@ export function InlineDiff({
       shown.push({ row, tokens: newSide[n++] });
     } else shown.push({ row, tokens: undefined });
   }
+  // Two columns only once the sides disagree: until then one number names the line in both.
+  const split = lineNumbers && rows.some((r) => r.oldLine !== undefined && r.oldLine !== r.line);
+  const digits = lineNumbers ? String(rows.reduce((top, r) => Math.max(top, r.line ?? 0, r.oldLine ?? 0), 0)).length : 0;
 
   return (
-    <div className="at-code overflow-x-auto py-2 font-mono text-code text-fg [font-variant-ligatures:none] [tab-size:4]">
+    <div className={cn('at-code overflow-x-auto py-2 font-mono text-code text-fg [font-variant-ligatures:none] [tab-size:4]', className)}>
       <div className="w-max min-w-full">
         {groups.map((group, g) => (
           <div key={g} className="group/hunk">
             {group.rows.map(({ row, tokens }, i) => (
               <div key={i} data-kind={row.kind} className={cn('flex pr-3 whitespace-pre', ROW_CLASS[row.kind], row.kind === 'hunk' && hunkAction && 'items-center')}>
-                {lineNumbers && <span className={cn('w-[38px] shrink-0 text-right select-none', GUTTER[row.kind][1])}>{row.line}</span>}
+                {split && <LineNumber value={row.kind === 'add' ? undefined : (row.oldLine ?? row.line)} digits={digits} className={GUTTER[row.kind][1]} />}
+                {lineNumbers && <LineNumber value={split && row.kind === 'remove' ? undefined : row.line} digits={digits} className={GUTTER[row.kind][1]} />}
                 <span aria-hidden className={cn('w-6 shrink-0 pl-2.5 select-none', GUTTER[row.kind][1])}>
                   {GUTTER[row.kind][0]}
                 </span>

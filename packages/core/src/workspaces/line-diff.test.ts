@@ -3,7 +3,22 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { unifiedDiff } from './line-diff.ts';
+import { lineChanges, unifiedDiff } from './line-diff.ts';
+
+describe('lineChanges', () => {
+  it('lists every line in order, with what changed marked', () => {
+    expect(lineChanges('a\nb\nc\n', 'a\nB\nc\n')).toEqual([
+      { kind: ' ', text: 'a' },
+      { kind: '-', text: 'b' },
+      { kind: '+', text: 'B' },
+      { kind: ' ', text: 'c' },
+    ]);
+  });
+
+  it('leaves out the marker of a last line without a newline', () => {
+    expect(lineChanges('a', 'a\n').map((op) => op.text)).toEqual(['a', 'a']);
+  });
+});
 
 /** Applies `patch` to `before` with git (outside any repository) and returns the result. */
 function applied(before: string | null, patch: string): string {

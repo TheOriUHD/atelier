@@ -52,7 +52,7 @@ interface WriteInput {
   content: string;
 }
 
-interface EditInput {
+export interface EditInput {
   file_path: string;
   old_string: string;
   new_string: string;
@@ -98,6 +98,42 @@ function tabHint(oldString: string, content: string): string {
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+/** What an Edit does to `content`, as the tool runs it. `count` is how often the text is there; the rest means something only when it is. */
+function matchEdit(content: string, oldString: string, newString: string, replaceAll: boolean | undefined) {
+  const crlf = /^[^\n]*\r\n/.test(content);
+  const toFile = (s: string) => (crlf ? s.replace(/\r?\n/g, '\r\n') : s);
+  let [from, to] = [toFile(oldString), toFile(newString)];
+
+  let parts = content.split(from);
+  let count = parts.length - 1;
+  let note = '';
+  // Not found as sent, but found without the Read prefixes copied into it: edit what the model meant.
+  const bare = count === 0 ? withoutReadPrefix(oldString) : null;
+  if (bare) {
+    const bareParts = content.split(toFile(bare));
+    if (bareParts.length > 1) {
+      // Only numbered prefixes come off new_string; a line without one keeps its tabs, which may be real.
+      [from, to, parts, count] = [toFile(bare), toFile(newString.split('\n').map((line) => line.replace(READ_PREFIX, '')).join('\n')), bareParts, bareParts.length - 1];
+      note = " Read's line prefixes (the number and the tab after it) aren't part of the file, so they were left out of old_string and new_string.";
+    }
+  }
+  const at = content.indexOf(from);
+  const updated = replaceAll ? parts.join(to) : content.slice(0, at) + to + content.slice(at + from.length);
+  return { from, to, count, note, at, updated };
+}
+
+/**
+ * The file after an Edit call, with the 1-based line of the first match and how many there are; null where the tool
+ * itself would refuse the call. The input is the model's, as Edit takes it: its tags are still escaped.
+ */
+export function applyEdit(content: string, input: EditInput): { updated: string; line: number; matches: number } | null {
+  const [oldString, newString] = [unescapeTags(input.old_string), unescapeTags(input.new_string)];
+  if (oldString === '' || oldString === newString) return null;
+  const { count, at, updated } = matchEdit(content, oldString, newString, input.replace_all);
+  if (count === 0 || (count > 1 && !input.replace_all)) return null;
+  return { updated, line: content.slice(0, at).split('\n').length, matches: count };
 }
 
 export function createFileTools(workspace: Workspace, blobs?: Pick<BlobStore, 'put'>, checkpoint?: Checkpoint): Tool[] {
@@ -276,26 +312,10 @@ export function createFileTools(workspace: Workspace, blobs?: Pick<BlobStore, 'p
       if (file.binary) return textOutput(`${file_path} is a binary file and can't be edited.`, true);
       if (file.truncated) return textOutput(`${file_path} is too large to edit.`, true);
       const { content } = file;
-      const crlf = /^[^\n]*\r\n/.test(content);
-      const toFile = (s: string) => (crlf ? s.replace(/\r?\n/g, '\r\n') : s);
-      let [from, to] = [toFile(old_string), toFile(new_string)];
-
-      let parts = content.split(from);
-      let count = parts.length - 1;
-      let note = '';
-      // Not found as sent, but found without the Read prefixes copied into it: edit what the model meant.
-      const bare = count === 0 ? withoutReadPrefix(old_string) : null;
-      if (bare) {
-        const bareParts = content.split(toFile(bare));
-        if (bareParts.length > 1) {
-          // Only numbered prefixes come off new_string; a line without one keeps its tabs, which may be real.
-          [from, to, parts, count] = [toFile(bare), toFile(new_string.split('\n').map((line) => line.replace(READ_PREFIX, '')).join('\n')), bareParts, bareParts.length - 1];
-          note = " Read's line prefixes (the number and the tab after it) aren't part of the file, so they were left out of old_string and new_string.";
-        }
-      }
+      const { from, to, count, note, at, updated } = matchEdit(content, old_string, new_string, replace_all);
       if (count === 0) {
         return textOutput(
-          `old_string was not found in ${file_path}. Read the file again and copy the text exactly, including whitespace and indentation.${tabHint(toFile(old_string), content)}`,
+          `old_string was not found in ${file_path}. Read the file again and copy the text exactly, including whitespace and indentation.${tabHint(from, content)}`,
           true,
         );
       }
@@ -305,8 +325,6 @@ export function createFileTools(workspace: Workspace, blobs?: Pick<BlobStore, 'p
           true,
         );
       }
-      const at = content.indexOf(from);
-      const updated = replace_all ? parts.join(to) : content.slice(0, at) + to + content.slice(at + from.length);
       await checkpoint?.(ctx, file_path);
       try {
         await runner.call(

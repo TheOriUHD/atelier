@@ -123,6 +123,11 @@ function hunks(ops: readonly Op[], context: number): string[] {
   return out;
 }
 
+/** Every line from `before` to `after` in order, marked unchanged, removed or added. Lines keep a CR; a line's missing final newline is dropped. */
+export function lineChanges(before: string, after: string): Op[] {
+  return editScript(lines(before), lines(after)).map((op) => (op.text.endsWith(NO_NEWLINE) ? { ...op, text: op.text.slice(0, -1) } : op));
+}
+
 /**
  * One file's diff from `before` to `after` (null: the file didn't exist, or doesn't any more). Empty when they are the
  * same. A last line without a newline gets git's "\ No newline at end of file", so `git apply` takes the patch both

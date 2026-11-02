@@ -6,7 +6,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { APP } from '@atelier/protocol';
-import { Check, ChevronDown, ExternalLink, TriangleAlert } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, Maximize2, TriangleAlert } from 'lucide-react';
 import type {
   AppGrant,
   AppTier,
@@ -20,15 +20,16 @@ import type {
   QuestionAnswer,
   QuestionRequest,
 } from '@atelier/protocol';
-import { Badge, Button, Field, Icon, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Select, TextField, cn, toast } from '../../components/ui/index.ts';
+import { Badge, Button, Field, Icon, IconButton, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Select, TextField, cn, toast } from '../../components/ui/index.ts';
 import { refreshComputer, useComputerHere, useComputerStatus } from '../../lib/computer.ts';
 import { desktop, isMac, openExternal } from '../../lib/platform.ts';
 import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts';
 import { useAppInfo } from '../../lib/queries.ts';
 import { describeError, errorCode, rpc } from '../../lib/rpc.ts';
 import { Markdown } from '../chat/markdown.tsx';
+import { ChangeView } from './change-view.tsx';
 import { CommandCode } from './command-code.tsx';
-import { DiffCard, editRows, writeRows } from './inline-diff.tsx';
+import { DiffCard, editRows, numberRows, writeRows } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
 import { planComments, revisionMessage, usePlanComments } from './plan-comments.ts';
 import { WorkspaceRoot, actionWords, asRecord, computerActions, str, summarize } from './tool-cards.tsx';
@@ -80,7 +81,7 @@ export function InteractionCard({
     ) : request.toolName === 'ExitPlanMode' ? (
       <PlanApproval sessionId={sessionId} request={request} sending={sending} respond={respond} onOpenPlan={onOpenPlan} />
     ) : (
-      <PermissionPrompt request={request} sending={sending} respond={respond} />
+      <PermissionPrompt sessionId={sessionId} interactionId={pending.id} request={request} sending={sending} respond={respond} />
     );
   return <Docked.Provider value={docked}>{card}</Docked.Provider>;
 }
@@ -89,7 +90,7 @@ const MOD = isMac ? '⌘' : 'Ctrl';
 const SHIFT = isMac ? '⇧' : 'Shift';
 const ENTER = isMac ? '↵' : 'Enter';
 
-/** What an ask answers to while it is on screen. Digits and letters count inside the card, outside its text fields. */
+/** What an ask answers to while it is on screen. Digits and letters count inside the card and its full-screen view, outside text fields. */
 interface AskKeys {
   escape?: (() => void) | undefined;
   /** ⌘↵ / Ctrl+Enter: the main action, from the message box as well. */
@@ -168,12 +169,13 @@ function useAskKeys(card: React.RefObject<HTMLElement | null>, keys: AskKeys): v
       if (e.isComposing || e.altKey) return;
       const target = e.target instanceof Element ? e.target : null;
       const typing = !!target?.closest('input, textarea, [contenteditable="true"]');
-      const inside = !!target && !!card.current?.contains(target);
+      const inside = !!target && (!!card.current?.contains(target) || !!target.closest('[data-ask-view]'));
       const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       const keysNow = latest.current;
       if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.shiftKey && keysNow.escape) {
-        // A menu or the slash list that is open closes first.
-        if (document.querySelector('[role="menu"], [role="dialog"]') || target?.closest('[aria-expanded="true"]')) return;
+        // A menu or the slash list that is open closes first, and so does a full-screen view: Esc leaves it, it doesn't
+        // refuse what is being read. Only the reason field, which that view holds too, comes before the view.
+        if (!target?.closest('[data-reason-field]') && (document.querySelector('[role="menu"], [role="dialog"]') || target?.closest('[aria-expanded="true"]'))) return;
         e.preventDefault();
         e.stopPropagation();
         keysNow.escape();
@@ -211,7 +213,7 @@ function useDenyReason(deny: (message: string) => void, sending: boolean) {
   };
   const toggle = () => {
     // The field is going away: back to the ask, where its keys count.
-    if (open) document.activeElement?.closest<HTMLElement>('[data-ask]')?.focus();
+    if (open) document.activeElement?.closest<HTMLElement>('[data-ask], [data-ask-view]')?.focus();
     setOpen(!open);
   };
   return { open, toggle, send, message, text, setText };
@@ -225,6 +227,7 @@ const withReason = (why: DenyReason, keys: AskKeys): AskKeys => (why.open ? { es
 function ReasonField({ why, sending }: { why: DenyReason; sending: boolean }) {
   return (
     <form
+      data-reason-field
       className="flex items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
@@ -314,6 +317,16 @@ function permissionTitle(request: PermissionRequest, root: string | null): strin
   }
 }
 
+/** An Edit's or Write's change as the card shows it, numbered once the backend said where an Edit lands. */
+function fileChange(request: PermissionRequest): { path: string; rows: ReturnType<typeof editRows>; numbered: boolean } | null {
+  const input = asRecord(request.input);
+  const path = str(input.file_path);
+  if (request.toolName === 'Write') return { path, rows: writeRows(str(input.content)), numbered: true };
+  if (request.toolName !== 'Edit') return null;
+  const rows = editRows(str(input.old_string), str(input.new_string));
+  return { path, rows: request.position ? numberRows(rows, request.position.line) : rows, numbered: !!request.position };
+}
+
 /** What the call would do: the command, the change as a diff, or the call's own summary. */
 function CallPreview({ request }: { request: PermissionRequest }) {
   const root = useContext(WorkspaceRoot);
@@ -331,9 +344,17 @@ function CallPreview({ request }: { request: PermissionRequest }) {
       );
     case 'Edit':
     case 'Write': {
-      const path = str(input.file_path);
-      const rows = request.toolName === 'Edit' ? editRows(str(input.old_string), str(input.new_string)) : writeRows(str(input.content));
-      return <DiffCard rows={rows} language={languageOf(path)} lineNumbers={request.toolName === 'Write'} limit={20} />;
+      const change = fileChange(request)!;
+      return (
+        <div className="flex flex-col gap-1.5">
+          <DiffCard rows={change.rows} language={languageOf(change.path)} lineNumbers={change.numbered} limit={20} />
+          {request.position && request.position.matches > 1 && (
+            <p className="text-footnote text-fg-muted">
+              This changes {request.position.matches} places. The first is shown, at line {request.position.line}.
+            </p>
+          )}
+        </div>
+      );
     }
     case 'ComputerAction':
       // Each step as it says it, with what it would type or press spelled out: that is what is approved.
@@ -361,9 +382,10 @@ function CallPreview({ request }: { request: PermissionRequest }) {
  * Deny, Deny with reason…, Always allow (for this project; the chevron picks this session or everywhere, each showing the
  * rule it adds) and Allow once. Digits pick them, `R` opens the reason, Esc denies, ⌘↵ allows once and ⇧⌘↵ always allows.
  * Dangerous commands are approved one call at a time. Without a folder (Chat) there is no project: Always allow is for
- * this person everywhere.
+ * this person everywhere. An Edit or Write also opens in the whole file (`F`), where all of this works the same, except
+ * that Esc only leaves that view.
  */
-function PermissionPrompt({ request, sending, respond }: { request: PermissionRequest; sending: boolean; respond: Respond }) {
+function PermissionPrompt({ sessionId, interactionId, request, sending, respond }: { sessionId: string; interactionId: string; request: PermissionRequest; sending: boolean; respond: Respond }) {
   const root = useContext(WorkspaceRoot);
   const inProject = root !== null;
   const rememberable = !request.warning && request.suggestedRule !== '';
@@ -374,24 +396,15 @@ function PermissionPrompt({ request, sending, respond }: { request: PermissionRe
   const always = () => run({ behavior: 'allow', remember: inProject ? 'project' : 'always' });
   const onceDigit = rememberable ? 3 : 2;
   const why = useDenyReason((message) => run({ behavior: 'deny', message }), sending);
-  return (
-    <Card
-      title={permissionTitle(request, root)}
-      {...(request.warning ? { warning: request.warning } : {})}
-      keys={withReason(why, {
-        escape: deny,
-        mod: once,
-        modShift: rememberable ? always : undefined,
-        digit: (n) => (n === 1 ? deny() : n === 2 && rememberable ? always() : n === onceDigit ? once() : undefined),
-      })}
-    >
-      <CallPreview request={request} />
-      {/* "Bash needs your approval." says nothing the card doesn't: only a reason with something in it is shown. */}
-      {request.reason && !/needs your approval\.?$/.test(request.reason) && <p className="text-footnote text-fg-muted">{request.reason}</p>}
+  const [wholeFile, setWholeFile] = useState(false);
+  const change = fileChange(request);
+  const title = permissionTitle(request, root);
+  const actions = (
+    <>
       {why.open && <ReasonField why={why} sending={sending} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Action label="Deny" caps={['1', 'Esc']} disabled={sending} onClick={deny} />
+          <Action label="Deny" caps={wholeFile ? ['1'] : ['1', 'Esc']} disabled={sending} onClick={deny} />
           <Action label="Deny with reason…" caps={['R']} aria-expanded={why.open} disabled={sending} onClick={why.toggle} />
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -417,6 +430,30 @@ function PermissionPrompt({ request, sending, respond }: { request: PermissionRe
           <Action primary label="Allow once" caps={[String(onceDigit), MOD, ENTER]} disabled={sending} onClick={once} />
         </div>
       </div>
+    </>
+  );
+  return (
+    <Card
+      title={title}
+      {...(request.warning ? { warning: request.warning } : {})}
+      action={change && <IconButton icon={Maximize2} label="Show the whole file" onClick={() => setWholeFile(true)} className="shrink-0" />}
+      keys={withReason(why, {
+        escape: deny,
+        mod: once,
+        modShift: rememberable ? always : undefined,
+        digit: (n) => (n === 1 ? deny() : n === 2 && rememberable ? always() : n === onceDigit ? once() : undefined),
+        letters: change ? { f: () => setWholeFile(true) } : undefined,
+      })}
+    >
+      <CallPreview request={request} />
+      {/* "Bash needs your approval." says nothing the card doesn't: only a reason with something in it is shown. */}
+      {request.reason && !/needs your approval\.?$/.test(request.reason) && <p className="text-footnote text-fg-muted">{request.reason}</p>}
+      {!wholeFile && actions}
+      {wholeFile && change && (
+        <ChangeView sessionId={sessionId} interactionId={interactionId} title={title} language={languageOf(change.path)} change={change.rows} onClose={() => setWholeFile(false)}>
+          {actions}
+        </ChangeView>
+      )}
     </Card>
   );
 }

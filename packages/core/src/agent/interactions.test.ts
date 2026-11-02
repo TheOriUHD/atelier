@@ -30,6 +30,18 @@ describe('InteractionBroker', () => {
     expect(broker.respond('s1', pending[2]!.id, 'again')).toBe(false);
   });
 
+  it('keeps what an open question asks, for that session and only while it is open', async () => {
+    let id = '';
+    const broker = new InteractionBroker(async (_s, p) => void (p && (id = p.id)));
+    const asked = broker.ask('s1', 'permission', { toolName: 'Edit' }, new AbortController().signal, null);
+    await vi.waitFor(() => expect(id).not.toBe(''));
+    expect(broker.payloadOf('s1', id)).toEqual({ toolName: 'Edit' });
+    expect(broker.payloadOf('s2', id)).toBeUndefined();
+    broker.respond('s1', id, 'done');
+    await asked;
+    expect(broker.payloadOf('s1', id)).toBeUndefined();
+  });
+
   it('resolves with the fallback when stopped and refuses later answers', async () => {
     let id = '';
     const broker = new InteractionBroker(async (_s, p) => void (p && (id = p.id)));

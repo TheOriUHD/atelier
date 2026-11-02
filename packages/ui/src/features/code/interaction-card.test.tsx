@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ElicitationRequest, PendingInteraction, PermissionRequest, QuestionRequest } from '@atelier/protocol';
+import type { ChangePreview, ElicitationRequest, PendingInteraction, PermissionRequest, QuestionRequest } from '@atelier/protocol';
 import { isMac, openExternal } from '../../lib/platform.ts';
 import { planComments } from './plan-comments.ts';
 import { callsTo, resetBackend } from '../settings/test-backend.ts';
@@ -343,6 +343,195 @@ describe('denying with a reason', () => {
   it('those cards still refuse with one press', async () => {
     render(<InteractionCard sessionId="s" pending={folder} />);
     fireEvent.keyDown(screen.getByRole('region'), { key: '1' });
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny' }]));
+  });
+});
+
+describe('where a change lands', () => {
+  const edit = (input: Record<string, unknown>, position?: PermissionRequest['position']) =>
+    permission({ toolName: 'Edit', input: { file_path: '/repo/a.ts', old_string: 'a\nb\nc', new_string: 'a\nB\nB2\nc', ...input }, suggestedRule: 'Edit(/repo/**)', ...(position ? { position } : {}) });
+  /** A row as the person reads it: its numbers, then its mark and code. */
+  const rows = () => [...screen.getByRole('region').querySelectorAll('[data-kind]')].map((r) => [...r.children].map((c) => c.textContent));
+
+  it('numbers an edit from its line in the file, with both sides once they differ', () => {
+    render(<InteractionCard sessionId="s" pending={edit({}, { line: 41, matches: 1 })} />);
+    expect(rows()).toEqual([
+      ['41', '41', '', 'a'],
+      ['42', '', '-', 'b'],
+      ['', '42', '+', 'B'],
+      ['', '43', '+', 'B2'],
+      ['43', '44', '', 'c'],
+    ]);
+  });
+
+  it('has one column while old and new agree', () => {
+    render(<InteractionCard sessionId="s" pending={edit({ old_string: 'old', new_string: 'new' }, { line: 7, matches: 1 })} />);
+    expect(rows()).toEqual([
+      ['7', '-', 'old'],
+      ['7', '+', 'new'],
+    ]);
+  });
+
+  it('shows the diff without numbers when the file couldn’t be read', () => {
+    render(<InteractionCard sessionId="s" pending={edit({ old_string: 'old', new_string: 'new' })} />);
+    expect(rows()).toEqual([
+      ['-', 'old'],
+      ['+', 'new'],
+    ]);
+  });
+
+  it('says so when it changes several places', () => {
+    render(<InteractionCard sessionId="s" pending={edit({ old_string: 'old', new_string: 'new', replace_all: true }, { line: 7, matches: 12 })} />);
+    expect(screen.getByRole('region').textContent).toContain('This changes 12 places. The first is shown, at line 7.');
+  });
+
+  it('numbers a Write as the new file', () => {
+    render(<InteractionCard sessionId="s" pending={permission({ toolName: 'Write', input: { file_path: '/repo/a.ts', content: 'x\ny\n' }, suggestedRule: 'Edit(/repo/**)' })} />);
+    expect(rows()).toEqual([
+      ['1', '+', 'x'],
+      ['2', '+', 'y'],
+    ]);
+  });
+});
+
+describe('the whole file', () => {
+  const edit = permission({ toolName: 'Edit', input: { file_path: '/repo/a.py', old_string: 'b', new_string: 'B' }, suggestedRule: 'Edit(/repo/**)', position: { line: 2, matches: 1 } });
+  const write = permission({ toolName: 'Write', input: { file_path: '/repo/new.py', content: 'x\n' }, suggestedRule: 'Edit(/repo/**)' });
+  const ready: ChangePreview = {
+    state: 'ready',
+    rows: [
+      { kind: 'context', text: 'a', line: 1, oldLine: 1 },
+      { kind: 'remove', text: 'b', line: 2 },
+      { kind: 'add', text: 'B', line: 2 },
+      { kind: 'context', text: 'c', line: 3, oldLine: 3 },
+    ],
+  };
+  const scrolled = vi.fn();
+  const open = async (pending: PendingInteraction, preview: () => unknown = () => ready) => {
+    resetBackend({ 'chat.respond': () => ({ ok: true }), 'chat.changePreview': preview });
+    Element.prototype.scrollIntoView = scrolled;
+    scrolled.mockClear();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <WorkspaceRoot.Provider value="/repo">
+          <InteractionCard sessionId="s" pending={pending} />
+        </WorkspaceRoot.Provider>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Show the whole file' }));
+    return screen.findByRole('dialog', { name: /^Allow Atelier to/ });
+  };
+  const shown = (view: HTMLElement) => [...view.querySelectorAll('[data-kind]')].map((r) => r.lastElementChild!.textContent);
+
+  it('asks for the file behind this card', async () => {
+    const view = await open(edit);
+    await waitFor(() => expect(shown(view)).toEqual(['a', 'b', 'B', 'c']));
+    expect(callsTo('chat.changePreview')).toEqual([{ sessionId: 's', interactionId: 'i1' }]);
+  });
+
+  it('opens at the change', async () => {
+    const view = await open(edit);
+    await waitFor(() => expect(shown(view)).toHaveLength(4));
+    await waitFor(() => expect(scrolled).toHaveBeenCalledWith({ block: 'center' }));
+    expect((scrolled.mock.contexts[0] as HTMLElement).getAttribute('data-kind')).toBe('remove');
+  });
+
+  it('puts focus on the code, not a button, so an Enter can’t approve', async () => {
+    const view = await open(edit);
+    await waitFor(() => expect(shown(view)).toHaveLength(4));
+    const code = within(view).getByRole('group', { name: 'The file with the change' });
+    await waitFor(() => expect(document.activeElement).toBe(code));
+  });
+
+  it.each([
+    ['1', { behavior: 'deny' }],
+    ['2', { behavior: 'allow', remember: 'project' }],
+    ['3', { behavior: 'allow' }],
+  ])('answers to %s there, as on the card', async (key, answer) => {
+    const view = await open(edit);
+    await waitFor(() => expect(shown(view)).toHaveLength(4));
+    fireEvent.keyDown(within(view).getByRole('group', { name: 'The file with the change' }), { key });
+    await waitFor(() => expect(answers()).toEqual([answer]));
+  });
+
+  it('answers to ⌘↵ and ⇧⌘↵ there', async () => {
+    await open(edit);
+    modEnter();
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'allow' }]));
+  });
+
+  it('allows and denies from its own buttons', async () => {
+    const view = await open(edit);
+    fireEvent.click(within(view).getByRole('button', { name: 'Allow once' }));
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'allow' }]));
+  });
+
+  it('takes a reason too, and Esc puts the field away before it leaves the view', async () => {
+    const view = await open(edit);
+    await waitFor(() => expect(shown(view)).toHaveLength(4));
+    fireEvent.keyDown(within(view).getByRole('group', { name: 'The file with the change' }), { key: 'r' });
+    const field = within(view).getByRole('textbox', { name: 'Why not' });
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(within(view).queryByRole('textbox', { name: 'Why not' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: /^Allow Atelier to/ })).toBeTruthy();
+    expect(answers()).toEqual([]);
+    fireEvent.keyDown(within(view).getByRole('group', { name: 'The file with the change' }), { key: 'r' });
+    fireEvent.change(within(view).getByRole('textbox', { name: 'Why not' }), { target: { value: 'wrong file' } });
+    fireEvent.submit(within(view).getByRole('textbox', { name: 'Why not' }).closest('form')!);
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny', message: 'wrong file' }]));
+  });
+
+  it('Esc leaves the view and refuses nothing; it denies from the card', async () => {
+    const view = await open(edit);
+    await waitFor(() => expect(shown(view)).toHaveLength(4));
+    fireEvent.keyDown(within(view).getByRole('group', { name: 'The file with the change' }), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(answers()).toEqual([]);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny' }]));
+  });
+
+  it('opens with F as well', async () => {
+    resetBackend({ 'chat.respond': () => ({ ok: true }), 'chat.changePreview': () => ready });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <InteractionCard sessionId="s" pending={edit} />
+      </QueryClientProvider>,
+    );
+    fireEvent.keyDown(screen.getByRole('region'), { key: 'f' });
+    expect(await screen.findByRole('dialog', { name: /^Allow Atelier to/ })).toBeTruthy();
+  });
+
+  it('isn’t offered where there is no file: a command has no whole file', () => {
+    render(<InteractionCard sessionId="s" pending={permission({})} />);
+    expect(screen.queryByRole('button', { name: 'Show the whole file' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('region'), { key: 'f' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('says a new file is new, with its numbered lines', async () => {
+    const view = await open(write, () => ({ state: 'new', rows: [{ kind: 'add', text: 'x', line: 1 }] }));
+    await waitFor(() => expect(view.textContent).toContain('A new file.'));
+    expect(shown(view)).toEqual(['x']);
+  });
+
+  it.each([
+    ['binary', 'This is a binary file, so this is only the change.'],
+    ['tooLarge', 'This file is too large to read, so this is only the change.'],
+    ['unreadable', 'This file can’t be read from here, so this is only the change.'],
+    ['stale', 'The text to replace isn’t in the file as it is now, so this is only the change.'],
+  ])('falls back to the change for a file it can’t show (%s), and says why', async (state, note) => {
+    const view = await open(edit, () => ({ state, rows: [] }));
+    await waitFor(() => expect(view.textContent).toContain(note));
+    expect(shown(view)).toEqual(['b', 'B']);
+  });
+
+  it('keeps working when the file can’t be asked for', async () => {
+    const view = await open(edit, () => {
+      throw new Error('not_waiting');
+    });
+    await waitFor(() => expect(view.textContent).toContain('This file can’t be read from here'));
+    fireEvent.click(within(view).getByRole('button', { name: 'Deny' }));
     await waitFor(() => expect(answers()).toEqual([{ behavior: 'deny' }]));
   });
 });

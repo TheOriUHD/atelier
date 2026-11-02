@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { editRows, hunkPatch, parseUnifiedDiff, writeRows } from './inline-diff.tsx';
+import { editRows, hunkPatch, numberRows, parseUnifiedDiff, writeRows } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
+
+describe('numberRows', () => {
+  it('counts each side from the line an Edit starts at', () => {
+    expect(numberRows(editRows('a\nb\nc', 'a\nB\nB2\nc'), 10)).toEqual([
+      { kind: 'context', text: 'a', line: 10, oldLine: 10 },
+      { kind: 'remove', text: 'b', line: 11 },
+      { kind: 'add', text: 'B', line: 11 },
+      { kind: 'add', text: 'B2', line: 12 },
+      { kind: 'context', text: 'c', line: 13, oldLine: 12 },
+    ]);
+  });
+});
 
 describe('editRows', () => {
   it('keeps shared leading and trailing lines as context around the change', () => {

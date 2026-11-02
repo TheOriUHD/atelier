@@ -62,8 +62,35 @@ export const PermissionRequest = z.object({
   suggestedRule: z.string(),
   /** Set when a sub-agent asks: the task it was given (its session title). */
   agent: z.string().optional(),
+  /**
+   * Where an Edit lands in the file as it stood when the person was asked: the 1-based line of the first match, and how
+   * many matches a `replace_all` changes. Left out when the file couldn't be read: the card then shows the diff unnumbered.
+   */
+  position: z.object({ line: z.number().int().positive(), matches: z.number().int().positive() }).optional(),
 });
 export type PermissionRequest = z.infer<typeof PermissionRequest>;
+
+/** A line of a file with a pending change in place, or (`hunk`) a note that lines are left out here. */
+export const ChangeRow = z.object({
+  kind: z.enum(['context', 'add', 'remove', 'hunk']),
+  text: z.string(),
+  /** The line in the new file; for a removal, in the old one. */
+  line: z.number().optional(),
+  /** A context row's line in the old file: the change above it may have moved it. */
+  oldLine: z.number().optional(),
+});
+export type ChangeRow = z.infer<typeof ChangeRow>;
+
+/**
+ * The file behind a permission card, read when the person opens it. `ready`: `rows` is the file with the change in place.
+ * `new`: the file doesn't exist yet and `rows` is what would be written. Otherwise there are no rows, and the state says
+ * why: a binary file, one too large to read, one that couldn't be read, or an edit whose text isn't in the file now (`stale`).
+ */
+export const ChangePreview = z.object({
+  state: z.enum(['ready', 'new', 'binary', 'tooLarge', 'unreadable', 'stale']),
+  rows: z.array(ChangeRow),
+});
+export type ChangePreview = z.infer<typeof ChangePreview>;
 
 /** A pending interaction the run is blocked on; survives reconnects (cleared if the backend restarts). */
 export const PendingInteraction = z.object({ kind: z.enum(['permission', 'question', 'elicitation']), id: z.string(), payload: z.unknown() });

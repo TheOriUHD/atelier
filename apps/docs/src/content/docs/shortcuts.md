@@ -107,6 +107,7 @@ An ask from the model appears above the message box, and its keys work even whil
 | | R | **Deny with reason…** *(next release)*: type, then Enter sends it and Esc puts the field away. On the folder, connector and computer use cards it is **Say why…** |
 | | 2 or ⇧⌘↵ | **Always allow** (the chevron picks this session, this project or everywhere). Absent for dangerous commands, which are approved one call at a time |
 | | 3 or ⌘↵ | **Allow once** (2 when there is no **Always allow**) |
+| | F | **Show the whole file**, for an edit *(next release)*. The keys above work there too, except Esc, which leaves the view |
 | **Folder change** | 1 or Esc | **Stay here** |
 | | ⌘↵ | **Move here** |
 | **Plan** | Esc | **Revise…** |

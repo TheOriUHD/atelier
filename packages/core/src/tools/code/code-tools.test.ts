@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { hostRunnerBinary, RunnerClient } from '../../workspaces/runner-client.ts';
 import type { RunnerCalls, Workspace } from '../../workspaces/workspace.ts';
 import type { Tool, ToolContext, ToolOutput } from '../types.ts';
+import { changePreview, editPosition } from './change-preview.ts';
 import { createCodeTools } from './index.ts';
 
 const binary = hostRunnerBinary(join(import.meta.dirname, '../../../../../runner/bin'));
@@ -346,6 +347,45 @@ describe.skipIf(!built)('code tools', { timeout: 30_000 }, () => {
       const out = await run('Edit', { file_path: 'crlf.txt', old_string: 'one\ntwo', new_string: 'uno\ndos' });
       expect(text(out)).toBe('Edited crlf.txt:\n     1\tuno\n     2\tdos\n     3\tthree');
       expect(readFileSync(at('crlf.txt'), 'utf8')).toBe('uno\r\ndos\r\nthree\r\n');
+    });
+  });
+
+  describe('what a permission card reads', () => {
+    const signal = new AbortController().signal;
+
+    it('finds an Edit’s line in a real file', async () => {
+      write('card.py', 'a\nb\nc\nd\n');
+      await expect(editPosition(workspace.runner, { file_path: 'card.py', old_string: 'c', new_string: 'C' }, signal)).resolves.toEqual({ line: 3, matches: 1 });
+    });
+
+    it('has no line for a missing file, a binary one or one outside the workspace', async () => {
+      write('card.bin', Buffer.from([0, 1, 2, 3]));
+      const edit = (file_path: string) => editPosition(workspace.runner, { file_path, old_string: 'a', new_string: 'b' }, signal);
+      await expect(edit('no-such-file.py')).resolves.toBeNull();
+      await expect(edit('card.bin')).resolves.toBeNull();
+      await expect(edit(join(tmp, 'outside.txt'))).resolves.toBeNull();
+    });
+
+    it('tells a new file from one it can’t read, by what the runner says', async () => {
+      const preview = (name: string, file_path: string) => changePreview(workspace.runner, { name, input: { file_path, content: 'x\n', old_string: 'a', new_string: 'b' } });
+      await expect(preview('Write', 'brand-new.py')).resolves.toEqual({ state: 'new', rows: [{ kind: 'add', text: 'x', line: 1 }] });
+      await expect(preview('Edit', 'brand-new.py')).resolves.toEqual({ state: 'unreadable', rows: [] });
+      await expect(preview('Write', join(tmp, 'outside.txt'))).resolves.toEqual({ state: 'unreadable', rows: [] });
+      write('card.bin', Buffer.from([0, 1, 2, 3]));
+      await expect(preview('Write', 'card.bin')).resolves.toEqual({ state: 'binary', rows: [] });
+    });
+
+    it('shows a real file with the edit in place', async () => {
+      write('whole.py', 'a\nb\nc\n');
+      const { state, rows } = await changePreview(workspace.runner, { name: 'Edit', input: { file_path: 'whole.py', old_string: 'b', new_string: 'B\nB2' } });
+      expect(state).toBe('ready');
+      expect(rows.map((r) => [r.kind, r.text, r.line, r.oldLine])).toEqual([
+        ['context', 'a', 1, 1],
+        ['remove', 'b', 2, undefined],
+        ['add', 'B', 2, undefined],
+        ['add', 'B2', 3, undefined],
+        ['context', 'c', 4, 3],
+      ]);
     });
   });
 

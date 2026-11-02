@@ -9,6 +9,7 @@ import { newId } from '../util/ids.ts';
 interface Waiting {
   sessionId: string;
   kind: PendingInteraction['kind'];
+  payload: unknown;
   resolve(answer: unknown): void;
 }
 
@@ -29,7 +30,7 @@ export class InteractionBroker {
       const abort = () => settle(onAbort);
       signal.addEventListener('abort', abort, { once: true });
       // Waiting before the question goes out, so an answer that comes straight back isn't refused.
-      this.waiting.set(id, { sessionId, kind, resolve: (answer) => settle(answer as A) });
+      this.waiting.set(id, { sessionId, kind, payload, resolve: (answer) => settle(answer as A) });
       try {
         await this.setPending(sessionId, { kind, id, payload });
         return await answered;
@@ -52,6 +53,12 @@ export class InteractionBroker {
   kindOf(sessionId: string, interactionId: string): PendingInteraction['kind'] | null {
     const w = this.waiting.get(interactionId);
     return w && w.sessionId === sessionId ? w.kind : null;
+  }
+
+  /** What the open question under this id in this session asks, if there is one. */
+  payloadOf(sessionId: string, interactionId: string): unknown {
+    const w = this.waiting.get(interactionId);
+    return w && w.sessionId === sessionId ? w.payload : undefined;
   }
 
   /** Delivers an answer; false when nothing with that id is waiting in that session (already answered or stale). */

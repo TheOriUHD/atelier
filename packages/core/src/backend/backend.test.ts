@@ -77,6 +77,17 @@ describe('personal session controls', () => {
   });
 });
 
+describe('the file behind a permission card', () => {
+  it('is only there for an open card in a session the person may see', async () => {
+    const session = await client.call('sessions.create', { mode: 'code' });
+    expect(await code(client.call('chat.changePreview', { sessionId: session.id, interactionId: 'nothing-open' }))).toBe('not_waiting');
+    const { temporaryPassword } = await client.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+    const bob = await signedIn('bob', temporaryPassword);
+    await bob.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+    expect(await code(bob.call('chat.changePreview', { sessionId: session.id, interactionId: 'nothing-open' }))).toBe('not_found');
+  });
+});
+
 describe('backend projects', () => {
   it('announces project changes when chats join or leave a project, so chat counts stay current', async () => {
     const project = await client.call('projects.create', { name: 'Docs', description: '' });

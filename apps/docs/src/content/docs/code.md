@@ -111,7 +111,7 @@ The mode picker under the message box decides how much the agent may do. Click i
 | **Plan mode** | Reads and plans only; you approve the plan before anything changes. |
 | **Bypass permissions** | Doesn't ask, not even for risky commands. Deny rules still block, and an ask rule still asks. |
 
-A prompt offers **Deny**, **Deny with reason…** *(next release)*, **Always allow** (this project, this session or everywhere, from the chevron) and **Allow once**. Rules, Auto mode's reviewer and what always asks are on [Permissions](/permissions/#the-prompt-and-always-allow).
+A prompt offers **Deny**, **Deny with reason…** *(next release)*, **Always allow** (this project, this session or everywhere, from the chevron) and **Allow once**. A card for an edit shows the file's line numbers and opens the whole file around the change *(next release)*. Rules, Auto mode's reviewer and what always asks are on [Permissions](/permissions/#the-prompt-and-always-allow).
 
 ## The conversation
 
@@ -353,6 +353,6 @@ More about permission messages is on [Permissions](/permissions/#when-something-
 | Upload or add files | ⌘U / Ctrl+U |
 | New session | ⌘N / Ctrl+N |
 | In a permission prompt: Deny, Always allow, Allow once | 1 or Esc, 2 or ⇧⌘↵, 3 or ⌘↵ |
-| In a permission prompt: Deny with reason *(next release)* | R |
+| In a permission prompt: Deny with reason, show the whole file *(next release)* | R, F |
 
 The rest are on [Shortcuts](/shortcuts/).

@@ -39,6 +39,7 @@ import {
   type SessionSummary,
   type Settings,
   type PendingInteraction,
+  type ChangePreview,
   type PermissionAnswer,
   type PermissionMode,
   type PermissionRequest,
@@ -81,6 +82,7 @@ import { createSkillTool } from '../tools/skill.ts';
 import { renderSkill, renderSkillList, type Skill } from '../extensions/skills.ts';
 import { renderCommand, type Command } from '../extensions/commands.ts';
 import { agentModel, agentPrompt, GENERAL_PURPOSE, type AgentDef } from '../extensions/agents.ts';
+import { CHANGE_TOOLS, changePreview, editPosition } from '../tools/code/change-preview.ts';
 import { createCodeTools } from '../tools/code/index.ts';
 import type { BackgroundCommands } from '../tools/code/bash.ts';
 import { BackgroundTasks } from './background-tasks.ts';
@@ -1358,6 +1360,7 @@ export class ChatService {
       reason = review.reason;
     }
 
+    const position = call.name === 'Edit' ? await this.editPosition(current, final.input, signal) : null;
     const request: PermissionRequest = {
       callId: call.id,
       toolName: call.name,
@@ -1366,6 +1369,7 @@ export class ChatService {
       ...(verdict.warning ? { warning: verdict.warning } : {}),
       suggestedRule: suggestRule(final, ctx),
       ...(session.parentSessionId && !main ? { agent: current.title } : {}),
+      ...(position ? { position } : {}),
     };
     const answer = await this.interactions.ask<PermissionAnswer>(asker, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' });
     if (answer.behavior === 'deny') {
@@ -1380,6 +1384,31 @@ export class ChatService {
     if (answer.remember === 'project') await this.deps.rememberProjectRule?.(session, request.suggestedRule);
     if (answer.remember === 'always' && session.userId) await this.deps.rememberRule?.(session.userId, request.suggestedRule);
     return { allow: true, ...(input ? { input } : {}) };
+  }
+
+  /**
+   * Where a pending Edit lands, for the card's line numbers. A slow or unreachable host only costs the numbers: the
+   * person is asked after POSITION_WAIT_MS whatever the runner says, and a file outside the workspace stays unread
+   * until they allow it (the runner's roots aren't widened for a card).
+   */
+  private async editPosition(session: SessionRow, input: unknown, signal: AbortSignal): Promise<PermissionRequest['position'] | null> {
+    const wait = AbortSignal.any([signal, AbortSignal.timeout(POSITION_WAIT_MS)]);
+    const lookup = async () => {
+      const workspace = await this.deps.workspace?.(session);
+      return workspace ? editPosition(workspace.runner, input, wait) : null;
+    };
+    const late = new Promise<null>((resolve) => wait.addEventListener('abort', () => resolve(null), { once: true }));
+    return Promise.race([lookup().catch(() => null), late]);
+  }
+
+  /** The file behind the permission card open in a session; null when nothing with that id is waiting there. */
+  async changePreview(sessionId: string, interactionId: string): Promise<ChangePreview | null> {
+    if (this.interactions.kindOf(sessionId, interactionId) !== 'permission') return null;
+    const request = this.interactions.payloadOf(sessionId, interactionId) as PermissionRequest;
+    if (!CHANGE_TOOLS.has(request.toolName)) return { state: 'unreadable', rows: [] };
+    // A sub-agent asks in its parent's session and shares its folder.
+    const workspace = await this.deps.workspace?.(await this.requireSession(sessionId)).catch(() => null);
+    return workspace ? changePreview(workspace.runner, { name: request.toolName, input: request.input }) : { state: 'unreadable', rows: [] };
   }
 
   /**
@@ -2656,6 +2685,8 @@ const NESTED_CHARS = 20_000;
 /** A compact-tier connector description: its first sentence, at most this long (docs/PROMPTS.md §1.3). */
 const COMPACT_CONNECTOR_CHARS = 200;
 
+/** How long a permission prompt waits to learn where an Edit lands before it goes out without line numbers. */
+const POSITION_WAIT_MS = 2000;
 /** Tools whose path the runner scopes to the workspace's roots. */
 const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
