@@ -25,6 +25,14 @@ describe('outputFiles', () => {
     ]);
   });
 
+  it('counts images SaveImage put in the folder, and not when it failed', () => {
+    const messages = [
+      message('assistant', [call('a', 'SaveImage', { image: 'img_1', file_path: `${ROOT}/public/hero.png` }), call('b', 'SaveImage', { image: 'img_2', file_path: `${ROOT}/public/no.png` })]),
+      message('tool', [result('a'), result('b', true)]),
+    ];
+    expect(outputFiles(messages, ROOT)).toEqual([{ path: 'public/hero.png', name: 'hero.png' }]);
+  });
+
   it('leaves out failed and unanswered calls and files outside the folder', () => {
     const messages = [
       message('assistant', [

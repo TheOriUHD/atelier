@@ -7,6 +7,7 @@ import { Bot, ListChecks, MessageSquare } from 'lucide-react';
 import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolCallPart, type ToolResultPart } from '@atelier/protocol';
 import { Badge, DiffStat, Icon, ThinkingDots, cn } from '../../components/ui/index.ts';
 import { queuedLabel, useLiveSession, type LiveSessionState } from '../../lib/live-session.ts';
+import { blobUrl } from '../../lib/platform.ts';
 import { Markdown, OpenFilePath } from '../chat/markdown.tsx';
 import { Chevron, MessageError, ProviderStopped, Summary, ThinkingBlock, ThinkingText, TranscriptDetail, detailClass, elapsed, inputPreview, useNow } from '../chat/parts.tsx';
 import { LINE } from '../chat/rows.ts';
@@ -185,6 +186,11 @@ function ActivityRow({ step }: { step: ActivityStepView }) {
         if (summary.meta) status = <span className="shrink-0 text-fg-muted">{summary.meta}</span>;
         body = text != null ? <SearchResults text={text} failed={failed} /> : null;
         break;
+      case 'SaveImage':
+        title = `${summary.verb} ${summary.target}`;
+        if (step.result?.saved) status = <SavedThumbnail image={step.result.saved} />;
+        body = <pre className={cn(detailClass, failed ? 'text-danger-text' : 'text-fg')}>{text ?? JSON.stringify(step.call.input, null, 2)}</pre>;
+        break;
       default:
         title = `${summary.verb}${summary.target ? ` ${summary.target}` : ''}`;
         if (summary.meta) status = <span className="shrink-0 text-fg-muted">{summary.meta}</span>;
@@ -211,6 +217,11 @@ function ActivityRow({ step }: { step: ActivityStepView }) {
       {open && body && <div className="px-3 pt-1 pb-3">{body}</div>}
     </div>
   );
+}
+
+/** The image a SaveImage call wrote, small enough to sit on its row. */
+function SavedThumbnail({ image }: { image: NonNullable<ToolResultPart['saved']> }) {
+  return <img src={blobUrl(image.blob)} alt="" loading="lazy" className="h-6 w-8 shrink-0 rounded-[6px] border border-line bg-fill-ghost-hover object-cover" />;
 }
 
 /** One card per call (Verbose, and an opened compact line). */
@@ -324,6 +335,8 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return files(list).length === 1 ? `created ${file(list[0]!)}` : `created ${files(list).length} files`;
       case 'Edit':
         return files(list).length === 1 ? `edited ${file(list[0]!)}` : `edited ${files(list).length} files`;
+      case 'SaveImage':
+        return files(list).length === 1 ? `saved ${file(list[0]!)}` : `saved ${files(list).length} images`;
       case 'Grep':
         return plural(n, 'searched the code', 'searched the code # times');
       case 'WebSearch':
@@ -516,6 +529,8 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
     case 'Edit':
     case 'Write':
       return { verb: call.name, target: displayPath(str(input.file_path), root) };
+    case 'SaveImage':
+      return { verb: result === null ? 'Save' : 'Saved', target: displayPath(str(input.file_path), root) };
     case 'Bash':
       return { verb: 'Ran', target: str(input.description) || str(input.command) };
     case 'BashOutput':
@@ -629,7 +644,7 @@ function OneLineCard({ step, detail }: { step: ToolStep; detail?: ReactNode }) {
   return (
     <div className="flex flex-col">
       <WithViewedImages steps={[step]}>
-        {step.call.name === 'Read' ? (
+        {step.call.name === 'Read' || step.call.name === 'SaveImage' ? (
           <FileSummary open={open} onToggle={() => setOpen((o) => !o)} running={step.running} verb={verb} path={str(asRecord(step.call.input).file_path)}>
             {after}
           </FileSummary>

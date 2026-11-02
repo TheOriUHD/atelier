@@ -22,14 +22,17 @@ export function inFolder(path: string, root: string): string | null {
   return parts.length && !parts.includes('..') ? parts.join('/') : null;
 }
 
-/** Files Write and Edit changed in the folder, each once where it last changed (newest last). Failed or unanswered calls don't count. */
+/** Tools that leave a file in the folder, at their `file_path`. */
+const OUTPUT_TOOLS = new Set(['Write', 'Edit', 'SaveImage']);
+
+/** Files Write, Edit and SaveImage changed in the folder, each once where it last changed (newest last). Failed or unanswered calls don't count. */
 export function outputFiles(messages: readonly Message[], root: string): OutputFile[] {
   const results = toolResults(messages);
   const paths = new Set<string>();
   for (const message of messages) {
     if (message.role !== 'assistant') continue;
     for (const part of message.parts) {
-      if (part.type !== 'tool_call' || (part.name !== 'Write' && part.name !== 'Edit')) continue;
+      if (part.type !== 'tool_call' || !OUTPUT_TOOLS.has(part.name)) continue;
       const result = results.get(part.id);
       const path = result && !result.isError && inFolder(str(asRecord(part.input).file_path), root);
       if (!path) continue;

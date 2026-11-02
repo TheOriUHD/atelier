@@ -42,6 +42,31 @@ const modEnter = (shift = false) => fireEvent.keyDown(document.body, { key: 'Ent
 /** The answers sent with chat.respond. */
 const answers = () => callsTo('chat.respond').map((c) => (c as { answer: unknown }).answer);
 
+describe('asking about images', () => {
+  const image = (input: Record<string, unknown>) => permission({ toolName: 'GenerateImage', input, reason: 'GenerateImage needs your approval.', suggestedRule: 'GenerateImage' });
+
+  it('shows the prompt, and goes through the usual buttons', async () => {
+    render(<InteractionCard sessionId="s" pending={image({ prompt: 'A poster for the summer party' })} />);
+    const card = screen.getByRole('region', { name: 'Allow Atelier to make an image?' });
+    expect(within(card).getByText('A poster for the summer party')).toBeTruthy();
+    expect(within(card).queryByText(/With /)).toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: 'Allow once' }));
+    await waitFor(() => expect(answers()).toEqual([{ behavior: 'allow' }]));
+  });
+
+  it('says how many, and which model if the call chose one', () => {
+    render(<InteractionCard sessionId="s" pending={image({ prompt: 'Three logos', count: 3, model: 'openai/gpt-image-1' })} />);
+    const card = screen.getByRole('region', { name: 'Allow Atelier to make 3 images?' });
+    expect(within(card).getByText('With openai/gpt-image-1')).toBeTruthy();
+  });
+
+  it('asks about saving an image by the file it would write', () => {
+    render(inProject(permission({ toolName: 'SaveImage', input: { image: 'img_1', file_path: '/work/app/public/hero.png' }, suggestedRule: 'SaveImage' })));
+    const card = screen.getByRole('region', { name: 'Allow Atelier to save public/hero.png?' });
+    expect(within(card).getByText('Save public/hero.png')).toBeTruthy();
+  });
+});
+
 describe('changing folder', () => {
   const folder = (input: Record<string, unknown>) =>
     permission({ toolName: 'ChangeDirectory', input: { path: '/work/api', reason: 'The bug is in the API repository.', from: '/work/app', host: null, ...input } });

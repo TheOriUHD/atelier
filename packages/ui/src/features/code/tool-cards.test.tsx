@@ -38,6 +38,52 @@ const show = (...steps: ToolStep[]) =>
     </WorkspaceRoot.Provider>,
   );
 
+describe('SaveImage', () => {
+  const save = (extra: Partial<ToolStep> = {}) => step('SaveImage', { image: 'img_1', file_path: '/repo/public/hero.png' }, extra);
+  const saved = { ...result('Saved /repo/public/hero.png (12 KB).')!, saved: { blob: 'abc123', mime: 'image/png' } };
+
+  it('says what it saved, or will save, relative to the folder', () => {
+    expect(summarize({ name: 'SaveImage', input: { file_path: '/repo/public/hero.png' } }, null, '/repo')).toEqual({ verb: 'Save', target: 'public/hero.png' });
+    expect(summarize({ name: 'SaveImage', input: { file_path: '/repo/public/hero.png' } }, 'Saved', '/repo')).toEqual({ verb: 'Saved', target: 'public/hero.png' });
+  });
+
+  it('is one line in a compact run, named by the file, with a thumbnail of the image', () => {
+    render(
+      <WorkspaceRoot.Provider value="/repo">
+        <CodeActivity steps={[save({ result: saved })]} />
+      </WorkspaceRoot.Provider>,
+    );
+    expect(screen.getByRole('button', { name: /^Saved hero\.png/ })).toBeTruthy();
+    const thumbnail = within(screen.getByRole('group', { name: 'Images looked at' })).getByRole('button', { name: /^Saved image/ });
+    expect(thumbnail.querySelector('img')?.getAttribute('src')).toContain('abc123');
+  });
+
+  it('opens to a row that shows the image too', () => {
+    const { container } = render(
+      <WorkspaceRoot.Provider value="/repo">
+        <CodeActivity steps={[save({ result: saved })]} />
+      </WorkspaceRoot.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Saved hero\.png/ }));
+    expect(within(screen.getByRole('group', { name: 'Steps' })).getByRole('button', { name: /Saved public\/hero\.png/ })).toBeTruthy();
+    expect(container.querySelectorAll('img[src*="abc123"]').length).toBeGreaterThan(1);
+  });
+
+  it('says what it is doing while it runs', () => {
+    render(
+      <WorkspaceRoot.Provider value="/repo">
+        <CodeActivity live steps={[save({ running: true })]} />
+      </WorkspaceRoot.Provider>,
+    );
+    expect(screen.getByText('Saving public/hero.png')).toBeTruthy();
+  });
+
+  it('has its own card in the verbose view, and counts as failed when it failed', () => {
+    show(save({ result: result('This image is a JPEG: save it with a .jpg name, or convert it afterwards.', true) }));
+    expect(screen.getByText('Failed')).toBeTruthy();
+  });
+});
+
 describe('summarize', () => {
   const call = (name: string, input: unknown): Pick<ToolCallPart, 'name' | 'input'> => ({ name, input });
 

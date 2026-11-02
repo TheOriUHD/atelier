@@ -308,6 +308,12 @@ function permissionTitle(request: PermissionRequest, root: string | null): strin
       const verb = request.toolName === 'Edit' ? 'edit' : 'write';
       return `Allow ${who} to ${verb} ${displayPath(str(input.file_path), root)}?`;
     }
+    case 'GenerateImage': {
+      const count = typeof input.count === 'number' && input.count > 1 ? input.count : 1;
+      return `Allow ${who} to make ${count > 1 ? `${count} images` : 'an image'}?`;
+    }
+    case 'SaveImage':
+      return `Allow ${who} to save ${displayPath(str(input.file_path), root)}?`;
     case 'ComputerAction':
       return `Allow ${who} to use your computer?`;
     case 'OpenApp':
@@ -356,6 +362,13 @@ function CallPreview({ request }: { request: PermissionRequest }) {
         </div>
       );
     }
+    case 'GenerateImage':
+      return (
+        <div className="flex flex-col gap-1.5">
+          <p className={cn(box, 'font-sans')}>{str(input.prompt)}</p>
+          {str(input.model) && <p className="text-footnote text-fg-muted">With {str(input.model)}</p>}
+        </div>
+      );
     case 'ComputerAction':
       // Each step as it says it, with what it would type or press spelled out: that is what is approved.
       return (
