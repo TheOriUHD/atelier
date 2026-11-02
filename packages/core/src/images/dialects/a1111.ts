@@ -59,6 +59,8 @@ const STOP_TIMEOUT_MS = 5_000;
 const EDIT_STRENGTH = 0.6;
 const FILL_FROM_ORIGINAL = 1;
 const MASK_BLUR = 4;
+/** 0 is "inpaint masked": white changes, as in the internal mask (images/mask.ts). The server's own setting must not flip it. */
+const WHITE_CHANGES = 0;
 /** Draw Things works in 64-pixel steps, and refuses an input image that differs from the size asked for. */
 const DRAW_THINGS_STEP = 64;
 
@@ -190,7 +192,7 @@ function webuiBody(flavor: Flavor, request: ImageRequest, genkey: string | undef
     ...(flavor.checkpoints ? { override_settings: { sd_model_checkpoint: request.model, show_progress_every_n_steps: 1 } } : {}),
     ...(genkey ? { genkey } : {}),
     ...(input ? { init_images: [toBase64(input.bytes)], denoising_strength: EDIT_STRENGTH, resize_mode: 0 } : {}),
-    ...(input && request.mask ? { mask: toBase64(request.mask.bytes), inpainting_fill: FILL_FROM_ORIGINAL, mask_blur: MASK_BLUR } : {}),
+    ...(input && request.mask ? { mask: toBase64(request.mask.bytes), inpainting_fill: FILL_FROM_ORIGINAL, inpainting_mask_invert: WHITE_CHANGES, mask_blur: MASK_BLUR } : {}),
   };
 }
 

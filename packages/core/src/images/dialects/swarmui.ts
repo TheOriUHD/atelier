@@ -72,6 +72,7 @@ function payload(request: ImageRequest, sessionId: string): Record<string, unkno
     donotsave: true,
     ...(request.loras.length ? { loras: request.loras.map((l) => l.name).join(','), loraweights: request.loras.map((l) => l.weight).join(',') } : {}),
     ...(input ? { initimage: dataUrl(input.mime, input.bytes), initimagecreativity: EDIT_CREATIVITY } : {}),
+    // White changes, as in the internal mask (images/mask.ts).
     ...(request.mask ? { maskimage: dataUrl(request.mask.mime, request.mask.bytes) } : {}),
   };
 }

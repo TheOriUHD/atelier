@@ -1,8 +1,9 @@
+import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { sse, streamResponse } from '../../providers/__fixtures__/harness.ts';
 import { HOSTED_DEFAULTS, lookUp, OPENAI_MODELS, RECRAFT_MODELS, TOGETHER_MODELS, XAI_MODELS } from '../catalog.ts';
 import { fitParams } from '../params.ts';
-import { deps, events, fakeFetch, finishOf, formFields, imagesOf, INPUT, instance, jsonResponse, keepingBodies, KEY, PNG_B64, request, stopped } from './__fixtures__/images.ts';
+import { deps, events, fakeFetch, finishOf, formFields, formFile, imagesOf, INPUT, instance, jsonResponse, keepingBodies, KEY, MASK, PNG_B64, request, stopped } from './__fixtures__/images.ts';
 import { createOpenAiImages } from './openai-images.ts';
 
 const OPENAI = 'https://api.openai.com';
@@ -45,9 +46,19 @@ describe('OpenAI', () => {
   it('sends several inputs as image[] and the mask beside them', async () => {
     const fake = fakeFetch({ 'POST /v1/images/edits': () => jsonResponse(b64) });
     const { fetch, bodies } = keepingBodies(fake.fetch);
-    await events(adapter(fetch).generate(request({ model: 'gpt-image-2', capabilities: quiet, references: [INPUT, { ...INPUT, name: 'two.png' }], mask: { ...INPUT, name: 'mask.png' } })));
+    await events(adapter(fetch).generate(request({ model: 'gpt-image-2', capabilities: quiet, references: [INPUT, { ...INPUT, name: 'two.png' }], mask: MASK })));
     expect(fake.calls[0]?.headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
     expect(formFields(bodies[0]!)).toMatchObject({ 'image[]': ['file:input.png', 'file:two.png'], mask: 'file:mask.png', model: 'gpt-image-2' });
+  });
+
+  it('marks the area to change by making it transparent, which is how OpenAI reads a mask', async () => {
+    const fake = fakeFetch({ 'POST /v1/images/edits': () => jsonResponse(b64) });
+    const { fetch, bodies } = keepingBodies(fake.fetch);
+    await events(adapter(fetch).generate(request({ model: 'gpt-image-2', capabilities: quiet, references: [INPUT], mask: MASK })));
+    const sent = PNG.sync.read(Buffer.from(formFile(bodies[0]!, 'mask')));
+    // The left column changes (white in the internal mask), the right stays.
+    const alpha = (x: number, y: number) => sent.data[(y * sent.width + x) * 4 + 3];
+    expect([alpha(0, 0), alpha(1, 0), alpha(0, 1), alpha(1, 1)]).toEqual([0, 255, 0, 255]);
   });
 
   it('asks for transparency the way the reference says', async () => {

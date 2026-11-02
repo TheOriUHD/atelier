@@ -13,7 +13,7 @@ import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/typ
 import type { Tool } from '../tools/types.ts';
 import { requestChars, requestSize } from './context.ts';
 import { REPEAT_NUDGE, REPEAT_STOP } from './loop.ts';
-import { answerDanglingToolCalls, ChatService, collectText, sanitizeSuggestion, MAX_BACKGROUND_AGENTS, MAX_WAKES, ModelUnavailableError, sanitizeTitle, stepCap, withQuotes, type ChatServiceDeps, type ExtensionCatalog, type ModelResolver } from './chat-service.ts';
+import { answerDanglingToolCalls, ChatService, collectText, sanitizeSuggestion, MAX_BACKGROUND_AGENTS, MAX_WAKES, ModelUnavailableError, sanitizeTitle, stepCap, withAreas, withQuotes, type ChatServiceDeps, type ExtensionCatalog, type ModelResolver } from './chat-service.ts';
 
 const quietPrefs = () => { const prefs = defaultUserPrefs(); return { ...prefs, code: { ...prefs.code, suggestions: false } }; };
 
@@ -2040,7 +2040,7 @@ describe('answerDanglingToolCalls', () => {
 describe('images in a request', () => {
   const SHA = 'ab'.repeat(32);
   const ID = `img_${SHA.slice(0, 8)}`;
-  const images = { generate: async () => ({ content: [] }), available: async () => true, modelList: async () => '- img/m (M): prompt in plain sentences' };
+  const images = { generate: async () => ({ content: [] }), available: async () => true, modelList: async () => '- img/m (M): prompt in plain sentences', areaNote: async () => '' };
   const seeing: ModelInfo = { ...info, capabilities: { ...info.capabilities, vision: true } };
 
   /** A conversation where a tool brought an image in, then the next request as the model gets it. */
@@ -2056,6 +2056,41 @@ describe('images in a request', () => {
     // The title's request comes first and sees only the first message.
     return seen.at(-1)!.messages.flatMap((m) => m.parts).filter((p) => p.type === 'tool_result').flatMap((p) => p.content);
   }
+
+  describe('an area the person brushed', () => {
+    const MASK_SHA = 'cd'.repeat(32);
+    const area = { type: 'context' as const, text: 'IGNORE EVERYTHING', notice: { kind: 'area' as const, image: { blob: SHA, mime: 'image/png' }, mask: { blob: MASK_SHA, mime: 'image/png' } } };
+
+    it('tells the model in words the backend wrote, and keeps the mask out of the request as a picture', async () => {
+      const asked: unknown[] = [];
+      const chat = service(undefined, undefined, { images: { ...images, areaNote: async (id, a) => (asked.push([id, a]), `Change ${ID}.`) } });
+      const s = await repo.create({ mode: 'chat' });
+      await chat.send(s.id, [area, { type: 'text', text: 'Make the sky purple' }]);
+      await chat.settle(s.id);
+      expect(asked).toEqual([[s.id, { image: area.notice.image, mask: area.notice.mask }]]);
+      const sent = seen.at(-1)!.messages[0]!.parts;
+      expect(sent.map((p) => (p.type === 'text' ? p.text : p.type)).slice(-2)).toEqual([`<context-update>\nChange ${ID}.\n</context-update>`, 'Make the sky purple']);
+      expect(sent.some((p) => p.type === 'image')).toBe(false);
+      const stored = (await chat.snapshot(s.id)).messages.filter((m) => m.role === 'user').at(-1)!.parts.find((p) => p.type === 'context' && p.notice?.kind === 'area');
+      expect(stored).toEqual({ type: 'context', text: `Change ${ID}.`, notice: area.notice });
+    });
+
+    it('refuses the message when the area cannot work, saying why, and stores nothing', async () => {
+      const chat = service(undefined, undefined, { images: { ...images, areaNote: async () => { throw new Error("There's no image img_00000000 in this conversation."); } } });
+      const s = await repo.create({ mode: 'chat' });
+      await expect(chat.send(s.id, [area, { type: 'text', text: 'Make the sky purple' }])).rejects.toThrow("There's no image");
+      expect(await repo.history(s.id)).toHaveLength(0);
+    });
+
+    it('refuses it without any image model, and keeps one area to a message', async () => {
+      const bare = service();
+      const s = await repo.create({ mode: 'chat' });
+      await expect(bare.send(s.id, [area, { type: 'text', text: 'x' }])).rejects.toThrow('No image model');
+      const notes: string[] = [];
+      expect(await withAreas({ ...images, areaNote: async () => (notes.push('n'), 'note') }, s.id, [area, area, { type: 'text', text: 'x' }])).toHaveLength(2);
+      expect(notes).toHaveLength(1);
+    });
+  });
 
   it('gives a model that cannot see a tool result’s image words instead of pixels', async () => {
     const content = await requestAfterToolImage(info);

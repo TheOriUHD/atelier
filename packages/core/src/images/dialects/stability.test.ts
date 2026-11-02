@@ -1,6 +1,7 @@
+import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { lookUp, STABILITY_MODELS } from '../catalog.ts';
-import { deps, events, fakeFetch, finishOf, formFields, imagesOf, INPUT, instance, jsonResponse, keepingBodies, KEY, PNG_B64, request, stopped } from './__fixtures__/images.ts';
+import { deps, events, fakeFetch, finishOf, formFields, formFile, imagesOf, INPUT, instance, jsonResponse, keepingBodies, KEY, MASK, PNG_B64, request, stopped } from './__fixtures__/images.ts';
 import { createStability } from './stability.ts';
 
 const BASE = 'https://api.stability.ai';
@@ -43,11 +44,14 @@ describe('Stability AI', () => {
 
   it('sends a mask to the inpaint route', async () => {
     const t = setup('POST /v2beta/stable-image/edit/inpaint');
-    await events(t.service.generate(request({ model: 'sd3.5-large', capabilities: caps, aspectRatio: '1:1', references: [INPUT], mask: { ...INPUT, name: 'mask.png' } })));
+    await events(t.service.generate(request({ model: 'sd3.5-large', capabilities: caps, aspectRatio: '1:1', references: [INPUT], mask: MASK })));
     const fields = formFields(t.bodies[0]!);
     expect(fields).toMatchObject({ image: 'file:input.png', mask: 'file:mask.png', prompt: 'a red lighthouse' });
     expect(fields).not.toHaveProperty('aspect_ratio');
     expect(fields).not.toHaveProperty('strength');
+    // White changes in Stability's own words, so the internal mask goes as it is.
+    const sent = PNG.sync.read(Buffer.from(formFile(t.bodies[0]!, 'mask')));
+    expect([sent.data[0], sent.data[4]]).toEqual([255, 0]);
   });
 
   it('counts a blurred result as a refusal and never keeps it', async () => {

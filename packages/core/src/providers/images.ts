@@ -58,7 +58,7 @@ export function sniffMime(b: Uint8Array): ImageMime | null {
   return null;
 }
 
-interface Raster {
+export interface Raster {
   width: number;
   height: number;
   /** RGBA, row by row. */
@@ -68,7 +68,7 @@ interface Raster {
 /** More than this many pixels is too much to decode in memory (RGBA is four bytes each). */
 const MAX_PIXELS = 100_000_000;
 
-function decode(bytes: Uint8Array, mime: ImageMime): Raster | null {
+export function decode(bytes: Uint8Array, mime: ImageMime): Raster | null {
   try {
     if (mime === 'image/png') {
       const png = PNG.sync.read(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));

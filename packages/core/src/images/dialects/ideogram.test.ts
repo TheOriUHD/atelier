@@ -1,13 +1,14 @@
+import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { IDEOGRAM_MODELS, lookUp } from '../catalog.ts';
 import { fitParams } from '../params.ts';
-import { deps, events, fakeFetch, finishOf, formFields, imagesOf, INPUT, instance, jsonResponse, keepingBodies, KEY, request, stopped } from './__fixtures__/images.ts';
+import { deps, events, fakeFetch, finishOf, formFields, formFile, imagesOf, INPUT, instance, jsonResponse, keepingBodies, KEY, MASK as INTERNAL_MASK, request, stopped } from './__fixtures__/images.ts';
 import { createIdeogram } from './ideogram.ts';
 
 const BASE = 'https://api.ideogram.ai';
 const OK = { generation_kind: 'sampling', generation_id: 'g1', seed: 12345, data: [{ prompt: 'a red lighthouse', resolution: '1024x1024', is_image_safe: true, seed: 12345, url: 'https://ideogram.ai/api/images/ephemeral/a.png?exp=1' }] };
 const caps = (model: string) => lookUp(IDEOGRAM_MODELS, model);
-const MASK = { ...INPUT, name: 'mask.png' };
+const MASK = INTERNAL_MASK;
 
 function setup(route: string, answer: () => Response = () => jsonResponse(OK)) {
   const fake = fakeFetch({ [route]: answer });
@@ -29,6 +30,14 @@ describe('Ideogram', () => {
     const t = setup('POST /v2/image/precise-edit/ideogram-4-5');
     await events(t.service.generate(request({ model: 'ideogram-4-5', capabilities: caps('ideogram-4-5'), references: [INPUT, { ...INPUT, name: 'guide.png' }], mask: MASK })));
     expect(formFields(t.bodies[0]!)).toMatchObject({ prompt: 'a red lighthouse', image: 'file:input.png', reference_images: 'file:guide.png', mask: 'file:mask.png' });
+  });
+
+  it('sends black where it changes, as Ideogram reads a mask: the opposite of the internal one', async () => {
+    const t = setup('POST /v2/image/inpaint/ideogram-3');
+    await events(t.service.generate(request({ model: 'ideogram-3', capabilities: caps('ideogram-3'), references: [INPUT], mask: MASK })));
+    const sent = PNG.sync.read(Buffer.from(formFile(t.bodies[0]!, 'mask')));
+    const red = (x: number, y: number) => sent.data[(y * sent.width + x) * 4];
+    expect([red(0, 0), red(1, 0)]).toEqual([0, 255]);
   });
 
   it('generates with 4 from JSON, and picks its speed from the quality', async () => {

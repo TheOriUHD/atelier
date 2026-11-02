@@ -18,6 +18,7 @@ import { arr, dataUrl, isRecord, num, rec, str } from '../../providers/util.ts';
 import { GPT_IMAGE_1, HOSTED_DEFAULTS, lookUp, OPENAI_MODELS, RECRAFT_MODEL_IDS, RECRAFT_MODELS, SQUARE, TOGETHER_MODELS, XAI_MODEL_IDS, XAI_MODELS, type ModelTable } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
 import { multipart, type MultipartField } from '../multipart.ts';
+import { transparentChanges } from '../mask.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 import { failureOf, imageStream, listedModel, noImage, refusal, usageEvent } from './hosted.ts';
 import { localEdit, localFields, localModels } from './openai-local.ts';
@@ -152,7 +153,11 @@ async function* eventsFromResult(instance: ImageInstance, deps: ImageAdapterDeps
 function editBody(instance: ImageInstance, request: ImageRequest, extra: Record<string, string> = {}) {
   const form: MultipartField[] = Object.entries({ ...fields(instance, request), ...extra }).map(([name, value]) => ({ name, value: String(value) }));
   for (const image of request.references) form.push({ name: request.references.length > 1 ? 'image[]' : 'image', filename: image.name, mime: image.mime, bytes: image.bytes });
-  if (request.mask) form.push({ name: 'mask', filename: request.mask.name, mime: request.mask.mime, bytes: request.mask.bytes });
+  // OpenAI marks the area to change by making it transparent, not by painting it white.
+  if (request.mask) {
+    const mask = transparentChanges(request.mask);
+    form.push({ name: 'mask', filename: mask.name, mime: mask.mime, bytes: mask.bytes });
+  }
   return multipart(form);
 }
 

@@ -188,6 +188,12 @@ export function workflowCapabilities(workflow: ImageWorkflow, samplers: readonly
   };
 }
 
+/** Which channel the workflow's mask node reads: `red` (white changes, as in our templates) unless it says `alpha`. */
+export function maskChannel(workflow: ImageWorkflow): 'red' | 'alpha' {
+  const place = workflow.map.mask;
+  return place && rec(rec(workflow.graph[place.node]).inputs).channel === 'alpha' ? 'alpha' : 'red';
+}
+
 /** The workflow's graph with this request's values in it. The original stays as it was saved. */
 export function applyWorkflow(workflow: ImageWorkflow, request: ImageRequest, seed: number, images: readonly string[], mask: string | undefined): GraphPlan {
   const graph = structuredClone(workflow.graph) as Graph;

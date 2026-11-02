@@ -11,6 +11,7 @@
 import { arr, isRecord, num, rec, str } from '../../providers/util.ts';
 import { IDEOGRAM_MODEL_IDS, IDEOGRAM_MODELS, lookUp } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
+import { blackChanges } from '../mask.ts';
 import { multipart, type MultipartField } from '../multipart.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInput, ImageInstance, ImageRequest } from '../types.ts';
 import { failureOf, listedModel, noImage, refusal } from './hosted.ts';
@@ -30,13 +31,13 @@ function latest(r: ImageRequest): { path: string; form: MultipartField[] } {
   const quality = text('quality', r.quality === 'draft' ? 'medium' : r.quality === 'high' ? 'high' : undefined);
   const [input, ...guides] = r.references;
   if (!input) return { path: `generate/${r.model}`, form: [...shared(r), ...quality, ...text('size', sizeOf(r)), ...text('background', r.transparent ? 'transparent' : undefined)] };
-  return { path: `precise-edit/${r.model}`, form: [...shared(r), ...quality, file('image', input), ...guides.map((g) => file('reference_images', g)), ...(r.mask ? [file('mask', r.mask)] : [])] };
+  return { path: `precise-edit/${r.model}`, form: [...shared(r), ...quality, file('image', input), ...guides.map((g) => file('reference_images', g)), ...(r.mask ? [file('mask', blackChanges(r.mask))] : [])] };
 }
 
 /** Ideogram 3: `generate`, `remix` for an input image, `inpaint` with a mask. Its rendering speeds aren't documented for v2, so they're left to its default. */
 function third(r: ImageRequest): { path: string; form: MultipartField[] } {
   const input = r.references[0];
-  if (input && r.mask) return { path: `inpaint/${r.model}`, form: [...shared(r), file('image', input), file('mask', r.mask)] };
+  if (input && r.mask) return { path: `inpaint/${r.model}`, form: [...shared(r), file('image', input), file('mask', blackChanges(r.mask))] };
   const shape = [...text('aspect_ratio', r.aspectRatio), ...text('negative_prompt', r.negativePrompt)];
   if (input) return { path: `remix/${r.model}`, form: [...shared(r), ...shape, file('image', input)] };
   return { path: `generate/${r.model}`, form: [...shared(r), ...shape] };

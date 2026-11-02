@@ -65,6 +65,7 @@ export function regionOf(baseUrl: string): string | null {
 function invokeBody(request: ImageRequest): Record<string, unknown> {
   const input = request.references[0];
   const shared = { prompt: request.prompt, output_format: 'png', ...(request.negativePrompt ? { negative_prompt: request.negativePrompt } : {}), ...(request.seed !== undefined ? { seed: request.seed } : {}) };
+  // Stability's inpaint service: white changes, as in the internal mask (images/mask.ts).
   if (input && request.mask) return { ...shared, image: toBase64(input.bytes), mask: toBase64(request.mask.bytes) };
   if (input) return { ...shared, mode: 'image-to-image', image: toBase64(input.bytes), strength: IMAGE_STRENGTH };
   return { ...shared, ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}) };

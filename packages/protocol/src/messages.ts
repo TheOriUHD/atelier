@@ -65,6 +65,12 @@ export const Notice = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('quote'), text: z.string().min(1).max(QUOTE_MAX_CHARS) }),
   /**
+   * "Change this area": the person brushed over part of an image of this conversation and uploaded the mask (white
+   * marks what changes). The message's text says how; the backend writes what the model is told, from these two
+   * images and nothing the client put in `text`. The mask is not an attachment: the model never sees it as a picture.
+   */
+  z.object({ kind: z.literal('area'), image: z.object({ blob: z.string(), mime: z.string() }), mask: z.object({ blob: z.string(), mime: z.string() }) }),
+  /**
    * A message another agent sent this session with SendMessage: from another of the person's sessions, from the
    * session's parent (this is a sub-agent) or from one of its sub-agents (`taskId` names it). `text` is the message.
    */

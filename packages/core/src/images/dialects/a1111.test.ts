@@ -188,7 +188,7 @@ describe('a1111 generation', () => {
     const mask = { bytes: pngOf(1000, 500), mime: 'image/png', name: 'mask.png' };
     await drain(createA1111(a1111(), deps, { pollMs: 10_000 }).generate(imageRequest({ references: [input], mask })));
     const body = bodyOf(calls, 'img2img');
-    expect(body).toMatchObject({ width: 728, height: 360, denoising_strength: 0.6, inpainting_fill: 1, mask_blur: 4 });
+    expect(body).toMatchObject({ width: 728, height: 360, denoising_strength: 0.6, inpainting_fill: 1, inpainting_mask_invert: 0, mask_blur: 4 });
     expect(body.init_images).toEqual([Buffer.from(input.bytes).toString('base64')]);
     expect(body.mask).toBe(Buffer.from(mask.bytes).toString('base64'));
     expect(calls.some((c) => c.url.includes('txt2img'))).toBe(false);

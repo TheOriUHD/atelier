@@ -293,6 +293,7 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
               generate: async () => ({ content: [] }),
               available: async () => true,
               modelList: async () => '- comfy/sdxl (SDXL): prompt in comma-separated tags, takes a negative prompt, can change images',
+              areaNote: async () => '',
             },
           }
         : {}),

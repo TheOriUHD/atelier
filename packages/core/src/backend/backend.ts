@@ -960,6 +960,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       generate: (input, ctx) => images.generate(input, ctx),
       available: (session) => images.available(imageFacts(session)),
       modelList: (session) => images.modelList(imageFacts(session)),
+      areaNote: (sessionId, area) => images.areaNote(sessionId, area),
     },
     usage: usageSource,
     search,

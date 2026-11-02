@@ -7,13 +7,14 @@ import { probe } from '../../../providers/http.ts';
 import { imageSize } from '../../../providers/image-size.ts';
 import { mapLimit, rec } from '../../../providers/util.ts';
 import { guardImages } from '../../guard.ts';
+import { transparentChanges } from '../../mask.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest } from '../../types.ts';
 import { ComfyClient, type ComfyImage } from './client.ts';
 import { detectFamily, discoverModels, DISCOVERY_NODES, sourceOf, stackFor, type NodeInfo, type ObjectInfo } from './discovery.ts';
 import { promptError } from './errors.ts';
 import { followJob, TIMING, type JobTiming } from './job.ts';
 import { buildGraph, type GraphPlan } from './templates.ts';
-import { applyWorkflow, readWorkflow, workflowIdOf } from './workflow.ts';
+import { applyWorkflow, maskChannel, readWorkflow, workflowIdOf } from './workflow.ts';
 
 /** How many `/object_info/<node>` reads run at once: each holds up that server's other requests while it runs. */
 const NODE_READS_AT_ONCE = 4;
@@ -46,10 +47,11 @@ export function createComfyUi(instance: ImageInstance, deps: ImageAdapterDeps, t
   async function plan(request: ImageRequest, seed: number): Promise<GraphPlan> {
     const { signal, model, references } = request;
     const images = await Promise.all(references.map((image) => client.upload(image, signal)));
-    const mask = request.mask ? await client.upload(request.mask, signal) : undefined;
     const workflowId = workflowIdOf(model);
+    const workflow = workflowId === null ? undefined : instance.workflows.find((w) => w.id === workflowId);
+    // An imported workflow may read its mask from the alpha channel, where transparent changes; our templates read red.
+    const mask = request.mask ? await client.upload(workflow && maskChannel(workflow) === 'alpha' ? transparentChanges(request.mask) : request.mask, signal) : undefined;
     if (workflowId !== null) {
-      const workflow = instance.workflows.find((w) => w.id === workflowId);
       if (!workflow) throw new Error(`${instance.name} has no workflow "${workflowId}" any more.`);
       return applyWorkflow(workflow, request, seed, images, mask);
     }

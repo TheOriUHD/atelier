@@ -1,6 +1,8 @@
+import { PNG as PngReader } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 import { jsonResponse } from '../../../providers/__fixtures__/harness.ts';
 import { createImageAdapter } from '../../index.ts';
+import { MASK } from '../__fixtures__/images.ts';
 import type { ImageAdapter, ImageEvent, ImageInstance, ImageRequest, ImageSocket } from '../../types.ts';
 import { BASE, collectEvents, fakeServer, FakeSocket, historyEntry, IMAGE, imageRequest, instance, message as m, metadataFrame, nodesOf, PNG, previewFrame, sentGraph, type Server, type ServerOptions } from './__fixtures__/comfy.ts';
 import { decodeFrame } from './frames.ts';
@@ -876,6 +878,28 @@ describe('imported workflows as models', () => {
     const { map: { output: _output, ...map }, ...rest } = workflow;
     const { adapter } = setup({ instance: { ...instance, workflows: [{ ...rest, map }] }, onPrompt: (id, s) => s.socket.push(m.executed(id, '6'), m.success(id)) });
     expect((await collectEvents(adapter.generate(imageRequest({ model: 'workflow:wf-1' })))).filter((e) => e.type === 'image')).toHaveLength(1);
+  });
+
+  it('sends a mask its way: a workflow that reads the alpha channel gets transparent where it changes', async () => {
+    const graph = { ...workflow.graph, 7: { class_type: 'LoadImageMask', inputs: { image: 'x.png', channel: 'alpha' } } };
+    const masked = { ...workflow, graph, map: { ...workflow.map, mask: { node: '7', input: 'image' } } };
+    const { adapter, server } = setup({ instance: { ...instance, workflows: [masked] }, onPrompt: (id, s) => s.socket.push(m.executed(id, '6'), m.success(id)) });
+    await collectEvents(adapter.generate(imageRequest({ model: 'workflow:wf-1', references: [{ bytes: PNG, mime: 'image/png', name: 'in.png' }], mask: MASK })));
+    const body = Buffer.from(server.bodies.filter((b) => b.url.endsWith('/upload/image'))[1]?.body as Uint8Array);
+    const start = body.indexOf(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const sent = PngReader.sync.read(body.subarray(start, body.indexOf('IEND', start) + 8));
+    expect([sent.data[3], sent.data[7]]).toEqual([0, 255]);
+  });
+
+  it('keeps a mask white-changes for a workflow that reads the red channel, as ours do', async () => {
+    const graph = { ...workflow.graph, 7: { class_type: 'LoadImageMask', inputs: { image: 'x.png', channel: 'red' } } };
+    const masked = { ...workflow, graph, map: { ...workflow.map, mask: { node: '7', input: 'image' } } };
+    const { adapter, server } = setup({ instance: { ...instance, workflows: [masked] }, onPrompt: (id, s) => s.socket.push(m.executed(id, '6'), m.success(id)) });
+    await collectEvents(adapter.generate(imageRequest({ model: 'workflow:wf-1', references: [{ bytes: PNG, mime: 'image/png', name: 'in.png' }], mask: MASK })));
+    const body = Buffer.from(server.bodies.filter((b) => b.url.endsWith('/upload/image'))[1]?.body as Uint8Array);
+    const start = body.indexOf(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const sent = PngReader.sync.read(body.subarray(start, body.indexOf('IEND', start) + 8));
+    expect([sent.data[0], sent.data[4]]).toEqual([255, 0]);
   });
 
   it('says so when a workflow is gone', async () => {

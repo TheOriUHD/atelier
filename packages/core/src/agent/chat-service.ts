@@ -228,6 +228,8 @@ export interface ChatServiceDeps {
     available(session: SessionRow): Promise<boolean>;
     /** The models, one per line with what the text model needs to choose. */
     modelList(session: SessionRow): Promise<string>;
+    /** What the model is told about an area the person brushed; throws what the person should read when it can't work. */
+    areaNote(sessionId: string, area: { image: { blob: string; mime: string }; mask: { blob: string; mime: string } }): Promise<string>;
   };
   /**
    * Per-person usage limits (ARCHITECTURE §8): `admit` is asked before every model request (a refusal ends the turn),
@@ -702,7 +704,8 @@ export class ChatService {
   }
 
   async send(sessionId: string, rawParts: Part[], parentId?: string | null): Promise<string> {
-    const parts = withQuotes(rawParts);
+    const checked = this.checked(sessionId, withQuotes(rawParts));
+    const parts = Array.isArray(checked) ? checked : await checked;
     const id = newId();
     await this.start(sessionId, true, {
       before: async () => {
@@ -726,6 +729,14 @@ export class ChatService {
       },
     });
     return id;
+  }
+
+  /**
+   * The parts with their marked areas checked. A message with none is not delayed by a tick: a send registers its run
+   * before anything else can slip in (a loop coming due, a second send), and that holds only if nothing is awaited first.
+   */
+  private checked(sessionId: string, parts: Part[]): Part[] | Promise<Part[]> {
+    return parts.some((p) => p.type === 'context' && p.notice?.kind === 'area') ? withAreas(this.deps.images, sessionId, parts) : parts;
   }
 
   /** Edit = a new sibling of the user message, then a fresh reply on that branch. */
@@ -770,7 +781,8 @@ export class ChatService {
    * back or send it at once) and the agent takes it at its next step; an idle one simply sends it.
    */
   async queue(sessionId: string, rawParts: Part[]): Promise<{ id: string; queued: boolean }> {
-    const parts = withQuotes(rawParts);
+    const checked = this.checked(sessionId, withQuotes(rawParts));
+    const parts = Array.isArray(checked) ? checked : await checked;
     if (!this.runs.has(sessionId)) return { id: await this.send(sessionId, parts), queued: false };
     const item: OutboxMessage = { id: newId(), parts };
     this.setOutbox(sessionId, [...(this.outboxes.get(sessionId) ?? []), item]);
@@ -2959,6 +2971,31 @@ export function withQuotes(parts: Part[]): Part[] {
       .join('\n');
     return [{ type: 'context', text: `The person is replying to this passage from earlier in the conversation:\n${block}`, notice: { kind: 'quote', text: quoted } }];
   });
+}
+
+/** At most one marked area to a message: a second would be a second mask for the same call. */
+const AREA_MAX_COUNT = 1;
+
+/**
+ * Areas the person brushed (`notice.kind === 'area'`): each is checked (both images are this conversation's, the mask is
+ * a real mask for that image, an image model exists) and the note to the model is written from the two images alone.
+ * Throws what the person should read, so a mask that can't work is refused when it is sent.
+ */
+export async function withAreas(images: ChatServiceDeps['images'], sessionId: string, parts: Part[]): Promise<Part[]> {
+  let count = 0;
+  const out: Part[] = [];
+  for (const p of parts) {
+    if (p.type !== 'context' || p.notice?.kind !== 'area') {
+      out.push(p);
+      continue;
+    }
+    if (++count > AREA_MAX_COUNT) continue;
+    if (!images) throw new Error('No image model is available. An admin adds one in Settings › Image providers.');
+    const { image, mask } = p.notice;
+    const note = await images.areaNote(sessionId, { image, mask });
+    out.push({ type: 'context', text: note, notice: { kind: 'area', image, mask } });
+  }
+  return out;
 }
 
 /** The person's own messages a suggestion is guessed from, at most (their habits show in the recent ones). */

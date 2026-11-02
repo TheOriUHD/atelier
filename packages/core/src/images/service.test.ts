@@ -1,3 +1,4 @@
+import { PNG as PngFile } from 'pngjs';
 import { describe, expect, it, vi } from 'vitest';
 import { imageId, type ImageCapabilities, type ImageModelInfo, type Message, type RunEvent } from '@atelier/protocol';
 import { openDatabase } from '../store/db.ts';
@@ -276,6 +277,116 @@ describe('ImageService', () => {
     const out = await t.service.generate({ prompt: 'x', reference_images: [imageId(sha)] }, t.ctx());
     expect((out.content[0] as { text: string }).text).toContain("isn't an image");
     expect(t.requests).toHaveLength(0);
+  });
+
+  describe('changing one area', () => {
+    /** A real PNG: white where `white(x, y)`, black elsewhere. */
+    const pic = (w: number, h: number, white: (x: number, y: number) => boolean = () => false) => {
+      const p = new PngFile({ width: w, height: h });
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) p.data.set(white(x, y) ? [255, 255, 255, 255] : [0, 0, 0, 255], (y * w + x) * 4);
+      return new Uint8Array(PngFile.sync.write(p));
+    };
+    const SOURCE = 'd'.repeat(64);
+    const MASK = 'e'.repeat(64);
+    const message = (parts: unknown[]) => ({ id: 'm', sessionId: 's', parentId: null, role: 'user', parts, model: null, usage: null, stopReason: null, error: null, kind: 'normal', summarizesThroughId: null, createdAt: 0 }) as Message;
+    const area = { type: 'context', text: '', notice: { kind: 'area', image: { blob: SOURCE, mime: 'image/png' }, mask: { blob: MASK, mime: 'image/png' } } };
+    const history = [message([{ type: 'image', mime: 'image/png', blob: SOURCE }, area])];
+    const masking = info({ capabilities: { ...capabilities, mask: true } });
+    const stores = (t: ReturnType<typeof setup>, files: Record<string, Uint8Array>) => {
+      (t.service as unknown as { deps: ImageServiceDeps }).deps.blobs = { put: async () => ({ sha256: 'a'.repeat(64), size: 1, mime: 'image/png', createdAt: 0 }), read: async (sha) => (files[sha] ?? PNG) as Uint8Array<ArrayBuffer> };
+    };
+    const call = (t: ReturnType<typeof setup>, extra: Record<string, unknown> = {}) =>
+      t.service.generate({ prompt: 'a purple sky', reference_images: [imageId(SOURCE)], mask: imageId(MASK), ...extra }, t.ctx());
+    const text = (out: { content: unknown[] }) => (out.content[0] as { text: string }).text;
+
+    it('hands the adapter a mask in the internal convention, resized to the input image the adapter gets', async () => {
+      const t = setup({ models: [masking], history });
+      // The brush was painted on a 400×200 canvas of an image that is 100×50 here: white on the left half.
+      stores(t, { [SOURCE]: pic(100, 50), [MASK]: pic(400, 200, (x) => x < 200) });
+      const out = await call(t);
+      expect(out.isError).toBeUndefined();
+      const sent = t.requests[0]!.mask!;
+      const read = PngFile.sync.read(Buffer.from(sent.bytes));
+      expect([read.width, read.height]).toEqual([100, 50]);
+      expect([read.data[0], read.data[(99) * 4]]).toEqual([255, 0]);
+    });
+
+    it('finds a mask that was uploaded as an ordinary attachment, too', async () => {
+      const t = setup({ models: [masking], history: [message([{ type: 'image', mime: 'image/png', blob: SOURCE }, { type: 'image', mime: 'image/png', blob: MASK }])] });
+      stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10, (x) => x < 5) });
+      expect((await call(t)).isError).toBeUndefined();
+      expect(t.requests[0]?.mask).toBeDefined();
+    });
+
+    it('only finds a mask in its own conversation, like any image', async () => {
+      const t = setup({ models: [masking], history: [message([{ type: 'image', mime: 'image/png', blob: SOURCE }])] });
+      stores(t, { [SOURCE]: pic(10, 10) });
+      const out = await call(t);
+      expect(out.isError).toBe(true);
+      expect(text(out)).toContain(`There's no image ${imageId(MASK)}`);
+      expect(t.requests).toHaveLength(0);
+    });
+
+    it('tells the model when its "mask" is really a picture, or marks nothing', async () => {
+      const t = setup({ models: [masking], history });
+      const photo = new PngFile({ width: 10, height: 10 });
+      for (let i = 0; i < 100; i++) photo.data.set([i * 2, 90, 200 - i, 255], i * 4);
+      stores(t, { [SOURCE]: pic(10, 10), [MASK]: new Uint8Array(PngFile.sync.write(photo)) });
+      expect(text(await call(t))).toContain('is a picture, not a mask');
+      stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10) });
+      expect(text(await call(t))).toContain('marks nothing to change');
+      expect(t.requests).toHaveLength(0);
+    });
+
+    it('needs the image the mask belongs to', async () => {
+      const t = setup({ models: [masking], history });
+      stores(t, { [MASK]: pic(10, 10, (x) => x < 5) });
+      const out = await t.service.generate({ prompt: 'x', mask: imageId(MASK) }, t.ctx());
+      expect(out.isError).toBe(true);
+      expect(text(out)).toContain('put that image');
+    });
+
+    it("says so when the model can't change one area, and offers one that can instead of quietly changing everything", async () => {
+      const plain = info();
+      const capable = info({ ref: 'img/inpaint', modelId: 'inpaint', displayName: 'Inpainter', capabilities: { ...capabilities, mask: true } });
+      const t = setup({ models: [plain, capable], history });
+      stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10, (x) => x < 5) });
+      const out = await call(t);
+      expect(out.isError).toBe(true);
+      expect(text(out)).toContain("can't change just one area");
+      expect(text(out)).toContain('img/inpaint (Inpainter)');
+      expect(t.requests).toHaveLength(0);
+      // And with that model named, it goes through.
+      expect((await call(t, { model: 'img/inpaint' })).isError).toBeUndefined();
+    });
+
+    it('offers the whole picture when no model here can mask', async () => {
+      const t = setup({ models: [info()], history });
+      stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10, (x) => x < 5) });
+      expect(text(await call(t))).toContain('No image model here can');
+    });
+
+    describe('the note to the model', () => {
+      const area = { image: { blob: SOURCE, mime: 'image/png' }, mask: { blob: MASK, mime: 'image/png' } };
+
+      it('names both images and the models that can, and says the mask is not a picture', async () => {
+        const t = setup({ models: [masking], history });
+        stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10, (x) => x < 5) });
+        const note = await t.service.areaNote('s', area);
+        expect(note).toContain(`reference_images\` ["${imageId(SOURCE)}"]`);
+        expect(note).toContain(`\`mask\` "${imageId(MASK)}"`);
+        expect(note).toContain('img/m');
+        expect(note).toContain('not a picture');
+      });
+
+      it('refuses at send time what could not work, in words for the person', async () => {
+        const t = setup({ models: [masking], history: [] });
+        stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10, (x) => x < 5) });
+        await expect(t.service.areaNote('s', area)).rejects.toThrow("There's no image");
+        const empty = setup({ models: [], history });
+        await expect(empty.service.areaNote('s', area)).rejects.toThrow('No image model is available');
+      });
+    });
   });
 
   it('counts images under way towards the daily limit, across sessions', async () => {

@@ -16,6 +16,7 @@ import type { ProviderFetch } from '../providers/types.ts';
 import { toBase64 } from '../providers/util.ts';
 import { textOutput, type ToolContext, type ToolOutput } from '../tools/types.ts';
 import { checkImage, type DownloadedImage } from './download.ts';
+import { MaskError, normaliseMask } from './mask.ts';
 import { fitParams, type SizeName } from './params.ts';
 import { imageCost, listImagePrice } from './prices.ts';
 import { ImageModelUnavailable, type ImageProviderRegistry, type ResolvedImageModel } from './registry.ts';
@@ -106,10 +107,20 @@ function imagesIn(messages: readonly Message[]): Map<string, string> {
   for (const m of messages) {
     for (const p of m.parts) {
       if (p.type === 'image') add(p.blob);
-      else if (p.type === 'tool_result') for (const c of p.content) if (c.type === 'image') add(c.blob);
+      else if (p.type === 'tool_result') {
+        for (const c of p.content) if (c.type === 'image') add(c.blob);
+      }
+      // The brushed mask of "change this area" is no attachment, but the model passes its id as `mask`.
+      else if (p.type === 'context' && p.notice?.kind === 'area') add(p.notice.mask.blob);
     }
   }
   return found;
+}
+
+/** An image of the conversation and the mask the person brushed on it (`Notice` kind `area`). */
+export interface AreaEdit {
+  image: { blob: string; mime: string };
+  mask: { blob: string; mime: string };
 }
 
 export class ImageService {
@@ -147,18 +158,78 @@ export class ImageService {
    * An input image, by its id only. Paths aren't taken: this tool goes unreviewed, so a path would let a prompt-injected
    * model send any file in the folder to a provider. A file comes in through Read, which has permissions, and gets an id.
    */
-  private async inputImage(sessionId: string, reference: string): Promise<ImageInput> {
+  /** The bytes of one of this conversation's images by its id. Only this conversation's: a model can't reach anything else by guessing hashes. */
+  private async imageBytes(sessionId: string, reference: string): Promise<{ bytes: Uint8Array; mime: NonNullable<ReturnType<typeof sniffMime>> }> {
     if (!reference.startsWith(IMAGE_ID_PREFIX)) throw new ImageCallError(`"${reference}" isn't an image id. To use an image file, open it with Read first, then pass the id you get.`);
-    // Only this conversation's images: a model can't reach anything else by guessing hashes.
     const known = imagesIn(await this.deps.history(sessionId));
     const sha = known.get(reference);
     if (!sha) throw new ImageCallError(`There's no image ${reference} in this conversation.${known.size ? ` Images here: ${[...known.keys()].join(', ')}.` : ''}`);
     const bytes = await this.deps.blobs.read(sha);
     const mime = sniffMime(bytes);
     if (!mime) throw new ImageCallError(`${reference} isn't an image.`);
+    return { bytes, mime };
+  }
+
+  /**
+   * The mask for `reference`, in the internal convention (white changes, images/mask.ts) and exactly its size, so each
+   * dialect only has to convert, never to resize. A mask that is really a picture, or marks nothing, is the model's mistake to hear.
+   */
+  private async maskImage(sessionId: string, id: string, reference: ImageInput): Promise<ImageInput> {
+    const { bytes } = await this.imageBytes(sessionId, id);
+    try {
+      return normaliseMask(bytes, reference);
+    } catch (error) {
+      if (error instanceof MaskError) throw new ImageCallError(`The mask ${id} ${error.message}`);
+      throw error;
+    }
+  }
+
+  private async inputImage(sessionId: string, reference: string): Promise<ImageInput> {
+    const { bytes, mime } = await this.imageBytes(sessionId, reference);
     const fitted = fitImage(bytes, mime, MAX_INPUT_SIDE, MAX_INPUT_BYTES);
     if (!fitted.ok) throw new ImageCallError(`The image ${reference} ${fitted.reason}.`);
     return { bytes: fitted.image.bytes, mime: fitted.image.mime, name: `input-${reference}.${fitted.image.mime.split('/')[1]}` };
+  }
+
+  /** The available models that can change one area, the person's choice first. */
+  async maskModels(session: ImageSessionFacts): Promise<ImageModelInfo[]> {
+    return (await this.models(session)).filter((m) => m.available !== false && m.capabilities.edit && m.capabilities.mask);
+  }
+
+  /** What the model hears when a model can't change one area: which can, if any, so it can offer that instead of quietly changing everything. */
+  private async cannotMask(session: ImageSessionFacts, model: ResolvedImageModel): Promise<string> {
+    const others = (await this.maskModels(session)).filter((m) => m.ref !== model.info.ref);
+    const head = `${model.config.name}'s ${model.info.displayName} can't change just one area.`;
+    if (others.length === 0) return `${head} No image model here can. Tell the person that, and offer to change the whole picture instead, without a mask: describe the result you want and pass only the image in \`reference_images\`.`;
+    return `${head} These can: ${others.map((m) => `${m.ref} (${m.displayName})`).join(', ')}. Say so, then call again with \`model\` set to one of them (a local server may need a moment to switch).`;
+  }
+
+  /**
+   * What the model is told when the person brushed an area (docs/PROMPTS.md): checked first, so a mask that can't work
+   * is refused when it is sent, not after the model spent a turn on it. Throws what the person should read.
+   */
+  async areaNote(sessionId: string, area: AreaEdit): Promise<string> {
+    const session = await this.deps.session(sessionId);
+    const models = await this.maskModels(session);
+    if (!(await this.available(session))) throw new Error('No image model is available. An admin adds one in Settings › Image providers.');
+    const image = imageId(area.image.blob);
+    const mask = imageId(area.mask.blob);
+    try {
+      const reference = await this.inputImage(sessionId, image);
+      // The same check the generation will make, with the model the person would get.
+      await this.maskImage(sessionId, mask, reference);
+    } catch (error) {
+      if (error instanceof ImageCallError) throw new Error(error.message, { cause: error });
+      throw error;
+    }
+    const capable = models.length > 0 ? `Image models that can change one area: ${models.map((m) => m.ref).join(', ')}.` : 'No image model here is known to change just one area; if GenerateImage says so, tell the person and offer to change the whole picture instead.';
+    return [
+      `The person brushed over part of the image ${image} and wants only that area changed. Their message says how.`,
+      `Call GenerateImage with \`reference_images\` ["${image}"] and \`mask\` "${mask}". The mask is not a picture to look at or describe: white marks the area to change.`,
+      '`prompt` describes the whole picture as it should look afterwards, with the change made, in the style of the original; everything outside the area stays as it is. Keep the original\'s aspect ratio.',
+      capable,
+      "If GenerateImage says the model can't change one area, follow what it says. Never paste the ids into your reply.",
+    ].join('\n');
   }
 
   /** The models as the text model reads them, the person's choice first. */
@@ -339,12 +410,16 @@ export class ImageService {
         },
         this.deps.settings().imageModels.overrides[model.info.ref]?.tuning,
       );
+      if (input.mask) {
+        if (!input.reference_images?.length) throw new ImageCallError('A mask belongs to an image: put that image\'s id first in `reference_images`.');
+        if (!fit.mask) throw new ImageCallError(await this.cannotMask(session, model));
+      }
       await this.checkLimits(ctx.sessionId, session.userId, fit.count);
       reserved = fit.count;
       underWay = fit.count;
 
       const references = await Promise.all((input.reference_images ?? []).slice(0, fit.references).map((r) => this.inputImage(ctx.sessionId, r)));
-      const mask = input.mask && fit.mask ? await this.inputImage(ctx.sessionId, input.mask) : undefined;
+      const mask = input.mask && fit.mask ? await this.maskImage(ctx.sessionId, input.mask, references[0]!) : undefined;
 
       const progress = this.progressReporter(ctx, { ...(fit.width ? { width: fit.width } : {}), ...(fit.height ? { height: fit.height } : {}), count: fit.count });
       progress.update({}, true);

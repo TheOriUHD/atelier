@@ -42,6 +42,7 @@ function form(request: ImageRequest, path: string): MultipartField[] {
       ? text('aspect_ratio', inpainting ? undefined : request.aspectRatio)
       : // An input image sets the shape, and `aspect_ratio` is only valid without one.
         [...(sd3 ? text('mode', 'image-to-image') : []), ...text('strength', IMAGE_STRENGTH), file('image', input)]),
+    // White changes, black stays: the internal convention, so the mask goes as it is (images/mask.ts).
     ...(inpainting && input && request.mask ? [file('image', input), file('mask', request.mask)] : []),
   ];
 }
