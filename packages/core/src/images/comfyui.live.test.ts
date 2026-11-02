@@ -205,7 +205,8 @@ describe.skipIf(!URL_)('ComfyUI, on a real server', () => {
     });
     summary('interrupted', result);
     expect(result.finish.reason).toBe('aborted');
-    expect(await queue()).toEqual({ running: [], pending: [] });
+    // The server needs a moment to wind the job down after it answers.
+    await expect.poll(queue, { timeout: 30_000, interval: 300 }).toEqual({ running: [], pending: [] });
   });
 
   it('takes its job off the queue when another is running, and leaves that one alone', { timeout: JOB_MS }, async () => {
