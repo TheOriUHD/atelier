@@ -4,6 +4,7 @@
  * a relay to the Atelier server (remote.ts).
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, powerSaveBlocker, protocol, safeStorage, session, shell, systemPreferences, utilityProcess, webContents, type UtilityProcess, type WebContents } from 'electron';
+import { AppWindows } from './app-windows.ts';
 import { ChatGptChatBrowser } from './chatgpt-chat.ts';
 import { connectIdentity } from './connect-identity.ts';
 import { autoUpdater } from 'electron-updater';
@@ -200,15 +201,9 @@ const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COM
 let steppedAside: BrowserWindow[] = [];
 // A test run with hidden windows doesn't light up the screen of the computer running it.
 const screenOverlay: ScreenOverlay = process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {}, working() {}, owns: () => false } : createOverlay();
-/** Atelier's own windows (not the overlay's), the one used last first. */
-let usedLast: BrowserWindow | null = null;
-app.on('browser-window-focus', (_event, win) => {
-  if (!screenOverlay.owns(win)) usedLast = win;
-});
-const atelierWindows = () => {
-  const all = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && !screenOverlay.owns(w));
-  return usedLast && all.includes(usedLast) ? [usedLast, ...all.filter((w) => w !== usedLast)] : all;
-};
+const appWindows = new AppWindows<BrowserWindow>();
+app.on('browser-window-focus', (_event, win) => appWindows.focused(win));
+const atelierWindows = () => appWindows.list();
 const computer = new ComputerController({
   helper: new ComputerHelper(computerHelperPath ?? '', APP.version),
   // macOS and Windows (ARCHITECTURE §22); a test's stand-in anywhere.
@@ -475,6 +470,12 @@ function createWindow(hash = ''): BrowserWindow {
       additionalArguments: [`--atelier-device=${JSON.stringify(device)}`, ...(hourCycle ? [`--atelier-clock=${hourCycle}`] : [])],
     },
   });
+  appWindows.add(win);
+  win.on('closed', () => {
+    appWindows.remove(win);
+    // The hidden ChatGPT Chat window stays open, so `window-all-closed` wouldn't come and Atelier would run on unseen.
+    if (!isMac && atelierWindows().length === 0) app.quit();
+  });
   // End-to-end runs set ATELIER_HIDE_WINDOW: the page works the same unseen, and no test window takes the screen or focus.
   if (!process.env.ATELIER_HIDE_WINDOW) {
     win.once('ready-to-show', () => win.show());
@@ -730,7 +731,7 @@ function registerIpc(): void {
     // A second switch may have finished while this one waited; its backend already matches `connection`.
     if (!backend) startBackend();
     // Every window follows the new connection, not only the one that chose it.
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.reload();
+    for (const win of atelierWindows()) win.webContents.reload();
     return null;
   });
   /** Settings › Account's "Sign out" / "Change setup…": back to the first-run choice. The built-in backend's data stays. */
@@ -743,7 +744,7 @@ function registerIpc(): void {
     followConnection();
     buildMenu();
     await stopBackend();
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.reload();
+    for (const win of atelierWindows()) win.webContents.reload();
   });
   // The first-run choice's "Found on your network"; each server is sent to the page as it answers.
   ipcMain.handle('discovery:scan', (event) =>
