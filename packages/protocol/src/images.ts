@@ -242,7 +242,7 @@ export const IMAGE_PROVIDER_PRESETS: readonly ImagePreset[] = [
   { id: 'koboldcpp', label: 'KoboldCpp', type: 'a1111', group: 'local', baseUrl: 'http://127.0.0.1:5001', key: 'none', help: 'Start it with an image model loaded.' },
   { id: 'sd-server', label: 'stable-diffusion.cpp', type: 'openai-images', group: 'local', baseUrl: 'http://127.0.0.1:1234', key: 'none', help: 'Use its sd-server program.' },
   { id: 'localai', label: 'LocalAI', type: 'openai-images', group: 'local', baseUrl: 'http://127.0.0.1:8080', key: 'optional' },
-  { id: 'ollama', label: 'Ollama', type: 'openai-images', group: 'local', baseUrl: 'http://127.0.0.1:11434', key: 'none', help: 'Image models in Ollama are experimental, and only some of its builds can run them.' },
+  { id: 'ollama', label: 'Ollama', type: 'openai-images', group: 'local', baseUrl: 'http://127.0.0.1:11434', key: 'none', help: 'Ollama removed image generation in version 0.33, so this needs an older version.' },
   { id: 'openai', label: 'OpenAI', type: 'openai-images', group: 'cloud', baseUrl: 'https://api.openai.com', key: 'required', keyUrl: 'https://platform.openai.com/api-keys', sharesKeyWith: 'openai' },
   { id: 'chatgpt', label: 'ChatGPT Plan', type: 'responses-image', group: 'cloud', baseUrl: 'https://chatgpt.com/backend-api/codex', key: 'none', help: 'Uses your ChatGPT Plan sign-in, and your plan’s limits.' },
   { id: 'gemini', label: 'Google Gemini', type: 'gemini', group: 'cloud', baseUrl: 'https://generativelanguage.googleapis.com', key: 'required', keyUrl: 'https://aistudio.google.com/apikey' },

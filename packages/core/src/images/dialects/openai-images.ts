@@ -20,6 +20,7 @@ import { guardImages } from '../guard.ts';
 import { multipart, type MultipartField } from '../multipart.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 import { failureOf, imageStream, listedModel, noImage, refusal, usageEvent } from './hosted.ts';
+import { fromImg2Img, localEdit, localFields, localModels, localSeed, OLLAMA_NO_IMAGES, ollamaHealth } from './openai-local.ts';
 
 /** Model ids that aren't for images, for servers whose list holds everything. */
 const NOT_IMAGES = /embed|whisper|tts|transcri|moderation|rerank|audio|realtime|video|vision/i;
@@ -63,9 +64,9 @@ const asDataUrl = (image: ImageRequest['references'][number]) => dataUrl(image.m
 function openAiFields(instance: ImageInstance, request: ImageRequest): Record<string, unknown> {
   const gpt = request.capabilities.family === 'gpt-image';
   const size = sizeOf(request);
-  return {
+  return localFields(instance, request, {
     model: request.model,
-    prompt: instance.preset === 'localai' && request.negativePrompt ? `${request.prompt}|${request.negativePrompt}` : request.prompt,
+    prompt: request.prompt,
     ...many(request),
     ...(size ? { size } : {}),
     ...(gpt ? { quality: request.quality === 'draft' ? 'low' : request.quality === 'high' ? 'high' : 'medium' } : {}),
@@ -73,7 +74,7 @@ function openAiFields(instance: ImageInstance, request: ImageRequest): Record<st
     ...(request.seed !== undefined ? { seed: request.seed } : {}),
     // GPT image models always answer in base64 and refuse the field.
     ...(gpt ? {} : { response_format: 'b64_json' }),
-  };
+  });
 }
 
 /** How a service words the same thing, where that isn't OpenAI's way. */
@@ -129,7 +130,7 @@ async function* eventsFromResult(instance: ImageInstance, deps: ImageAdapterDeps
     }
     const b64 = str(image.b64_json) ?? str(image.b64);
     const url = str(image.url);
-    const seed = num(image.seed);
+    const seed = num(image.seed) ?? localSeed(image);
     const revisedPrompt = str(image.revised_prompt);
     const extra = { ...(seed !== undefined ? { seed } : {}), ...(revisedPrompt ? { revisedPrompt } : {}) };
     if (b64) yield { type: 'image', bytes: Buffer.from(b64, 'base64'), ...extra };
@@ -157,6 +158,9 @@ function editBody(instance: ImageInstance, request: ImageRequest, extra: Record<
 
 function send(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, stream: boolean): Promise<Response> {
   const extra = stream ? { stream: true, partial_images: PARTIAL_IMAGES } : {};
+  // A local server may do edits on another route.
+  const elsewhere = localEdit(instance, request, fields(instance, request));
+  if (elsewhere) return deps.fetch(elsewhere.url, { method: 'POST', headers: headers(instance), body: JSON.stringify(elsewhere.body), signal: request.signal });
   const editing = request.references.length > 0;
   const json = (url: string, body: Record<string, unknown>) => deps.fetch(url, { method: 'POST', headers: headers(instance), body: JSON.stringify({ ...body, ...extra }), signal: request.signal });
   // xAI's edits are JSON, and Together's go in the generation request.
@@ -173,9 +177,10 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
   // OpenAI streams GPT image models only; one image at a time, as previews don't say which image they belong to.
   const stream = request.capabilities.previews && request.count === 1;
   const res = await send(instance, deps, request, stream);
-  if (!res.ok) yield await failureOf(instance, res);
+  if (instance.preset === 'ollama' && res.status === 404) yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: OLLAMA_NO_IMAGES, retryable: false } };
+  else if (!res.ok) yield await failureOf(instance, res);
   else if (stream) yield* imageStream(instance, res, request.signal);
-  else yield* eventsFromResult(instance, deps, await res.json(), request.signal);
+  else yield* eventsFromResult(instance, deps, fromImg2Img(await res.json()), request.signal);
 }
 
 /** `{ data: [...] }`, or Together's bare list, with what each entry says it is. */
@@ -200,13 +205,20 @@ export function createOpenAiImages(instance: ImageInstance, deps: ImageAdapterDe
     type: 'openai-images',
     async listModels(signal) {
       if (noList) return typedIn();
+      const own = await localModels(instance, deps, headers(instance), signal);
+      if (own) {
+        const reportedHere = own.map((m): ListedImageModel => ({ ...listed(m.id, 'detected'), displayName: m.displayName ?? m.id, capabilities: m.capabilities }));
+        return [...typedIn().filter((m) => !reportedHere.some((k) => k.modelId === m.modelId)), ...reportedHere];
+      }
       const body = await requestJson(deps, instance, `${instance.baseUrl}/v1/models`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
-      const entries = reported(body).filter((m) => !NOT_IMAGES.test(m.id) && (m.type ? m.type === 'image' : local || LOOKS_LIKE_IMAGES.test(m.id)));
+      // LocalAI lists its text models too, and landing here means it couldn't say which are which.
+      const entries = reported(body).filter((m) => !NOT_IMAGES.test(m.id) && (m.type ? m.type === 'image' : (local && instance.preset !== 'localai') || LOOKS_LIKE_IMAGES.test(m.id)));
       const seen = new Set([...instance.models, ...known]);
       return [...typedIn(), ...entries.filter((m) => !seen.has(m.id)).map((m) => listed(m.id, 'detected', m.name))];
     },
     health(signal) {
       if (noList) return Promise.resolve({ ok: true, latencyMs: null, warnings: [] });
+      if (instance.preset === 'ollama') return ollamaHealth(instance, deps, headers(instance), signal);
       return probe(deps, instance, `${instance.baseUrl}/v1/models`, headers(instance), signal);
     },
     generate(request) {
