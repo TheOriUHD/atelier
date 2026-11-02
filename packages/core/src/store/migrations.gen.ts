@@ -182,5 +182,17 @@ export const migrations: { name: string; statements: string[] }[] = [
       "CREATE UNIQUE INDEX `user_identities_subject` ON `user_identities` (`issuer`,`subject`);",
       "CREATE INDEX `user_identities_user` ON `user_identities` (`user_id`);"
     ]
+  },
+  {
+    "name": "20261102022322_image_generation",
+    "statements": [
+      "CREATE TABLE `generated_images` (\n\t`id` text PRIMARY KEY,\n\t`user_id` text,\n\t`session_id` text,\n\t`message_id` text,\n\t`call_id` text,\n\t`blob` text NOT NULL,\n\t`mime` text NOT NULL,\n\t`size` integer NOT NULL,\n\t`width` integer NOT NULL,\n\t`height` integer NOT NULL,\n\t`prompt` text NOT NULL,\n\t`revised_prompt` text,\n\t`negative_prompt` text,\n\t`provider_id` text NOT NULL,\n\t`model_id` text NOT NULL,\n\t`model_name` text NOT NULL,\n\t`params` text NOT NULL,\n\t`seed` real,\n\t`cost_usd` real,\n\t`cost_estimated` integer DEFAULT false NOT NULL,\n\t`duration_ms` integer,\n\t`hidden` integer DEFAULT false NOT NULL,\n\t`created_at` integer NOT NULL,\n\tCONSTRAINT `fk_generated_images_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,\n\tCONSTRAINT `fk_generated_images_session_id_sessions_id_fk` FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON DELETE CASCADE\n);",
+      "CREATE TABLE `image_model_cache` (\n\t`provider_id` text NOT NULL,\n\t`model_id` text NOT NULL,\n\t`info` text NOT NULL,\n\t`discovered_at` integer NOT NULL,\n\tCONSTRAINT `image_model_cache_pk` PRIMARY KEY(`provider_id`, `model_id`)\n);",
+      "CREATE TABLE `personal_image_providers` (\n\t`id` text PRIMARY KEY,\n\t`user_id` text NOT NULL,\n\t`device_id` text NOT NULL,\n\t`type` text NOT NULL,\n\t`preset` text,\n\t`name` text NOT NULL,\n\t`base_url` text NOT NULL,\n\t`options` text NOT NULL,\n\t`enabled` integer DEFAULT true NOT NULL,\n\t`created_at` integer NOT NULL,\n\tCONSTRAINT `fk_personal_image_providers_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE\n);",
+      "ALTER TABLE `usage_events` ADD `images` integer DEFAULT 0 NOT NULL;",
+      "CREATE INDEX `generated_images_user` ON `generated_images` (`user_id`,`created_at`);",
+      "CREATE INDEX `generated_images_session` ON `generated_images` (`session_id`);",
+      "CREATE INDEX `personal_image_providers_user` ON `personal_image_providers` (`user_id`);"
+    ]
   }
 ];

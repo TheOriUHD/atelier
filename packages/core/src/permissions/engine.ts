@@ -41,7 +41,7 @@ export interface Decision {
   warning?: string;
 }
 
-const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'SaveImage']);
 /** Folders and files whose edits change how git, shells, editors or the agent itself behave: never auto-approved. */
 const PROTECTED_DIRS = new Set(['.git', '.vscode', '.idea', '.husky', '.cargo', '.devcontainer', '.yarn', '.mvn', '.claude', '.atelier']);
 const PROTECTED_FILES =
@@ -120,6 +120,8 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   if (auto && isBash && !opaque && !warning && routineCleanup(parts, ctx)) return { behavior: 'allow', reason: 'Auto mode: clearing generated or temporary files.' };
 
   if (ASKS_ITSELF.has(call.name)) return { behavior: 'allow', reason: 'It asks the person itself.' };
+  // Making an image touches nothing but the provider, and a per-turn limit caps it: Auto has nothing to review.
+  if (auto && call.name === 'GenerateImage') return { behavior: 'allow', reason: 'It only makes an image.' };
   if (call.name === 'ComputerAction' && onlyLooks(call.input)) return { behavior: 'allow', reason: 'It only looks at the screen.' };
 
   // A connector describes its own tools: a read-only hint lets a call into plan mode but never skips the prompt,

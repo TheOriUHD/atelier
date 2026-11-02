@@ -32,6 +32,7 @@ Every note Atelier can send is below, verbatim. `{{name}}` is filled in when the
 | [`effort-normal`](#effort-normal) | Back to the default (Medium) after a different level. |
 | [`effort-thorough`](#effort-thorough) | Extra, on a model whose own setting cannot express it (same cadence). |
 | [`git-snapshot`](#git-snapshot) | Code: the first turn in a git repository, with the branch, default branch, changed files and the last five commit subjects, labelled as repository data that does not update. |
+| [`image-models`](#image-models) | A session with GenerateImage: the first turn, and when the image models it can use, or their order, change. |
 | [`instructions-nested`](#instructions-nested) | Code and Cowork: the first file tool call in or under a folder that has its own instruction file. Rides on a tool result. |
 | [`loop-tick`](#loop-tick) | Code and Cowork: a /loop sends its prompt again. |
 | [`message-interrupt`](#message-interrupt) | The person pressed Send now: the message interrupted the work in progress. |
@@ -197,6 +198,17 @@ Source: [`packages/core/prompts/notes/connector-on.md`](https://github.com/TheOr
 
 ````text wrap
 The {{name}} connector is now on for this conversation; its tools are available.
+````
+
+### `image-models`
+
+A session with GenerateImage: the first turn, and when the image models it can use, or their order, change.
+
+Source: [`packages/core/prompts/notes/image-models.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/notes/image-models.md)
+
+````text wrap
+Image models you can use with GenerateImage, the person's choice first:
+{{list}}
 ````
 
 ### `research`

@@ -446,9 +446,9 @@ async function executeToolCalls(
   const byName = new Map((opts.availableTools?.() ?? opts.tools).map((t) => [t.name, t]));
   const runOne = async (call: (typeof calls)[number]): Promise<ToolResultPart> => {
     const output = await invoke(call, byName.get(call.name), opts, messageId);
-    return { type: 'tool_result', callId: call.id, content: output.content, ...(output.isError ? { isError: true } : {}) };
+    return { type: 'tool_result', callId: call.id, content: output.content, ...(output.isError ? { isError: true } : {}), ...(output.generated ? { generated: output.generated } : {}) };
   };
-  // Read-only tools run concurrently; anything that mutates runs in order.
+  // Read-only and concurrent tools run together; anything else runs in order.
   const results: ToolResultPart[] = new Array(calls.length);
   let batch: number[] = [];
   const flush = async () => {
@@ -457,7 +457,8 @@ async function executeToolCalls(
     batch = [];
   };
   for (let i = 0; i < calls.length; i++) {
-    if (byName.get(calls[i]!.name)?.readOnly) batch.push(i);
+    const tool = byName.get(calls[i]!.name);
+    if (tool?.readOnly || tool?.concurrent) batch.push(i);
     else {
       await flush();
       results[i] = await runOne(calls[i]!);

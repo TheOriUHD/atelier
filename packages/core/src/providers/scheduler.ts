@@ -56,6 +56,8 @@ interface Ticket {
   ahead: number | null;
   owner?: string | undefined;
   onWait?: ((ahead: number | null) => void) | undefined;
+  /** Nothing else may run on the server beside it (an image job on a GPU shared with text models). */
+  exclusive?: boolean | undefined;
   start(): void;
 }
 
@@ -68,6 +70,8 @@ interface Server {
   warm: string[];
   queue: Ticket[];
   agents: { active: number; waiting: Ticket[] };
+  /** Exclusive jobs running: nothing else starts until they end. */
+  exclusive: number;
 }
 
 export class RequestScheduler {
@@ -79,6 +83,26 @@ export class RequestScheduler {
   /** The adapter with its streams taking a slot on `server` (any stable name for it, like its base URL). */
   wrap(adapter: ProviderAdapter, server: string, limits: () => ServerLimits): ProviderAdapter {
     return { ...adapter, stream: (request) => this.stream(adapter, this.server(server, limits), request) };
+  }
+
+  /**
+   * Waits for a slot on `server` for work that isn't a text stream (an image job) and returns the release. `model`
+   * counts as a model the server holds, so on a server that holds one model at a time nothing else runs meanwhile.
+   */
+  async hold(server: string, limits: () => ServerLimits, model: string, signal: AbortSignal, options: { priority?: QueuePriority; onWait?: (ahead: number | null) => void; owner?: string; exclusive?: boolean } = {}): Promise<() => void> {
+    const s = this.server(server, limits);
+    await this.wait(s.queue, signal, model, options.priority ?? 'foreground', options.onWait, () => this.pump(s), options.owner, options.exclusive);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const n = (s.running.get(model) ?? 1) - 1;
+      if (n > 0) s.running.set(model, n);
+      else s.running.delete(model);
+      s.owners.splice(s.owners.indexOf(options.owner), 1);
+      if (options.exclusive) s.exclusive--;
+      this.pump(s);
+    };
   }
 
   /**
@@ -105,7 +129,7 @@ export class RequestScheduler {
 
   private server(name: string, limits: () => ServerLimits): Server {
     let s = this.servers.get(name);
-    if (!s) this.servers.set(name, (s = { limits, running: new Map(), owners: [], warm: [], queue: [], agents: { active: 0, waiting: [] } }));
+    if (!s) this.servers.set(name, (s = { limits, running: new Map(), owners: [], warm: [], queue: [], agents: { active: 0, waiting: [] }, exclusive: 0 }));
     s.limits = limits;
     return s;
   }
@@ -141,6 +165,7 @@ export class RequestScheduler {
     onWait: ((ahead: number | null) => void) | undefined,
     pump: () => void,
     owner?: string,
+    exclusive?: boolean,
   ): Promise<Ticket> {
     return new Promise((resolve, reject) => {
       if (signal.aborted) return reject(signal.reason);
@@ -157,6 +182,7 @@ export class RequestScheduler {
         ahead: null,
         owner,
         onWait,
+        exclusive,
         start: () => {
           signal.removeEventListener('abort', onAbort);
           if (ticket.ahead !== null) onWait?.(null);
@@ -177,6 +203,7 @@ export class RequestScheduler {
       s.queue.splice(s.queue.indexOf(next), 1);
       s.running.set(next.model, (s.running.get(next.model) ?? 0) + 1);
       s.owners.push(next.owner);
+      if (next.exclusive) s.exclusive++;
       s.warm = [next.model, ...s.warm.filter((m) => m !== next.model)].slice(0, Number.isFinite(modelsAtOnce) ? Math.max(1, modelsAtOnce) : 8);
       next.start();
     }
@@ -200,7 +227,10 @@ export class RequestScheduler {
 function pick(s: Server, modelsAtOnce: number): Ticket | undefined {
   const order = byArrival(s.queue);
   const head = order[0]!;
-  const fits = (t: Ticket) => s.running.has(t.model) || new Set([...s.running.keys(), t.model]).size <= Math.max(1, modelsAtOnce);
+  const fits = (t: Ticket) => {
+    if (s.exclusive > 0 || (t.exclusive && sum(s.running) > 0)) return false;
+    return s.running.has(t.model) || new Set([...s.running.keys(), t.model]).size <= Math.max(1, modelsAtOnce);
+  };
   const warm = order.find((t) => t.at <= head.at + AFFINITY_MS && s.warm.includes(t.model) && fits(t));
   return warm ?? (fits(head) ? head : undefined);
 }

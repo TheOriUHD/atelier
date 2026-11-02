@@ -1,6 +1,7 @@
 export * from './app.ts';
 export * from './messages.ts';
 export * from './models.ts';
+export * from './images.ts';
 export * from './effort.ts';
 export * from './loops.ts';
 export * from './settings.ts';

@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { ArtifactSummary, BackgroundTask, ContextUsage, Message, OutboxMessage, PendingInteraction, RunEvent, RunPhase, SessionSnapshot, SessionSummary, Todo } from '@atelier/protocol';
+import type { ArtifactSummary, BackgroundTask, ContextUsage, ImageProgress, Message, OutboxMessage, PendingInteraction, RunEvent, RunPhase, SessionSnapshot, SessionSummary, Todo } from '@atelier/protocol';
 import { rpc } from './rpc.ts';
 import { getTransport } from './platform.ts';
 
@@ -35,6 +35,8 @@ export interface LiveSessionState {
   tasks: BackgroundTask[];
   /** Live output of running tool calls (Bash), by call id; cleared when the results arrive. */
   toolOutput: Record<string, string>;
+  /** How far running image generations are, by call id. */
+  toolProgress?: Record<string, ImageProgress>;
   /** A short guess at the person's next message (Code and Cowork): the message box shows it while empty. */
   suggestion: string | null;
   seq: number;
@@ -68,6 +70,7 @@ const initial: LiveSessionState = {
   todos: [],
   tasks: [],
   toolOutput: {},
+  toolProgress: {},
   suggestion: null,
   seq: 0,
 };
@@ -143,6 +146,7 @@ function fromSnapshot(s: SessionSnapshot, artifacts: ArtifactSummary[]): LiveSes
     todos: s.todos,
     tasks: s.tasks,
     toolOutput: s.toolOutput,
+    toolProgress: s.toolProgress ?? {},
     suggestion: s.suggestion ?? null,
     seq: s.seq,
   };
@@ -187,7 +191,7 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
         messages,
         siblings,
         streamingMessageId: m.role === 'assistant' && !m.stopReason ? m.id : state.streamingMessageId,
-        ...(m.role === 'tool' ? { toolOutput: {} } : {}),
+        ...(m.role === 'tool' ? { toolOutput: {}, toolProgress: {} } : {}),
       };
     }
     case 'part':
@@ -245,6 +249,8 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
       return { ...state, tasks: event.tasks };
     case 'pending':
       return { ...state, pending: event.pending };
+    case 'tool_progress':
+      return { ...state, toolProgress: { ...state.toolProgress, [event.callId]: event.progress } };
     case 'tool_output':
       return { ...state, toolOutput: { ...state.toolOutput, [event.callId]: ((state.toolOutput[event.callId] ?? '') + event.text).slice(-OUTPUT_TAIL_CHARS) } };
   }

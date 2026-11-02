@@ -50,6 +50,7 @@ import {
   type Usage,
   type UserPrefs,
 } from '@atelier/protocol';
+import { imageId, type ImageProgress } from '@atelier/protocol';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
 import { BLOCKS_IN_A_ROW, BLOCKS_TOTAL, parseVerdict, reviewInput, reviewLeniency } from '../permissions/auto-mode.ts';
@@ -69,6 +70,8 @@ import { firstUsableModel } from '../providers/model-choice.ts';
 import type { JsonSchema, ProviderAdapter, QueueOptions, SystemBlock, ToolDef } from '../providers/types.ts';
 import { toSummary, type SessionRepo, type SessionRow } from '../sessions/session-repo.ts';
 import { usesPersonalContext } from '../sessions/temporary.ts';
+import { createGenerateImageTool, type GenerateImageDeps } from '../tools/generate-image.ts';
+import { createSaveImageTool } from '../tools/save-image.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { createArtifactTool } from '../tools/artifact.ts';
 import { createInlineVisualTool } from '../tools/inline-visual.ts';
@@ -85,7 +88,7 @@ import { Loops, type LoopTick } from './loops.ts';
 import { approvedMode, createExitPlanModeTool } from '../tools/exit-plan-mode.ts';
 import { createAddConnectorTool, type AddedConnector, type NewConnector } from '../tools/add-connector.ts';
 import { createComputerTools, type ComputerCall } from '../tools/computer.ts';
-import { keepRecentScreenshots } from './screenshots.ts';
+import { keepRecentGenerated, keepRecentScreenshots } from './screenshots.ts';
 import { createChangeDirectoryTool } from '../tools/change-directory.ts';
 import { createTaskStopTool } from '../tools/task-stop.ts';
 import { createTimeTool } from '../tools/time.ts';
@@ -201,6 +204,13 @@ export interface ChatServiceDeps {
   computer?: {
     available(session: SessionRow): Promise<boolean>;
     call<M extends keyof ControllerMethods>(session: SessionRow, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']>;
+  };
+  /** Image generation (ARCHITECTURE §23): the tools a session gets when it has an image model, and what it's told about them. */
+  images?: {
+    generate: GenerateImageDeps['generate'];
+    available(session: SessionRow): Promise<boolean>;
+    /** The models, one per line with what the text model needs to choose. */
+    modelList(session: SessionRow): Promise<string>;
   };
   /** File pre-images for Rewind; without it Write and Edit keep none. */
   checkpoints?: Checkpoints;
@@ -402,6 +412,7 @@ export class ChatService {
   private readonly calibration = new Calibration();
   /** The tail of each running tool call's live output, by session and call id, for snapshots. */
   private toolOutputs = new Map<string, Map<string, string>>();
+  private toolProgress = new Map<string, Map<string, ImageProgress>>();
   /** Child-session links being written, by message (`linkChild`). */
   private linking = new Map<string, Promise<void>>();
   /** Running Ultracode turns, by the session and each of its sub-agents: how many sub-agents the turn has started. */
@@ -589,7 +600,7 @@ export class ChatService {
   private emit(sessionId: string, event: RunEvent): void {
     const seq = (this.seqs.get(sessionId) ?? 0) + 1;
     this.seqs.set(sessionId, seq);
-    if (event.type !== 'delta' && event.type !== 'tool_output' && event.type !== 'context' && event.type !== 'compacting' && event.type !== 'queued' && event.type !== 'phase' && event.type !== 'outbox') this.versions.set(sessionId, (this.versions.get(sessionId) ?? 0) + 1);
+    if (event.type !== 'delta' && event.type !== 'tool_output' && event.type !== 'tool_progress' && event.type !== 'context' && event.type !== 'compacting' && event.type !== 'queued' && event.type !== 'phase' && event.type !== 'outbox') this.versions.set(sessionId, (this.versions.get(sessionId) ?? 0) + 1);
     if (event.type === 'context') this.contexts.set(sessionId, event.context);
     if (event.type === 'compacting') {
       if (event.active) this.compacting.add(sessionId);
@@ -610,8 +621,17 @@ export class ChatService {
       outputs.set(event.callId, ((outputs.get(event.callId) ?? '') + event.text).slice(-OUTPUT_TAIL_CHARS));
       this.toolOutputs.set(sessionId, outputs);
     }
+    if (event.type === 'tool_progress') {
+      const progress = this.toolProgress.get(sessionId) ?? new Map<string, ImageProgress>();
+      progress.set(event.callId, event.progress);
+      this.toolProgress.set(sessionId, progress);
+    }
     // Results are in: the live output is no longer needed.
-    if (event.type === 'message' && event.message.role === 'tool') this.toolOutputs.delete(sessionId);
+    if (event.type === 'message' && event.message.role === 'tool') {
+      this.toolOutputs.delete(sessionId);
+      this.toolProgress.delete(sessionId);
+      this.toolProgress.delete(sessionId);
+    }
     this.deps.sessionEvent(sessionId, seq, event);
   }
 
@@ -638,6 +658,7 @@ export class ChatService {
         todos: row.todos as Todo[],
         tasks: this.tasks.list(sessionId),
         toolOutput: Object.fromEntries(this.toolOutputs.get(sessionId) ?? []),
+        toolProgress: Object.fromEntries(this.toolProgress.get(sessionId) ?? []),
         context: this.contexts.get(sessionId) ?? null,
         compacting: this.compacting.has(sessionId),
         queued: this.queued.get(sessionId) ?? null,
@@ -1212,6 +1233,7 @@ export class ChatService {
         tools: run.tools.map((t) => t.name),
         safeguards: run.snapshot.safeguardsHash,
         research: session.overrides.research === true && settings.capabilities.webSearch.enabled,
+        ...(run.tools.some((t) => t.name === 'GenerateImage') && this.deps.images ? { imageModels: await this.deps.images.modelList(session) } : {}),
         contextFill: context ? context.used / context.limit : 0,
         ...(session.mode === 'code' && this.deps.gitSnapshot ? { gitSnapshot: () => this.deps.gitSnapshot!(session) } : {}),
         todos: row.todos as Todo[],
@@ -1723,6 +1745,11 @@ export class ChatService {
     this.emit(sessionId, { type: 'done', messageId: message.id, usage: null, stopReason: 'error', error: message.error });
   }
 
+  /** Whether a session has image generation; a sub-agent's images wouldn't show in the conversation it works for. */
+  private async imagesFor(session: SessionRow): Promise<boolean> {
+    return !session.parentSessionId && !!(await this.deps.images?.available(session));
+  }
+
   private async toolsFor(session: SessionRow): Promise<Tool[]> {
     const { webSearch, webFetch } = this.deps.settings().capabilities;
     const web = [...(webSearch.enabled ? [this.webSearch] : []), ...(webFetch ? [this.webFetch] : [])];
@@ -1738,7 +1765,8 @@ export class ChatService {
     // The clock for everyone; the usage figures only where the model's provider has limits or a cost, and not for sub-agents.
     const modelRef = session.parentSessionId ? undefined : await this.modelRef(session);
     const usage = modelRef && this.deps.usage?.offered(modelRef) ? [this.usage] : [];
-    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
+    const images = (await this.imagesFor(session)) ? [createGenerateImageTool({ generate: (input, ctx) => this.deps.images!.generate(input, ctx) })] : [];
+    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...images, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
     if (workspace) {
@@ -1766,7 +1794,10 @@ export class ChatService {
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));
     const moveSession = movable ? [this.changeDirectory] : [];
-    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...web, ...connect, ...computer, ...memory, ...mcp];
+    const checkpoints = this.deps.checkpoints;
+    // Only with image generation, so a session without an image provider asks the model for exactly what it did before.
+    const saveImage = workspace && images.length ? [createSaveImageTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
+    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...saveImage, ...web, ...connect, ...computer, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */
@@ -2153,8 +2184,10 @@ export class ChatService {
   }
 
   /** Adapts stored history to what the model can consume; tool results longer than `resultChars` keep their start and end. */
-  private async prepareHistory(history: Message[], info: ModelInfo, resultChars: number): Promise<Message[]> {
+  private async prepareHistory(history: Message[], info: ModelInfo, resultChars: number, imageIds = false): Promise<Message[]> {
     const out: Message[] = [];
+    // A model with no eyes still gets the ids, so it can have an attached image edited.
+    const unseen = (sha: string) => ({ type: 'text' as const, text: `[An image${imageIds ? ` (${imageId(sha)})` : ''} was attached, but this model cannot view images.]` });
     for (const m of history) {
       const parts: Part[] = [];
       for (const p of m.parts) {
@@ -2162,19 +2195,26 @@ export class ChatService {
         if (p.type === 'context') {
           if (p.text) parts.push({ type: 'text', text: `<context-update>\n${p.text}\n</context-update>` });
         } else if (p.type === 'text' && m.role === 'user') parts.push({ type: 'text', text: escapeTags(p.text) });
-        else if (p.type === 'image' && !info.capabilities.vision) parts.push({ type: 'text', text: '[An image was attached, but this model cannot view images.]' });
+        else if (p.type === 'image' && !info.capabilities.vision) parts.push(unseen(p.blob));
+        // Tool results carry images too (screenshots, Read, connectors, generated ones): a model that can't see them
+        // would have the whole request refused.
+        else if (p.type === 'tool_result' && !info.capabilities.vision && p.content.some((c) => c.type === 'image')) parts.push({ ...p, content: p.content.map((c) => (c.type === 'image' ? { type: 'text' as const, text: `[An image${imageIds ? ` (${imageId(c.blob)})` : ''}, which this model cannot view.]` } : c)) });
         else if (p.type === 'document' && !(p.mime === 'application/pdf' && info.capabilities.pdf)) {
           parts.push(
             canExtractText(p.mime)
               ? { type: 'text', text: `<document name="${escapeAttr(p.name)}">\n${escapeTags(await this.textOf(p.blob, p.mime))}\n</document>` }
               : { type: 'text', text: `[Attached file ${p.name} (${p.mime}) cannot be read by this model.]` },
           );
-        } else parts.push(p);
+        } else {
+          parts.push(p);
+          if (p.type === 'image' && imageIds) parts.push({ type: 'text', text: `[Image ${imageId(p.blob)}]` });
+        }
       }
       out.push({ ...m, parts });
     }
-    // Computer use keeps the newest screenshots only (a compact model sees one).
-    return answerDanglingToolCalls(capToolResults(keepRecentScreenshots(out, info.tier === 'compact' ? 1 : 3), resultChars));
+    // Computer use keeps the newest screenshots only (a compact model sees one), and old generated images leave too.
+    const compact = info.tier === 'compact';
+    return answerDanglingToolCalls(capToolResults(keepRecentGenerated(keepRecentScreenshots(out, compact ? 1 : 3), compact ? 1 : 4), resultChars));
   }
 
   // ------------------------------------------------------- context, compaction, titles
@@ -2266,7 +2306,7 @@ export class ChatService {
     const { resultChars, tailChars } = roomBudgets(run.threshold - run.fixedTokens);
     const history = await this.deps.repo.history(run.sessionId);
     const sent = run.mainSessionId ? withSideChatNote(history, await this.mainConversation(run.mainSessionId, tailChars)) : history;
-    return this.prepareHistory(sent, run.model.info, resultChars);
+    return this.prepareHistory(sent, run.model.info, resultChars, run.tools.some((t) => t.name === 'GenerateImage' || t.name === 'SaveImage'));
   }
 
   /** A side chat's note: the main conversation as it stands, its reply in progress too, in at most `maxChars`. */
@@ -2617,7 +2657,7 @@ const NESTED_CHARS = 20_000;
 const COMPACT_CONNECTOR_CHARS = 200;
 
 /** Tools whose path the runner scopes to the workspace's roots. */
-const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep']);
+const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
 const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'ComputerApps', 'OpenApp', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);
 /** One instruction file of a folder the session moved to, at most this long in the tool's result. */

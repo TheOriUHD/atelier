@@ -3,6 +3,7 @@
  * Binary payloads never live in messages: images and documents reference the blob store by sha256.
  */
 import { z } from 'zod';
+import { GeneratedImageMeta } from './images.ts';
 import { Mode } from './settings.ts';
 
 export const TextPart = z.object({ type: z.literal('text'), text: z.string() });
@@ -30,6 +31,8 @@ export const ToolResultPart = z.object({
   callId: z.string(),
   content: z.array(z.discriminatedUnion('type', [TextPart, ImagePart])),
   isError: z.boolean().optional(),
+  /** The images GenerateImage made, for the transcript; the model gets `content`. */
+  generated: z.array(GeneratedImageMeta).optional(),
 });
 /** A reply's quoted passage: at most this many characters, and this many passages to a message. */
 export const QUOTE_MAX_CHARS = 4_000;

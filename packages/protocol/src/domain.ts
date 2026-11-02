@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ImageProgress } from './images.ts';
 import { Message, MessageError, Part, Usage } from './messages.ts';
 import { Effort } from './models.ts';
 import { Mode, PermissionMode, SettingsLayer } from './settings.ts';
@@ -25,6 +26,8 @@ export const SessionSummary = z.object({
   connectorsOff: z.array(z.string()),
   /** Research: each message asks the model to search broadly and cite its sources (while web search is on). */
   research: z.boolean(),
+  /** The image model chosen for this session; absent uses the person's default. */
+  imageModel: z.string().optional(),
   /** From `sessions.list` only: whether it made an artifact or, in Cowork, changed files in its folder. */
   produced: z.boolean().optional(),
   /** A turn finished while the person was elsewhere, and they haven't opened the session since (the sidebar's blue dot). */
@@ -216,6 +219,8 @@ export const UsageRow = z.object({
   reasoning: z.number(),
   costUsd: z.number().nullable(),
   unpriced: z.number(),
+  /** Images generated; these rows have no tokens. */
+  images: z.number().optional(),
   /** Averaged over the `timed` requests that reported a speed. */
   tokensPerSecond: z.number().nullable(),
   timed: z.number(),
@@ -371,6 +376,8 @@ export const SessionSnapshot = z.object({
   tasks: z.array(BackgroundTask),
   /** The recent output of tool calls still running, by call id. */
   toolOutput: z.record(z.string(), z.string()),
+  /** How far running image generations are, by call id. */
+  toolProgress: z.record(z.string(), ImageProgress).optional(),
   context: ContextUsage.nullable(),
   /** The conversation is being summarized right now. */
   compacting: z.boolean(),
@@ -427,6 +434,8 @@ export const RunEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('tasks'), tasks: z.array(BackgroundTask) }),
   /** Live output of a running tool call (Bash). Not stored: the tool result carries the final output. */
   z.object({ type: z.literal('tool_output'), messageId: z.string(), callId: z.string(), text: z.string() }),
+  /** How far a running image generation is. Not stored: the tool result carries the images. */
+  z.object({ type: z.literal('tool_progress'), messageId: z.string(), callId: z.string(), progress: ImageProgress }),
   /** The run waits for the person (permission prompt, question) or stopped waiting (null). */
   z.object({ type: z.literal('pending'), pending: PendingInteraction.nullable() }),
 ]);
@@ -573,5 +582,7 @@ export const AppInfo = z.object({
    * Absent on a desktop's own backend and on servers from before version 2.
    */
   deviceLink: z.object({ protocol: z.number(), services: z.array(z.string()) }).optional(),
+  /** This backend can generate images (ARCHITECTURE §23); a newer app hides the feature on an older server. */
+  imageGeneration: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

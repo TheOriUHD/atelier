@@ -48,6 +48,11 @@ export class FileRepo {
     return toFileRef((await this.get(row.id!))!);
   }
 
+  /** Keeps an image the assistant generated with its conversation, so export and cleanup treat it like any file. */
+  async addGenerated(input: { name: string; mime: string; blob: string; size: number; userId: string | null; sessionId: string; messageId: string }): Promise<void> {
+    await this.db.insert(files).values({ id: newId(), ...input, name: input.name.slice(0, 255), tokens: null, kind: 'generated', createdAt: Date.now() });
+  }
+
   async get(id: string): Promise<FileRow | undefined> {
     return this.db.select().from(files).where(eq(files.id, id)).get();
   }

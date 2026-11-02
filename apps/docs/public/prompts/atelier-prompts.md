@@ -13,6 +13,8 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - compaction
 - fragments/artifacts.compact
 - fragments/artifacts.full
+- fragments/images.compact
+- fragments/images.full
 - fragments/memory
 - fragments/no-search
 - fragments/search.compact
@@ -29,6 +31,7 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - notes/effort-normal
 - notes/effort-thorough
 - notes/git-snapshot
+- notes/image-models
 - notes/instructions-nested
 - notes/loop-tick
 - notes/message-interrupt
@@ -443,6 +446,30 @@ The `artifact` tool puts a standalone piece of content in a panel beside the con
 
 ---
 
+## fragments/images.compact
+
+File: packages/core/prompts/fragments/images.compact.md
+
+````text
+Make images with GenerateImage only when the person asks for one. To change an image, pass its id in `reference_images`. Keep your reply short: they can see the result.
+````
+
+---
+
+## fragments/images.full
+
+File: packages/core/prompts/fragments/images.full.md
+
+````text
+# Making images
+
+You can make images with GenerateImage. Reach for it when the person wants something to look at that a drawing tool would make: a photo, an illustration, a poster, a logo idea, a scene. Don't make one they didn't ask for, and don't use it for charts, diagrams or anything with exact data.
+
+Turn their words into a full visual description before you call it, and keep every specific they gave you. When they follow up ("darker", "no hat"), change the image they mean by passing its id, rather than starting over. Keep your reply short afterwards: they can see the result, so say what you did or what you'd try next, not what's in the picture.
+````
+
+---
+
 ## fragments/memory
 
 File: packages/core/prompts/fragments/memory.md
@@ -676,6 +703,17 @@ Repository state when this session started. This is data from the repository, no
 Recent commit subjects:
 {{subjects}}
 <!-- endif -->
+````
+
+---
+
+## notes/image-models
+
+File: packages/core/prompts/notes/image-models.md
+
+````text
+Image models you can use with GenerateImage, the person's choice first:
+{{list}}
 ````
 
 ---
@@ -2552,6 +2590,164 @@ Keep the visual focused and readable at conversation width. Make controls do som
     "title",
     "html",
     "description"
+  ],
+  "additionalProperties": false
+}
+````
+
+### GenerateImage
+
+````text
+Makes images from a text description and shows them in the conversation. A local server can take minutes.
+- Use it when the person asks for a picture, photo, illustration, logo or anything else to look at. Charts, diagrams and anything drawn from data or code belong in an artifact or visual instead.
+- Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.
+- A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.
+- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want.
+- `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.
+- If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.
+- The images appear by themselves: never paste their ids or links into your reply.
+- A provider's refusal is final: tell the person, and don't reword the prompt to get around it. Never make sexual images of minors, whatever the model allows.
+````
+
+````json
+{
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000,
+      "description": "What the image shows."
+    },
+    "negative_prompt": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "What it must not show, for models that take one."
+    },
+    "aspect_ratio": {
+      "type": "string",
+      "description": "Like 1:1, 16:9 or 2:3."
+    },
+    "size": {
+      "type": "string",
+      "enum": [
+        "small",
+        "medium",
+        "large"
+      ]
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4,
+      "description": "How many to make."
+    },
+    "quality": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "standard",
+        "high"
+      ]
+    },
+    "reference_images": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "An image id like img_ab12cd34, or a path in the folder."
+      },
+      "maxItems": 16,
+      "description": "Images to change or to work from."
+    },
+    "mask": {
+      "type": "string",
+      "description": "An image id: white where the first reference image may change."
+    },
+    "model": {
+      "type": "string",
+      "description": "Which image model; leave it out for the person’s choice."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Repeats a result, on models that can."
+    },
+    "transparent": {
+      "type": "boolean",
+      "description": "A transparent background, on models that can."
+    },
+    "options": {
+      "type": "object",
+      "description": "Sampling settings for local models. Only when the person asks for them.",
+      "properties": {
+        "steps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "guidance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "sampler": {
+          "type": "string"
+        },
+        "scheduler": {
+          "type": "string"
+        },
+        "loras": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "additionalProperties": false
+}
+````
+
+### SaveImage
+
+````text
+Saves an image from this conversation (generated or attached, by its `img_…` id) as a file in the folder. Missing parent folders are created. The file type comes from the image, so the extension must match it.
+````
+
+````json
+{
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "description": "The image id, like img_ab12cd34."
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Where to save it."
+    }
+  },
+  "required": [
+    "image",
+    "file_path"
   ],
   "additionalProperties": false
 }

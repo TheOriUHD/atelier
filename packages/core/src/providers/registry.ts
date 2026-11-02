@@ -79,8 +79,8 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
   private overridesKey = '';
   private syncing: Promise<void> = Promise.resolve();
   private statuses = new Map<string, ProviderStatus>();
-  /** One queue per model server, for every request and sub-agent run (providers/scheduler.ts). */
-  private readonly scheduler = new RequestScheduler();
+  /** One queue per model server, for every request and sub-agent run (providers/scheduler.ts); image jobs share it. */
+  readonly scheduler = new RequestScheduler();
   /** What each provider's server said about its capacity, by provider id. */
   private reported = new Map<string, { parallel?: number; modelsAtOnce?: number }>();
   /** Personal providers whose computer lent them at the last look, to discover one again when it comes back. */
@@ -324,6 +324,32 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     for (const m of models) {
       await this.deps.db.insert(modelCache).values({ providerId, modelId: m.modelId, info: m as unknown as Record<string, unknown>, discoveredAt: now });
     }
+  }
+
+  // ------------------------------------------------------- for image providers on the same GPU
+
+  /** The queue a text provider's requests wait in. */
+  queueOf(id: string): { server: string; limits: () => ServerLimits } | null {
+    const config = this.providers.find((p) => p.id === id);
+    return config ? { server: this.serverOf(config), limits: () => this.limits(id) ?? defaultLimits(config.baseUrl) } : null;
+  }
+
+  /** A text provider's key as it is, for "use the same key". */
+  async rawKey(id: string): Promise<string | undefined> {
+    const config = this.providers.find((p) => p.id === id);
+    return config ? (await this.instance(config)).apiKey : undefined;
+  }
+
+  /** Makes a local text server unload its models, so an image job has the GPU. A text request loads them again. */
+  async freeGpu(id: string, signal: AbortSignal): Promise<void> {
+    const config = this.providers.find((p) => p.id === id);
+    if (config?.type !== 'ollama') return;
+    const { fetch } = this.deps.adapterDeps;
+    const base = config.baseUrl.replace(/\/+$/, '');
+    const res = await fetch(`${base}/api/ps`, { method: 'GET', signal });
+    if (!res.ok) return;
+    const loaded = ((await res.json()) as { models?: { name?: string }[] }).models ?? [];
+    await Promise.all(loaded.flatMap((m) => (m.name ? [fetch(`${base}/api/generate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: m.name, keep_alive: 0 }), signal })] : [])));
   }
 
   // ------------------------------------------------------- add-provider flow

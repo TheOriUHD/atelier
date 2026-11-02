@@ -370,6 +370,8 @@ export const usageEvents = sqliteTable(
     durationMs: integer('duration_ms'),
     tokensPerSecond: real('tokens_per_second'),
     costUsd: real('cost_usd'),
+    /** Images generated (ARCHITECTURE §23); these rows have no tokens. */
+    images: integer('images').notNull().default(0),
   },
   (t) => [index('usage_ts').on(t.ts)],
 );
@@ -383,6 +385,71 @@ export const modelCache = sqliteTable(
     discoveredAt: integer('discovered_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.providerId, t.modelId] })],
+);
+
+/** What image providers list, like `model_cache` for text: kept apart so an image model can never show up as a text model. */
+export const imageModelCache = sqliteTable(
+  'image_model_cache',
+  {
+    providerId: text('provider_id').notNull(),
+    modelId: text('model_id').notNull(),
+    info: text('info', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    discoveredAt: integer('discovered_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.providerId, t.modelId] })],
+);
+
+/** Every image the assistant made, for the Images page. The bytes are a blob, kept by its `files` row and by this one. */
+export const generatedImages = sqliteTable(
+  'generated_images',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
+    messageId: text('message_id'),
+    callId: text('call_id'),
+    blob: text('blob').notNull(),
+    mime: text('mime').notNull(),
+    size: integer('size').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    prompt: text('prompt').notNull(),
+    revisedPrompt: text('revised_prompt'),
+    negativePrompt: text('negative_prompt'),
+    providerId: text('provider_id').notNull(),
+    modelId: text('model_id').notNull(),
+    modelName: text('model_name').notNull(),
+    params: text('params', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    seed: real('seed'),
+    costUsd: real('cost_usd'),
+    costEstimated: integer('cost_estimated', { mode: 'boolean' }).notNull().default(false),
+    durationMs: integer('duration_ms'),
+    /** Left out of the Images page: the chat it came from is temporary. */
+    hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('generated_images_user').on(t.userId, t.createdAt), index('generated_images_session').on(t.sessionId)],
+);
+
+/** A person's own image servers on one of their computers, as `personal_providers` is for text. */
+export const personalImageProviders = sqliteTable(
+  'personal_image_providers',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id').notNull(),
+    type: text('type').notNull(),
+    preset: text('preset'),
+    name: text('name').notNull(),
+    baseUrl: text('base_url').notNull(),
+    /** parallelRequests, freeAfterRun, models and workflows. */
+    options: text('options', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('personal_image_providers_user').on(t.userId)],
 );
 
 /** A person's own model servers and ChatGPT Chat on one of their computers (providers/personal.ts); ids never clash with the admin's. */

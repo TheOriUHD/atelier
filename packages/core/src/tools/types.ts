@@ -1,4 +1,4 @@
-import type { ImagePart, Mode, PromptTier, RunEvent, TextPart } from '@atelier/protocol';
+import type { GeneratedImageMeta, ImagePart, Mode, PromptTier, RunEvent, TextPart } from '@atelier/protocol';
 import type { JsonSchema } from '../providers/types.ts';
 
 export interface ToolContext {
@@ -13,6 +13,8 @@ export interface ToolContext {
 export interface ToolOutput {
   content: (TextPart | ImagePart)[];
   isError?: boolean;
+  /** What the transcript shows about generated images; the model only gets `content`. */
+  generated?: GeneratedImageMeta[];
 }
 
 /** What a built-in tool's description depends on: it is a pure function of these, so the tools JSON stays byte-stable. */
@@ -29,8 +31,12 @@ export interface Tool<Input = unknown> {
   inputSchema: JsonSchema;
   /** Read-only tools may run in parallel and are allowed in plan mode. */
   readOnly: boolean;
+  /** Changes something, but several calls may still run at once (their server's queue keeps order). */
+  concurrent?: boolean;
   /** Built-in core tools: an input with placeholder values, shown as the example call in compact-tier prompts. */
   compactExample?: Record<string, unknown>;
+  /** A shorter schema for compact-tier models, whose prompt and tools have a budget. */
+  compactSchema?: JsonSchema;
   run(input: Input, ctx: ToolContext): Promise<ToolOutput>;
 }
 
@@ -38,14 +44,15 @@ export interface Tool<Input = unknown> {
 export type DescribedTool = Tool & { description: string };
 
 export function describeTool(tool: Tool, ctx: DescribeContext): DescribedTool {
-  return typeof tool.description === 'string' ? (tool as DescribedTool) : { ...tool, description: tool.description(ctx) };
+  const sized = ctx.tier === 'compact' && tool.compactSchema ? { ...tool, inputSchema: tool.compactSchema } : tool;
+  return typeof sized.description === 'string' ? (sized as DescribedTool) : { ...sized, description: sized.description(ctx) };
 }
 
 /**
  * Built-in tools in the order every request lists them, so the tools array (the start of the provider's cache prefix)
  * is the same for every session with the same tool set. Connector tools follow, sorted by name.
  */
-export const BUILTIN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'BashOutput', 'KillShell', 'TaskStop', 'ChangeDirectory', 'TodoWrite', 'AskUser', 'Agent', 'SendMessage', 'ListSessions', 'Time', 'Usage', 'Skill', 'ExitPlanMode', 'WebSearch', 'WebFetch', 'AddConnector', 'ComputerAccess', 'ComputerApps', 'OpenApp', 'Screenshot', 'FullControl', 'ComputerAction', 'MemorySearch', 'MemoryView', 'MemoryUpdate', 'ChatSearch', 'ChatRead', 'artifact', 'inline_visual'] as const;
+export const BUILTIN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'BashOutput', 'KillShell', 'TaskStop', 'ChangeDirectory', 'TodoWrite', 'AskUser', 'Agent', 'SendMessage', 'ListSessions', 'Time', 'Usage', 'Skill', 'ExitPlanMode', 'WebSearch', 'WebFetch', 'AddConnector', 'ComputerAccess', 'ComputerApps', 'OpenApp', 'Screenshot', 'FullControl', 'ComputerAction', 'MemorySearch', 'MemoryView', 'MemoryUpdate', 'ChatSearch', 'ChatRead', 'artifact', 'inline_visual', 'GenerateImage', 'SaveImage'] as const;
 
 export function orderTools<T extends Pick<Tool, 'name'>>(tools: T[]): T[] {
   const rank = (name: string) => {

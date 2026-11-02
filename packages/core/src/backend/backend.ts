@@ -22,7 +22,9 @@ import {
   PUBLIC_PROCEDURES,
   isLoopbackHost,
   mcpToolName,
+  imagePreset,
   isPersonalProviderId,
+  type ImageModelInfo,
   LocalServer,
   parseModelRef,
   serveRpc,
@@ -55,6 +57,13 @@ import { importClaudeCode } from '../mcp/import.ts';
 import { McpManager } from '../mcp/manager.ts';
 import { PersonalConnectorError, PersonalConnectors } from '../mcp/personal.ts';
 import { assertPublicHost } from '../tools/address-guard.ts';
+import { downloadImage } from '../images/download.ts';
+import { createImageAdapter } from '../images/index.ts';
+import { generatedImagesFor } from '../images/library.ts';
+import { ImageProviderRegistry } from '../images/registry.ts';
+import { ImageService, type ImageSessionFacts } from '../images/service.ts';
+import { openSocket } from '../images/socket.ts';
+import { sniffMime } from '../providers/images.ts';
 import { connectorContext } from '../permissions/engine.ts';
 import { hostRunnerBinary } from '../workspaces/runner-client.ts';
 import { codeContext } from '../workspaces/code-context.ts';
@@ -109,7 +118,7 @@ import { CopilotAuth } from '../providers/copilot-auth.ts';
 import { OpenRouterConnect } from '../providers/openrouter-auth.ts';
 import { costOf, listPrice } from '../providers/prices.ts';
 import { GroupRepo } from '../sessions/group-repo.ts';
-import { SessionRepo, connectorsOff } from '../sessions/session-repo.ts';
+import { SessionRepo, connectorsOff, type SessionRow } from '../sessions/session-repo.ts';
 import { TEMPORARY_MAX_IDLE_MS } from '../sessions/temporary.ts';
 import { SettingsService, SettingsValidationError } from '../settings/settings-service.ts';
 import { BlobStore } from '../store/blobs.ts';
@@ -214,6 +223,13 @@ const LOOPBACK_ON_SERVER =
   'That address is the Atelier server itself. A connector on your own computer goes under Customize › Connectors › Your connectors, added in the desktop app on that computer.';
 
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
+/** A session's overrides with its image model set, or gone again on null. */
+function withImageModel(overrides: Record<string, unknown>, imageModel: string | null | undefined): Record<string, unknown> {
+  if (imageModel === undefined) return overrides;
+  const { imageModel: _old, ...rest } = overrides;
+  return imageModel === null ? rest : { ...rest, imageModel };
+}
+
 const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'chatgptChat'];
 
 export async function createBackend(platform: Platform): Promise<Backend> {
@@ -359,6 +375,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         ...effective,
         providers: effective.providers.map((p) => ({ id: p.id, type: p.type, name: p.name, enabled: p.enabled })),
         pricing: {},
+        imageProviders: effective.imageProviders.map((p) => ({ id: p.id, type: p.type, name: p.name, enabled: p.enabled })),
+        imagePricing: {},
         mcpServers: {},
         // The commands the system runs, where web searches go with which key, and what the administrator tells the
         // models, are the admin's business (the system AGENTS.md is admin-only too).
@@ -375,6 +393,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const settingsFor = (c: Connection) => (isAdmin(c) ? settings.snapshot() : publicSettings(settings.snapshot(), c.auth!.user));
   /** Hidden models are an admin decision: only admins see them (to unhide them). */
   const modelsFor = (c: Connection, all: ModelInfo[]) => (isAdmin(c) ? all : all.filter((m) => !m.hidden));
+  const imageModelsFor = (c: Connection, all: ImageModelInfo[]) => (isAdmin(c) ? all : all.filter((m) => !m.hidden));
 
   /** Ends the sign-in of matching connections, which then show the sign-in screen. */
   const signOutWhere = (pick: (c: Connection) => boolean) => {
@@ -440,6 +459,30 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   });
   // "Connect with OpenRouter": mints a key in the person's account and saves the provider with it.
   const openrouter = new OpenRouterConnect({ fetch: httpFetch, surface: platform.surface, save: (draft) => registry.save(draft) });
+  const imageRegistry = new ImageProviderRegistry({
+    db,
+    settings,
+    secrets,
+    env: platform.env,
+    createAdapter: createImageAdapter,
+    adapterDeps: {
+      // A local server says nothing until the image is done: a plain-HTTP request may wait as long as a job may run.
+      fetch: inspector.wrap(platform.fetch ?? plainHttpFetch(httpFetch, { idleMs: 60 * 60_000 })),
+      socket: openSocket,
+      ...(chatgpt ? { chatgpt } : {}),
+    },
+    scheduler: registry.scheduler,
+    text: {
+      queue: (id) => registry.queueOf(id),
+      free: (id, signal) => registry.freeGpu(id, signal),
+      key: (id) => registry.rawKey(id),
+      has: (id) => settings.effective.providers.some((p) => p.id === id) || isPersonalProviderId(id),
+    },
+  });
+  imageRegistry.on('status', (s) => emitWhere(isAdmin, 'imageProviders.changed', s));
+  imageRegistry.on('models', (models) => {
+    for (const c of connections) if (c.auth) c.rpc.emit('imageModels.changed', imageModelsFor(c, models));
+  });
   registry.on('status', (s) => emitWhere(isAdmin, 'providers.changed', s));
   // Everyone gets the shared models with their own after them; a change to a person's own models goes to them only.
   // One broadcast at a time, so a later list never arrives before an earlier one.
@@ -460,7 +503,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
   registry.on('models', (m: ModelInfo[]) => sendModels(async () => m, () => true));
   registry.on('personalModels', (userId) => sendModels(() => registry.listModels(), (c) => c.auth?.user.id === userId));
-  const syncProviders = () => void registry.syncWithSettings().catch((e: unknown) => platform.logger.error('provider refresh failed', e));
+  const syncProviders = () => {
+    void registry.syncWithSettings().catch((e: unknown) => platform.logger.error('provider refresh failed', e));
+    void imageRegistry.syncWithSettings().catch((e: unknown) => platform.logger.error('image provider refresh failed', e));
+  };
   settings.on('change', () => {
     for (const c of connections) if (c.auth) c.rpc.emit('settings.changed', settingsFor(c));
     syncProviders();
@@ -810,7 +856,49 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
   };
 
+  const imageFacts = (row: Pick<SessionRow, 'userId' | 'mode' | 'temporary' | 'overrides'>): ImageSessionFacts => ({
+    userId: row.userId,
+    mode: row.mode,
+    temporary: row.temporary !== null,
+    ...(typeof row.overrides.imageModel === 'string' ? { imageModel: row.overrides.imageModel } : {}),
+  });
+  const images = new ImageService({
+    registry: imageRegistry,
+    blobs,
+    files,
+    db,
+    settings: () => settings.effective,
+    session: async (id) => {
+      const row = await sessions.getRow(id);
+      if (!row) throw new Error(`Session ${id} not found`);
+      return imageFacts(row);
+    },
+    preferred: async (userId) => (userId ? (await prefs.get(userId)).models.image : undefined),
+    isAdmin: async (userId) => !userId || (await accounts.get(userId)).role === 'admin',
+    history: (id) => sessions.history(id),
+    turnStart: async (id) => (db.$client.prepare(`SELECT COALESCE(MAX(created_at), 0) AS at FROM messages WHERE session_id = ? AND role = 'user'`).get(id) as { at: number }).at,
+    readFile: async (id, path, signal) => {
+      const row = await sessions.getRow(id);
+      const workspace = row?.workspaceId && row.userId ? await workspaceManager.open(row.userId, row.workspaceId) : null;
+      if (!workspace) throw new Error('This conversation has no folder.');
+      const { content } = await workspace.runner.call('fs.read', { path, encoding: 'base64' }, { signal });
+      const bytes = Buffer.from(content, 'base64');
+      return { bytes, mime: sniffMime(bytes) ?? 'application/octet-stream' };
+    },
+    // Tests point a hosted service's result URLs at a fake server on this machine.
+    download: (url, signal) => downloadImage({ fetch: httpFetch, allowPrivate: !!platform.env.ATELIER_IMAGE_DOWNLOAD_PRIVATE }, url, signal),
+    recordUsage: ({ providerId, modelId, sessionId, userId, mode, images: count, costUsd, durationMs }) => {
+      void db.insert(usageEvents).values({ id: newId(), ts: Date.now(), userId, providerId, modelId, sessionId, mode, input: 0, output: 0, durationMs, costUsd, images: count }).catch((e: unknown) => platform.logger.error('recording image usage failed', e));
+    },
+    log: (message, error) => platform.logger.error(message, error),
+  });
+
   const chat = new ChatService({
+    images: {
+      generate: (input, ctx) => images.generate(input, ctx),
+      available: (session) => images.available(imageFacts(session)),
+      modelList: (session) => images.modelList(imageFacts(session)),
+    },
     usage: usageSource,
     search,
     memory,
@@ -1253,6 +1341,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       dataDir: platform.dataDir,
       // A server takes these from desktop devices (ARCHITECTURE §21); their windows offer them only where both ends can.
       ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...SERVER_DEVICE_SERVICES] } } : {}),
+      imageGeneration: true,
     }),
 
     // ---------------------------------------------------------------- sign-in
@@ -1524,6 +1613,24 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'models.list': async (_input, ctx) => modelsFor(ctx.connection(), await registry.listModels(me(ctx).id)),
     'models.probeTools': ({ ref }) => registry.probeTools(ref),
 
+    // ------------------------------------------------- image providers
+    'imageProviders.status': () => imageRegistry.statusList(),
+    'imageProviders.detect': () => imageRegistry.detect(),
+    'imageProviders.test': (draft) => imageRegistry.test(draft),
+    'imageProviders.tryImage': ({ draft, modelId }) => images.tryImage(draft, modelId),
+    'imageProviders.save': async (draft) => {
+      const existing = settings.effective.imageProviders.find((p) => p.id === draft.id);
+      if (imagePreset(draft.preset)?.key === 'required' && !draft.apiKey && !draft.apiKeyFromEnv && !draft.apiKeyFromProvider && !existing?.apiKey) throw appError('missing_key', `${draft.name} needs an API key.`);
+      return imageRegistry.save(draft);
+    },
+    'imageProviders.remove': async ({ id }) => {
+      await imageRegistry.remove(id);
+      return { ok: true as const };
+    },
+    'imageProviders.refresh': ({ id }) => imageRegistry.refresh(id),
+    'imageModels.list': async (_input, ctx) => imageModelsFor(ctx.connection(), await imageRegistry.listModels()),
+    'generatedImages.list': ({ before, query, ref, limit }, ctx) => generatedImagesFor(db, me(ctx).id, { ...(before !== undefined ? { before } : {}), ...(query ? { query } : {}), ...(ref ? { ref } : {}), limit: limit ?? 60 }),
+
     // ------------------------------------------------- your models on your computers
     'personalProviders.list': (_input, ctx) => registry.personalProviders(me(ctx).id),
     'personalProviders.detect': async (_input, ctx) => {
@@ -1579,7 +1686,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       }));
       return allowed.filter((summary): summary is SessionSummary => summary !== null);
     },
-    'sessions.create': async ({ mode, projectId, model, effort, thinking, remoteControl, workspaceId, scratch, permissionMode, connectorsOff: off, research, groupId, temporary }, ctx) => {
+    'sessions.create': async ({ mode, projectId, model, effort, thinking, remoteControl, workspaceId, scratch, permissionMode, connectorsOff: off, research, imageModel, groupId, temporary }, ctx) => {
       if (projectId) await projectOrThrow(projectId, ctx);
       const userId = me(ctx).id;
       if (temporary && (mode !== 'chat' || groupId)) throw appError('unsupported', 'Only a chat can be temporary, and it isn’t filed in a group.');
@@ -1595,7 +1702,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         workspaceId: folder ?? null,
         permissionMode: permissionMode ?? null,
         groupId: groupId && (await groups.get(userId, groupId)) ? groupId : null,
-        overrides: { ...(off?.length ? { connectorsOff: off } : {}), ...(research ? { research } : {}), thinking: thinking ?? (await prefs.get(userId)).thinking, remoteControl: remoteControl ?? true, originClient: ctx.connection().auth?.sessionId },
+        overrides: { ...(off?.length ? { connectorsOff: off } : {}), ...(research ? { research } : {}), ...(imageModel ? { imageModel } : {}), thinking: thinking ?? (await prefs.get(userId)).thinking, remoteControl: remoteControl ?? true, originClient: ctx.connection().auth?.sessionId },
         temporary: temporary ? (await prefs.get(userId)).privacy.temporaryChats : null,
       });
       // Nothing lists a temporary chat, so there is nothing to tell other windows.
@@ -1607,9 +1714,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (projectId) emitToUser(userId, 'projects.changed', {});
       return created;
     },
-    'sessions.update': async ({ id, title, pinned, model, effort, thinking, remoteControl, projectId, permissionMode, connectorsOff: off, research, groupId, archived, unread }, ctx) => {
+    'sessions.update': async ({ id, title, pinned, model, effort, thinking, remoteControl, projectId, permissionMode, connectorsOff: off, research, imageModel, groupId, archived, unread }, ctx) => {
       const before = await sessionOrThrow(id, ctx);
-      const row = off !== undefined || research !== undefined || thinking !== undefined || remoteControl !== undefined ? await sessions.getRow(id) : undefined;
+      const row = off !== undefined || research !== undefined || imageModel !== undefined || thinking !== undefined || remoteControl !== undefined ? await sessions.getRow(id) : undefined;
       if (projectId) await projectOrThrow(projectId, ctx);
       if (groupId && !(await groups.get(me(ctx).id, groupId))) throw appError('not_found', 'Group not found.');
       const loud = {
@@ -1619,7 +1726,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         ...(effort !== undefined ? { effort: sessionEffort(effort, before.mode) } : {}),
         ...(projectId !== undefined ? { projectId } : {}),
         ...(permissionMode !== undefined ? { permissionMode } : {}),
-        ...(row ? { overrides: { ...row.overrides, ...(off !== undefined ? { connectorsOff: off } : {}), ...(research !== undefined ? { research } : {}), ...(thinking !== undefined ? { thinking } : {}), ...(remoteControl !== undefined ? { remoteControl, originClient: row.overrides.originClient ?? ctx.connection().auth?.sessionId } : {}) } } : {}),
+        ...(row ? { overrides: { ...withImageModel(row.overrides, imageModel), ...(off !== undefined ? { connectorsOff: off } : {}), ...(research !== undefined ? { research } : {}), ...(thinking !== undefined ? { thinking } : {}), ...(remoteControl !== undefined ? { remoteControl, originClient: row.overrides.originClient ?? ctx.connection().auth?.sessionId } : {}) } } : {}),
       };
       // Filing, archiving and marking unread are the person's housekeeping, not activity: they don't reorder Recents.
       const quiet = {

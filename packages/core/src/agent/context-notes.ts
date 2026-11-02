@@ -66,6 +66,8 @@ export interface TurnFacts {
   /** The rendered safeguards block's hash, empty when safeguards are off. */
   safeguards: string;
   research: boolean;
+  /** The image models a session with GenerateImage can use, one per line. */
+  imageModels?: string;
   /** How full the context window was at the last request, from 0 to 1. */
   contextFill: number;
   /** Code: the repository as it is now, read only when it hasn't been announced. */
@@ -141,6 +143,12 @@ export async function turnNote(facts: TurnFacts, prior: NoteState, history: read
   set('safeguards', facts.safeguards);
 
   if (facts.research) note('research');
+
+  // Only when the list changes, so the tool's description and the frozen prompt stay byte-stable.
+  if (facts.imageModels !== undefined) {
+    if (prior.imageModels !== facts.imageModels) note('image-models', { list: escapeTags(facts.imageModels) });
+    set('imageModels', facts.imageModels);
+  }
 
   if (facts.ultracode) {
     const ultra = ultracodeNote(facts.ultracode, prior, history, overrides, facts.tools);

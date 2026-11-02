@@ -262,3 +262,50 @@ describe('defaultLimits', () => {
     expect(defaultLimits('https://api.anthropic.com')).toEqual({ parallel: 16, modelsAtOnce: Infinity });
   });
 });
+
+describe('RequestScheduler.hold', () => {
+  const limits = () => ({ parallel: 1, modelsAtOnce: 1 });
+  const signal = () => new AbortController().signal;
+
+  it('queues an image job with text on the same server', async () => {
+    const scheduler = new RequestScheduler();
+    const first = await scheduler.hold('gpu', limits, 'image:a', signal());
+    let started = false;
+    const second = scheduler.hold('gpu', limits, 'image:b', signal()).then((release) => ((started = true), release));
+    await Promise.resolve();
+    expect(started).toBe(false);
+    expect(scheduler.load('gpu')).toMatchObject({ running: 1, queued: 1 });
+    first();
+    (await second)();
+    expect(scheduler.load('gpu')).toMatchObject({ running: 0, queued: 0 });
+  });
+
+  it('lets an exclusive job run alone however many the server could take', async () => {
+    const scheduler = new RequestScheduler();
+    const wide = () => ({ parallel: 4, modelsAtOnce: 4 });
+    const text = await scheduler.hold('gpu', wide, 'text', signal());
+    let imageStarted = false;
+    const image = scheduler.hold('gpu', wide, 'image', signal(), { exclusive: true }).then((release) => ((imageStarted = true), release));
+    await Promise.resolve();
+    expect(imageStarted).toBe(false);
+    text();
+    const release = await image;
+    let textStarted = false;
+    const next = scheduler.hold('gpu', wide, 'text', signal()).then((r) => ((textStarted = true), r));
+    await Promise.resolve();
+    expect(textStarted).toBe(false);
+    release();
+    (await next)();
+  });
+
+  it('leaves the queue when stopped while waiting', async () => {
+    const scheduler = new RequestScheduler();
+    const first = await scheduler.hold('gpu', limits, 'a', signal());
+    const controller = new AbortController();
+    const waiting = scheduler.hold('gpu', limits, 'b', controller.signal);
+    controller.abort(new Error('stopped'));
+    await expect(waiting).rejects.toThrow('stopped');
+    first();
+    expect(scheduler.load('gpu')).toMatchObject({ running: 0, queued: 0 });
+  });
+});

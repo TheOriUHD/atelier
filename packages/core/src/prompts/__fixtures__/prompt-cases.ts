@@ -70,6 +70,8 @@ export interface PromptCase {
   memory?: { entries?: number; searchChats?: boolean; generate?: boolean };
   /** Computer use is on in the desktop app running the session. */
   computer?: boolean;
+  /** The session has an image model. */
+  images?: boolean;
 }
 
 export interface Assembled {
@@ -285,6 +287,15 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
       mcpTools: async () => connectorTools(c.connectors ?? 0, c.connectorTools),
       workspace: async (s) => (s.mode === 'chat' ? null : workspace),
       chatSandboxAvailable: () => c.sandbox === true,
+      ...(c.images
+        ? {
+            images: {
+              generate: async () => ({ content: [] }),
+              available: async () => true,
+              modelList: async () => '- comfy/sdxl (SDXL): prompt in comma-separated tags, takes a negative prompt, can change images',
+            },
+          }
+        : {}),
       ...(c.computer
         ? {
             computer: {
@@ -484,6 +495,9 @@ export const CASES: Record<string, PromptCase> = {
   'work.compact': { mode: 'work', tier: 'compact' },
   'work.full.memory': { mode: 'work', memory: {} },
   'work.full.computer': { mode: 'work', computer: true },
+  'chat.full.images': { mode: 'chat', images: true },
+  'code.full.images': { mode: 'code', images: true },
+  'code.compact.images': { mode: 'code', tier: 'compact', images: true },
   'code.compact.computer': { mode: 'code', tier: 'compact', computer: true },
   'code.full': { mode: 'code' },
   'code.full.plan': { mode: 'code', permissionMode: 'plan' },

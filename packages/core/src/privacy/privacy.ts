@@ -39,6 +39,7 @@ export async function collectUnusedBlobs(db: Db, blobs: BlobStore, now = Date.no
        UNION SELECT tools_snapshot FROM sessions WHERE tools_snapshot IS NOT NULL
        UNION SELECT before_blob FROM checkpoints WHERE before_blob IS NOT NULL
        UNION SELECT avatar_blob FROM users WHERE avatar_blob IS NOT NULL
+       UNION SELECT blob FROM generated_images
        UNION SELECT json_tree.value FROM messages, json_tree(messages.parts) WHERE json_tree.key = 'blob'
        UNION SELECT sha256 FROM blobs WHERE created_at > ?`,
     )

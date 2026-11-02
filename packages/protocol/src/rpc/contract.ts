@@ -40,6 +40,7 @@ import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, ProviderStatus, ProviderType } from '../models.ts';
+import { DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
 import {
@@ -265,6 +266,21 @@ export const contract = {
     'providers.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(ProviderStatus) },
     'models.list': { input: Empty, output: z.array(ModelInfo) },
     'models.probeTools': { input: z.object({ ref: z.string() }), output: z.object({ native: z.boolean(), detail: z.string() }) },
+    /** Image providers (ARCHITECTURE §23), separate from text providers. */
+    'imageProviders.status': { input: Empty, output: z.array(ProviderStatus) },
+    'imageProviders.detect': { input: Empty, output: z.array(DetectedImageServer) },
+    'imageProviders.test': { input: ImageProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ImageModelInfo) }) },
+    /** Makes one small real image, so a person sees it works. It can cost money, so only a click asks for it. */
+    'imageProviders.tryImage': { input: z.object({ draft: ImageProviderDraft, modelId: z.string().optional() }), output: z.object({ blob: z.string(), mime: z.string(), width: z.number(), height: z.number(), durationMs: z.number() }) },
+    'imageProviders.save': { input: ImageProviderDraft, output: ImageProviderConfig },
+    'imageProviders.remove': { input: Id, output: Ok },
+    'imageProviders.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(ProviderStatus) },
+    'imageModels.list': { input: Empty, output: z.array(ImageModelInfo) },
+    /** The person's generated images, newest first; `before` is the `createdAt` of the last one so far. */
+    'generatedImages.list': {
+      input: z.object({ before: z.number().optional(), query: z.string().max(200).optional(), ref: z.string().optional(), limit: z.number().int().min(1).max(100).optional() }),
+      output: z.object({ items: z.array(GeneratedImage), next: z.number().nullable(), totalBytes: z.number() }),
+    },
     /**
      * The caller's personal providers (personal-providers.ts): their own model servers and ChatGPT Chat, on their
      * computers. `detect`, `test` and adding one run on the desktop app the call comes from, which lends the address
@@ -312,6 +328,7 @@ export const contract = {
         permissionMode: PermissionMode.optional(),
         connectorsOff: z.array(McpServerName).max(200).optional(),
         research: z.boolean().optional(),
+        imageModel: z.string().max(300).optional(),
         /** File the new session under one of the person's sidebar groups. */
         groupId: z.string().optional(),
         /** A temporary chat (Chat only), private as the person's `privacy.temporaryChats` says. */
@@ -334,6 +351,8 @@ export const contract = {
         connectorsOff: z.array(McpServerName).max(200).optional(),
         /** Takes effect from the next message. */
         research: z.boolean().optional(),
+        /** The image model for this session; null goes back to the person's default. */
+        imageModel: z.string().max(300).nullable().optional(),
         /** A sidebar group of the person's (null: ungrouped). Doesn't count as activity. */
         groupId: z.string().nullable().optional(),
         /** Puts it away (true) or brings it back (false). Doesn't count as activity. */
@@ -706,6 +725,8 @@ export const contract = {
     'settings.changed': SettingsSnapshot,
     'providers.changed': z.array(ProviderStatus),
     'models.changed': z.array(ModelInfo),
+    'imageProviders.changed': z.array(ProviderStatus),
+    'imageModels.changed': z.array(ImageModelInfo),
     'projects.changed': Empty,
     'workspaces.changed': z.array(WorkspaceSummary),
     /** One of the person's desktop devices came or went, or changed what it lends: read `account.devices` again. */
@@ -781,6 +802,13 @@ export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNam
   'providers.remove',
   'providers.refresh',
   'models.probeTools',
+  'imageProviders.status',
+  'imageProviders.detect',
+  'imageProviders.test',
+  'imageProviders.tryImage',
+  'imageProviders.save',
+  'imageProviders.remove',
+  'imageProviders.refresh',
   'users.list',
   'users.create',
   'users.update',

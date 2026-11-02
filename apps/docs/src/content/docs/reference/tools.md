@@ -47,6 +47,8 @@ without asking are on [Permissions](/permissions/), and how descriptions are kep
 | [`ChatRead`](#chatread) | Chat (some setups), Cowork (some setups) | Reads part of one of the person's past conversations: at most 6 messages, each cut to a few thousand characters. |
 | [`artifact`](#artifact) | Chat, Code | Shows a file from the workspace in the Artifact pane beside the conversation, so the person can look at what you made without leaving Atelier. |
 | [`inline_visual`](#inline_visual) | Chat, Cowork | Shows a self-contained inline explainer or mini app in the conversation when seeing or interacting helps understanding; not for every answer. |
+| [`GenerateImage`](#generateimage) | Chat (some setups), Code (some setups) | Makes images from a text description and shows them in the conversation. |
+| [`SaveImage`](#saveimage) | Code (some setups) | Saves an image from this conversation (generated or attached, by its `img_…` id) as a file in the folder. |
 
 ## Read
 
@@ -1233,3 +1235,85 @@ Provide accessible, keyboard-operable controls and a plain-language description.
 | `title` | string | yes |  |
 | `html` | string | yes | Self-contained HTML fragment, with CSS and any script last. |
 | `description` | string | yes | Plain-language explanation, also available without the visual. |
+
+## GenerateImage
+
+**Available in:** Chat (some setups), Code (some setups)
+
+### Description
+
+````text wrap
+Makes images from a text description and shows them in the conversation. A local server can take minutes.
+- Use it when the person asks for a picture, photo, illustration, logo or anything else to look at. Charts, diagrams and anything drawn from data or code belong in an artifact or visual instead.
+- Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.
+- A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.
+- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want.
+- `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.
+- If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.
+- The images appear by themselves: never paste their ids or links into your reply.
+- A provider's refusal is final: tell the person, and don't reword the prompt to get around it. Never make sexual images of minors, whatever the model allows.
+````
+
+<details>
+<summary>The description reads differently in 2 other setups</summary>
+
+A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
+
+**Code, full tier**
+
+````text wrap
+Makes images from a text description and shows them in the conversation. A local server can take minutes.
+- Use it when the person asks for a picture, photo, illustration, logo or anything else to look at. Charts, diagrams and anything drawn from data or code belong in an artifact or visual instead.
+- Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.
+- A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.
+- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want. A path to an image file in the folder works too.
+- `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.
+- If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.
+- The images appear by themselves: never paste their ids or links into your reply.
+- A provider's refusal is final: tell the person, and don't reword the prompt to get around it. Never make sexual images of minors, whatever the model allows.
+````
+
+**Code, compact tier**
+
+````text wrap
+Makes an image from a description and shows it to the person.
+- Only when the person asks for an image.
+- `prompt`: describe what it shows, in detail. Follow the prompt style in the note about image models.
+- To change an earlier or attached image, put its `img_…` id in `reference_images`.
+````
+
+</details>
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | yes | What the image shows. |
+| `negative_prompt` | string | no | What it must not show, for models that take one. |
+| `aspect_ratio` | string | no | Like 1:1, 16:9 or 2:3. |
+| `size` | "small" \| "medium" \| "large" | no |  |
+| `count` | integer | no | How many to make. |
+| `quality` | "draft" \| "standard" \| "high" | no |  |
+| `reference_images` | array of string | no | Images to change or to work from. |
+| `mask` | string | no | An image id: white where the first reference image may change. |
+| `model` | string | no | Which image model; leave it out for the person’s choice. |
+| `seed` | integer | no | Repeats a result, on models that can. |
+| `transparent` | boolean | no | A transparent background, on models that can. |
+| `options` | object | no | Sampling settings for local models. Only when the person asks for them. |
+
+## SaveImage
+
+**Available in:** Code (some setups)
+
+### Description
+
+````text wrap
+Saves an image from this conversation (generated or attached, by its `img_…` id) as a file in the folder. Missing parent folders are created. The file type comes from the image, so the extension must match it.
+````
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `image` | string | yes | The image id, like img_ab12cd34. |
+| `file_path` | string | yes | Where to save it. |

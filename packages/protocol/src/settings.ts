@@ -6,6 +6,7 @@
  * Keys are added to this schema in the milestone that uses them.
  */
 import { z } from 'zod';
+import { ImageModelOverride, ImagePrice, ImageProviderConfig } from './images.ts';
 import { McpServerConfig, McpServerName } from './mcp.ts';
 import { ProviderId, ProviderType, PromptTier } from './models.ts';
 
@@ -114,7 +115,7 @@ export const SettingsSchema = z.object({
   models: z
     .object({
       defaults: z
-        .object({ chat: z.string(), work: z.string(), code: z.string(), small: z.string() })
+        .object({ chat: z.string(), work: z.string(), code: z.string(), small: z.string(), image: z.string() })
         .partial()
         .default({}),
       aliases: z.object({ opus: z.string(), sonnet: z.string(), haiku: z.string(), fable: z.string() }).partial().default({}),
@@ -143,6 +144,20 @@ export const SettingsSchema = z.object({
     })
     .default({ webSearch: { enabled: true, provider: 'auto' }, webFetch: true, webFetchPrivateNetworks: false }),
   pricing: z.record(z.string(), Price).default({}),
+  /** Image providers are separate from text providers (ARCHITECTURE §23): a bad entry here can't drop `providers`. */
+  imageProviders: z.array(ImageProviderConfig).default([]),
+  imageModels: z.object({ overrides: z.record(z.string(), ImageModelOverride).default({}) }).default({ overrides: {} }),
+  imagePricing: z.record(z.string(), ImagePrice).default({}),
+  imageGeneration: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Images one turn may make, so text on a web page can't spend the person's money. */
+      maxImagesPerTurn: z.number().int().min(1).max(100).default(8),
+      /** Per person per day, on a server with several accounts; absent means no limit. */
+      maxImagesPerUserPerDay: z.number().int().min(1).optional(),
+      maxSpendPerUserPerDayUsd: z.number().positive().optional(),
+    })
+    .default({ enabled: true, maxImagesPerTurn: 8 }),
   context: z
     .object({ autoCompactAt: z.number().min(0.5).max(0.98).default(0.85) })
     .default({ autoCompactAt: 0.85 }),

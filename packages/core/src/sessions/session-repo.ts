@@ -26,6 +26,7 @@ export function toSummary(r: SessionRow): SessionSummary {
     remoteControl: r.overrides.remoteControl !== false,
     connectorsOff: connectorsOff(r),
     research: r.overrides.research === true,
+    ...(typeof r.overrides.imageModel === 'string' ? { imageModel: r.overrides.imageModel } : {}),
     status: r.status,
     finishedUnseen: r.finishedUnseenAt !== null,
     groupId: r.groupId,

@@ -5,21 +5,24 @@
  */
 import type { MessageError } from '@atelier/protocol';
 import type { AdapterDeps, ChatRequest, HealthResult, ProviderInstance, StreamEvent } from './types.ts';
+
+/** What the plumbing needs of a provider, text or image. */
+export type ProviderIdentity = Pick<ProviderInstance, 'name' | 'baseUrl' | 'apiKey' | 'headers'>;
 import { isRecord, rec, str } from './util.ts';
 
 const PROVIDERS_FIX = 'settings/providers';
 const MODELS_FIX = 'settings/models';
 
-export function jsonHeaders(instance: ProviderInstance, auth: Record<string, string>): Record<string, string> {
+export function jsonHeaders(instance: ProviderIdentity, auth: Record<string, string>): Record<string, string> {
   return { 'content-type': 'application/json', ...instance.headers, ...auth };
 }
 
-export function bearer(instance: ProviderInstance): Record<string, string> {
+export function bearer(instance: ProviderIdentity): Record<string, string> {
   return instance.apiKey ? { authorization: `Bearer ${instance.apiKey}` } : {};
 }
 
 /** Remove secrets (API key, custom header values) from text that may echo them back. */
-export function redact(text: string, instance: ProviderInstance): string {
+export function redact(text: string, instance: ProviderIdentity): string {
   const secrets = [instance.apiKey, ...Object.values(instance.headers)].filter(
     (s): s is string => typeof s === 'string' && s.length >= 8,
   );
@@ -59,7 +62,7 @@ const MODEL_OUTPUT_INVALID =
 
 /** Classify a provider failure from its HTTP status (if any) and the provider's own error type/message. */
 export function classifyError(
-  instance: ProviderInstance,
+  instance: ProviderIdentity,
   status: number | null,
   kind: string,
   message: string,
@@ -124,7 +127,7 @@ export function classifyError(
   };
 }
 
-export async function httpError(res: Response, instance: ProviderInstance): Promise<MessageError> {
+export async function httpError(res: Response, instance: ProviderIdentity): Promise<MessageError> {
   const body = await res.text().catch(() => '');
   let kind = '';
   try {
@@ -142,7 +145,7 @@ export function isAbortError(err: unknown): boolean {
   );
 }
 
-function hostOf(instance: ProviderInstance): string {
+function hostOf(instance: ProviderIdentity): string {
   try {
     return new URL(instance.baseUrl).host;
   } catch {
@@ -174,7 +177,7 @@ export function noAnswerError(baseUrl: string, timeoutMs: number): string {
 }
 
 /** Map a thrown exception (network failure, bug) to a message error. */
-export function exceptionError(err: unknown, instance: ProviderInstance): MessageError {
+export function exceptionError(err: unknown, instance: ProviderIdentity): MessageError {
   if (err instanceof Error && err.name === 'TimeoutError') {
     return {
       code: 'provider_timeout',
@@ -211,7 +214,7 @@ export class ProviderHttpError extends Error {
 /** POST a JSON body and return the response, or a ready-made error finish when the request failed. */
 export async function postStream(
   deps: AdapterDeps,
-  instance: ProviderInstance,
+  instance: ProviderIdentity,
   url: string,
   headers: Record<string, string>,
   body: unknown,
@@ -226,8 +229,8 @@ export async function postStream(
 
 /** GET/POST returning parsed JSON; non-2xx responses throw `ProviderHttpError`. */
 export async function requestJson(
-  deps: AdapterDeps,
-  instance: ProviderInstance,
+  deps: Pick<AdapterDeps, 'fetch'>,
+  instance: ProviderIdentity,
   url: string,
   init: { method?: 'GET' | 'POST'; headers: Record<string, string>; body?: unknown; signal?: AbortSignal },
 ): Promise<unknown> {
@@ -247,7 +250,7 @@ export async function requestJson(
  */
 export async function* guardStream(
   request: ChatRequest,
-  instance: ProviderInstance,
+  instance: ProviderIdentity,
   run: () => AsyncGenerator<StreamEvent>,
 ): AsyncGenerator<StreamEvent> {
   try {
@@ -285,8 +288,8 @@ export async function* guardStream(
 
 /** Time a single probe request and describe the outcome for the Providers page. */
 export async function probe(
-  deps: AdapterDeps,
-  instance: ProviderInstance,
+  deps: Pick<AdapterDeps, 'fetch'>,
+  instance: ProviderIdentity,
   url: string,
   headers: Record<string, string>,
   signal: AbortSignal | undefined,
