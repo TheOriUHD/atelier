@@ -22,6 +22,7 @@ import { ScrollToBottom, SessionHeader, clearCommand, loopCommand, modelCommand,
 import { Transcript } from '../chat/transcript.tsx';
 import type { ActivityStepView } from '../chat/turns.ts';
 import { useSessionConnectors } from '../chat/connector-switches.ts';
+import { useSessionImageModel } from '../chat/image-model.ts';
 import { useSessionSend } from '../chat/outbox.tsx';
 import { useAttachments } from '../chat/use-attachments.ts';
 import { InteractionCard } from '../code/interaction-card.tsx';
@@ -59,6 +60,7 @@ export function WorkPage() {
   const [preview, setPreview] = useState<OutputFile | null>(null);
   const session = live.session;
   const connectors = useSessionConnectors(session);
+  const imageModel = useSessionImageModel(session);
   const workspace = workspaces?.find((w) => w.id === session?.workspaceId);
   const model = models?.find((m) => m.ref === session?.model);
   const providerType = useProviderType(model?.providerId);
@@ -158,6 +160,7 @@ export function WorkPage() {
                     suggestion={live.suggestion}
                     draftKey={draftKeys.session(sessionId)}
                     connectors={connectors}
+                    imageModel={imageModel}
                     autoFocus
                     attachments={attachments}
                     model={model}

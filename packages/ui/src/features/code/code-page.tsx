@@ -28,6 +28,7 @@ import { SelectionReply } from '../chat/selection-reply.tsx';
 import { TRANSCRIPT_VIEWS, TranscriptDetail } from '../chat/parts.tsx';
 import { Transcript } from '../chat/transcript.tsx';
 import { useSessionConnectors } from '../chat/connector-switches.ts';
+import { useSessionImageModel } from '../chat/image-model.ts';
 import { useSessionSend } from '../chat/outbox.tsx';
 import { useAttachments } from '../chat/use-attachments.ts';
 import { ArtifactPaneContext } from '../chat/artifact-card.tsx';
@@ -120,6 +121,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   const rewindTo = useCallback((messageId: string) => setRewind({ open: true, messageId }), []);
   const session = live.session;
   const connectors = useSessionConnectors(session);
+  const imageModel = useSessionImageModel(session);
   const workspace = workspaces?.find((w) => w.id === session?.workspaceId);
   const workspaceId = workspace?.available ? workspace.id : null;
   const { data: git } = useGitStatus(workspaceId);
@@ -386,6 +388,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                         draftKey={draftKeys.session(sessionId)}
                         compact
                         connectors={connectors}
+                        imageModel={imageModel}
                         autoFocus
                         attachments={attachments}
                         model={model}

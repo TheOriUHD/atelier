@@ -35,6 +35,7 @@ import { NewSessionContextButton } from '../code/context-popover.tsx';
 import { useDefaultModel } from './models.ts';
 import { modelCommand } from './session-view.tsx';
 import { useNewConnectors } from './connector-switches.ts';
+import { useNewImageModel } from './image-model.ts';
 import { useNewResearch } from './research.ts';
 import { useStartSession } from './start-session.ts';
 import { Starters } from './starters.tsx';
@@ -71,6 +72,7 @@ export function HomePage() {
   const { sending, start } = useStartSession(attachments);
   const connectors = useNewConnectors();
   const research = useNewResearch();
+  const imageModel = useNewImageModel();
   const composer = useRef<ComposerHandle>(null);
   const model = models?.find((m) => m.ref === modelRef) ?? defaultModel;
   const providerType = useProviderType(model?.providerId);
@@ -86,6 +88,7 @@ export function HomePage() {
       effort,
       ...(connectors.off.length ? { connectorsOff: [...connectors.off] } : {}),
       ...(research?.on ? { research: true } : {}),
+      ...(imageModel?.ref ? { imageModel: imageModel.ref } : {}),
     };
     if (!folder) return start({ mode: 'chat', ...choices, ...(projectId && offersProject ? { projectId } : {}), ...(temporary ? { temporary: true } : {}) }, text);
     // Sending is the gesture browsers want before they ask; Cowork tells the person when a task is done.
@@ -122,6 +125,7 @@ export function HomePage() {
             temporary={temporary}
             connectors={connectors}
             research={research}
+            imageModel={imageModel}
             onAddFolder={temporary ? undefined : setWorkspaceId}
             autoFocus
             attachments={attachments}

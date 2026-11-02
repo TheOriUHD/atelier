@@ -7,6 +7,7 @@ import { pressIs, useShortcut } from '../../lib/shortcuts.ts';
 import { useComposerMenu, type SlashCommand } from './composer-menu.tsx';
 import { leadingCommand } from './command-text.tsx';
 import { PlusMenu } from './plus-menu.tsx';
+import type { ImageModelChoice } from './image-model.ts';
 import type { ResearchSwitch } from './research.ts';
 import { QuoteTile } from './quote.tsx';
 import { isImage, isText, type Attachment, type Attachments } from './use-attachments.ts';
@@ -52,6 +53,8 @@ export interface ComposerProps {
   connectors?: ConnectorSwitches;
   /** Research on or off (the + menu's toggle); absent while web search is off. */
   research?: ResearchSwitch;
+  /** The image model for this conversation (the + menu's row); absent with fewer than two to choose between. */
+  imageModel?: ImageModelChoice;
   /** A new conversation: + › Add folder turns it into a Cowork task in the folder picked. */
   onAddFolder?(workspaceId: string): void;
   /**
@@ -98,6 +101,7 @@ export function Composer({
   onKeyDown,
   connectors,
   research,
+  imageModel,
   onAddFolder,
   dock,
   temporary,
@@ -183,6 +187,7 @@ export function Composer({
         workspaceId={workspaceId}
         connectors={connectors}
         research={research}
+        imageModel={imageModel}
       />
       {research?.on && (
         <Tooltip content="Research is on: each message searches broadly and cites sources">

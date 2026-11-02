@@ -20,6 +20,7 @@ import { ContextButton } from '../code/context-popover.tsx';
 import { ScrollToBottom, SessionHeader, clearCommand, modelCommand, useFollowScroll } from './session-view.tsx';
 import { Transcript } from './transcript.tsx';
 import { useSessionConnectors } from './connector-switches.ts';
+import { useSessionImageModel } from './image-model.ts';
 import { useSessionResearch } from './research.ts';
 import { useAttachments } from './use-attachments.ts';
 import { SideChatPanel, btwCommand, useSideChatPanel, useSideChats } from './side-chat.tsx';
@@ -37,6 +38,7 @@ export function ChatPage() {
   const session = live.session;
   const connectors = useSessionConnectors(session);
   const research = useSessionResearch(session);
+  const imageModel = useSessionImageModel(session);
   const model = models?.find((m) => m.ref === session?.model);
   const providerType = useProviderType(model?.providerId);
   // A connector's permission prompt or question keeps the run going.
@@ -103,6 +105,7 @@ export function ChatPage() {
               temporary={temporary}
               connectors={connectors}
               research={research}
+              imageModel={imageModel}
               autoFocus
               attachments={attachments}
               model={model}

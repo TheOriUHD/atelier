@@ -10,6 +10,7 @@ import {
   FolderClosed,
   FolderOpen,
   FolderPlus,
+  Image as ImageIcon,
   Paperclip,
   Plus,
   Puzzle,
@@ -21,7 +22,11 @@ import {
   Menu,
   MenuCheckboxItem,
   MenuContent,
+  MenuGroup,
   MenuItem,
+  MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
   MenuSubmenu,
   MenuTrigger,
@@ -36,6 +41,7 @@ import { recentWorkspaces, workspaceLabel } from '../code/workspaces.ts';
 import { chooseLocalFolder } from '../workspaces/trust.tsx';
 import type { ConnectorSwitches } from './composer.tsx';
 import { useSlashList } from './composer-menu.tsx';
+import { useDefaultImageModel, useImageModelGroups, type ImageModelChoice } from './image-model.ts';
 import type { ResearchSwitch } from './research.ts';
 
 /** Rows 36 tall with 15px labels. */
@@ -48,6 +54,7 @@ export function PlusMenu({
   workspaceId,
   connectors,
   research,
+  imageModel,
 }: {
   onUpload(): void;
   /** Puts `/name ` in the message box. */
@@ -57,6 +64,7 @@ export function PlusMenu({
   workspaceId: string | null | undefined;
   connectors: ConnectorSwitches | undefined;
   research: ResearchSwitch | undefined;
+  imageModel: ImageModelChoice | undefined;
 }) {
   const navigate = useNavigate();
   const { account } = useAccount();
@@ -120,21 +128,59 @@ export function PlusMenu({
             Add plugins
           </MenuItem>
         )}
+        {(research || imageModel) && <MenuSeparator />}
+        {imageModel && <ImageModelRow choice={imageModel} />}
         {research && (
-          <>
-            <MenuSeparator />
-            <MenuCheckboxItem
-              icon={Telescope}
-              className={ROW}
-              checked={research.on}
-              onCheckedChange={(on) => research.onChange(on)}
-            >
-              Research
-            </MenuCheckboxItem>
-          </>
+          <MenuCheckboxItem
+            icon={Telescope}
+            className={ROW}
+            checked={research.on}
+            onCheckedChange={(on) => research.onChange(on)}
+          >
+            Research
+          </MenuCheckboxItem>
         )}
       </MenuContent>
     </Menu>
+  );
+}
+
+/** Radio value of "Default"; model refs always contain a slash, so it can't collide. */
+const DEFAULT_MODEL = 'default';
+
+/** The image model for this conversation, by provider; a chosen model that has since gone counts as Default. */
+function ImageModelRow({ choice }: { choice: ImageModelChoice }) {
+  const groups = useImageModelGroups();
+  const fallback = useDefaultImageModel();
+  const chosen = groups.flatMap((g) => g.models).find((m) => m.ref === choice.ref);
+  const select = (next: string) => choice.onChange(next === DEFAULT_MODEL ? null : next);
+  return (
+    <MenuSubmenu
+      label="Image model"
+      icon={ImageIcon}
+      hint={chosen && <span className="block max-w-20 truncate">{chosen.displayName}</span>}
+      triggerClassName={ROW}
+      className="max-h-96 w-72"
+    >
+      <MenuRadioGroup value={chosen?.ref ?? DEFAULT_MODEL} onValueChange={select}>
+        <MenuRadioItem value={DEFAULT_MODEL} description={fallback?.displayName}>
+          Default
+        </MenuRadioItem>
+      </MenuRadioGroup>
+      {groups.map((g) => (
+        <MenuGroup key={g.providerId}>
+          <MenuSeparator />
+          {groups.length > 1 && <MenuLabel>{g.label}</MenuLabel>}
+          <MenuRadioGroup value={chosen?.ref ?? ''} onValueChange={select}>
+            {g.models.map((m) => (
+              <MenuRadioItem key={m.ref} value={m.ref} description={m.description}>
+                {m.displayName}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+      ))}
+    </MenuSubmenu>
   );
 }
 

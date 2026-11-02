@@ -18,6 +18,7 @@ import { ModelPicker } from '../chat/model-picker.tsx';
 import { useDefaultModel } from '../chat/models.ts';
 import { modelCommand } from '../chat/session-view.tsx';
 import { useNewConnectors } from '../chat/connector-switches.ts';
+import { useNewImageModel } from '../chat/image-model.ts';
 import { useStartSession } from '../chat/start-session.ts';
 import { useAttachments } from '../chat/use-attachments.ts';
 import { askToNotify } from '../work/notifications.ts';
@@ -53,6 +54,7 @@ export function FolderHome({ mode: sessionMode, children }: { mode: 'work' | 'co
   const attachments = useAttachments(cell ? undefined : sessionMode === 'code' ? draftKeys.newCode : draftKeys.newChat);
   const { sending, start } = useStartSession(attachments);
   const connectors = useNewConnectors();
+  const imageModel = useNewImageModel();
   const { environment, folders, choice, scratchHost, choose } = useEnvironment(sessionMode, search.workspace, search.host);
   const model = models?.find((m) => m.ref === modelRef) ?? defaultModel;
   const providerType = useProviderType(model?.providerId);
@@ -73,7 +75,7 @@ export function FolderHome({ mode: sessionMode, children }: { mode: 'work' | 'co
     if (!choice) return void toast.error(desktop ? 'Choose a folder to work in first.' : NO_FOLDER_HINT);
     // Sending is the gesture browsers want before they ask; Cowork tells the person when a task is done.
     if (!code && prefs) askToNotify(prefs);
-    const choices = { ...(code && chosenMode ? { permissionMode: chosenMode } : {}), ...(connectors.off.length ? { connectorsOff: [...connectors.off] } : {}) };
+    const choices = { ...(code && chosenMode ? { permissionMode: chosenMode } : {}), ...(connectors.off.length ? { connectorsOff: [...connectors.off] } : {}), ...(imageModel?.ref ? { imageModel: imageModel.ref } : {}) };
     const where = choice.kind === 'folder' ? { workspaceId: choice.workspace.id } : { scratch: choice.host ? { sshHost: choice.host } : {} };
     await start({ mode: sessionMode, model: model.ref, effort, ...where, ...choices, ...(search.group ? { groupId: search.group } : {}) }, text);
   };
@@ -112,6 +114,7 @@ export function FolderHome({ mode: sessionMode, children }: { mode: 'work' | 'co
             draftKey={cell ? undefined : code ? draftKeys.newCode : draftKeys.newChat}
             compact
             connectors={connectors}
+            imageModel={imageModel}
             autoFocus
             attachments={attachments}
             model={model}

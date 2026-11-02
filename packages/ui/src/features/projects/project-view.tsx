@@ -13,6 +13,7 @@ import { ModelPicker } from '../chat/model-picker.tsx';
 import { useDefaultModel } from '../chat/models.ts';
 import { modelCommand } from '../chat/session-view.tsx';
 import { useNewConnectors } from '../chat/connector-switches.ts';
+import { useNewImageModel } from '../chat/image-model.ts';
 import { useNewResearch } from '../chat/research.ts';
 import { useStartSession } from '../chat/start-session.ts';
 import { useAttachments } from '../chat/use-attachments.ts';
@@ -230,6 +231,7 @@ function ProjectComposer({ project }: { project: Project }) {
   const { sending, start } = useStartSession(attachments);
   const connectors = useNewConnectors();
   const research = useNewResearch();
+  const imageModel = useNewImageModel();
   const model = models?.find((m) => m.ref === modelRef) ?? defaultModel;
 
   const send = (text: string) =>
@@ -242,6 +244,7 @@ function ProjectComposer({ project }: { project: Project }) {
         projectId: project.id,
         ...(connectors.off.length ? { connectorsOff: [...connectors.off] } : {}),
         ...(research?.on ? { research: true } : {}),
+        ...(imageModel?.ref ? { imageModel: imageModel.ref } : {}),
       },
       text,
     );
@@ -253,6 +256,7 @@ function ProjectComposer({ project }: { project: Project }) {
         draftKey={draftKeys.project(project.id)}
         connectors={connectors}
         research={research}
+        imageModel={imageModel}
         autoFocus
         attachments={attachments}
         model={model}
