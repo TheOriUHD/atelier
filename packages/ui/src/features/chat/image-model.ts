@@ -12,9 +12,34 @@ export interface ImageModelChoice {
 }
 
 export interface ImageModelGroup {
-  providerId: string;
+  id: string;
   label: string;
   models: ImageModelInfo[];
+  /** Every model here is on a computer that isn't connected. */
+  offline: boolean;
+}
+
+/**
+ * Image models grouped for a picker, as `useModelGroups` does for text: by provider, and the person's own by the computer
+ * they run on, which is what the picker shows as the group's name. `providerName` names the shared providers.
+ */
+export function imageModelGroups(models: readonly ImageModelInfo[], providerName: (id: string) => string | undefined): ImageModelGroup[] {
+  const groups = new Map<string, ImageModelInfo[]>();
+  for (const m of models) {
+    const key = m.personal ? `device:${m.personal.deviceId}` : m.providerId;
+    if (!m.hidden) groups.set(key, [...(groups.get(key) ?? []), m]);
+  }
+  return [...groups].map(([id, list]) => ({
+    id,
+    label: list[0]!.personal?.deviceName ?? providerName(id) ?? id,
+    models: [...list].sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order || a.displayName.localeCompare(b.displayName)),
+    offline: list.every((m) => m.available === false),
+  }));
+}
+
+/** One line under an image model in a picker; a personal one whose computer is away says so, and can't be chosen. */
+export function imageModelSubtitle(m: ImageModelInfo): string | undefined {
+  return m.available === false ? `${m.personal?.deviceName ?? 'Its computer'} isn’t connected` : m.description;
 }
 
 /** Hidden models are an admin's to keep from the picker, their own included. */
@@ -23,20 +48,13 @@ function useVisibleImageModels(): ImageModelInfo[] {
   return useMemo(() => (data ?? []).filter((m) => !m.hidden), [data]);
 }
 
-/** The models by provider, favorites first and then by order and name, as the text picker groups them. */
+/** The models by provider and by computer, favorites first and then by order and name, as the text picker groups them. */
 export function useImageModelGroups(): ImageModelGroup[] {
   const models = useVisibleImageModels();
   const { settings } = useSettings();
   return useMemo(() => {
-    if (models.length === 0) return [];
     const names = new Map(settings?.imageProviders.map((p) => [p.id, p.name]));
-    const groups = new Map<string, ImageModelInfo[]>();
-    for (const m of models) groups.set(m.providerId, [...(groups.get(m.providerId) ?? []), m]);
-    return [...groups].map(([providerId, list]) => ({
-      providerId,
-      label: names.get(providerId) ?? providerId,
-      models: list.sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order || a.displayName.localeCompare(b.displayName)),
-    }));
+    return imageModelGroups(models, (id) => names.get(id));
   }, [models, settings?.imageProviders]);
 }
 

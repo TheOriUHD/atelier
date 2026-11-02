@@ -41,7 +41,7 @@ import { recentWorkspaces, workspaceLabel } from '../code/workspaces.ts';
 import { chooseLocalFolder } from '../workspaces/trust.tsx';
 import type { ConnectorSwitches } from './composer.tsx';
 import { useSlashList } from './composer-menu.tsx';
-import { useDefaultImageModel, useImageModelGroups, type ImageModelChoice } from './image-model.ts';
+import { imageModelSubtitle, useDefaultImageModel, useImageModelGroups, type ImageModelChoice } from './image-model.ts';
 import type { ResearchSwitch } from './research.ts';
 
 /** Rows 36 tall with 15px labels. */
@@ -148,7 +148,7 @@ export function PlusMenu({
 /** Radio value of "Default"; model refs always contain a slash, so it can't collide. */
 const DEFAULT_MODEL = 'default';
 
-/** The image model for this conversation, by provider; a chosen model that has since gone counts as Default. */
+/** The image model for this conversation, by provider and computer; a chosen model that has since gone counts as Default. */
 function ImageModelRow({ choice }: { choice: ImageModelChoice }) {
   const groups = useImageModelGroups();
   const fallback = useDefaultImageModel();
@@ -162,12 +162,12 @@ function ImageModelRow({ choice }: { choice: ImageModelChoice }) {
         </MenuRadioItem>
       </MenuRadioGroup>
       {groups.map((g) => (
-        <MenuGroup key={g.providerId}>
+        <MenuGroup key={g.id}>
           <MenuSeparator />
           {groups.length > 1 && <MenuLabel>{g.label}</MenuLabel>}
           <MenuRadioGroup value={chosen?.ref ?? ''} onValueChange={select}>
             {g.models.map((m) => (
-              <MenuRadioItem key={m.ref} value={m.ref} description={m.description}>
+              <MenuRadioItem key={m.ref} value={m.ref} disabled={m.available === false} description={imageModelSubtitle(m)}>
                 {m.displayName}
               </MenuRadioItem>
             ))}
