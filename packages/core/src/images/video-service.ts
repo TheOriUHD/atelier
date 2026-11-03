@@ -199,6 +199,8 @@ export class VideoService {
         lastFrame: !!input.last_frame,
       };
       const fit = fitVideo(model.info.capabilities, ask, this.deps.settings().imageModels.overrides[model.info.ref]?.video);
+      // An image-to-video model can't start without a picture: say so before a slot, a limit or any money is used.
+      if (model.info.capabilities.video?.firstFrameRequired && !fit.firstFrame) throw new VideoCallError(`${model.info.displayName} makes video only from a picture. Pass the id of one in first_frame, or choose another model.`);
       await this.checkLimits(ctx.sessionId, session.userId);
       reserved = true;
       underWay = true;

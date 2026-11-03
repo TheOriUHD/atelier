@@ -10,6 +10,7 @@ import { arr, dataUrl, isRecord, num, rec, str } from '../../providers/util.ts';
 import { FAL_MODELS, lookUp } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
+import { falVideoBody, falVideoCapabilities, falVideoSchema, type FalVideoSchema } from './fal-video.ts';
 import { assertOwnHost, bytesOfDataUrl, failure, failureOf, listedModel, noImage, refusal, soundsRefused, waitFor } from './hosted.ts';
 
 const POLL_MS = 1_000;
@@ -17,6 +18,8 @@ const MAX_POLL_FAILURES = 5;
 const CANCEL_TIMEOUT_MS = 5_000;
 const SEARCH_URL = 'https://api.fal.ai/v1/models';
 const SEARCH_LIMIT = 40;
+/** Per category: both together are about as many as the image search. */
+const VIDEO_SEARCH_LIMIT = 20;
 /** A status lookup is on `queue.fal.run` whichever regional name the base URL uses. */
 const FAL_HOSTS = /(?:^|\.)fal\.(?:run|ai)$/;
 
@@ -45,6 +48,18 @@ async function* result(instance: ImageInstance, deps: ImageAdapterDeps, request:
     return;
   }
   const answer = rec(await res.json());
+  if (request.video) {
+    // A clip: `video.url`, on fal's CDN. Its safety checker, when on, fails the job instead of blanking the file.
+    const link = str(rec(answer.video).url);
+    if (!link) {
+      yield noImage(instance, 'its answer had no video');
+      return;
+    }
+    const seed = num(answer.seed);
+    yield { type: 'video', url: link, ...(seed !== undefined ? { seed } : {}) };
+    yield { type: 'finish', reason: 'done' };
+    return;
+  }
   const flagged = arr(answer.has_nsfw_concepts);
   const seed = num(answer.seed);
   const revisedPrompt = str(answer.prompt);
@@ -66,8 +81,8 @@ async function* result(instance: ImageInstance, deps: ImageAdapterDeps, request:
   yield images > 0 ? { type: 'finish', reason: 'done' } : blocked ? refusal(instance) : noImage(instance);
 }
 
-async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, pollMs: number): AsyncGenerator<ImageEvent> {
-  const res = await deps.fetch(`${instance.baseUrl}/${modelPath(request.model)}`, { method: 'POST', headers: headers(instance), body: JSON.stringify(body(request)), signal: request.signal });
+async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, pollMs: number, payload: Record<string, unknown>): AsyncGenerator<ImageEvent> {
+  const res = await deps.fetch(`${instance.baseUrl}/${modelPath(request.model)}`, { method: 'POST', headers: headers(instance), body: JSON.stringify(payload), signal: request.signal });
   if (!res.ok) {
     yield await failureOf(instance, res);
     return;
@@ -124,12 +139,45 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
   }
 }
 
+/** A clip takes minutes, so its status is asked for less often. */
+const VIDEO_POLL_MS = 3_000;
+
 export function createFal(instance: ImageInstance, deps: ImageAdapterDeps, options: { pollMs?: number } = {}): ImageAdapter {
   const pollMs = options.pollMs ?? POLL_MS;
+  const videoPollMs = options.pollMs ?? VIDEO_POLL_MS;
+  // This service is added for video: its models are fal's video endpoints, described by their own schemas.
+  const forVideo = instance.preset === 'fal-video';
+  const schemas = new Map<string, FalVideoSchema>();
+  const videoListed = (entry: Record<string, unknown>): ListedImageModel | null => {
+    const id = str(entry.endpoint_id);
+    const schema = falVideoSchema(entry);
+    if (!id || !schema) return null;
+    schemas.set(id, schema);
+    const metadata = rec(entry.metadata);
+    return listedModel(instance, id, falVideoCapabilities(schema), instance.models.includes(id) ? 'default' : 'detected', { displayName: str(metadata.display_name) ?? id });
+  };
+  /** The schemas of these endpoints, one request however many. */
+  const withSchemas = async (query: string, signal?: AbortSignal): Promise<ListedImageModel[]> => {
+    const found = await requestJson(deps, instance, `${SEARCH_URL}?${query}&expand=openapi-3.0`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
+    return arr(rec(found).models).filter(isRecord).flatMap((entry) => videoListed(entry) ?? []);
+  };
+  const schemaOf = async (model: string, signal: AbortSignal): Promise<FalVideoSchema> => {
+    if (!schemas.has(model)) await withSchemas(`endpoint_id=${encodeURIComponent(model)}`, signal);
+    return schemas.get(model) ?? { fields: {}, required: [] };
+  };
   const listed = (id: string, source: ListedImageModel['source'], extra: { displayName?: string; description?: string } = {}) => listedModel(instance, id, lookUp(FAL_MODELS, id), source, extra);
   return {
     type: 'fal',
     async listModels(signal) {
+      if (forVideo) {
+        const typedIds = instance.models.slice(0, 50);
+        const typedModels = typedIds.length ? await withSchemas(typedIds.map((id) => `endpoint_id=${encodeURIComponent(id)}`).join('&'), signal) : [];
+        // Typed in but unknown to fal's list: still offered, with only what any endpoint takes.
+        const unknown = typedIds.filter((id) => !typedModels.some((m) => m.modelId === id)).map((id) => listedModel(instance, id, falVideoCapabilities({ fields: {}, required: [] }), 'default'));
+        const seen = new Set(typedIds);
+        const searched = (await Promise.all(['text-to-video', 'image-to-video'].map((category) => withSchemas(`category=${category}&status=active&limit=${VIDEO_SEARCH_LIMIT}`, signal)))).flat().filter((m) => !seen.has(m.modelId));
+        return [...typedModels, ...unknown, ...searched];
+      }
       const typed = instance.models.map((id) => listed(id, 'default'));
       // There are over a thousand, so the search's most relevant ones; the rest are typed in.
       const found = await requestJson(deps, instance, `${SEARCH_URL}?category=text-to-image&status=active&limit=${SEARCH_LIMIT}`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
@@ -146,7 +194,10 @@ export function createFal(instance: ImageInstance, deps: ImageAdapterDeps, optio
       return probe(deps, instance, `${SEARCH_URL}?limit=1`, headers(instance), signal);
     },
     generate(request) {
-      return guardImages(request, instance, () => run(instance, deps, request, pollMs));
+      return guardImages(request, instance, async function* () {
+        const payload = request.video ? falVideoBody(await schemaOf(request.model, request.signal), request) : body(request);
+        yield* run(instance, deps, request, request.video ? videoPollMs : pollMs, payload);
+      });
     },
   };
 }

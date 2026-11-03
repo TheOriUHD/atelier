@@ -1,0 +1,202 @@
+{
+ "data": [
+  {
+   "id": "tbc/mischief-1",
+   "canonical_slug": "tbc/mischief-1-20261023",
+   "hugging_face_id": null,
+   "name": "TBC: mischief 1",
+   "created": 1793319378,
+   "description": "TBC mischief 1 is the world's first neuron-derived video model from The Biological Computing Co. It supports image to video and is a fast and affordable way to bring ideas...",
+   "supported_resolutions": [
+    "480p",
+    "720p"
+   ],
+   "supported_aspect_ratios": [
+    "16:9"
+   ],
+   "supported_sizes": [
+    "854x480",
+    "1280x720"
+   ],
+   "supported_durations": [
+    3,
+    5
+   ],
+   "supported_frame_images": [
+    "first_frame"
+   ],
+   "upscale_factor": null,
+   "creativity": null,
+   "generate_audio": false,
+   "seed": true,
+   "pricing_skus": {
+    "cents_per_video_output_second_480p": "0.5",
+    "cents_per_video_output_second_720p": "1"
+   },
+   "allowed_passthrough_parameters": []
+  },
+  {
+   "id": "black-forest-labs/flux-video-edit",
+   "canonical_slug": "black-forest-labs/flux-video-edit-20260910",
+   "hugging_face_id": null,
+   "name": "Black Forest Labs: FLUX Video Edit",
+   "created": 1789073532,
+   "description": "FLUX Video Edit [fast] takes a source video and an edit prompt and returns a precisely edited video. Add, remove, or replace objects and characters, rebuild the setting, edit on-screen...",
+   "supported_resolutions": null,
+   "supported_aspect_ratios": null,
+   "supported_sizes": null,
+   "supported_durations": null,
+   "supported_frame_images": null,
+   "upscale_factor": null,
+   "creativity": null,
+   "generate_audio": false,
+   "seed": false,
+   "pricing_skus": {
+    "cents_per_second_output": "3"
+   },
+   "allowed_passthrough_parameters": [
+    "safety_tolerance"
+   ]
+  },
+  {
+   "id": "x-ai/grok-imagine-video-1.5",
+   "canonical_slug": "x-ai/grok-imagine-video-1.5-20260719",
+   "hugging_face_id": null,
+   "name": "SpaceXAI: Grok Imagine Video 1.5",
+   "created": 1784548100,
+   "description": "Grok Imagine Video 1.5 is a video generation model from SpaceXAI. It creates videos from text prompts, with an optional starting image to guide the scene. It can direct subject...",
+   "supported_resolutions": [
+    "480p",
+    "720p",
+    "1080p"
+   ],
+   "supported_aspect_ratios": [
+    "16:9",
+    "9:16",
+    "1:1",
+    "4:3",
+    "3:4",
+    "3:2",
+    "2:3"
+   ],
+   "supported_sizes": null,
+   "supported_durations": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "supported_frame_images": [
+    "first_frame"
+   ],
+   "upscale_factor": null,
+   "creativity": null,
+   "generate_audio": null,
+   "seed": null,
+   "pricing_skus": {
+    "cents_per_image_input": "1",
+    "cents_per_video_output_second_480p": "8",
+    "cents_per_video_output_second_720p": "14",
+    "cents_per_video_output_second_1080p": "25"
+   },
+   "allowed_passthrough_parameters": []
+  },
+  {
+   "id": "minimax/hailuo-2.3",
+   "canonical_slug": "minimax/hailuo-2.3-20260420",
+   "hugging_face_id": null,
+   "name": "MiniMax: Hailuo 2.3",
+   "created": 1776702740,
+   "description": "Hailuo 2.3 is a video generation model from MiniMax. It accepts text prompts and reference images as input and generates video output, supporting both text-to-video and image-to-video workflows. It is...",
+   "supported_resolutions": [
+    "1080p"
+   ],
+   "supported_aspect_ratios": [
+    "16:9"
+   ],
+   "supported_sizes": [
+    "1920x1080"
+   ],
+   "supported_durations": [
+    6,
+    10
+   ],
+   "supported_frame_images": [
+    "first_frame"
+   ],
+   "upscale_factor": null,
+   "creativity": null,
+   "generate_audio": false,
+   "seed": null,
+   "pricing_skus": {
+    "duration_seconds": "0.0817"
+   },
+   "allowed_passthrough_parameters": [
+    "prompt_optimizer",
+    "fast_pretreatment"
+   ]
+  },
+  {
+   "id": "google/veo-3.1",
+   "canonical_slug": "google/veo-3.1-20260320",
+   "hugging_face_id": null,
+   "name": "Google: Veo 3.1",
+   "created": 1774277148,
+   "description": "Google's state-of-the-art video generation model, built for maximum visual fidelity in final production cuts. Veo 3.1 generates high-quality 1080p video from text or image prompts with native synchronized audio \u2014...",
+   "supported_resolutions": [
+    "720p",
+    "1080p",
+    "4K"
+   ],
+   "supported_aspect_ratios": [
+    "16:9",
+    "9:16"
+   ],
+   "supported_sizes": [
+    "1280x720",
+    "1080x1920",
+    "1920x1080",
+    "720x1280",
+    "3840x2160",
+    "2160x3840"
+   ],
+   "supported_durations": [
+    4,
+    6,
+    8
+   ],
+   "supported_frame_images": [
+    "first_frame",
+    "last_frame"
+   ],
+   "upscale_factor": null,
+   "creativity": null,
+   "generate_audio": true,
+   "seed": true,
+   "pricing_skus": {
+    "duration_seconds_with_audio": "0.40",
+    "duration_seconds_with_audio_4k": "0.60",
+    "duration_seconds_without_audio": "0.20",
+    "duration_seconds_without_audio_4k": "0.40"
+   },
+   "allowed_passthrough_parameters": [
+    "personGeneration",
+    "aspectRatio",
+    "negativePrompt",
+    "conditioningScale",
+    "enhancePrompt"
+   ]
+  }
+ ]
+}

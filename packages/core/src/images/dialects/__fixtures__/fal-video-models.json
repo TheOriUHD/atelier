@@ -1,0 +1,627 @@
+{
+ "models": [
+  {
+   "endpoint_id": "alibaba/wan-3.0/text-to-video",
+   "metadata": {
+    "display_name": "Wan Text to Video",
+    "category": "text-to-video",
+    "status": "active"
+   },
+   "openapi": {
+    "paths": {
+     "/fal-ai/wan-3/text-to-video": {
+      "post": {
+       "requestBody": {
+        "required": true,
+        "content": {
+         "application/json": {
+          "schema": {
+           "$ref": "#/components/schemas/Wan3TextToVideoInput"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "components": {
+     "schemas": {
+      "Wan3TextToVideoInput": {
+       "properties": {
+        "duration": {
+         "anyOf": [
+          {
+           "minimum": 2,
+           "maximum": 30,
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "Duration",
+         "description": "Output duration in seconds. Set to null for smart duration, which lets the model pick a length from the prompt and reference media.",
+         "default": 5
+        },
+        "resolution": {
+         "enum": [
+          "480p",
+          "720p",
+          "1080p"
+         ],
+         "title": "Resolution",
+         "type": "string",
+         "description": "Output video resolution tier.",
+         "default": "1080p"
+        },
+        "seed": {
+         "anyOf": [
+          {
+           "minimum": 0,
+           "maximum": 2147483647,
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "title": "Seed"
+        },
+        "enable_safety_checker": {
+         "type": "boolean",
+         "title": "Enable Safety Checker",
+         "description": "Enable content moderation for input and output. Disabling it requires account authorization; unauthorized requests are always checked.",
+         "default": true
+        },
+        "prompt": {
+         "maxLength": 20000,
+         "title": "Prompt",
+         "examples": [
+          "A red panda walking through a bamboo forest at sunrise"
+         ],
+         "description": "Text prompt for the generated video.",
+         "minLength": 1,
+         "type": "string"
+        },
+        "enable_prompt_expansion": {
+         "type": "boolean",
+         "title": "Enable Prompt Expansion",
+         "description": "Enable intelligent prompt rewriting. Disabling it can save roughly 20-60 seconds of latency but is likely to degrade generation quality.",
+         "default": true
+        },
+        "audio": {
+         "type": "boolean",
+         "title": "Audio",
+         "description": "Include generated audio.",
+         "default": true
+        },
+        "enable_thinking": {
+         "type": "boolean",
+         "title": "Enable Thinking",
+         "description": "Enable enhanced reasoning before generation.",
+         "default": false
+        },
+        "aspect_ratio": {
+         "enum": [
+          "adaptive",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16"
+         ],
+         "title": "Aspect Ratio",
+         "type": "string",
+         "description": "Output aspect ratio, or adaptive selection.",
+         "default": "adaptive"
+        }
+       },
+       "required": [
+        "prompt"
+       ],
+       "title": "Wan30TextToVideoInput",
+       "x-fal-order-properties": [
+        "prompt",
+        "resolution",
+        "aspect_ratio",
+        "duration",
+        "audio",
+        "enable_prompt_expansion",
+        "enable_thinking",
+        "seed",
+        "enable_safety_checker"
+       ],
+       "type": "object"
+      }
+     }
+    }
+   }
+  },
+  {
+   "endpoint_id": "kling/v4/image-to-video",
+   "metadata": {
+    "display_name": "Kling 4.0 Image to Video",
+    "category": "image-to-video",
+    "status": "active"
+   },
+   "openapi": {
+    "paths": {
+     "/fal-ai/kling-video/v4/image-to-video": {
+      "post": {
+       "requestBody": {
+        "required": true,
+        "content": {
+         "application/json": {
+          "schema": {
+           "$ref": "#/components/schemas/KlingVideoV4ImageToVideoInput"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "components": {
+     "schemas": {
+      "KlingVideoV4ImageToVideoInput": {
+       "properties": {
+        "end_image_url": {
+         "examples": [
+          "https://v3b.fal.media/files/b/tiger/BwHi22qoQnqaTNMMhe533.png"
+         ],
+         "title": "End Image Url",
+         "description": "Image to use as the last frame of the video.",
+         "anyOf": [
+          {
+           "x-fal": {
+            "max_aspect_ratio": 2.5,
+            "min_height": 300,
+            "timeout": 20,
+            "max_file_size": 31457280,
+            "min_width": 300,
+            "min_aspect_ratio": 0.4
+           },
+           "type": "string",
+           "ui": {
+            "field": "image"
+           },
+           "limit_description": "Max file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "middle_image_urls": {
+         "examples": [
+          null
+         ],
+         "title": "Middle Image Urls",
+         "description": "Ordered keyframes between the first and last frames (max 8).",
+         "anyOf": [
+          {
+           "maxItems": 8,
+           "type": "array",
+           "items": {
+            "x-fal": {
+             "max_aspect_ratio": 2.5,
+             "min_height": 300,
+             "timeout": 20,
+             "max_file_size": 31457280,
+             "min_width": 300,
+             "min_aspect_ratio": 0.4
+            },
+            "type": "string",
+            "ui": {
+             "field": "image"
+            },
+            "_fal_ui_field": "image",
+            "limit_description": "Max file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s"
+           }
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "multi_prompt": {
+         "examples": [
+          null
+         ],
+         "title": "Multi Prompt",
+         "description": "Per-shot prompts for multi-shot generation. The video duration is the sum of the shot durations.",
+         "anyOf": [
+          {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/KlingV4Shot"
+           },
+           "minItems": 1
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "resolution": {
+         "default": "1080p",
+         "enum": [
+          "720p",
+          "1080p"
+         ],
+         "title": "Resolution",
+         "type": "string",
+         "description": "Output resolution."
+        },
+        "start_image_url": {
+         "x-fal": {
+          "max_aspect_ratio": 2.5,
+          "min_height": 300,
+          "timeout": 20,
+          "max_file_size": 31457280,
+          "min_width": 300,
+          "min_aspect_ratio": 0.4
+         },
+         "examples": [
+          "https://v3b.fal.media/files/b/rabbit/NaslJIC7F2WodS6DFZRRJ.png"
+         ],
+         "title": "Start Image Url",
+         "type": "string",
+         "description": "Image to use as the first frame of the video.\n\nMax file size: 30.0MB, Min width: 300px, Min height: 300px, Min aspect ratio: 0.40, Max aspect ratio: 2.50, Timeout: 20.0s"
+        },
+        "prompt": {
+         "examples": [
+          "A detective in a black trench coat stands on a rooftop in the rain, looking through a telescope at the street below."
+         ],
+         "title": "Prompt",
+         "description": "Text prompt. Either prompt or multi_prompt must be provided.",
+         "anyOf": [
+          {
+           "maxLength": 26000,
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "duration": {
+         "default": 5,
+         "title": "Duration",
+         "type": "integer",
+         "minimum": 3,
+         "maximum": 30,
+         "description": "Video duration in seconds (3-30)."
+        }
+       },
+       "title": "ImageToVideoInput",
+       "type": "object",
+       "description": "The output aspect ratio follows the input frames.",
+       "x-fal-order-properties": [
+        "prompt",
+        "start_image_url",
+        "middle_image_urls",
+        "end_image_url",
+        "multi_prompt",
+        "duration",
+        "resolution"
+       ],
+       "required": [
+        "start_image_url"
+       ]
+      },
+      "KlingV4Shot": {
+       "properties": {
+        "prompt": {
+         "maxLength": 512,
+         "minLength": 1,
+         "type": "string",
+         "description": "The prompt for this shot.",
+         "title": "Prompt"
+        },
+        "duration": {
+         "default": 5,
+         "title": "Duration",
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 30,
+         "description": "Shot duration in seconds."
+        }
+       },
+       "title": "KlingV4Shot",
+       "type": "object",
+       "x-fal-order-properties": [
+        "prompt",
+        "duration"
+       ],
+       "required": [
+        "prompt"
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "endpoint_id": "minimax/h3-max/text-to-video",
+   "metadata": {
+    "display_name": "MiniMax H3 Max Text to Video",
+    "category": "text-to-video",
+    "status": "active"
+   },
+   "openapi": {
+    "paths": {
+     "/fal-ai/minimax-h3-turbo/text-to-video": {
+      "post": {
+       "requestBody": {
+        "required": true,
+        "content": {
+         "application/json": {
+          "schema": {
+           "$ref": "#/components/schemas/MinimaxH3TurboTextToVideoInput"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "components": {
+     "schemas": {
+      "MinimaxH3TurboTextToVideoInput": {
+       "x-fal-order-properties": [
+        "prompt",
+        "duration",
+        "resolution",
+        "seed",
+        "enable_safety_checker",
+        "sync_mode",
+        "prompt_expansion_mode",
+        "target_audio_url",
+        "aspect_ratio"
+       ],
+       "type": "object",
+       "properties": {
+        "enable_safety_checker": {
+         "type": "boolean",
+         "description": "If set to true, the safety checker will be enabled.",
+         "title": "Enable Safety Checker",
+         "default": true
+        },
+        "prompt_expansion_mode": {
+         "examples": [
+          "disabled",
+          "balanced",
+          "quality"
+         ],
+         "type": "string",
+         "description": "How much effort to spend rewriting the prompt before generation. 'disabled' skips prompt expansion. 'balanced' returns in about a second. 'quality' spends up to ~30s on a richer prompt.",
+         "title": "Prompt Expansion Mode",
+         "default": "balanced"
+        },
+        "seed": {
+         "description": "Random seed. A random seed is selected when omitted.",
+         "title": "Seed",
+         "anyOf": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "prompt": {
+         "minLength": 1,
+         "examples": [
+          "A white kitten chases a butterfly across a sunlit garden. Gentle camera tracking, natural movement, soft afternoon light filtering through the leaves."
+         ],
+         "type": "string",
+         "description": "Text prompt for video generation",
+         "title": "Prompt",
+         "maxLength": 50000
+        },
+        "duration": {
+         "maximum": 15,
+         "type": "number",
+         "description": "Video length in seconds. The output can run up to about 0.7 s longer than requested. Use at least 2 s with target_audio_url.",
+         "title": "Duration",
+         "minimum": 0.92,
+         "default": 5
+        },
+        "resolution": {
+         "enum": [
+          "480P",
+          "768P",
+          "1080P"
+         ],
+         "type": "string",
+         "description": "The native generation resolution, or 1080P latent refinement from a native 768P source.",
+         "title": "Resolution",
+         "default": "768P"
+        },
+        "target_audio_url": {
+         "description": "Optional URL of an audio clip at least 2 seconds long (maximum 15 MB) to pin to the generated soundtrack. Longer clips are trimmed to the generated video's length, keeping the beginning. The original audio replaces the output soundtrack, padded with silence if shorter than the video, without changing playback speed. Exceptionally high sample rates may be resampled to 96 kHz. Accepts an HTTP(S) URL or a base64 data URI.",
+         "title": "Target Audio Url",
+         "anyOf": [
+          {
+           "minLength": 1,
+           "pattern": "\\S",
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "aspect_ratio": {
+         "enum": [
+          "21:9",
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16"
+         ],
+         "type": "string",
+         "description": "The aspect ratio of the generated video.",
+         "title": "Aspect Ratio",
+         "default": "16:9"
+        },
+        "sync_mode": {
+         "type": "boolean",
+         "description": "Return the generated video as base64 instead of a CDN URL.",
+         "title": "Sync Mode",
+         "default": false
+        }
+       },
+       "title": "MaxTextToVideoHailuo03Input",
+       "required": [
+        "prompt",
+        "prompt_expansion_mode"
+       ],
+       "description": "Public H3 Max input; Max Turbo keeps the shared Turbo input contract."
+      }
+     }
+    }
+   }
+  },
+  {
+   "endpoint_id": "lightricks/ltx-2.5/text-to-video/fast",
+   "metadata": {
+    "display_name": "Ltx 2.5 Text to Video Fast",
+    "category": "text-to-video",
+    "status": "active"
+   },
+   "openapi": {
+    "paths": {
+     "/fal-ai/ltx-2.5/text-to-video/fast": {
+      "post": {
+       "requestBody": {
+        "required": true,
+        "content": {
+         "application/json": {
+          "schema": {
+           "$ref": "#/components/schemas/Ltx25TextToVideoFastInput"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "components": {
+     "schemas": {
+      "Ltx25TextToVideoFastInput": {
+       "type": "object",
+       "properties": {
+        "duration": {
+         "default": "auto",
+         "enum": [
+          6,
+          8,
+          10,
+          12,
+          14,
+          16,
+          18,
+          20,
+          "auto"
+         ],
+         "description": "The duration of the generated video in seconds. At 720p and 1080p, 24 or 25 FPS supports up to 20 seconds, while 48 or 50 FPS supports up to 10 seconds. At 1440p and 2160p, all frame rates support up to 10 seconds. Set to 'auto' to let the model choose the duration automatically.",
+         "title": "Duration"
+        },
+        "camera_motion": {
+         "anyOf": [
+          {
+           "type": "string",
+           "enum": [
+            "dolly_in",
+            "dolly_out",
+            "dolly_left",
+            "dolly_right",
+            "jib_up",
+            "jib_down",
+            "static",
+            "focus_shift"
+           ]
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "description": "Optional camera motion applied to the generated video.",
+         "title": "Camera Motion"
+        },
+        "aspect_ratio": {
+         "type": "string",
+         "default": "16:9",
+         "enum": [
+          "16:9",
+          "9:16"
+         ],
+         "description": "The aspect ratio of the generated video",
+         "title": "Aspect Ratio"
+        },
+        "fps": {
+         "type": "integer",
+         "default": 25,
+         "enum": [
+          24,
+          25,
+          48,
+          50
+         ],
+         "description": "The frames per second of the generated video.",
+         "title": "Frames per Second"
+        },
+        "prompt": {
+         "type": "string",
+         "maxLength": 5000,
+         "minLength": 1,
+         "examples": [
+          "Through-the-veil shot of a bride's face during an Indian wedding ceremony, camera positioned behind the sheer red dupatta fabric, the embroidered pattern creating a textured overlay on her face, her eyes lined with kohl looking down at henna-covered hands, marigold garlands in soft background bokeh, 85mm f/1.2 focused through the fabric layer, warm tungsten and candlelight, Mira Nair Monsoon Wedding intimacy"
+         ],
+         "description": "The prompt to use for the generated video",
+         "title": "Prompt"
+        },
+        "resolution": {
+         "type": "string",
+         "default": "1080p",
+         "enum": [
+          "720p",
+          "1080p",
+          "1440p",
+          "2160p"
+         ],
+         "description": "The resolution of the generated video.",
+         "title": "Resolution"
+        },
+        "generate_audio": {
+         "type": "boolean",
+         "default": true,
+         "description": "Whether to generate audio for the generated video",
+         "title": "Generate Audio"
+        }
+       },
+       "required": [
+        "prompt"
+       ],
+       "x-fal-order-properties": [
+        "prompt",
+        "duration",
+        "resolution",
+        "aspect_ratio",
+        "fps",
+        "generate_audio",
+        "camera_motion"
+       ],
+       "title": "LTXV25TextToVideoFastRequest"
+      }
+     }
+    }
+   }
+  }
+ ],
+ "has_more": false
+}

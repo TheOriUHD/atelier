@@ -11,10 +11,12 @@ import { createHuggingFace } from './dialects/huggingface.ts';
 import { createIdeogram } from './dialects/ideogram.ts';
 import { createInvokeAi } from './dialects/invokeai.ts';
 import { createOpenAiImages } from './dialects/openai-images.ts';
+import { createOpenRouterVideo } from './dialects/openrouter-video.ts';
 import { createReplicate } from './dialects/replicate.ts';
 import { createResponsesImage } from './dialects/responses-image.ts';
 import { createStability } from './dialects/stability.ts';
 import { createSwarmUi } from './dialects/swarmui.ts';
+import { createXaiVideo } from './dialects/xai-video.ts';
 import { guardedImageFetch } from './fetch-guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageInstance } from './types.ts';
 
@@ -34,6 +36,8 @@ const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps
   swarmui: createSwarmUi,
   invokeai: createInvokeAi,
   comfyui: createComfyUi,
+  'openrouter-video': createOpenRouterVideo,
+  'xai-video': createXaiVideo,
 };
 
 export function createImageAdapter(instance: ImageInstance, deps: ImageAdapterDeps): ImageAdapter {

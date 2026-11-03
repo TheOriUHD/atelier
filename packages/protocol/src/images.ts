@@ -58,6 +58,8 @@ export const VideoCapabilities = z.object({
   firstFrame: z.boolean(),
   /** An image to end on; it needs a first frame. */
   lastFrame: z.boolean(),
+  /** Makes video only from an image: a call without a first frame can't be run. */
+  firstFrameRequired: z.boolean().optional(),
   /** `always`: the sound can't be turned off, `optional`: it can, `none`: silent. */
   audio: z.enum(['none', 'optional', 'always']),
 });
