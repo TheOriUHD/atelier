@@ -310,6 +310,7 @@ export const AUDIT_RULES = {
   'server.update': rule<'server.update'>({ describe: () => ({ kind: 'server.update_started', summary: 'Started a server update' }) }),
   'server.updates': skip('looks up the newest version; stores nothing'),
   'audit.list': skip('reading the log is not recorded; exporting it is'),
+  'limits.everyone': skip('reads everyone’s usage against their limits; stores nothing'),
   'audit.export': rule<'audit.export'>({
     describe: ({ input, result }) => ({
       kind: 'audit.exported',
