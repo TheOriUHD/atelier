@@ -8,3 +8,9 @@ mac:
   gatekeeperAssess: false
   # scripts/package-mac.mjs notarizes by itself, so that waiting for Apple (hours, for a new account) isn't part of the build.
   notarize: false
+  # Data is not signed file by file. Chromium's language packs (locale.pak: 55 languages in each of the four helper
+  # apps, 220 of the 270 files electron-builder signs) are sealed by the bundle that holds them, and Apple's
+  # notarization only looks at executables. Each file cost a round trip to Apple's timestamp server, one after the
+  # other: about 7 of the 8 minutes it took to sign one architecture.
+  signIgnore:
+    - '\.pak$'
