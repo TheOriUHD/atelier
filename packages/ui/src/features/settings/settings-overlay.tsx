@@ -135,9 +135,27 @@ function SettingsBody({ page, list, admin, row, onClose }: { page: SettingsPage;
     else backButton.current?.focus();
   }, [narrow, list, page.id]);
 
+  // The page's top edge has scrolled under the Close bar: the bar gets a line, so content doesn't seem to run into it.
+  const [scrolledOn, setScrolledOn] = useState<string | null>(null);
+  const scrolled = scrolledOn === page.id;
   const body = (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-      <div ref={content} key={page.id} className="min-h-0 flex-1 overflow-y-auto px-6 pt-[60px] pb-12 max-md:px-4 max-md:pt-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/*
+        Close sits in a bar of its own above the scrolling page, not on top of it: floating over the page, it covered
+        whatever scrolled to the top right, such as the Log out button.
+      */}
+      {!narrow && (
+        <div className={cn('flex h-12 shrink-0 items-center justify-end border-b px-3 transition-colors', scrolled ? 'border-line-subtle' : 'border-transparent')}>
+          <IconButton icon={X} label="Close" iconSize="md" onClick={onClose} />
+        </div>
+      )}
+      <div
+        ref={content}
+        key={page.id}
+        data-settings-content
+        onScroll={(e) => setScrolledOn(e.currentTarget.scrollTop > 0 ? page.id : null)}
+        className="min-h-0 flex-1 overflow-y-auto px-6 pt-3 pb-12 max-md:px-4 max-md:pt-4"
+      >
         {loaded ? (
           <>
             <SettingsFileErrors errors={snapshot.errors} />
@@ -149,7 +167,6 @@ function SettingsBody({ page, list, admin, row, onClose }: { page: SettingsPage;
           </div>
         )}
       </div>
-      {!narrow && <IconButton icon={X} label="Close" iconSize="md" className="absolute top-3 right-3" onClick={onClose} />}
     </div>
   );
   if (!narrow)

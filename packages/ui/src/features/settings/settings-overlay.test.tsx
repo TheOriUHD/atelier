@@ -99,6 +99,26 @@ describe('SettingsOverlay', () => {
     await waitFor(() => expect(search().settings).toBeUndefined());
   });
 
+  it('keeps Close in a bar above the scrolling page, so scrolled content (Log out) never runs under it', async () => {
+    renderSettings('/?settings=account');
+    const { dialog, ui } = await openDialog();
+    await ui.findByText('Profile photo');
+    const close = ui.getByRole('button', { name: 'Close' });
+    const page = dialog.querySelector<HTMLElement>('[data-settings-content]')!;
+    // Not inside what scrolls, and not floating over it: nothing positioned absolutely holds it.
+    expect(page.contains(close)).toBe(false);
+    expect(close.closest('.absolute')).toBeNull();
+    // The bar gets its line once the page has scrolled under it.
+    const bar = close.parentElement!;
+    expect(bar.className).toContain('border-transparent');
+    page.scrollTop = 120;
+    fireEvent.scroll(page);
+    expect(bar.className).toContain('border-line-subtle');
+    page.scrollTop = 0;
+    fireEvent.scroll(page);
+    expect(bar.className).toContain('border-transparent');
+  });
+
   it('falls back to General for an unknown page and switches pages from the nav', async () => {
     const { search } = renderSettings('/?settings=nope');
     const { ui } = await openDialog();
