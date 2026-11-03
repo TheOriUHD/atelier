@@ -20,7 +20,7 @@ let checked = 0;
 for (const [page, text] of html) {
   for (const m of text.matchAll(/\s(?:href|src)="([^"]+)"/g)) {
     const raw = m[1].replace(/&amp;/g, '&');
-    if (/^(https?:|mailto:|tel:|data:|javascript:|#?$)/.test(raw)) continue;
+    if (/^(https?:|mailto:|tel:|data:|javascript:|atelier-image:|#?$)/.test(raw)) continue;
     const [pathPart, hash] = raw.split('#');
     const from = '/' + dirname(page);
     const target = pathPart ? resolve(pathPart.startsWith('/') ? '/' : from + '/', pathPart.startsWith('/') ? pathPart.slice(1) : pathPart) : '/' + page;
