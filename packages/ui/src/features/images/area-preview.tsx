@@ -38,9 +38,9 @@ export function AreaPreview({ image, mask }: { image: { blob: string }; mask: { 
     };
   }, [mask.blob]);
   return (
-    <figure className="relative max-w-60 overflow-hidden rounded-2xl inset-ring inset-ring-line">
+    <div className="relative max-w-60 overflow-hidden rounded-2xl inset-ring inset-ring-line">
       <img src={blobUrl(image.blob)} alt="The image, with the area to change marked" loading="lazy" className="block max-h-40 w-full object-cover" />
       {tint && <img src={tint} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 size-full object-cover" />}
-    </figure>
+    </div>
   );
 }

@@ -293,11 +293,11 @@ function AreaEditorBody({ src, alt, onClose, onSubmit }: Omit<AreaEditorProps, '
   return (
     <BaseDialog.Popup
       aria-label="Change an area"
-      className="fixed inset-0 z-(--at-layout-z-modal) flex flex-col gap-3 p-3 outline-none transition-opacity duration-(--at-duration-base) ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 md:p-4"
+      className="fixed inset-0 z-(--at-layout-z-modal) flex flex-col gap-3 bg-bg p-3 outline-none transition-opacity duration-(--at-duration-base) ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 md:p-4"
     >
       <div className="flex shrink-0 items-center gap-3 rounded-xl bg-popover px-3 py-1.5 shadow-popover">
         <BaseDialog.Title className="text-control text-fg">Change an area</BaseDialog.Title>
-        <p id={hint} className="min-w-0 flex-1 truncate text-footnote text-fg-muted max-md:hidden">
+        <p id={hint} className="min-w-0 flex-1 line-clamp-2 text-footnote text-fg-muted max-md:hidden">
           Paint over the part you want changed, then say what it should become. With the keyboard: arrow keys move the brush, Space paints, Shift with an arrow paints while it moves.
         </p>
         <BaseDialog.Close render={<IconButton icon={X} label="Close" iconSize="md" size="lg" className="ml-auto" />} />

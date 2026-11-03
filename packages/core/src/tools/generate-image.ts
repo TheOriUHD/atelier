@@ -73,6 +73,8 @@ export function createGenerateImageTool(deps: GenerateImageDeps): Tool<GenerateI
         prompt: { type: 'string', minLength: 1, maxLength: 8000 },
         aspect_ratio: { type: 'string' },
         reference_images: { type: 'array', items: { type: 'string', pattern: '^img_[0-9a-f]{8}$' }, maxItems: 16 },
+        // A marked area reaches a small model too: without this field its call would be refused as having extra properties.
+        mask: { type: 'string', pattern: '^img_[0-9a-f]{8}$' },
         model: { type: 'string' },
       },
       required: ['prompt'],

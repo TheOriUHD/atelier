@@ -15,6 +15,13 @@ describe('GenerateImage description', () => {
     expect(full).toContain("If the model can't change one area, the result says which can");
   });
 
+  it('lets a compact model pass the mask too: the schema it gets would otherwise refuse the call', () => {
+    const compact = describeTool(tool, { tier: 'compact', mode: 'chat', has: () => false });
+    const props = (compact.inputSchema as { properties: Record<string, { pattern?: string }> }).properties;
+    expect(props.mask?.pattern).toBe('^img_[0-9a-f]{8}$');
+    expect(props.reference_images).toBeDefined();
+  });
+
   it('takes the mask as an image id like any other, never a path', () => {
     const mask = (tool.inputSchema as { properties: { mask: { pattern: string } } }).properties.mask;
     expect(new RegExp(mask.pattern).test('img_ab12cd34')).toBe(true);

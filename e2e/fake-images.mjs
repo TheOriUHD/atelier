@@ -142,7 +142,7 @@ async function run(job, width, height, onStep) {
 }
 
 function newJob(api, fields) {
-  const job = { api, model: fields.model ?? null, prompt: fields.prompt ?? '', n: fields.n ?? 1, size: fields.size ?? null, inputs: fields.inputs ?? 0, inputBytes: fields.inputBytes ?? 0, stopped: false };
+  const job = { api, model: fields.model ?? null, prompt: fields.prompt ?? '', n: fields.n ?? 1, size: fields.size ?? null, inputs: fields.inputs ?? 0, inputBytes: fields.inputBytes ?? 0, mask: fields.mask ?? false, stopped: false };
   jobs.push(job);
   return job;
 }

@@ -88,7 +88,7 @@ Image models you can use with GenerateImage, the person's choice first:
 - comfy/sdxl (SDXL): prompt in comma-separated tags, takes a negative prompt, can change images
 </context-update>
 
-# Tools: 18, 12990 characters of JSON
+# Tools: 18, 13045 characters of JSON
 
 [
   {
@@ -633,6 +633,10 @@ Image models you can use with GenerateImage, the person's choice first:
             "pattern": "^img_[0-9a-f]{8}$"
           },
           "maxItems": 16
+        },
+        "mask": {
+          "type": "string",
+          "pattern": "^img_[0-9a-f]{8}$"
         },
         "model": {
           "type": "string"
