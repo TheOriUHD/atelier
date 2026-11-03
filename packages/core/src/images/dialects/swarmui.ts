@@ -9,6 +9,7 @@ import { sniffMime } from '../../providers/images.ts';
 import { arr, dataUrl, num, rec, str } from '../../providers/util.ts';
 import { checkpointFamily, checkpointLabel, editSize, pickName } from '../families.ts';
 import { guardImages } from '../guard.ts';
+import { readClasses, standardSize, swarmVideoCapabilities, swarmVideoPayload, videoKind, type SwarmClasses } from './swarmui-video.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ImageSocket, ListedImageModel } from '../types.ts';
 
 const SESSION_GONE = 'invalid_session_id';
@@ -53,6 +54,7 @@ function previewOf(value: unknown): Extract<ImageEvent, { type: 'preview' }> | n
 }
 
 function payload(request: ImageRequest, sessionId: string): Record<string, unknown> {
+  if (request.video) return swarmVideoPayload(request, sessionId);
   const { steps, guidance, sampler, scheduler } = request.tuning;
   const input = request.references[0];
   const size = input ? editSize(request) : { width: request.width, height: request.height };
@@ -170,7 +172,7 @@ export function createSwarmUi(instance: ImageInstance, deps: ImageAdapterDeps): 
           const current = num(progress.current_percent) ?? 0;
           const { steps } = request.tuning;
           // An edit skips the first steps, so only a new picture can count them from this.
-          const counted = steps && current > 0 && request.references.length === 0 ? { step: Math.round(current * steps), steps } : {};
+          const counted = steps && current > 0 && request.references.length === 0 && !request.video ? { step: Math.round(current * steps), steps } : {};
           // A real server sends two series side by side, with and without previews, and each restarts per node of the
           // workflow, so only progress past the furthest so far counts: a bar shouldn't run backwards.
           if (fraction > furthest) {
@@ -212,7 +214,11 @@ export function createSwarmUi(instance: ImageInstance, deps: ImageAdapterDeps): 
           yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: `${instance.name} made no image.`, retryable: false } };
           return;
         }
-        for (const image of images) yield { type: 'image', bytes: await fetchImage(image.path, request.signal), ...(image.seed !== undefined ? { seed: image.seed } : {}) };
+        // One clip: the file the server wrote, fetched through the same guarded fetch (a clip may be large).
+        if (request.video) {
+          const clip = images[0]!;
+          yield { type: 'video', bytes: await fetchImage(clip.path, request.signal), ...(clip.seed !== undefined ? { seed: clip.seed } : {}) };
+        } else for (const image of images) yield { type: 'image', bytes: await fetchImage(image.path, request.signal), ...(image.seed !== undefined ? { seed: image.seed } : {}) };
         yield { type: 'finish', reason: 'done' };
         return;
       } catch (error) {
@@ -223,9 +229,12 @@ export function createSwarmUi(instance: ImageInstance, deps: ImageAdapterDeps): 
     }
   }
 
-  const listed = (file: Record<string, unknown>, lists: Pick<ImageCapabilities, 'samplers' | 'schedulers' | 'loras'>): ListedImageModel | null => {
+  const listed = (file: Record<string, unknown>, lists: Pick<ImageCapabilities, 'samplers' | 'schedulers' | 'loras'>, classes: SwarmClasses): ListedImageModel | null => {
     const name = str(file.name);
     if (!name || file.is_supported_model_format === false || file.is_negative_embedding === true) return null;
+    // A video model's class says so (`is_text2video`, `is_image2video`); it is a different kind of model, with a recipe of its own.
+    const kind = videoKind(str(file.architecture), classes);
+    if (kind) return { ref: modelRef(instance.id, name), providerId: instance.id, modelId: name, displayName: str(file.title) || checkpointLabel(name), capabilities: swarmVideoCapabilities(kind, standardSize(file)), source: 'detected' };
     const { defaults, sizes, ...family } = checkpointFamily(`${str(file.architecture) ?? ''} ${name}`);
     const width = num(file.standard_width) ?? 0;
     const height = num(file.standard_height) ?? 0;
@@ -272,7 +281,8 @@ export function createSwarmUi(instance: ImageInstance, deps: ImageAdapterDeps): 
       const samplers = choices(params, 'sampler');
       const schedulers = choices(params, 'scheduler');
       const lists = { ...(samplers ? { samplers } : {}), ...(schedulers ? { schedulers } : {}), ...(loraNames.length ? { loras: loraNames } : {}) };
-      return arr(rec(models).files).flatMap((file) => listed(rec(file), lists) ?? []);
+      const classes = readClasses(params);
+      return arr(rec(models).files).flatMap((file) => listed(rec(file), lists, classes) ?? []);
     },
     async health(signal) {
       const started = performance.now();
