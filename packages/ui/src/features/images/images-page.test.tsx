@@ -32,6 +32,7 @@ interface ListInput {
   before?: number;
   query?: string;
   ref?: string;
+  kind?: 'image' | 'video';
 }
 
 function renderPage(list: (input: ListInput) => { items: GeneratedImage[]; next: number | null; totalBytes: number }, extra: Record<string, (input: never) => unknown> = {}) {
@@ -39,9 +40,9 @@ function renderPage(list: (input: ListInput) => { items: GeneratedImage[]; next:
     'app.info': () => ({ imageGeneration: true }),
     'settings.get': () => snapshot(),
     'imageModels.list': () => [
-      { ref: 'comfy/z-image', providerId: 'comfy', modelId: 'z-image', displayName: 'Z-Image Turbo', hidden: false },
-      { ref: 'comfy/flux', providerId: 'comfy', modelId: 'flux', displayName: 'FLUX', hidden: false },
-      { ref: 'comfy/secret', providerId: 'comfy', modelId: 'secret', displayName: 'Hidden one', hidden: true },
+      { ref: 'comfy/z-image', providerId: 'comfy', modelId: 'z-image', displayName: 'Z-Image Turbo', hidden: false, capabilities: {} },
+      { ref: 'comfy/flux', providerId: 'comfy', modelId: 'flux', displayName: 'FLUX', hidden: false, capabilities: {} },
+      { ref: 'comfy/secret', providerId: 'comfy', modelId: 'secret', displayName: 'Hidden one', hidden: true, capabilities: {} },
     ],
     'generatedImages.list': list,
     ...extra,
@@ -132,6 +133,74 @@ describe('the Images page', () => {
       throw new Error('The server is away.');
     });
     expect((await screen.findByRole('alert')).textContent).toBe('The server is away.');
+  });
+});
+
+const clip = (n: number, extra: Partial<GeneratedImage> = {}): GeneratedImage => image(n, { id: `vid_${n}`, mime: 'video/mp4', kind: 'video', width: 1280, height: 720, seconds: 6, fps: 24, audio: true, ref: 'fal/kling', modelName: 'Kling', ...extra });
+
+describe('videos on the page', () => {
+  it('shows a clip among the pictures with a play mark and its length, and opens it in the video viewer', async () => {
+    renderPage(() => ({ items: [clip(1), image(2)], next: null, totalBytes: 1 }));
+    const play = await screen.findByRole('button', { name: 'Play video: Prompt 1' });
+    expect(play.textContent).toBe('0:06');
+    const tile = play.querySelector('video')!;
+    expect(tile.getAttribute('src')).toMatch(/#t=0\.001$/);
+    expect(tile.muted).toBe(true);
+    expect(tile.autoplay).toBe(false);
+    fireEvent.click(play);
+    const dialog = await screen.findByRole('dialog', { name: 'Video' });
+    expect(dialog.querySelector('video')!.controls).toBe(true);
+    const details = within(dialog).getByRole('complementary', { name: 'Details' });
+    expect(within(details).getByText('Kling')).toBeTruthy();
+    expect(within(details).getByText('0:06')).toBeTruthy();
+    expect(within(details).getByText('1280×720')).toBeTruthy();
+    expect(within(details).getByText('24 fps')).toBeTruthy();
+    expect(within(details).getByText('Yes')).toBeTruthy();
+    // The picture beside it has its own viewer, which stays shut.
+    expect(screen.queryByRole('dialog', { name: 'Image' })).toBeNull();
+  });
+
+  it('steps between clips only, and opens a picture in the picture viewer', async () => {
+    renderPage(() => ({ items: [clip(1), image(2), clip(3)], next: null, totalBytes: 1 }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Play video: Prompt 1' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Video' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Next video' }));
+    expect(dialog.querySelector('video')!.getAttribute('aria-label')).toBe('Prompt 3');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByAltText('Prompt 2'));
+    expect(await screen.findByRole('dialog', { name: 'Image' })).toBeTruthy();
+  });
+
+  it('filters by kind once there are videos, and asks the server for that kind', async () => {
+    renderPage(({ kind }) => ({ items: kind === 'image' ? [image(2)] : kind === 'video' ? [clip(1)] : [clip(1), image(2)], next: null, totalBytes: 1 }));
+    await screen.findByRole('button', { name: 'Play video: Prompt 1' });
+    fireEvent.click(screen.getByRole('radio', { name: 'Videos' }));
+    await waitFor(() => expect(callsTo('generatedImages.list').at(-1)).toMatchObject({ kind: 'video' }));
+    await waitFor(() => expect(screen.queryByAltText('Prompt 2')).toBeNull());
+    fireEvent.click(screen.getByRole('radio', { name: 'Images' }));
+    await screen.findByAltText('Prompt 2');
+    expect(callsTo('generatedImages.list').at(-1)).toMatchObject({ kind: 'image' });
+    expect(screen.queryByRole('button', { name: /Play video/ })).toBeNull();
+  });
+
+  it('says there are no videos yet when that is the filter', async () => {
+    renderPage(({ kind }) => ({ items: kind === 'video' ? [] : [clip(1)], next: null, totalBytes: 1 }));
+    await screen.findByRole('button', { name: 'Play video: Prompt 1' });
+    fireEvent.click(screen.getByRole('radio', { name: 'Videos' }));
+    expect(await screen.findByText('No videos yet.')).toBeTruthy();
+  });
+
+  it('keeps the kind filter out of the page of someone with no video model and no videos', async () => {
+    renderPage(() => ({ items: [image(1)], next: null, totalBytes: 1 }));
+    await screen.findByAltText('Prompt 1');
+    expect(screen.queryByRole('radio', { name: 'Videos' })).toBeNull();
+  });
+
+  it('offers the filter to someone with a video model and no videos yet', async () => {
+    renderPage(() => ({ items: [image(1)], next: null, totalBytes: 1 }), { 'imageModels.list': () => [{ ref: 'fal/kling', providerId: 'fal', modelId: 'kling', displayName: 'Kling', hidden: false, capabilities: { output: 'video' } }] });
+    await screen.findByAltText('Prompt 1');
+    expect(screen.getByRole('radio', { name: 'Videos' })).toBeTruthy();
   });
 });
 

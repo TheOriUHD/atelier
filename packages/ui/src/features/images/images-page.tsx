@@ -1,21 +1,25 @@
-/** Images (Chat sidebar): everything the person's conversations made, newest first, searchable by prompt. */
+/** Images (Chat sidebar): everything the person's conversations made, pictures and videos, newest first, searchable by prompt. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
-import { Image as ImageIcon, Search } from 'lucide-react';
+import { Image as ImageIcon, Play, Search } from 'lucide-react';
 import type { GeneratedImage } from '@atelier/protocol';
-import { Button, Icon, Select, Spinner, TextField, type SelectOption } from '../../components/ui/index.ts';
+import { Button, Icon, SegmentedControl, Select, Spinner, TextField, type SelectOption } from '../../components/ui/index.ts';
 import { useOpenSettings } from '../../app/navigation.ts';
 import { blobUrl } from '../../lib/platform.ts';
 import { keys, useAccount, useImageGeneration, useImageModels } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useDebounced } from '../chat/composer-menu.tsx';
-import { ImageViewer } from './image-viewer.tsx';
+import { ImageViewer, isVideo } from './image-viewer.tsx';
 import { justified } from './justified.ts';
 
 const PAGE = 48;
 const SEARCH_DEBOUNCE_MS = 250;
 const ALL_MODELS = 'all';
+type Kind = 'all' | 'image' | 'video';
+
+/** "0:06": a clip's length on its tile. */
+const clock = (s: number) => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`;
 const GAP = 6;
 /** The widest a phone gets in portrait: below it, tiles are small enough for two or three in a row. */
 const PHONE_WIDTH = 560;
@@ -35,15 +39,17 @@ export function ImagesPage() {
   const [typed, setTyped] = useState('');
   const query = useDebounced(typed.trim(), SEARCH_DEBOUNCE_MS);
   const [ref, setRef] = useState(ALL_MODELS);
+  const [kind, setKind] = useState<Kind>('all');
   const [open, setOpen] = useState<number | null>(null);
   const list = useInfiniteQuery({
-    queryKey: [...keys.generatedImages, 'list', query, ref],
+    queryKey: [...keys.generatedImages, 'list', query, ref, kind],
     queryFn: ({ pageParam }) =>
       rpc().call('generatedImages.list', {
         limit: PAGE,
         ...(pageParam !== null ? { before: pageParam } : {}),
         ...(query ? { query } : {}),
         ...(ref !== ALL_MODELS ? { ref } : {}),
+        ...(kind !== 'all' ? { kind } : {}),
       }),
     initialPageParam: null as number | null,
     getNextPageParam: (page) => page.next,
@@ -53,7 +59,11 @@ export function ImagesPage() {
   });
   const items = useMemo(() => list.data?.pages.flatMap((p) => p.items), [list.data]);
   const total = list.data?.pages[0]?.totalBytes;
-  const filtering = !!query || ref !== ALL_MODELS;
+  const filtering = !!query || ref !== ALL_MODELS || kind !== 'all';
+  // Told apart only for those who have videos or can make them: for everyone else the page is the Images page it always was.
+  const hasVideos = !!models?.some((m) => m.capabilities.output === 'video') || !!items?.some(isVideo) || kind !== 'all';
+
+  const noun = kind === 'video' ? 'videos' : kind === 'image' ? 'images' : hasVideos ? 'images or videos' : 'images';
 
   // Images from a provider that has since been removed can still be filtered by.
   const options = useMemo<SelectOption[]>(() => {
@@ -77,6 +87,18 @@ export function ImagesPage() {
                 <Icon icon={Search} className="pointer-events-none absolute top-2 left-2.5 text-fg-muted" />
                 <TextField aria-label="Search by prompt" placeholder="Search by prompt" value={typed} onChange={(e) => setTyped(e.target.value)} className="pl-8" />
               </div>
+              {hasVideos && (
+                <SegmentedControl<Kind>
+                  aria-label="Show"
+                  value={kind}
+                  onValueChange={setKind}
+                  items={[
+                    { value: 'all', label: 'All' },
+                    { value: 'image', label: 'Images' },
+                    { value: 'video', label: 'Videos' },
+                  ]}
+                />
+              )}
               {options.length > 2 && <Select aria-label="Model" options={options} value={ref} onValueChange={setRef} className="max-w-60" />}
             </div>
           )}
@@ -88,7 +110,7 @@ export function ImagesPage() {
             <Spinner className="mx-auto mt-24" />
           ) : items.length === 0 ? (
             filtering ? (
-              <p className="mt-24 text-center text-body text-fg-muted">{query ? `No images match “${query}”.` : 'No images from this model yet.'}</p>
+              <p className="mt-24 text-center text-body text-fg-muted">{query ? `No ${noun} match “${query}”.` : kind !== 'all' ? `No ${noun} yet.` : `No ${noun} from this model yet.`}</p>
             ) : (
               <EmptyState />
             )
@@ -123,9 +145,20 @@ function ImageGrid({ images, onOpen }: { images: readonly GeneratedImage[]; onOp
     <ul ref={grid} aria-label="Images" className="mt-6 flex flex-wrap" style={{ gap: GAP }}>
       {images.map((image, i) => (
         <li key={image.blob + image.createdAt} style={tiles[i]}>
-          <button type="button" onClick={() => onOpen(i)} className="block size-full cursor-zoom-in overflow-hidden rounded-lg bg-fill-ghost-hover outline-none focus-ring">
-            <img src={blobUrl(image.blob)} alt={image.prompt} loading="lazy" decoding="async" className="size-full object-cover transition-opacity duration-(--at-duration-fast) ease-standard hover:opacity-90" />
-          </button>
+          {isVideo(image) ? (
+            <button type="button" aria-label={`Play video: ${image.prompt}`} onClick={() => onOpen(i)} className="relative block size-full cursor-pointer overflow-hidden rounded-lg bg-fill-ghost-hover outline-none focus-ring">
+              {/* The first frame stands in as the picture; nothing plays until the viewer opens. */}
+              <video src={`${blobUrl(image.blob)}#t=0.001`} aria-hidden="true" tabIndex={-1} muted playsInline preload="metadata" className="pointer-events-none size-full object-cover" />
+              <span aria-hidden="true" className="absolute bottom-1.5 left-1.5 flex h-6 items-center gap-1 rounded-md bg-popover/90 pr-2 pl-1.5 text-footnote text-fg shadow-popover tabular-nums">
+                <Icon icon={Play} size="sm" className="fill-current" />
+                {image.seconds !== undefined && clock(image.seconds)}
+              </span>
+            </button>
+          ) : (
+            <button type="button" onClick={() => onOpen(i)} className="block size-full cursor-zoom-in overflow-hidden rounded-lg bg-fill-ghost-hover outline-none focus-ring">
+              <img src={blobUrl(image.blob)} alt={image.prompt} loading="lazy" decoding="async" className="size-full object-cover transition-opacity duration-(--at-duration-fast) ease-standard hover:opacity-90" />
+            </button>
+          )}
         </li>
       ))}
     </ul>

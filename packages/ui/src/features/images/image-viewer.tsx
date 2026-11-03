@@ -1,11 +1,12 @@
 /**
- * An image from the Images page in the `Lightbox`, with what made it and the way back to its conversation.
+ * An image or video from the Images page in the `Lightbox` (a video in the `VideoLightbox`), with what made it and the way
+ * back to its conversation. Stepping goes to the next of the same kind: a picture's viewer zooms, and a video's plays.
  */
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Download, ImagePlus, MessageCircle, Paintbrush } from 'lucide-react';
 import type { GeneratedImage } from '@atelier/protocol';
-import { Button, Icon, IconButton, Lightbox, toast } from '../../components/ui/index.ts';
+import { Button, Icon, IconButton, Lightbox, VideoLightbox, toast } from '../../components/ui/index.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
 import { shortDate } from '../../lib/dates.ts';
 import { blobUrl, saveBlob } from '../../lib/platform.ts';
@@ -23,6 +24,15 @@ export interface ImageViewerProps {
   onIndexChange(index: number | null): void;
 }
 
+export const isVideo = (image: Pick<GeneratedImage, 'kind'>) => image.kind === 'video';
+
+/** The items of one kind with where each sits in the whole list, and which of them is `index`. */
+function ofKind(images: readonly GeneratedImage[], index: number | null, video: boolean) {
+  const at = images.flatMap((image, i) => (isVideo(image) === video ? [i] : []));
+  const sub = index === null ? -1 : at.indexOf(index);
+  return { items: at.map((i) => images[i]!), at, shown: sub >= 0 ? sub : null };
+}
+
 export function ImageViewer({ images, index, onIndexChange }: ImageViewerProps) {
   const [detailsOpen, setDetailsOpen] = useState(true);
   const inNewChat = useInNewChat();
@@ -30,43 +40,71 @@ export function ImageViewer({ images, index, onIndexChange }: ImageViewerProps) 
   // The image being marked stays through the editor's fade, and the lightbox is closed behind it.
   const [marking, setMarking] = useState<{ image: GeneratedImage; open: boolean } | null>(null);
   const area = marking?.image;
+  const pictures = ofKind(images, index, false);
+  const clips = ofKind(images, index, true);
+  const leave = () => onIndexChange(null);
   return (
     <>
-    <Lightbox
-      images={images.map((image) => ({ src: blobUrl(image.blob), alt: image.prompt }))}
-      index={index}
-      onIndexChange={onIndexChange}
-      actions={(at) => {
-        const image = images[at];
-        if (!image) return null;
-        return (
-          <>
-            <IconButton icon={ImagePlus} label="Use as reference" iconSize="md" size="lg" onClick={() => void inNewChat(image).then(() => onIndexChange(null))} />
-            {/* The change goes to the conversation the image was made in, which is where its result will be. */}
-            {image.sessionId && image.sessionMode && <IconButton icon={Paintbrush} label="Change an area" iconSize="md" size="lg" onClick={() => { setMarking({ image, open: true }); onIndexChange(null); }} />}
-          </>
-        );
-      }}
-      details={(at) => images[at] && <Details image={images[at]} onLeave={() => onIndexChange(null)} />}
-      detailsOpen={detailsOpen}
-      onDetailsOpenChange={setDetailsOpen}
-    />
-    {marking && area?.sessionId && area.sessionMode && (
-      <AreaEditor
-        open={marking.open}
-        src={blobUrl(area.blob)}
-        alt={area.prompt}
-        onClose={() => setMarking((now) => now && { ...now, open: false })}
-        onSubmit={async (instruction, mask) => {
-          await sendAreaChange(area.sessionId!, area, instruction, mask);
-          await navigate({ to: SESSION_ROUTE[area.sessionMode!], params: { sessionId: area.sessionId! } });
+      <Lightbox
+        images={pictures.items.map((image) => ({ src: blobUrl(image.blob), alt: image.prompt }))}
+        index={pictures.shown}
+        onIndexChange={(sub) => onIndexChange(sub === null ? null : (pictures.at[sub] ?? null))}
+        actions={(at) => {
+          const image = pictures.items[at];
+          if (!image) return null;
+          return (
+            <>
+              <IconButton icon={ImagePlus} label="Use as reference" iconSize="md" size="lg" onClick={() => void inNewChat(image).then(leave)} />
+              {/* The change goes to the conversation the image was made in, which is where its result will be. */}
+              {image.sessionId && image.sessionMode && (
+                <IconButton
+                  icon={Paintbrush}
+                  label="Change an area"
+                  iconSize="md"
+                  size="lg"
+                  onClick={() => {
+                    setMarking({ image, open: true });
+                    leave();
+                  }}
+                />
+              )}
+            </>
+          );
         }}
+        details={(at) => pictures.items[at] && <Details image={pictures.items[at]} onLeave={leave} />}
+        detailsOpen={detailsOpen}
+        onDetailsOpenChange={setDetailsOpen}
       />
-    )}
+      <VideoLightbox
+        videos={clips.items.map((image) => ({ src: blobUrl(image.blob), alt: image.prompt, width: image.width, height: image.height }))}
+        index={clips.shown}
+        onIndexChange={(sub) => onIndexChange(sub === null ? null : (clips.at[sub] ?? null))}
+        actions={(at) => clips.items[at] && <DownloadAction image={clips.items[at]} />}
+        details={(at) => clips.items[at] && <Details image={clips.items[at]} onLeave={leave} />}
+        detailsOpen={detailsOpen}
+        onDetailsOpenChange={setDetailsOpen}
+      />
+      {marking && area?.sessionId && area.sessionMode && (
+        <AreaEditor
+          open={marking.open}
+          src={blobUrl(area.blob)}
+          alt={area.prompt}
+          onClose={() => setMarking((now) => now && { ...now, open: false })}
+          onSubmit={async (instruction, mask) => {
+            await sendAreaChange(area.sessionId!, area, instruction, mask);
+            await navigate({ to: SESSION_ROUTE[area.sessionMode!], params: { sessionId: area.sessionId! } });
+          }}
+        />
+      )}
     </>
   );
 }
 
+function DownloadAction({ image }: { image: GeneratedImage }) {
+  return <IconButton icon={Download} label="Download" size="lg" onClick={() => void saveBlob(image.blob, `${image.id}.${image.mime === 'video/webm' ? 'webm' : 'mp4'}`).catch((e: unknown) => toast.error(describeError(e).message))} />;
+}
+
+const clock = (s: number) => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`;
 const seconds = (ms: number) => `${ms < 10_000 ? (ms / 1000).toFixed(1) : Math.round(ms / 1000)} s`;
 
 function Details({ image, onLeave }: { image: GeneratedImage; onLeave(): void }) {
@@ -78,11 +116,14 @@ function Details({ image, onLeave }: { image: GeneratedImage; onLeave(): void })
       {image.negativePrompt && <Block label="Negative prompt">{image.negativePrompt}</Block>}
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
         <Fact label="Model">{image.modelName}</Fact>
+        {image.seconds !== undefined && <Fact label="Length">{clock(image.seconds)}</Fact>}
         {image.width > 0 && (
           <Fact label="Size">
             {image.width}×{image.height}
           </Fact>
         )}
+        {image.fps !== undefined && <Fact label="Frame rate">{Math.round(image.fps * 100) / 100} fps</Fact>}
+        {isVideo(image) && image.audio !== undefined && <Fact label="Sound">{image.audio ? 'Yes' : 'No'}</Fact>}
         {image.seed !== undefined && <Fact label="Seed">{image.seed}</Fact>}
         {image.durationMs !== undefined && <Fact label="Took">{seconds(image.durationMs)}</Fact>}
         {image.costUsd !== undefined && (
