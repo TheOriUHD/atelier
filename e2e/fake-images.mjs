@@ -9,7 +9,7 @@
  *   "forbidden" → the service refuses it                        "broken"  → the server answers 500
  *   "reworded"  → the service reports a revised prompt          anything else → about 2 s
  *
- * GET /__log lists the jobs it saw, oldest first: { api, model, prompt, n, size, inputs, inputBytes, stopped }.
+ * GET /__log lists the jobs it saw, oldest first: { api, model, prompt, n, size, inputs, inputBytes, mask, stopped }.
  * POST /__reset forgets them.
  *
  * Usage: node e2e/fake-images.mjs [port=11600]
@@ -234,7 +234,7 @@ async function openAiRoutes(req, res, url) {
     const parts = multipart(await readBytes(req), req.headers['content-type'] ?? '');
     const field = (name) => parts.find((p) => p.name === name)?.body.toString();
     const images = parts.filter((p) => p.name === 'image' || p.name === 'image[]');
-    const job = newJob('edits', { model: field('model'), prompt: field('prompt'), n: Number(field('n') ?? 1), size: field('size'), inputs: images.length, inputBytes: images.reduce((sum, p) => sum + p.body.length, 0) });
+    const job = newJob('edits', { model: field('model'), prompt: field('prompt'), n: Number(field('n') ?? 1), size: field('size'), inputs: images.length, inputBytes: images.reduce((sum, p) => sum + p.body.length, 0), mask: parts.some((p) => p.name === 'mask') });
     return openAiImages(req, res, job, parseSize(field('size')), field('stream') === 'true');
   }
   return false;

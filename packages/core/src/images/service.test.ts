@@ -370,7 +370,8 @@ describe('ImageService', () => {
       const area = { image: { blob: SOURCE, mime: 'image/png' }, mask: { blob: MASK, mime: 'image/png' } };
 
       it('names both images and the models that can, and says the mask is not a picture', async () => {
-        const t = setup({ models: [masking], history });
+        // The message that brings the mask isn't stored yet: only the image is in the conversation.
+        const t = setup({ models: [masking], history: [message([{ type: 'image', mime: 'image/png', blob: SOURCE }])] });
         stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10, (x) => x < 5) });
         const note = await t.service.areaNote('s', area);
         expect(note).toContain(`reference_images\` ["${imageId(SOURCE)}"]`);
@@ -383,6 +384,9 @@ describe('ImageService', () => {
         const t = setup({ models: [masking], history: [] });
         stores(t, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10, (x) => x < 5) });
         await expect(t.service.areaNote('s', area)).rejects.toThrow("There's no image");
+        const photo = setup({ models: [masking], history: [message([{ type: 'image', mime: 'image/png', blob: SOURCE }])] });
+        stores(photo, { [SOURCE]: pic(10, 10), [MASK]: pic(10, 10) });
+        await expect(photo.service.areaNote('s', area)).rejects.toThrow('marks nothing to change');
         const empty = setup({ models: [], history });
         await expect(empty.service.areaNote('s', area)).rejects.toThrow('No image model is available');
       });

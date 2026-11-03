@@ -176,6 +176,10 @@ export class ImageService {
    */
   private async maskImage(sessionId: string, id: string, reference: ImageInput): Promise<ImageInput> {
     const { bytes } = await this.imageBytes(sessionId, id);
+    return this.shapeMask(bytes, id, reference);
+  }
+
+  private shapeMask(bytes: Uint8Array, id: string, reference: ImageInput): ImageInput {
     try {
       return normaliseMask(bytes, reference);
     } catch (error) {
@@ -216,8 +220,9 @@ export class ImageService {
     const mask = imageId(area.mask.blob);
     try {
       const reference = await this.inputImage(sessionId, image);
-      // The same check the generation will make, with the model the person would get.
-      await this.maskImage(sessionId, mask, reference);
+      // The same check the generation will make. The mask is read by its blob: the message that carries it isn't stored
+      // yet, so its id can't be found among the conversation's images until it is.
+      this.shapeMask(await this.deps.blobs.read(area.mask.blob), mask, reference);
     } catch (error) {
       if (error instanceof ImageCallError) throw new Error(error.message, { cause: error });
       throw error;

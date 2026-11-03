@@ -5,7 +5,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { McpServerConfig, Mode, PermissionMode } from '@atelier/protocol';
+import type { McpServerConfig, Mode, Part, PermissionMode } from '@atelier/protocol';
+import { IMAGE_TASKS } from './image-tasks.ts';
 
 export interface Observed {
   /** The folder the task ran in (code tasks). */
@@ -16,16 +17,29 @@ export interface Observed {
   /** Kinds of questions the run put to the person ("permission", "question"). */
   asked: string[];
   artifacts: { type: string; title: string }[];
+  /** The ids the model knows the conversation's generated images by, in the order they were made. */
+  imageIds: string[];
+  /** The ids of the masks the person's messages gave (areas they marked). */
+  maskIds: string[];
 }
+
+/** A later message of the same conversation: plain words, or parts built from what the run made so far. */
+export type FollowUp = string | ((context: { areaParts(text: string): Promise<Part[]> }) => Promise<Part[]>);
 
 export interface EvalTask {
   name: string;
   /** `core`: can the model do Atelier's work; `behaviour`: does it follow the prompt's conduct rules. */
-  suite?: 'core' | 'behaviour';
+  suite?: 'core' | 'behaviour' | 'images';
   mode: Mode;
   /** Files to create; code tasks get a git repository around them. */
   files?: Record<string, string>;
   prompt: string;
+  /** Messages sent one after the other once the reply to the one before is done. */
+  followUps?: FollowUp[];
+  /** The run has an image provider (a fake image server), so the model is offered GenerateImage. */
+  images?: boolean;
+  /** The task as a script for the fake model of e2e/fake-ollama.mjs (`pnpm eval --scripted`): what a model that behaves would do. */
+  scripted?: string;
   permissionMode?: PermissionMode;
   /** System deny rules for the run. */
   deny?: string[];
@@ -193,6 +207,7 @@ export const TASKS: EvalTask[] = [
       return { pass, notes: refused ? `refused: ${reply.slice(0, 120)}` : `${wordsOf(reply).length} words` };
     },
   },
+  ...IMAGE_TASKS,
 ];
 
 /** Creates the task's files (and a git repository for code tasks) in `dir`. */

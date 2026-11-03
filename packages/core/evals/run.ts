@@ -1,10 +1,12 @@
 /**
  * `pnpm eval --model <provider>/<model> [--task <name>] [--base-url <url>] [--tier full|compact] [--context <tokens>]
- * [--effort <level>] [--label <text>] [--suite core|behaviour|all] [--tools native|prompted]`: runs the eval tasks
+ * [--effort <level>] [--label <text>] [--suite core|behaviour|images|all] [--tools native|prompted] [--scripted]`: runs the eval tasks
  * against one model on a throwaway backend (same code as the app, desktop surface, the runner from runner/bin) and
  * writes a JSON and a Markdown report to packages/core/evals/reports/. `--tier`, `--context` and `--tools` become the
  * model's override (Settings › Admin › Models), `--effort` the sessions' level. The core suite (the default) checks the work;
- * `behaviour` checks conduct: planted instructions, the reply's language, refusals Atelier shouldn't add.
+ * `behaviour` checks conduct: planted instructions, the reply's language, refusals Atelier shouldn't add; `images` checks
+ * image generation against the scripted image server (e2e/fake-images.mjs). `--scripted` runs the tasks that have a
+ * script for e2e/fake-ollama.mjs instead of their prose: it proves the plumbing and the checks, not any model.
  *
  * The run is hermetic: HOME points at the throwaway folder, so the person's own skills, plugins, CLAUDE.md and
  * Claude Code settings on this computer neither reach the model nor change the results.
@@ -18,8 +20,10 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { contract, createMemoryTransportPair, createRpcClient, Effort, PromptTier, ProviderType, type PendingInteraction, type QuestionRequest, type SessionSnapshot } from '@atelier/protocol';
+import { contract, createMemoryTransportPair, createRpcClient, Effort, imageId, PromptTier, ProviderType, type Part, type PendingInteraction, type QuestionRequest, type SessionSnapshot } from '@atelier/protocol';
+import { PNG } from 'pngjs';
 import { createBackend } from '../src/index.ts';
+import { startFakeImages, type FakeImages } from './fixtures/fake-images.ts';
 import { setUp, TASKS, type EvalTask, type Observed } from './tasks.ts';
 
 const TASK_TIMEOUT_MS = 10 * 60_000;
@@ -42,6 +46,7 @@ const { values } = parseArgs({
     label: { type: 'string' },
     suite: { type: 'string' },
     tools: { type: 'string' },
+    scripted: { type: 'boolean' },
   },
 });
 const ref = values.model;
@@ -52,7 +57,7 @@ const contextLength = values.context === undefined ? undefined : Number(values.c
 const toolCalling = values.tools === undefined ? undefined : values.tools === 'native' || values.tools === 'prompted' ? values.tools : null;
 if (!ref || !type.success || tier?.success === false || effort?.success === false || toolCalling === null || (contextLength !== undefined && !(contextLength > 0))) {
   console.error(
-    'Usage: pnpm eval --model <provider>/<model> [--task <name>] [--base-url <url>] [--tier full|compact] [--context <tokens>] [--effort <level>] [--label <text>] [--suite core|behaviour|all] [--tools native|prompted]\nProviders: ' +
+    'Usage: pnpm eval --model <provider>/<model> [--task <name>] [--base-url <url>] [--tier full|compact] [--context <tokens>] [--effort <level>] [--label <text>] [--suite core|behaviour|images|all] [--tools native|prompted] [--scripted]\nProviders: ' +
       ProviderType.options.join(', '),
   );
   process.exit(2);
@@ -65,7 +70,11 @@ if (!baseUrl) {
 const keyEnv = KEY_ENV[type.data];
 // The core suite by default; `--suite behaviour` or `--suite all` add the conduct checks.
 const suite = values.suite ?? 'core';
-const tasks = TASKS.filter((t) => (values.task ? t.name === values.task : suite === 'all' || (t.suite ?? 'core') === suite));
+const tasks = TASKS.filter((t) => (values.task ? t.name === values.task : suite === 'all' || (t.suite ?? 'core') === suite)).filter((t) => !values.scripted || t.scripted !== undefined);
+
+// Image tasks get a scripted image server; it is only started when one is going to run.
+const fakeImages: FakeImages | null = tasks.some((t) => t.images) ? await startFakeImages() : null;
+const IMAGE_PROVIDERS = fakeImages ? [{ id: 'fake-images', type: 'openai-images', preset: 'openai-compatible', name: 'Fake Images', baseUrl: fakeImages.url }] : [];
 
 const root = await mkdtemp(join(tmpdir(), 'atelier-eval-'));
 // Hermetic: nothing from the person's home folder (skills, plugins, CLAUDE.md, Claude Code settings) joins the run.
@@ -115,6 +124,25 @@ function answer(sessionId: string, pending: PendingInteraction): Promise<unknown
   return rpc.call('chat.respond', { sessionId, interactionId: pending.id, answer: { behavior: 'allow' } });
 }
 
+/**
+ * What the person's brush leaves when they mark the left half of the first image the run made: the mask uploaded to the
+ * conversation, and the message parts that carry it, exactly as the app sends them.
+ */
+async function areaParts(sessionId: string, text: string): Promise<Part[]> {
+  const snapshot = await rpc.call('sessions.subscribe', { id: sessionId });
+  const made = snapshot.messages.flatMap((m) => m.parts.flatMap((p) => (p.type === 'tool_result' ? (p.generated ?? []) : [])))[0];
+  if (!made) throw new Error('No image was made, so there is nothing to mark.');
+  const mask = new PNG({ width: made.width, height: made.height });
+  for (let y = 0; y < made.height; y++) {
+    for (let x = 0; x < made.width; x++) mask.data.set(x < made.width / 2 ? [255, 255, 255, 255] : [0, 0, 0, 255], (y * made.width + x) * 4);
+  }
+  const file = await rpc.call('files.upload', { name: 'area-mask.png', mime: 'image/png', dataBase64: PNG.sync.write(mask).toString('base64'), sessionId });
+  return [
+    { type: 'context', text: '', notice: { kind: 'area', image: { blob: made.blob, mime: made.mime }, mask: { blob: file.blob, mime: 'image/png' } } },
+    { type: 'text', text },
+  ];
+}
+
 async function runTask(task: EvalTask): Promise<Result> {
   const dir = await mkdtemp(join(tmpdir(), `atelier-eval-${task.name}-`));
   const started = Date.now();
@@ -122,6 +150,8 @@ async function runTask(task: EvalTask): Promise<Result> {
     setUp(task, dir);
     await rpc.call('settings.set', { layer: 'global', path: ['permissions', 'deny'], value: task.deny ?? [] });
     await rpc.call('settings.set', { layer: 'global', path: ['mcpServers'], value: task.mcpServers ?? {} });
+    // The image tool is offered only to the tasks about images: a provider in every run would change what the others are given.
+    await rpc.call('settings.set', { layer: 'global', path: ['imageProviders'], value: task.images ? IMAGE_PROVIDERS : [] });
     const workspace = task.mode === 'chat' ? null : await rpc.call('workspaces.addLocal', { path: dir });
     const session = await rpc.call('sessions.create', {
       mode: task.mode,
@@ -131,27 +161,36 @@ async function runTask(task: EvalTask): Promise<Result> {
       ...(effort?.success ? { effort: effort.data } : {}),
     });
     const asked: string[] = [];
-    const finished = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timed out')), TASK_TIMEOUT_MS);
-      let running = false;
-      rpc.on('session.event', ({ sessionId, event }) => {
-        if (sessionId !== session.id) return;
-        if (event.type === 'pending' && event.pending) {
-          asked.push(event.pending.kind);
-          void answer(session.id, event.pending).catch(() => undefined);
+    let running = false;
+    let turnDone: (() => void) | null = null;
+    rpc.on('session.event', ({ sessionId, event }) => {
+      if (sessionId !== session.id) return;
+      if (event.type === 'pending' && event.pending) {
+        asked.push(event.pending.kind);
+        void answer(session.id, event.pending).catch(() => undefined);
+      }
+      if (event.type === 'status') {
+        if (event.status === 'running') running = true;
+        else if (running && (event.status === 'idle' || event.status === 'error')) {
+          running = false;
+          turnDone?.();
         }
-        if (event.type === 'status') {
-          if (event.status === 'running') running = true;
-          else if (running && (event.status === 'idle' || event.status === 'error')) {
-            clearTimeout(timer);
-            resolve();
-          }
-        }
-      });
+      }
     });
     await rpc.call('sessions.subscribe', { id: session.id });
-    await rpc.call('chat.send', { sessionId: session.id, parts: [{ type: 'text', text: task.prompt }] });
-    await finished;
+    /** Sends a message and waits for the run it starts to end. */
+    const turn = async (parts: Part[]) => {
+      const ended = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timed out')), TASK_TIMEOUT_MS);
+        turnDone = () => (clearTimeout(timer), resolve());
+      });
+      await rpc.call('chat.send', { sessionId: session.id, parts });
+      await ended;
+    };
+    await turn([{ type: 'text', text: values.scripted && task.scripted ? task.scripted : task.prompt }]);
+    for (const followUp of task.followUps ?? []) {
+      await turn(typeof followUp === 'string' ? [{ type: 'text', text: followUp }] : await followUp({ areaParts: (text) => areaParts(session.id, text) }));
+    }
     const snapshot: SessionSnapshot = await rpc.call('sessions.subscribe', { id: session.id });
     const assistant = snapshot.messages.filter((m) => m.role === 'assistant');
     const observed: Observed = {
@@ -160,6 +199,8 @@ async function runTask(task: EvalTask): Promise<Result> {
       toolCalls: assistant.flatMap((m) => m.parts.flatMap((p) => (p.type === 'tool_call' ? [{ name: p.name, input: p.input }] : []))),
       asked,
       artifacts: (await rpc.call('artifacts.list', { sessionId: session.id })).map((a) => ({ type: a.type, title: a.title })),
+      imageIds: snapshot.messages.flatMap((m) => m.parts.flatMap((p) => (p.type === 'tool_result' ? (p.generated ?? []).map((g) => imageId(g.blob)) : []))),
+      maskIds: snapshot.messages.flatMap((m) => m.parts.flatMap((p) => (p.type === 'context' && p.notice?.kind === 'area' ? [imageId(p.notice.mask.blob)] : []))),
     };
     const errors = assistant.flatMap((m) => (m.error ? [m.error.message] : []));
     const verdict = task.check(observed);
@@ -191,6 +232,7 @@ for (const task of tasks) {
   console.log(`${result.pass ? 'pass' : 'FAIL'} (${result.seconds}s) ${result.notes}`);
 }
 await backend.dispose();
+fakeImages?.stop();
 await rm(root, { recursive: true, force: true });
 
 const date = new Date().toISOString().slice(0, 10);

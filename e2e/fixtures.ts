@@ -65,6 +65,8 @@ export interface FakeImageJob {
   size: string | null;
   inputs: number;
   inputBytes: number;
+  /** An edit that came with a mask. */
+  mask?: boolean;
   stopped: boolean;
 }
 
