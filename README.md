@@ -218,7 +218,7 @@ Build each OS's installers on that OS (or on a machine of that OS over SSH): mac
 | Platform | Targets | State |
 |---|---|---|
 | macOS | `.dmg` and `.zip`, arm64 and x64 | ✅ built and used day to day. The published builds are signed with a Developer ID and notarized, so they open like any app; keep it in Applications and it updates itself in place |
-| Windows | NSIS `Setup.exe` wizard, x64 and arm64 in one | ✅ built on Windows 11; silent install, uninstall and the bundled runners checked. Not signed, so SmartScreen shows "unknown publisher". The app itself has not had a full UI pass on Windows yet |
+| Windows | NSIS `Setup.exe` wizard, one installer each for x64 and arm64 | ✅ built on Windows 11; silent install, uninstall and the bundled runners checked. Not signed, so SmartScreen shows "unknown publisher". The app itself has not had a full UI pass on Windows yet |
 | Linux | `.deb` and `.AppImage`, x64 and arm64 | ✅ built on Ubuntu 24.04; CI starts it under a virtual display, and it has not been tried on a real desktop yet. Prefer the `.deb` (`sudo apt install ./Atelier-<version>-amd64.deb`): an AppImage needs `libfuse2t64` and, on Ubuntu 24.04, may need `--no-sandbox` |
 
 ### Updates

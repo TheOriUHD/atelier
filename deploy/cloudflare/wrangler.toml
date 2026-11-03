@@ -11,3 +11,7 @@ routes = [{ pattern = "updates.atelierhq.dev", custom_domain = true }]
 [[r2_buckets]]
 binding = "RELEASES"
 bucket_name = "atelier-releases"
+
+[vars]
+# Where the Worker sends a request for a macOS disk image that the bucket doesn't have (src/index.js).
+GITHUB_REPO = "TheOriUHD/atelier"

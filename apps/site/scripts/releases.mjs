@@ -7,12 +7,14 @@
  *
  * It reads the release with the GitHub CLI, so it works while the repository is private too. Each build links to the
  * update feed's copy (deploy/cloudflare/publish.mjs puts it there) when that copy exists at the same size, since
- * GitHub's links need access to the repository; until it is mirrored, the GitHub link. Run it again after publishing.
+ * GitHub's links need access to the repository; until it is mirrored, the GitHub link. The macOS disk images are not
+ * on the feed any more and always link to the release. Run it again after publishing.
  */
 import { execFileSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KINDS, onFeed } from './kinds.mjs';
 
 const repo = 'TheOriUHD/atelier';
 const gh = (...args) => JSON.parse(execFileSync('gh', [...args, '--repo', repo], { encoding: 'utf8' }));
@@ -21,18 +23,6 @@ const tag = process.argv[2] ?? gh('release', 'list', '--limit', '1', '--json', '
 if (!tag) throw new Error('no release found');
 const release = gh('release', 'view', tag, '--json', 'tagName,publishedAt,url,isPrerelease,assets');
 
-/** Which download is which, by file name (electron-builder's names for this app). */
-// The version, with an optional prerelease part that is never an architecture (0.3.0-beta.1, not 0.3.0-arm64).
-const V = String.raw`\d+\.\d+\.\d+(?:-(?!arm64|amd64)[A-Za-z0-9.]+)?`;
-const KINDS = {
-  'macos-arm64': new RegExp(`^Atelier-${V}-arm64\\.dmg$`),
-  'macos-x64': new RegExp(`^Atelier-${V}\\.dmg$`),
-  windows: new RegExp(`^Atelier-Setup-${V}\\.exe$`),
-  'linux-deb-x64': new RegExp(`^Atelier-${V}-amd64\\.deb$`),
-  'linux-deb-arm64': new RegExp(`^Atelier-${V}-arm64\\.deb$`),
-  'linux-appimage-x64': new RegExp(`^Atelier-${V}\\.AppImage$`),
-  'linux-appimage-arm64': new RegExp(`^Atelier-${V}-arm64\\.AppImage$`),
-};
 const feed = `https://updates.atelierhq.dev/${release.isPrerelease ? 'beta' : 'stable'}`;
 /** The feed's copy, if it is there and the same file (a release can be replaced, e.g. by signed Mac builds). */
 async function mirrored(asset) {
@@ -54,10 +44,10 @@ for (const [kind, pattern] of Object.entries(KINDS)) {
     if (asset) older.push(`${kind} from ${earlier[i]}`);
   }
   if (!asset) throw new Error(`no ${kind} in ${tag} or an earlier release`);
-  assets[kind] = { name: asset.name, size: asset.size, url: (await mirrored(asset)) ?? asset.url };
+  assets[kind] = { name: asset.name, size: asset.size, url: (onFeed(kind) ? await mirrored(asset) : null) ?? asset.url };
 }
 if (older.length) console.warn(`not in ${tag}, kept from earlier releases: ${older.join(', ')}`);
-const missing = Object.values(assets).filter((a) => !a.url.startsWith(feed));
+const missing = Object.entries(assets).filter(([kind, a]) => onFeed(kind) && !a.url.startsWith(feed)).map(([, a]) => a);
 if (missing.length) console.warn(`not mirrored yet (GitHub links): ${missing.map((a) => a.name).join(', ')}`);
 
 const out = {

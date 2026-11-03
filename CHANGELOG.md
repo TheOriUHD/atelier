@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Smaller Windows downloads:** there is now an installer for x64 and one for ARM64 (`Atelier-Setup-<version>-x64.exe`, `-arm64.exe`), each about half the size of the one installer that carried both. Installed copies pick theirs by themselves. The website's Windows tab offers the right one for your PC.
+
 ## [0.3.1] — 2026-11-02
 
 - **A desktop app no longer breaks when its server updates under it:** while a server updated to 0.3.0, the app could hear about image generation before it had the new settings, and the window showed only "Something went wrong!" until Atelier was quit from Task Manager. It now carries on through an update.

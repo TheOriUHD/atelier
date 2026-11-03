@@ -3,18 +3,27 @@
  * packages beside it (electron-updater's generic provider, which asks for byte ranges); people open `/` to download.
  * The bucket holds `stable/` and `beta/`, put there by deploy/cloudflare/publish.mjs.
  */
-import { latestPackages } from './latest.js';
+import { announcedFiles, diskImageUrl, latestPackages } from './latest.js';
 
 const CHANNELS = new Set(['stable', 'beta']);
 const SETUP_VERSION = /^[0-9A-Za-z][0-9A-Za-z.-]{0,40}$/;
 const SETUP_FILE = /^atelier-setup-(linux|darwin)-(amd64|arm64)$/;
+
+/** The repository whose release a missing macOS disk image is sent to (wrangler.toml, `GITHUB_REPO`). */
+const REPO = 'TheOriUHD/atelier';
+/** The update files of a channel: what an app is told to download. */
+const UPDATE_FILES = ['latest.yml', 'latest-mac.yml', 'latest-linux.yml', 'latest-linux-arm64.yml'];
 
 const text = (body, status = 200, headers = {}) => new Response(body, { status, headers: { 'content-type': 'text/plain; charset=utf-8', ...headers } });
 
 /** A file from the bucket, with ranges: updates download in pieces and resume. */
 async function file(request, env, key, cache) {
   const object = await env.RELEASES.get(key, { range: request.headers });
-  if (!object) return text('Not found', 404);
+  if (!object) {
+    // A disk image is only on the GitHub release (publish.mjs leaves it out of the bucket): the app and older apps ask for it here.
+    const release = diskImageUrl(key, env.GITHUB_REPO ?? REPO);
+    return release ? new Response(null, { status: 302, headers: { location: release, 'cache-control': 'public, max-age=300' } }) : text('Not found', 404);
+  }
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('etag', object.httpEtag);
@@ -33,9 +42,10 @@ async function file(request, env, key, cache) {
   return new Response(request.method === 'HEAD' ? null : object.body, { headers });
 }
 
+/** What the download page offers: the packages the channel's update files announce, so nothing is shown before it is complete. */
 async function packages(env, channel) {
-  const listed = await env.RELEASES.list({ prefix: `${channel}/` });
-  return latestPackages(listed.objects.map((o) => o.key.slice(channel.length + 1)));
+  const files = await Promise.all(UPDATE_FILES.map(async (name) => (await env.RELEASES.get(`${channel}/${name}`))?.text() ?? ''));
+  return latestPackages(announcedFiles(files));
 }
 
 const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);

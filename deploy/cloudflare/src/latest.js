@@ -1,8 +1,14 @@
 /** What the update files and the bucket's listing say, as plain functions (no Worker APIs, so they can be tested). */
 
-/** The package kinds the download page offers, in the order it shows them, with how to tell them apart by name. */
+/**
+ * The package kinds the download page offers, in the order it shows them, with how to tell them apart by name.
+ * Windows has an installer per architecture since 0.3.2; the one that carried both (`Atelier-Setup-<version>.exe`) is
+ * what older releases in the bucket have, and is only shown while no newer per-architecture installer exists.
+ */
 export const KINDS = [
-  { id: 'windows', label: 'Windows', note: 'x64 and ARM64', test: (n) => /^Atelier-Setup-.*\.exe$/.test(n) },
+  { id: 'windows-x64', label: 'Windows', note: 'x64', test: (n) => /^Atelier-Setup-.*-x64\.exe$/.test(n) },
+  { id: 'windows-arm64', label: 'Windows', note: 'ARM64', test: (n) => /^Atelier-Setup-.*-arm64\.exe$/.test(n) },
+  { id: 'windows', label: 'Windows', note: 'x64 and ARM64', test: (n) => /^Atelier-Setup-\d[^-]*(?:-[A-Za-z0-9.]+)?\.exe$/.test(n) && !/-(x64|arm64)\.exe$/.test(n) },
   { id: 'mac-arm64', label: 'macOS, Apple silicon', note: '.dmg', test: (n) => /^Atelier-.*arm64\.dmg$/.test(n) },
   { id: 'mac-x64', label: 'macOS, Intel', note: '.dmg', test: (n) => /^Atelier-.*\.dmg$/.test(n) && !/arm64/.test(n) },
   { id: 'linux-deb-x64', label: 'Linux, Debian and Ubuntu', note: '.deb, x64', test: (n) => /^Atelier-.*amd64\.deb$/.test(n) },
@@ -46,5 +52,31 @@ export function latestPackages(names) {
       .sort((a, b) => compareVersions(b.version, a.version))[0];
     if (best) out.push({ id: kind.id, label: kind.label, note: kind.note, ...best });
   }
+  // The installer that carried both architectures is a fallback for a bucket whose newest Windows release has no other.
+  const split = out.filter((p) => p.id === 'windows-x64' || p.id === 'windows-arm64');
+  const combined = out.find((p) => p.id === 'windows');
+  if (combined && split.some((p) => compareVersions(p.version, combined.version) >= 0)) out.splice(out.indexOf(combined), 1);
   return out;
+}
+
+/**
+ * The files an update file (`latest*.yml`) announces: the `url:` of each entry. The download page lists only these, so
+ * a package that is in the bucket but that no update file points at yet (a release being uploaded: the update files
+ * go last) is not offered.
+ */
+export function announcedFiles(texts) {
+  const names = new Set();
+  for (const text of texts) for (const m of text.matchAll(/^ {2}- url: *['"]?([^'"\s]+)['"]?\s*$/gm)) names.add(m[1]);
+  return [...names];
+}
+
+/**
+ * Where a macOS disk image that is not in the bucket is: the same file on the GitHub release (the repository is public).
+ * Releases from 0.3.2 on leave the .dmg off the feed to save an upload; the app's "Download" button on a Mac that can't
+ * replace itself, and older apps' too, ask the feed for it by the name `latest-mac.yml` gives. Null for any other key.
+ */
+export function diskImageUrl(key, repo) {
+  const m = /^(?:stable|beta)\/(Atelier-[A-Za-z0-9._-]+\.dmg)$/.exec(key);
+  const version = m && versionOfFile(m[1]);
+  return version ? `https://github.com/${repo}/releases/download/v${version}/${encodeURIComponent(m[1])}` : null;
 }

@@ -1,4 +1,4 @@
-# Builds the Windows installer (x64 and arm64 in one) on the Windows build machine. The release command
+# Builds the Windows installers (one for x64, one for arm64, both in one latest.yml) on the Windows build machine. The release command
 # (deploy/ship/release.mjs) copies this script, the source of the tag (atelier-src.tar.gz), the runner binaries
 # (runner-bin.tar.gz) and the computer use helpers (computer-windows.tar.gz, built with Go on the Mac) to $Root, then
 # runs it. $Root holds tools\node (Node and pnpm on the PATH) and src\ (the checkout).

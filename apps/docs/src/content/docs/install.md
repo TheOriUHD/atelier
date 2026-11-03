@@ -11,14 +11,16 @@ The desktop app runs on macOS, Windows and Linux. If someone runs an Atelier ser
 - **[atelierhq.dev/download](https://atelierhq.dev/download/)** detects your system and lets you pick another build. It
   lists the newest stable release.
 - **The [GitHub releases page](https://github.com/TheOriUHD/atelier/releases)** has every version, with release notes,
-  plus the macOS `.zip` builds, `.blockmap` files and the `latest*.yml` update files the in-app updater reads. For a
+  plus the macOS `.zip` builds, `.blockmap` files and the `latest*.yml` update files the in-app updater reads. The
+  macOS `.dmg` files are there and on the website, not on the update feed. For a
   first install you only need the file below for your system.
 
 | System | File | Notes |
 |---|---|---|
 | macOS, Apple silicon (M1 and later) | `Atelier-<version>-arm64.dmg` | |
 | macOS, Intel | `Atelier-<version>.dmg` | |
-| Windows 10 and 11 | `Atelier-Setup-<version>.exe` | One installer for x64 and ARM64. |
+| Windows 10 and 11, x64 (64-bit Intel or AMD) | `Atelier-Setup-<version>-x64.exe` | |
+| Windows 11 on ARM | `Atelier-Setup-<version>-arm64.exe` | Releases up to 0.3.1 had one `Atelier-Setup-<version>.exe` for both. |
 | Debian, Ubuntu and relatives, x86-64 | `Atelier-<version>-amd64.deb` | Preferred on Linux. |
 | Debian, Ubuntu and relatives, ARM64 | `Atelier-<version>-arm64.deb` | |
 | Any Linux, x86-64 | `Atelier-<version>.AppImage` | |
@@ -60,7 +62,7 @@ app and offers **Open Local Network settings** (System Settings › Privacy & Se
 
 ## Windows
 
-Windows 10 and 11, on 64-bit Intel or AMD and on ARM. Run `Atelier-Setup-<version>.exe`.
+Windows 10 and 11, on 64-bit Intel or AMD (`-x64`) and on ARM (`-arm64`). Run the installer for your processor: Windows' own **Settings › System › About** names it under *System type*.
 
 **The installer is not code-signed.** Windows SmartScreen may show "Windows protected your PC" and name an unknown
 publisher. Choose **More info**, then **Run anyway**. Atelier's own updates are still checked against a signature made with
@@ -79,7 +81,7 @@ The installer is a wizard:
 | Needs administrator rights | No | Yes (Windows asks) |
 
 The installer adds a desktop shortcut, a Start menu shortcut called **Atelier** and an entry in **Settings › Apps** for
-uninstalling. For scripted installs, `Atelier-Setup-<version>.exe /S` runs it silently; add `/allusers` or `/currentuser`
+uninstalling. For scripted installs, `Atelier-Setup-<version>-x64.exe /S` (or `-arm64`) runs it silently; add `/allusers` or `/currentuser`
 to choose the mode, and `/D=<folder>` (last on the command line, without quotes) to choose the folder. Updates install
 silently and start Atelier again.
 

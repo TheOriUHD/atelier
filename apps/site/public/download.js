@@ -41,13 +41,19 @@
   // Which build each system leads with, by processor.
   var LEAD = {
     macos: { arm64: 'macos-arm64', x64: 'macos-x64' },
-    windows: { arm64: 'windows', x64: 'windows' },
+    windows: { arm64: 'windows-arm64', x64: 'windows-x64' },
     linux: { arm64: 'linux-deb-arm64', x64: 'linux-deb-x64' },
   };
 
   var size = function (bytes) {
     return bytes >= 1e9 ? (bytes / 1e9).toFixed(1) + ' GB' : Math.round(bytes / 1e6) + ' MB';
   };
+
+  // Releases up to 0.3.1 have one Windows installer for both processors, under the kind 'windows'.
+  function assetFor(kind) {
+    var assets = (release && release.assets) || {};
+    return assets[kind] || (/^windows-/.test(kind) ? assets.windows : undefined);
+  }
 
   function lead(os) {
     return LEAD[os][arch];
@@ -63,7 +69,7 @@
       $('.builds', panel).hidden = single;
       rows.forEach(function (row) {
         var kind = row.getAttribute('data-build');
-        var asset = release && release.assets[kind];
+        var asset = assetFor(kind);
         var link = $('[data-link]', row);
         if (asset) {
           link.href = asset.url;
@@ -72,7 +78,7 @@
         row.classList.toggle('is-lead', kind === leadKind);
       });
       var primary = $('[data-primary]', panel);
-      var asset = release && release.assets[leadKind];
+      var asset = assetFor(leadKind);
       var label = $('[data-primary-label]', panel);
       var meta = $('[data-primary-meta]', panel);
       label.textContent =
@@ -80,9 +86,9 @@
           ? 'Download for ' + (leadKind === 'macos-arm64' ? 'Apple silicon' : 'Intel')
           : os === 'linux'
             ? 'Download the ' + (arch === 'arm64' ? 'ARM64' : 'x86-64') + ' .deb'
-            : 'Download for Windows';
+            : 'Download for Windows (' + (arch === 'arm64' ? 'ARM64' : 'x64') + ')';
       // A platform a release left out keeps an earlier build: its own file name says which version it is.
-      var built = asset && /\d+\.\d+\.\d+(?:-(?!arm64|amd64)[A-Za-z0-9.]+)?/.exec(asset.name);
+      var built = asset && /\d+\.\d+\.\d+(?:-(?!arm64|amd64|x64)[A-Za-z0-9.]+)?/.exec(asset.name);
       var facts = asset ? [built ? built[0] : release.version, size(asset.size)] : [];
       if (single) facts.push(rows[0].getAttribute('data-summary'));
       if (asset) primary.href = asset.url;
