@@ -254,9 +254,14 @@ export function createDeviceLink(options: DeviceLinkOptions) {
       failures = 0;
       connect();
     },
-    close(): void {
+    /**
+     * Ends the link and what it lends. `exiting`: the process ends right after, so the home watcher is left to it:
+     * closing a watcher over many (symlinked) skills blocks the process for seconds, and Log out and Change setup wait
+     * for this process to end before the window may show the first-run choice.
+     */
+    close(options?: { exiting?: boolean }): void {
       this.setToken(null);
-      stopWatch?.();
+      if (!options?.exiting) stopWatch?.();
       stopWatch = undefined;
     },
     /** The person changed what this computer lends the server: tell it. */

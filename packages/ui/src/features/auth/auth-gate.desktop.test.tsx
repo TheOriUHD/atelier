@@ -5,10 +5,11 @@ import { appError, type AuthStatus, type ScreenLockStatus } from '@atelier/proto
 import { TooltipProvider } from '../../components/ui/index.ts';
 import { callsTo, emit, resetBackend, user } from '../settings/test-backend.ts';
 import { AuthGate } from './auth-gate.tsx';
+import { leaveSetup } from './sign-in.ts';
 
 const bridge = vi.hoisted(() => ({
   platform: 'darwin',
-  connection: { get: vi.fn(), set: vi.fn(), problem: vi.fn(), onProblem: vi.fn(), openNetworkSettings: vi.fn() },
+  connection: { get: vi.fn(), set: vi.fn(), reset: vi.fn(), problem: vi.fn(), onProblem: vi.fn(), openNetworkSettings: vi.fn() },
   session: { save: vi.fn(), clear: vi.fn() },
   discovery: { scan: vi.fn() },
   lock: { canUseSystem: vi.fn(), removeWithSystem: vi.fn() },
@@ -40,7 +41,7 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
 const status = (patch: Partial<AuthStatus> = {}): AuthStatus => ({ setupRequired: false, signup: 'invite', user: null, local: false, oidc: [], ...patch });
 
 beforeEach(() => {
-  for (const fn of [bridge.connection.get, bridge.connection.set, bridge.connection.problem, bridge.connection.onProblem, bridge.connection.openNetworkSettings, bridge.session.save, bridge.session.clear, toasts.message]) fn.mockReset();
+  for (const fn of [bridge.connection.get, bridge.connection.set, bridge.connection.reset, bridge.connection.problem, bridge.connection.onProblem, bridge.connection.openNetworkSettings, bridge.session.save, bridge.session.clear, toasts.message]) fn.mockReset();
   bridge.connection.problem.mockResolvedValue(null);
   bridge.connection.onProblem.mockReturnValue(() => {});
   bridge.connection.openNetworkSettings.mockResolvedValue(undefined);
@@ -358,6 +359,45 @@ describe('AuthGate in the desktop app', () => {
 
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeTruthy();
     expect(bridge.session.clear).toHaveBeenCalled();
+  });
+});
+
+describe('leaving the setup (Log out, Change setup…)', () => {
+  it('does not put the server’s sign-in screen up while the backend stops, because the window is about to show the first-run choice', async () => {
+    // The server answers a logout with auth.signedOut before the reply; stopping the backend then takes seconds.
+    let reload!: () => void;
+    bridge.connection.get.mockResolvedValue({ mode: 'server', serverUrl: 'https://atelier.example' });
+    bridge.connection.reset.mockReturnValue(new Promise<void>((resolve) => (reload = resolve)));
+    resetBackend({
+      'auth.status': () => status({ user: user() }),
+      'devices.register': () => ({}),
+      'auth.logout': () => {
+        emit('auth.signedOut', {});
+        return { ok: true };
+      },
+    });
+    renderGate();
+    await screen.findByText('The app');
+
+    const leaving = leaveSetup();
+    await waitFor(() => expect(bridge.connection.reset).toHaveBeenCalled());
+
+    expect(screen.getByText('The app')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Welcome back' })).toBeNull();
+    reload();
+    await leaving;
+  });
+
+  it('shows the sign-in again after a failed attempt to leave', async () => {
+    bridge.connection.get.mockResolvedValue({ mode: 'server', serverUrl: 'https://atelier.example' });
+    bridge.connection.reset.mockRejectedValue(new Error('no'));
+    resetBackend({ 'auth.status': () => status({ user: user() }), 'devices.register': () => ({}), 'auth.logout': () => ({ ok: true }) });
+    renderGate();
+    await screen.findByText('The app');
+    await expect(leaveSetup()).rejects.toThrow('no');
+
+    act(() => emit('auth.signedOut', {}));
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeTruthy();
   });
 });
 

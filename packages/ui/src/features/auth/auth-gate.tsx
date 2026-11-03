@@ -26,7 +26,7 @@ import {
 import { InviteCodeScreen } from './invite-code-screen.tsx';
 import { LockScreen } from './lock-screen.tsx';
 import { setLocal, useAutoLock } from './screen-lock.ts';
-import { localSignIn, setIdentityProvidersOffered } from './sign-in.ts';
+import { isLeavingSetup, localSignIn, setIdentityProvidersOffered } from './sign-in.ts';
 
 type Screen =
   | { name: 'loading' }
@@ -135,6 +135,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // Signed out elsewhere (logout, password reset, account disabled) or a call found no sign-in.
   useEffect(() => {
     const signedOut = () => {
+      // "Log out" and "Change setup…" end in a reload onto the first-run choice; until then nothing else is shown.
+      if (isLeavingSetup()) return;
       void desktop?.session.clear();
       if (status?.local) void refresh();
       else setScreen({ name: 'login' });

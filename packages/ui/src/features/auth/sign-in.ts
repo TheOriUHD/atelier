@@ -148,12 +148,28 @@ const LOGOUT_WAIT_MS = 5000;
 
 /** Desktop: back to the first-run choice; a server's sign-in is revoked first where it answers in time. */
 export async function leaveSetup(): Promise<void> {
-  if (!isLocal()) {
-    // An unreachable server can't revoke it; it stays listed under Active sessions there, where it can be revoked.
-    await Promise.race([rpc().call('auth.logout', {}), new Promise((resolve) => setTimeout(resolve, LOGOUT_WAIT_MS))]).catch(() => undefined);
+  leaving = true;
+  try {
+    if (!isLocal()) {
+      // An unreachable server can't revoke it; it stays listed under Active sessions there, where it can be revoked.
+      await Promise.race([rpc().call('auth.logout', {}), new Promise((resolve) => setTimeout(resolve, LOGOUT_WAIT_MS))]).catch(() => undefined);
+    }
+    await desktop!.connection.reset!();
+  } catch (error) {
+    // The window stays as it is: the person may try again.
+    leaving = false;
+    throw error;
   }
-  await desktop!.connection.reset!();
 }
+
+/** Set from the moment the app leaves its setup until the window reloads onto the first-run choice. */
+let leaving = false;
+/**
+ * Whether the app is on its way back to the first-run choice. The server's `auth.signedOut` (it answers a logout with
+ * one) must not then put its sign-in screen up for the seconds the backend takes to stop: that is a screen for a server
+ * the person just left, and it hides the choice that follows.
+ */
+export const isLeavingSetup = (): boolean => leaving;
 
 /** Ends this sign-in. On desktop the backend's `auth.signedOut` then takes the app back to sign-in. */
 export async function logout(): Promise<void> {

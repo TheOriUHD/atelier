@@ -214,7 +214,12 @@ export interface Backend {
    * "This computer" has one person, so nothing is checked there.
    */
   readBlobFor(userId: string, sha256: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string } | undefined>;
-  dispose(): Promise<void>;
+  /**
+   * Stops everything. `exiting`: the process ends right after, so the file watchers are left to it. Closing one over a
+   * folder of many (symlinked) skills blocks the process for seconds, and the app waits for that process to end before it
+   * goes back to its first-run choice.
+   */
+  dispose(options?: { exiting?: boolean }): Promise<void>;
 }
 
 interface Connection {
@@ -2622,7 +2627,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       await devices.register(auth.user.id, device);
       return links.attach(auth.user.id, device.id, socket);
     },
-    async dispose() {
+    async dispose(options) {
       clearInterval(cleanupTimer);
       await audit.idle();
       clearInterval(temporaryTimer);
@@ -2636,9 +2641,11 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       await mcp.close();
       await personal.close();
       await workspaceManager.disposeAll();
-      stopPromptWatch();
-      stopExtensionWatch();
-      settings.unwatch();
+      if (!options?.exiting) {
+        stopPromptWatch();
+        stopExtensionWatch();
+        settings.unwatch();
+      }
       for (const c of connections) c.rpc.close();
       connections.clear();
       db.$client.close();

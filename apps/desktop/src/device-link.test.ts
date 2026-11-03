@@ -446,6 +446,24 @@ describe('device link version 2', () => {
     expect(lendingChanged).toHaveBeenCalledOnce();
   });
 
+  it('closes the home watcher when it ends, but leaves it to the process when the process is exiting (closing one blocks for seconds)', async () => {
+    // Closing a watcher over a person's many skills froze the relay for 3 s, and Log out waits for the relay to end.
+    const stopped = vi.fn();
+    const first = linkWith({ watchHome: () => stopped });
+    first.setToken('tok');
+    sockets[0]!.open();
+    first.close();
+    expect(stopped).toHaveBeenCalledOnce();
+
+    stopped.mockClear();
+    const second = linkWith({ watchHome: () => stopped });
+    second.setToken('tok');
+    sockets[1]!.open();
+    second.close({ exiting: true });
+    expect(stopped).not.toHaveBeenCalled();
+    expect(sockets[1]!.readyState).toBe(WebSocket.CLOSED);
+  });
+
   it('passes on why a service wasn’t started', async () => {
     const l = linkWith({
       start: async () => {

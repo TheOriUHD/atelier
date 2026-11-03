@@ -104,7 +104,7 @@ parentPort.on('message', (event: { data: MainToBackend; ports: Electron.MessageP
   } else if (m.kind === 'removeScreenLock') {
     void backend.removeScreenLock().catch((e: unknown) => console.error('Removing the screen lock failed:', e instanceof Error ? e.message : e));
   } else if (m.kind === 'shutdown') {
-    void backend.dispose().then(() => process.exit(0));
+    void backend.dispose({ exiting: true }).then(() => process.exit(0));
   }
 });
 

@@ -85,7 +85,7 @@ process.parentPort.on('message', (event: { data: MainToBackend; ports: Electron.
   else if (m.kind === 'lending') deviceLink.lendingChanged();
   else if (m.kind === 'importing') services.allowImport();
   else if (m.kind === 'shutdown') {
-    deviceLink.close();
+    deviceLink.close({ exiting: true });
     process.exit(0);
   }
 });
