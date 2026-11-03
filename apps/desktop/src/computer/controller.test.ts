@@ -106,7 +106,7 @@ beforeEach(async () => {
     changed() {},
     platform: 'darwin',
   });
-  await changeComputerSettings(settingsPath, (s) => ({ ...s, enabled: true }));
+  await changeComputerSettings(settingsPath, (s) => ({ ...s, enabled: true }), 'darwin');
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -125,7 +125,7 @@ async function ready(grants: { id: string; tier: 'view' | 'click' | 'full' }[]) 
 describe('computer use settings', () => {
   it('starts off, with the password managers denied', async () => {
     rmSync(settingsPath);
-    const settings = await readComputerSettings(settingsPath);
+    const settings = await readComputerSettings(settingsPath, 'darwin');
     expect(settings.enabled).toBe(false);
     expect(settings.mode).toBe('background');
     expect(settings.denied.map((a) => a.name)).toContain('1Password');
