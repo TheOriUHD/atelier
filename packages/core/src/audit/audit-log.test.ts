@@ -188,7 +188,7 @@ describe('the activity log', () => {
 
     it('caps the table so a flood cannot fill the disk before retention would act', async () => {
       const rows = Array.from({ length: AUDIT_MAX_ROWS + 3 }, (_, i) => ({ id: `id-${i}`, at: now - i, kind: 'signin.failed', actorId: null, actor: null, target: null, summary: 'x', detail: null, ip: null }));
-      for (let i = 0; i < rows.length; i += 5000) await db.insert(auditEvents).values(rows.slice(i, i + 5000));
+      for (let i = 0; i < rows.length; i += 500) await db.insert(auditEvents).values(rows.slice(i, i + 500));
       expect(await log.prune(90)).toBe(3);
       expect((await db.select({ n: sql<number>`count(*)` }).from(auditEvents).get())?.n).toBe(AUDIT_MAX_ROWS);
       // The newest stay.
