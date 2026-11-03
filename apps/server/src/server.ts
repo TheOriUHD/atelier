@@ -15,6 +15,7 @@ import { randomBytes } from 'node:crypto';
 import { AccountError, AesGcmCipher, createBackend, loadServerKey, type ClientInfo, type LinkSocket } from '@atelier/core';
 import { APP, artifactRuntimeCsp, DEVICE_HEADERS, DEVICE_LINK_PATH, DeviceInfo, Password, Username, type RpcMessage, type Transport } from '@atelier/protocol';
 import { z } from 'zod';
+import { blobRoutes } from './blobs.ts';
 import { oauthRoutes } from './oauth.ts';
 import { oidcRoutes } from './oidc.ts';
 import { clientIp, originRefusal, proxyConfig, publicOrigin } from './proxy.ts';
@@ -67,6 +68,8 @@ const APP_CSP = [
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  // Generated videos come from /api/blobs; a blob: URL is a frame a page took from one.
+  "media-src 'self' blob:",
   "font-src 'self' data:",
   "connect-src 'self'",
   "frame-src 'self' blob:",
@@ -201,23 +204,12 @@ app.post('/api/auth/logout', async (c) => {
 oauthRoutes(app, backend, { cookie: COOKIE, originOf });
 oidcRoutes(app, backend, { cookie: COOKIE, originOf, sameOrigin, secure, clientOf, keepSignIn });
 
-const INLINE_TYPES = /^image\/(png|jpeg|gif|webp|avif)$/;
-app.get('/api/blobs/:sha', async (c) => {
-  const token = tokenOf(c);
-  const auth = token ? await backend.authenticate(token) : null;
-  if (!auth) return c.json({ code: 'unauthenticated' }, 401);
-  // A blob is only for accounts that hold something referring to it (or an avatar): the hash is not a credential.
-  // Someone else's blob reads like one that doesn't exist.
-  const blob = await backend.readBlobFor(auth.user.id, c.req.param('sha')).catch(() => undefined);
-  if (!blob) return c.notFound();
-  const inline = INLINE_TYPES.test(blob.mime);
-  return c.body(blob.bytes, 200, {
-    'Content-Type': inline ? blob.mime : 'application/octet-stream',
-    'Content-Disposition': inline ? 'inline' : 'attachment',
-    'Content-Security-Policy': "default-src 'none'; sandbox",
-    'X-Content-Type-Options': 'nosniff',
-    'Cache-Control': 'private, max-age=31536000, immutable',
-  });
+blobRoutes(app, {
+  userOf: async (c) => {
+    const token = tokenOf(c);
+    return token ? ((await backend.authenticate(token))?.user.id ?? null) : null;
+  },
+  blobSource: (userId, sha) => backend.blobSource(userId, sha),
 });
 
 // Desktop apps signed in to this server update from here (electron-updater's generic provider).

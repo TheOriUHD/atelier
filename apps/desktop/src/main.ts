@@ -16,7 +16,7 @@ import { homedir, hostname, networkInterfaces, userInfo } from 'node:os';
 import { basename, join, normalize, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { APP, AppTier, artifactRuntimeCsp, ComputerApp, ComputerMode, shortcutBindings, ShortcutPrefs, toAccelerator, type ControllerMethods, type ShortcutBindings, type ShortcutId } from '@atelier/protocol';
+import { APP, AppTier, artifactRuntimeCsp, blobHeaders, blobResponse, ComputerApp, ComputerMode, shortcutBindings, ShortcutPrefs, toAccelerator, type ControllerMethods, type ShortcutBindings, type ShortcutId } from '@atelier/protocol';
 import type { BackendToMain, MainToBackend, MenuCommand } from './bridge.ts';
 
 import { BROWSER_PARTITION, attachGuest, fetchFavicon, hardenWebview, prepareBrowserSession, type BrowserEvents } from './browser.ts';
@@ -366,39 +366,39 @@ function connectRenderer(contents: WebContents): void {
   else waiting.add(contents);
 }
 
-type BlobBody = { body: BodyInit; mime: string } | undefined;
+/** A stored file as main got it: all of it, or the part a `Range` header named (`range` is that header). */
+type BlobBody = { body: BodyInit; mime: string; size: number; range?: string; status?: number; contentRange?: string } | undefined;
 
-function readLocalBlob(sha256: string): Promise<BlobBody> {
+function readLocalBlob(sha256: string, range?: string): Promise<BlobBody> {
   if (!backend || !backendReady) return Promise.resolve(undefined);
   const id = blobSeq++;
   return new Promise((resolve) => {
-    blobWaiters.set(id, (r) => resolve(r.found ? { body: r.bytes, mime: r.mime } : undefined));
-    post({ kind: 'blob', id, sha256 });
+    blobWaiters.set(id, (r) => resolve(r.found ? { body: r.bytes, mime: r.mime, size: r.size, ...(range ? { range } : {}) } : undefined));
+    post({ kind: 'blob', id, sha256, ...(range ? { range } : {}) });
   });
 }
 
-/** Server mode: main fetches blobs with the token, so the renderer never talks to the server itself. */
-async function fetchServerBlob(serverUrl: string, sha256: string): Promise<BlobBody> {
-  const response = await fetch(`${serverUrl}/api/blobs/${sha256}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).catch(() => null);
-  if (!response?.ok || !response.body) return undefined;
-  return { body: response.body, mime: response.headers.get('content-type') ?? 'application/octet-stream' };
+/** Server mode: main fetches blobs with the token, so the renderer never talks to the server itself. A `Range` goes on to the server, which answers with the piece. */
+async function fetchServerBlob(serverUrl: string, sha256: string, range?: string): Promise<BlobBody> {
+  const response = await fetch(`${serverUrl}/api/blobs/${sha256}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(range ? { Range: range } : {}) } }).catch(() => null);
+  if (!response || (!response.ok && response.status !== 416)) return undefined;
+  const contentRange = response.headers.get('content-range') ?? undefined;
+  return { body: response.body ?? new Uint8Array(), mime: response.headers.get('content-type') ?? 'application/octet-stream', size: Number(contentRange?.split('/')[1] ?? response.headers.get('content-length') ?? 0), status: response.status, ...(contentRange ? { contentRange } : {}) };
 }
 
-// The web server's /api/blobs policy: only common image types render inline.
-const INLINE_TYPES = /^image\/(png|jpeg|gif|webp|avif)$/;
-
-function blobResponse({ body, mime }: NonNullable<BlobBody>): Response {
-  const inline = INLINE_TYPES.test(mime);
-  return new Response(body, {
-    headers: {
-      'Content-Type': inline ? mime : 'application/octet-stream',
-      'Content-Disposition': inline ? 'inline' : 'attachment',
-      'Content-Security-Policy': "default-src 'none'; sandbox",
-      'X-Content-Type-Options': 'nosniff',
-      // Atelier's own pages only: an artifact's sandbox has another origin, and the Browser pane another session.
-      'Access-Control-Allow-Origin': DEV_URL ? new URL(DEV_URL).origin : 'app://ui',
-    },
-  });
+/**
+ * The same policy as the web server's /api/blobs (protocol `blobResponse`): common pictures and MP4/WebM render inline,
+ * ranges are answered so a video plays and seeks, and every answer is sandboxed and nosniff. A file main read itself goes
+ * through that function; one the server already answered keeps the server's status and range.
+ */
+function respondWithBlob(blob: NonNullable<BlobBody>): Promise<Response> | Response {
+  // Atelier's own pages only: an artifact's sandbox has another origin, and the Browser pane another session.
+  const extra = {
+    'Access-Control-Allow-Origin': DEV_URL ? new URL(DEV_URL).origin : 'app://ui',
+    'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+  };
+  if (blob.status === undefined) return blobResponse({ mime: blob.mime, size: blob.size, whole: () => blob.body, slice: () => blob.body }, blob.range, extra);
+  return new Response(blob.status === 416 ? null : blob.body, { status: blob.status, headers: { ...blobHeaders(blob.mime), ...extra, ...(blob.contentRange ? { 'Content-Range': blob.contentRange } : {}) } });
 }
 
 const CSP = [
@@ -406,6 +406,8 @@ const CSP = [
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob: ${APP.scheme}-blob:`,
+  // Generated videos play from the blob protocol; a blob: URL is a frame a page took from one.
+  `media-src 'self' blob: ${APP.scheme}-blob:`,
   "font-src 'self' data:",
   `connect-src 'self' ${APP.scheme}-blob:`,
   `frame-src blob: ${APP.scheme}-artifact: ${APP.scheme}-blob:`,
@@ -455,8 +457,9 @@ function registerProtocols(): void {
   protocol.handle(`${APP.scheme}-blob`, async (request) => {
     const sha = new URL(request.url).hostname;
     if (!/^[0-9a-f]{64}$/.test(sha)) return new Response('Not found', { status: 404 });
-    const blob = connection?.mode === 'server' ? await fetchServerBlob(connection.serverUrl, sha) : await readLocalBlob(sha);
-    return blob ? blobResponse(blob) : new Response('Not found', { status: 404 });
+    const range = request.headers.get('range') ?? undefined;
+    const blob = connection?.mode === 'server' ? await fetchServerBlob(connection.serverUrl, sha, range) : await readLocalBlob(sha, range);
+    return blob ? respondWithBlob(blob) : new Response('Not found', { status: 404 });
   });
 }
 

@@ -3,6 +3,7 @@ export * from './messages.ts';
 export * from './models.ts';
 export * from './images.ts';
 export * from './limits.ts';
+export * from './blob-http.ts';
 export * from './effort.ts';
 export * from './loops.ts';
 export * from './settings.ts';

@@ -249,6 +249,9 @@ export const UsageRow = z.object({
   unpriced: z.number(),
   /** Images generated; these rows have no tokens. */
   images: z.number().optional(),
+  /** Videos generated, and their seconds in all. */
+  videos: z.number().optional(),
+  videoSeconds: z.number().optional(),
   /** How much of `costUsd` comes from a price list rather than from the service. */
   estimatedUsd: z.number().optional(),
   /** Averaged over the `timed` requests that reported a speed. */

@@ -1,8 +1,9 @@
 /** Content-addressed blob store: files live at <dir>/<aa>/<bb>/<sha256>, metadata in the `blobs` table. */
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readFile, rename, writeFile, rm, readdir, stat } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, writeFile, rm, readdir, stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { Db } from './db.ts';
@@ -112,6 +113,29 @@ export class BlobStore {
 
   async read(sha256: string): Promise<Uint8Array<ArrayBuffer>> {
     return readFile(this.pathFor(sha256));
+  }
+
+  /** Bytes `start` to `end` (inclusive) of a file, read from disk without reading the rest: a video is served in pieces. */
+  async readRange(sha256: string, start: number, end: number): Promise<Uint8Array<ArrayBuffer>> {
+    const file = await open(this.pathFor(sha256), 'r');
+    try {
+      const length = Math.max(0, end - start + 1);
+      const out = new Uint8Array(length);
+      let read = 0;
+      while (read < length) {
+        const { bytesRead } = await file.read(out, read, length - read, start + read);
+        if (bytesRead === 0) break;
+        read += bytesRead;
+      }
+      return read === length ? out : out.slice(0, read);
+    } finally {
+      await file.close();
+    }
+  }
+
+  /** The whole file as a stream, so a large download never sits in memory. */
+  stream(sha256: string): ReadableStream<Uint8Array> {
+    return Readable.toWeb(createReadStream(this.pathFor(sha256))) as unknown as ReadableStream<Uint8Array>;
   }
 
   async readText(sha256: string): Promise<string> {

@@ -65,6 +65,28 @@ describe('privacy', () => {
     expect((await db.select().from(blobTable).all()).map((b) => b.sha256).sort()).toEqual([image.sha256, fresh.sha256].sort());
   });
 
+  it('keeps a generated video while its conversation or the library has it, and removes it when neither does', async () => {
+    const s = await repo.create({ mode: 'chat', userId: 'ada' });
+    const clip = await blobs.put(new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]), 'video/mp4');
+    const files = new FileRepo(db, blobs);
+    await files.addGenerated({ name: 'waves.mp4', mime: 'video/mp4', blob: clip.sha256, size: 12, userId: 'ada', sessionId: s.id, messageId: 'm' });
+    db.$client.prepare('UPDATE blobs SET created_at = ?').run(Date.now() - 2 * 3600_000);
+    expect(await collectUnusedBlobs(db, blobs)).toBe(0);
+    await deleteConversations(db, [s.id]);
+    expect(await collectUnusedBlobs(db, blobs)).toBe(1);
+  });
+
+  it('exports a generated video with the files, stored as it is', async () => {
+    const s = await repo.create({ mode: 'chat', userId: 'ada' });
+    const bytes = new Uint8Array(2000).map((_, i) => i % 7);
+    const clip = await blobs.put(bytes, 'video/mp4');
+    await new FileRepo(db, blobs).addGenerated({ name: 'waves-ab12cd.mp4', mime: 'video/mp4', blob: clip.sha256, size: bytes.length, userId: 'ada', sessionId: s.id, messageId: 'm' });
+    const zip = unzipSync(await exportAll(db, blobs, 'ada'));
+    const name = Object.keys(zip).find((n) => n.endsWith('-waves-ab12cd.mp4'))!;
+    expect(name).toMatch(/^files\//);
+    expect(zip[name]).toEqual(bytes);
+  });
+
   it('exports conversations, artifacts, projects and files as a zip', async () => {
     const s = await repo.create({ mode: 'chat', userId: 'ada', title: 'Trip plans' });
     const q = await say(s.id, 'user', 'Where to?', null);

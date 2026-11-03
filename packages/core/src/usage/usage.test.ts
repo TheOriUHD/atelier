@@ -45,6 +45,24 @@ describe('usage summary of images', () => {
   });
 });
 
+describe('usage summary of videos', () => {
+  it('counts the clips of a row and their seconds, and keeps them out of the model card of the stats', async () => {
+    const db = openDatabase(':memory:');
+    await db.insert(users).values({ id: 'ada', username: 'ada', name: 'ada', role: 'user', passwordHash: 'x', createdAt: 0, updatedAt: 0 });
+    await db.insert(sessions).values({ id: 's1', userId: 'ada', mode: 'chat', title: 't', createdAt: 0, updatedAt: 0 });
+    const at = Date.parse('2026-10-13T09:00:00Z');
+    const event = (id: string, extra: Partial<typeof usageEvents.$inferInsert>) =>
+      db.insert(usageEvents).values({ id, ts: at, userId: 'ada', sessionId: 's1', providerId: 'fal', modelId: 'kling', mode: 'chat', input: 0, output: 0, ...extra });
+    await event('1', { videos: 1, videoSeconds: 5, costUsd: 0.8, costEstimated: true });
+    await event('2', { videos: 1, videoSeconds: 8, costUsd: 1.25 });
+    await event('3', { modelId: 'text', input: 100, output: 10 });
+    const rows = usageSummary(db, { userId: 'ada', days: 7, timezoneOffset: 0, now: at });
+    expect(rows.find((r) => r.modelId === 'kling')).toMatchObject({ videos: 2, videoSeconds: 13, images: 0, costUsd: 2.05, estimatedUsd: 0.8, input: 0 });
+    expect(rows.find((r) => r.modelId === 'text')).toMatchObject({ videos: 0, videoSeconds: 0 });
+    expect(statsSummary(db, { userId: 'ada', mode: 'chat', days: null, timezoneOffset: 0, now: at }).models.map((m) => m.ref)).toEqual(['fal/text']);
+  });
+});
+
 describe('stats summary', () => {
   it('counts one person’s root sessions in a mode by local day and hour, with sub-agents’ tokens on their parent', async () => {
     const db = openDatabase(':memory:');

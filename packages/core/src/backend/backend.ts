@@ -32,6 +32,7 @@ import {
   serveRpc,
   sessionEffort,
   type AppContract,
+  type BlobSource,
   type ControllerEvent,
   type ControllerMethods,
   type Handlers,
@@ -216,6 +217,11 @@ export interface Backend {
    * "This computer" has one person, so nothing is checked there.
    */
   readBlobFor(userId: string, sha256: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string } | undefined>;
+  /**
+   * A stored file as `blobResponse` (protocol) serves it, for a signed-in account: its type and size from the record, the whole of
+   * it as a stream and any range read from disk. Undefined when there is no such file or nothing that account may see refers to it.
+   */
+  blobSource(userId: string, sha256: string): Promise<BlobSource | undefined>;
   /**
    * Stops everything. `exiting`: the process ends right after, so the file watchers are left to it. Closing one over a
    * folder of many (symlinked) skills blocks the process for seconds, and the app waits for that process to end before it
@@ -2658,6 +2664,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     async readBlobFor(userId, sha256) {
       if (!local && !(await blobAccess.canRead(userId, sha256))) return undefined;
       return readBlob(sha256);
+    },
+    async blobSource(userId, sha256) {
+      // As `readBlobFor`: a blob is for accounts that hold something referring to it. "This computer" has one person.
+      if (!local && !(await blobAccess.canRead(userId, sha256))) return undefined;
+      const info = await blobs.info(sha256).catch(() => undefined);
+      if (!info) return undefined;
+      return { mime: info.mime, size: info.size, whole: () => blobs.stream(sha256), slice: (start, end) => blobs.readRange(sha256, start, end) };
     },
     passkeys,
     oidc,

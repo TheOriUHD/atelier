@@ -15,7 +15,8 @@ export type MainToBackend =
   | MainResponse
   /** A renderer connection, signed in with the stored token if any; the MessagePort travels in the transfer list. */
   | { kind: 'connect'; token?: string }
-  | { kind: 'blob'; id: number; sha256: string }
+  /** `range` is the request's `Range` header: only that part is read and sent back. */
+  | { kind: 'blob'; id: number; sha256: string; range?: string }
   /** Server mode: the current sign-in for the device link (null when signed out). */
   | { kind: 'token'; token: string | null }
   /** Server mode: the person changed what this computer lends the server (`lending.json`). */
@@ -35,7 +36,8 @@ export type BackendToMain =
   | { kind: 'link'; problem: LinkProblem | null }
   /** The built-in backend made a folder on this machine one of the person's (the agent moved a session there): main trusts it too. */
   | { kind: 'trusted'; root: string }
-  | { kind: 'blob'; id: number; found: true; bytes: Uint8Array<ArrayBuffer>; mime: string }
+  /** `size` is the whole file's, which `bytes` is all or a range of. */
+  | { kind: 'blob'; id: number; found: true; bytes: Uint8Array<ArrayBuffer>; mime: string; size: number }
   | { kind: 'blob'; id: number; found: false };
 
 /** Menu commands forwarded to the renderer. */

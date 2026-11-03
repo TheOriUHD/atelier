@@ -4,7 +4,7 @@
  */
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import type { ControllerEvent, RpcMessage, Transport } from '@atelier/protocol';
+import { parseByteRange, type ControllerEvent, type RpcMessage, type Transport } from '@atelier/protocol';
 import { createBackend, hostRunnerBinary, type Cipher } from '@atelier/core';
 import type { BackendToMain, MainToBackend } from './bridge.ts';
 import { localConfigDir, localDataDir } from './data-dir.ts';
@@ -68,6 +68,20 @@ const backend = await createBackend({
   },
 });
 
+/**
+ * The bytes a blob request needs: all of the file, or only the part its `Range` header names, because a player asks for a
+ * video in pieces and the whole file (up to 512 MB) shouldn't cross to the window for each. `main.ts` answers with the same header.
+ */
+async function readBlob(sha256: string, range: string | undefined): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string; size: number } | undefined> {
+  const source = await backend.blobSource(sha256);
+  if (!source) return undefined;
+  const wanted = parseByteRange(range, source.size);
+  if (wanted === 'unsatisfiable') return { bytes: new Uint8Array(), mime: source.mime, size: source.size };
+  if (wanted) return { bytes: (await source.slice(wanted.start, wanted.end)) as Uint8Array<ArrayBuffer>, mime: source.mime, size: source.size };
+  const whole = await backend.readBlob(sha256);
+  return whole && { bytes: whole.bytes, mime: whole.mime, size: whole.bytes.byteLength };
+}
+
 parentPort.on('message', (event: { data: MainToBackend; ports: Electron.MessagePortMain[] }) => {
   const m = event.data;
   if (m.kind === 'res') {
@@ -95,8 +109,8 @@ parentPort.on('message', (event: { data: MainToBackend; ports: Electron.MessageP
     });
     port.start();
   } else if (m.kind === 'blob') {
-    void backend.readBlob(m.sha256).then(
-      (blob) => send(blob ? { kind: 'blob', id: m.id, found: true, bytes: blob.bytes, mime: blob.mime } : { kind: 'blob', id: m.id, found: false }),
+    void readBlob(m.sha256, m.range).then(
+      (blob) => send(blob ? { kind: 'blob', id: m.id, found: true, bytes: blob.bytes, mime: blob.mime, size: blob.size } : { kind: 'blob', id: m.id, found: false }),
       () => send({ kind: 'blob', id: m.id, found: false }),
     );
   } else if (m.kind === 'computerEvent') {
