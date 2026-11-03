@@ -268,7 +268,7 @@ function KeepSection({ filter }: { filter: AuditFilter }) {
       <SettingRow id="activity.retention" setting={retention}>
         {(label) => <Select {...label} options={options} value={String(days)} onValueChange={(v) => void retention.set(Number(v))} />}
       </SettingRow>
-      <SettingRow id="activity.export" detail="Saves everything recorded, or choose filters above first.">
+      <SettingRow id="activity.export">
         <Button leadingIcon={Download} loading={exporting} onClick={() => void save()}>
           Export JSON
         </Button>

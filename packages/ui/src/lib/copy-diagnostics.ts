@@ -2,6 +2,7 @@
  * Gathers what "Copy diagnostics" reports and puts the text on the clipboard. Every source is best effort and bounded
  * in time: this runs from the error screen too, where the backend may be the very thing that broke.
  */
+import { APP } from '@atelier/protocol';
 import { type DiagnosticsInput, type DiagnosticsMode, buildDiagnostics } from './diagnostics.ts';
 import { lastError } from './last-error.ts';
 import { desktop, os } from './platform.ts';
@@ -48,7 +49,8 @@ export async function gatherDiagnostics(now = Date.now()): Promise<DiagnosticsIn
   const error = lastError();
   return {
     now,
-    appVersion: updates?.version ?? info?.version ?? '',
+    // The app's own version, not the updater's: a development run reports Electron's there.
+    appVersion: APP.version,
     packaged: native?.packaged ?? null,
     channel: updates?.channel ?? null,
     platform: os,

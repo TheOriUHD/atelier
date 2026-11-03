@@ -1110,7 +1110,7 @@ export const SETTINGS_INDEX = [
     id: 'activity.export',
     page: 'activity',
     label: 'Export activity',
-    description: 'Saves the events that match the filters as a JSON file.',
+    description: 'Saves the events that match the filters above as a JSON file, or everything recorded when none are set.',
     keywords: ['audit', 'download', 'json', 'save', 'backup', 'report'],
     available: () => auditLogOffered(),
   },
