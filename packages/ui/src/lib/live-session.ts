@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { ArtifactSummary, BackgroundTask, ContextUsage, ImageProgress, Message, OutboxMessage, PendingInteraction, RunEvent, RunPhase, SessionSnapshot, SessionSummary, Todo } from '@atelier/protocol';
+import type { ArtifactSummary, BackgroundTask, ContextUsage, ImageProgress, LimitWarning, Message, OutboxMessage, PendingInteraction, RunEvent, RunPhase, SessionSnapshot, SessionSummary, Todo } from '@atelier/protocol';
 import { rpc } from './rpc.ts';
 import { getTransport } from './platform.ts';
 
@@ -39,6 +39,8 @@ export interface LiveSessionState {
   toolProgress?: Record<string, ImageProgress>;
   /** A short guess at the person's next message (Code and Cowork): the message box shows it while empty. */
   suggestion: string | null;
+  /** The person passed 80% of a usage limit: shown above the message box until their next turn starts. */
+  limitWarning?: LimitWarning | null;
   seq: number;
 }
 
@@ -72,6 +74,7 @@ const initial: LiveSessionState = {
   toolOutput: {},
   toolProgress: {},
   suggestion: null,
+  limitWarning: null,
   seq: 0,
 };
 
@@ -148,6 +151,7 @@ function fromSnapshot(s: SessionSnapshot, artifacts: ArtifactSummary[]): LiveSes
     toolOutput: s.toolOutput,
     toolProgress: s.toolProgress ?? {},
     suggestion: s.suggestion ?? null,
+    limitWarning: s.limitWarning ?? null,
     seq: s.seq,
   };
 }
@@ -243,6 +247,8 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
       return state;
     case 'suggestion':
       return { ...state, suggestion: event.text };
+    case 'limit_warning':
+      return { ...state, limitWarning: event.warning };
     case 'todos':
       return { ...state, todos: event.todos };
     case 'tasks':

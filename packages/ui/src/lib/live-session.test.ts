@@ -113,5 +113,13 @@ describe('applyEvent', () => {
     s = applyEvent(s, { type: 'message', message: msg('t1', 'a1', 'tool', '') });
     expect(s.toolOutput).toEqual({});
   });
+
+  it('shows the usage-limit warning until it is taken back', () => {
+    const warning = { key: 'tokensPerDay' as const, used: 820, max: 1000, resetsAt: null, message: 'You’ve used 82% of your limit.' };
+    let s = applyEvent(base, { type: 'limit_warning', warning });
+    expect(s.limitWarning).toEqual(warning);
+    s = applyEvent(s, { type: 'limit_warning', warning: null });
+    expect(s.limitWarning).toBeNull();
+  });
 });
 

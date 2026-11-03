@@ -11,6 +11,7 @@ import { ArtifactPanel } from '../artifacts/artifact-panel.tsx';
 import { InteractionCard } from '../code/interaction-card.tsx';
 import { SelectionReply } from './selection-reply.tsx';
 import { LiveStatus } from '../code/live-status.tsx';
+import { UsageLimitWarning } from './usage-limit-warning.tsx';
 import { Composer, FileDropZone, type ComposerHandle } from './composer.tsx';
 import { ComposerImages, useImageReference } from './generated-images.tsx';
 import { CoworkOffer } from './cowork-offer.tsx';
@@ -102,6 +103,7 @@ export function ChatPage() {
           </div>
           <div className="pr-6 pb-2 pl-8 max-md:px-4">
             <PlanLimitWarning provider={providerType} busy={streaming} />
+            <UsageLimitWarning warning={live.limitWarning} />
             <Composer
               ref={composer}
               variant="reply"

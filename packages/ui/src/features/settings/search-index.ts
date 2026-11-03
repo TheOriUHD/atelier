@@ -7,7 +7,7 @@ import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
 import { identityProvidersOffered } from '../auth/sign-in.ts';
 import { desktop, isMac } from '../../lib/platform.ts';
-import { auditLogOffered, imageGenerationOffered } from '../../lib/queries.ts';
+import { auditLogOffered, imageGenerationOffered, usageLimitsOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
 
@@ -332,6 +332,24 @@ export const SETTINGS_INDEX = [
     description: 'Images each model made and what they cost. A cost marked “estimate” comes from a price list, because the service didn’t report one.',
     keywords: ['image generation', 'pictures', 'cost', 'estimate', 'models'],
     available: () => imageGenerationOffered(),
+  },
+  {
+    id: 'usage.limits',
+    page: 'usage',
+    label: 'Your limits',
+    description:
+      'What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats, Cowork tasks and Code sessions, including deleted ones. A cost limit counts only requests to models with a price.',
+    keywords: ['limit', 'quota', 'cap', 'budget', 'tokens', 'requests', 'cost', 'near limit', 'reset'],
+    available: () => usageLimitsOffered(),
+  },
+  {
+    id: 'usage.people',
+    page: 'usage',
+    label: 'Limits by person',
+    description: 'Everyone’s usage against their limits, with who is near or at one. Edit a person’s limits here or under Admin › Limits.',
+    keywords: ['limit', 'quota', 'near limit', 'everyone', 'accounts', 'exempt'],
+    admin: true,
+    available: () => usageLimitsOffered(),
   },
   {
     id: 'usage.prices',
@@ -1037,6 +1055,51 @@ export const SETTINGS_INDEX = [
     description:
       'API keys and tokens, kept encrypted. Settings refer to them as ${secret:id}; their values never leave the backend.',
     keywords: ['api key', 'token', 'credentials', 'rotate', 'delete', 'secret store', 'encrypted', 'used by'],
+  },
+  {
+    id: 'limits.tokensPerDay',
+    page: 'limits',
+    label: 'Tokens per person per day',
+    description:
+      'Input, output and cache tokens of text models, counted across all of a person’s conversations, including deleted ones. A day is a UTC day and resets at 00:00 UTC. Empty means no limit.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'daily', 'accounts', 'shared server'],
+  },
+  {
+    id: 'limits.tokensPer30Days',
+    page: 'limits',
+    label: 'Tokens per person per 30 days',
+    description: 'The same count over today and the 29 days before it. Empty means no limit.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'monthly', 'rolling'],
+  },
+  {
+    id: 'limits.costUsdPerDay',
+    page: 'limits',
+    label: 'Cost per person per day',
+    description:
+      'In dollars. Counts only requests to models that have a price (Settings › Usage › Prices); local models cost nothing here, so limit them by tokens. Empty means no limit.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'dollars', 'money', 'spend', 'daily'],
+  },
+  {
+    id: 'limits.costUsdPer30Days',
+    page: 'limits',
+    label: 'Cost per person per 30 days',
+    description: 'In dollars over today and the 29 days before it, for requests to models that have a price. Empty means no limit.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'dollars', 'money', 'spend', 'monthly', 'rolling'],
+  },
+  {
+    id: 'limits.requestsPerHour',
+    page: 'limits',
+    label: 'Requests per person per hour',
+    description: 'Model requests in the last 60 minutes, including titles, memory updates and sub-agents. Requests under way count too. Empty means no limit.',
+    keywords: ['limit', 'cap', 'quota', 'rate limit', 'hourly', 'throttle'],
+  },
+  {
+    id: 'limits.people',
+    page: 'limits',
+    label: 'People',
+    description:
+      'Each person’s usage against their limits. Raise or lower a limit for one person, lift one, or exempt them from all. Admins are not exempt unless you say so.',
+    keywords: ['limit', 'exempt', 'override', 'near limit', 'quota', 'accounts', 'users'],
   },
   {
     id: 'users.list',

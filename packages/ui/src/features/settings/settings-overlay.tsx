@@ -33,6 +33,7 @@ import { ShortcutsPage } from './shortcuts-page.tsx';
 import { DeveloperPage } from './developer-page.tsx';
 import { SkillsPage } from './skills-page.tsx';
 import { SystemPage } from './system-page.tsx';
+import { LimitsPage } from './limits-page.tsx';
 import { UsagePage } from './usage-page.tsx';
 import { UsersPage } from './users-page.tsx';
 
@@ -58,6 +59,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   plugins: PluginsPage,
   secrets: SecretsPage,
   users: UsersPage,
+  limits: LimitsPage,
   server: ServerPage,
   activity: ActivityPage,
   developer: DeveloperPage,

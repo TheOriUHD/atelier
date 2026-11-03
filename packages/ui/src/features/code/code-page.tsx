@@ -23,6 +23,7 @@ import { describeError, rpc } from '../../lib/rpc.ts';
 import { Composer, FileDropZone, type ComposerHandle } from '../chat/composer.tsx';
 import { ModelPicker } from '../chat/model-picker.tsx';
 import { PlanLimitWarning } from '../chat/plan-usage.tsx';
+import { UsageLimitWarning } from '../chat/usage-limit-warning.tsx';
 import { ScrollToBottom, SessionHeader, clearCommand, compactCommand, loopCommand, modelCommand, useFollowScroll } from '../chat/session-view.tsx';
 import { SelectionReply } from '../chat/selection-reply.tsx';
 import { TRANSCRIPT_VIEWS, TranscriptDetail } from '../chat/parts.tsx';
@@ -385,6 +386,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                     <div className="pr-6 pb-5 pl-8 max-md:px-4">
                       <TodoWidget todos={live.todos} running={busy} />
                       <PlanLimitWarning provider={providerType} busy={busy} />
+                      <UsageLimitWarning warning={live.limitWarning} />
                       <Composer
                         ref={composer}
                         variant="reply"

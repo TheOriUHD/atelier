@@ -8,6 +8,7 @@ import {
   Cloud,
   CodeXml,
   Cpu,
+  Gauge,
   FolderClosed,
   History,
   Images,
@@ -26,7 +27,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { desktop } from '../../lib/platform.ts';
-import { auditLogOffered, imageGenerationOffered } from '../../lib/queries.ts';
+import { auditLogOffered, imageGenerationOffered, usageLimitsOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 
 export type SettingsPageId =
@@ -51,6 +52,7 @@ export type SettingsPageId =
   | 'plugins'
   | 'secrets'
   | 'users'
+  | 'limits'
   | 'server'
   | 'activity'
   | 'developer';
@@ -93,6 +95,8 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'plugins', label: 'Plugins', icon: Puzzle, group: 'Admin' },
   { id: 'secrets', label: 'Keys & secrets', icon: KeyRound, group: 'Admin' },
   { id: 'users', label: 'Users', icon: Users, group: 'Admin' },
+  // Per-person limits matter on a server with several accounts; the desktop's own backend has one person. An older server has none.
+  { id: 'limits', label: 'Limits', icon: Gauge, group: 'Admin', available: () => !isLocal() && usageLimitsOffered() },
   { id: 'server', label: 'Server', icon: Server, group: 'Admin' },
   // Who changed what on a shared server. A desktop app on its own backend has one person, and no page for it.
   { id: 'activity', label: 'Activity', icon: History, group: 'Admin', available: () => auditLogOffered() },

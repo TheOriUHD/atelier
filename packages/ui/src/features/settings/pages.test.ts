@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { keys, queryClient } from '../../lib/queries.ts';
+import { setLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, settingsPage, visiblePages } from './pages.ts';
 
 describe('the Settings list', () => {
@@ -27,5 +28,33 @@ describe('Image providers', () => {
     expect(shown(true)).not.toContain('image-providers');
     // A link to it lands on a page that exists.
     expect(settingsPage('image-providers', true).id).toBe('general');
+  });
+});
+
+describe('Limits', () => {
+  afterEach(() => {
+    queryClient.clear();
+    setLocal(false);
+  });
+  const shown = (admin: boolean) => visiblePages(admin).map((p) => p.id);
+
+  it('is an admin page, once the server says it keeps limits', () => {
+    queryClient.setQueryData(keys.appInfo, { usageLimits: true });
+    const pages = shown(true);
+    expect(pages[pages.indexOf('users') + 1]).toBe('limits');
+    expect(shown(false)).not.toContain('limits');
+  });
+
+  it('is hidden on an older server, and until it has said', () => {
+    expect(shown(true)).not.toContain('limits');
+    queryClient.setQueryData(keys.appInfo, {});
+    expect(shown(true)).not.toContain('limits');
+    expect(settingsPage('limits', true).id).toBe('general');
+  });
+
+  it('is hidden on the desktop app’s own backend, which has one person', () => {
+    queryClient.setQueryData(keys.appInfo, { usageLimits: true });
+    setLocal(true);
+    expect(shown(true)).not.toContain('limits');
   });
 });

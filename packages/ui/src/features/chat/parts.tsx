@@ -257,6 +257,15 @@ export function MessageError({ error, onRetry }: { error: MessageErrorData; onRe
           Fix in Settings
         </button>
       )}
+      {error.code === 'limit_reached' && (
+        <button
+          type="button"
+          onClick={() => openSettings('usage')}
+          className="rounded-xs text-interactive-text underline-offset-2 outline-none hover:underline focus-ring"
+        >
+          See your usage
+        </button>
+      )}
       {onRetry && (
         <Button size="sm" leadingIcon={RotateCcw} onClick={onRetry}>
           Retry

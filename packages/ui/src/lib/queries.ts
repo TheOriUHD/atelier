@@ -41,6 +41,9 @@ export const keys = {
   screenLock: ['screenLock'] as const,
   /** Every usage summary; each is keyed further by period and scope. */
   usage: ['usage'] as const,
+  /** The person's own usage against their limits, and (admins) everyone's. */
+  limits: ['limits'] as const,
+  limitsEveryone: ['limits', 'everyone'] as const,
   github: ['github'] as const,
   codespaces: ['codespaces'] as const,
   githubRepos: ['github', 'repos'] as const,
@@ -260,6 +263,15 @@ export const imageGenerationOffered = (): boolean => !!queryClient.getQueryData<
 
 /** For code outside React: this backend keeps the admin activity log (a shared server that knows it). */
 export const auditLogOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.auditLog;
+
+/** For code outside React (the Settings page list). A newer app on an older server hides usage limits; something must have asked `useAppInfo`. */
+export const usageLimitsOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.usageLimits;
+
+/** The person's usage against the limits that apply to them. Nothing is asked of a server from before limits. */
+export function useLimits() {
+  const offered = !!useAppInfo().data?.usageLimits;
+  return useQuery({ queryKey: keys.limits, queryFn: () => rpc().call('limits.mine', {}), enabled: offered, staleTime: 0 });
+}
 
 /** This backend can generate images: false on an older server, and until `app.info` answers. */
 export function useImageGeneration(): boolean {

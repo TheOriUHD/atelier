@@ -15,10 +15,12 @@ import {
   TextField,
   formatCount,
 } from '../../components/ui/index.ts';
-import { keys, useAccount, useImageModels, useModels, useSettings } from '../../lib/queries.ts';
+import { keys, useAccount, useImageModels, useLimits, useModels, useSettings } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useFormSubmit } from '../auth/form.ts';
 import { Cell, DataTable, TableRow } from './data-table.tsx';
+import { LimitMeter, unpricedNote } from './limits-view.tsx';
+import { PeopleLimits } from './limits-page.tsx';
 import { settingEntry } from './search-index.ts';
 import { SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
@@ -100,11 +102,35 @@ export function UsagePage() {
           rows && <Summary rows={rows} days={days} admin={admin} />
         )}
       </SettingsSection>
+      <YourLimits />
+      {everyone && <PeopleLimits id="usage.people" />}
       {withTokens && <DaysSection rows={withTokens} days={days} />}
       {withTokens && <ModelsSection rows={withTokens} />}
       {withImages && <ImagesSection rows={withImages} />}
       {admin && <PricesSection />}
     </div>
+  );
+}
+
+/** The person's own usage against the limits an admin set; nothing at all when none applies to them. */
+function YourLimits() {
+  const { data: status } = useLimits();
+  const entry = settingEntry('usage.limits');
+  if (!status || (!status.rows.length && !status.exempt)) return null;
+  const note = unpricedNote(status);
+  return (
+    <SettingsSection id="usage.limits" title={entry.label} description={entry.description}>
+      {status.exempt ? (
+        <p className="text-body text-fg-muted">An admin lifted all limits for you.</p>
+      ) : (
+        <div className="divide-y divide-line-subtle">
+          {status.rows.map((row) => (
+            <LimitMeter key={row.key} row={row} />
+          ))}
+        </div>
+      )}
+      {note && <p className="pt-3 text-footnote text-fg-muted">{note}</p>}
+    </SettingsSection>
   );
 }
 

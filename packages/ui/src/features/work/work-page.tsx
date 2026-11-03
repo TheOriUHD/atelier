@@ -17,6 +17,7 @@ import { describeError, rpc } from '../../lib/rpc.ts';
 import { Composer, FileDropZone, type ComposerHandle } from '../chat/composer.tsx';
 import { ModelPicker } from '../chat/model-picker.tsx';
 import { PlanLimitWarning } from '../chat/plan-usage.tsx';
+import { UsageLimitWarning } from '../chat/usage-limit-warning.tsx';
 import { ContextButton } from '../code/context-popover.tsx';
 import { ScrollToBottom, SessionHeader, clearCommand, loopCommand, modelCommand, useFollowScroll } from '../chat/session-view.tsx';
 import { Transcript } from '../chat/transcript.tsx';
@@ -158,6 +159,7 @@ export function WorkPage() {
                 </div>
                 <div className="pr-6 pb-5 pl-8 max-md:px-4">
                   <PlanLimitWarning provider={providerType} busy={busy} />
+                  <UsageLimitWarning warning={live.limitWarning} />
                   <Composer
                     ref={composer}
                     variant="reply"

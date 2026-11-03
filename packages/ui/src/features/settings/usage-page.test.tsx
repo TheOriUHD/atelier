@@ -145,6 +145,67 @@ describe('Usage page', () => {
     expect(callsTo('usage.summary').at(-1)).toEqual({ days: 30, timezoneOffset, everyone: true });
   });
 
+  describe('limits', () => {
+    const limited = (rows: object[], extra: object = {}) => ({ 'app.info': () => ({ usageLimits: true }), 'limits.mine': () => ({ exempt: false, rows, unpriced: 0, ...extra }) });
+    const tokens = { key: 'tokensPerDay', used: 820_000, max: 1_000_000, resetsAt: Date.now() + 3_600_000, reached: false, near: true };
+
+    it('shows a person their own usage against each limit, with a bar that warns when it is near', async () => {
+      resetBackend({
+        ...settingsBackend(),
+        ...limited([tokens, { key: 'requestsPerHour', used: 3, max: 30, resetsAt: null, reached: false, near: false }, { key: 'costUsdPerDay', used: 5, max: 5, resetsAt: null, reached: true, near: true }], { unpriced: 4 }),
+        'account.get': () => user({ role: 'user' }),
+        'usage.summary': () => ROWS,
+      });
+      await renderPage();
+      expect(await screen.findByRole('heading', { name: 'Your limits' })).toBeTruthy();
+      expect(screen.getByText('820K of 1M tokens')).toBeTruthy();
+      expect(screen.getByText('3 of 30 requests')).toBeTruthy();
+      expect(screen.getByText('$5.00 of $5.00')).toBeTruthy();
+      expect(screen.getByRole('progressbar', { name: 'Tokens per day: 82% used' }).getAttribute('aria-valuenow')).toBe('82');
+      expect(screen.getByText(/^82% used\. Resets /)).toBeTruthy();
+      expect(screen.getByText(/^Limit reached\. It lifts /)).toBeTruthy();
+      expect(screen.getByText(/4 requests in the last 30 days had no price/)).toBeTruthy();
+      // They see their own, not the table of everyone.
+      expect(screen.queryByRole('table', { name: 'Limits by person' })).toBeNull();
+    });
+
+    it('is not on the page when no limit applies to the person, or the server has none', async () => {
+      resetBackend({ ...settingsBackend(), ...limited([]), 'usage.summary': () => ROWS });
+      await renderPage();
+      await screen.findByText(/in the last 30 days/);
+      expect(screen.queryByRole('heading', { name: 'Your limits' })).toBeNull();
+      expect(callsTo('limits.mine')).toHaveLength(1);
+    });
+
+    it('does not ask a server from before limits', async () => {
+      resetBackend({ ...settingsBackend(), 'app.info': () => ({}), 'usage.summary': () => ROWS });
+      await renderPage();
+      await screen.findByText(/in the last 30 days/);
+      expect(callsTo('limits.mine')).toEqual([]);
+    });
+
+    it('says when an admin lifted every limit for the person', async () => {
+      resetBackend({ ...settingsBackend(), ...limited([], { exempt: true }), 'usage.summary': () => ROWS });
+      await renderPage();
+      expect(await screen.findByText('An admin lifted all limits for you.')).toBeTruthy();
+    });
+
+    it('gives admins everyone’s limits with who is near one, when they look at everyone', async () => {
+      resetBackend({
+        ...settingsBackend(),
+        ...limited([]),
+        'limits.everyone': () => [{ id: 'b', username: 'bob', name: 'Bob', disabled: false, own: {}, status: { exempt: false, rows: [tokens], unpriced: 0 } }],
+        'usage.summary': () => ROWS,
+      });
+      await renderPage();
+      await screen.findByText(/in the last 30 days/);
+      expect(screen.queryByRole('table', { name: 'Limits by person' })).toBeNull();
+      fireEvent.click(screen.getByRole('radio', { name: 'Everyone' }));
+      const table = await screen.findByRole('table', { name: 'Limits by person' });
+      expect((await within(table).findByText('Near limit')).closest('tr')!.textContent).toContain('Bob');
+    });
+  });
+
   it('shows everyone else only their own usage, without prices', async () => {
     resetBackend({ ...settingsBackend(), 'account.get': () => user({ role: 'user' }), 'usage.summary': () => ROWS });
     await renderPage();
