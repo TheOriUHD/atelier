@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { deps, events, fakeFetch, finishOf, instance, jsonResponse, KEY, PNG, stopped } from './__fixtures__/images.ts';
 import { videoRequest, videoOf } from './__fixtures__/video.ts';
-import { createOpenRouterVideo } from './openrouter-video.ts';
+import { createOpenRouterVideo, pollDelay } from './openrouter-video.ts';
 
 const BASE = 'https://openrouter.ai/api';
 // The first five rows of what /api/v1/videos/models answered on 2026-11-03.
@@ -118,5 +118,9 @@ describe('OpenRouter video', () => {
   it('reports a finished job with no video', async () => {
     const empty = fakeFetch({ 'POST /api/v1/videos': () => jsonResponse(SUBMITTED, 202), 'GET /api/v1/videos/job1': statuses({ status: 'completed' }) });
     expect(finishOf(await events(adapter(empty.fetch).generate(videoRequest()))).error?.message).toContain('no video');
+  });
+
+  it('asks often at first and settles at every 10 seconds, which a job of minutes can take', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 20].map(pollDelay)).toEqual([2000, 3500, 5000, 6500, 8000, 9500, 10000, 10000]);
   });
 });

@@ -13,7 +13,8 @@ import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRe
 import { assertOwnHost, failure, failureOf, listedModel, noImage, refusal, soundsRefused, usageEvent, waitFor } from './hosted.ts';
 import { hostedVideo, readClip, usualSeconds } from './video-common.ts';
 
-const POLL_MS = 10_000;
+/** Asked often at first, as a clip that is already there shouldn't wait long to be fetched, then every 10 s: a job takes minutes (the docs suggest about 30 s). */
+export const pollDelay = (asked: number) => Math.min(10_000, 2_000 + asked * 1_500);
 const MAX_POLL_FAILURES = 5;
 
 const headers = (instance: ImageInstance): Record<string, string> => ({ 'content-type': 'application/json', ...instance.headers, ...(instance.apiKey ? { authorization: `Bearer ${instance.apiKey}` } : {}) });
@@ -61,7 +62,7 @@ function body(request: ImageRequest): Record<string, unknown> {
   };
 }
 
-async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, pollMs: number): AsyncGenerator<ImageEvent> {
+async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, delay: (asked: number) => number): AsyncGenerator<ImageEvent> {
   const res = await deps.fetch(`${instance.baseUrl}/v1/videos`, { method: 'POST', headers: headers(instance), body: JSON.stringify(body(request)), signal: request.signal });
   if (!res.ok) {
     yield await failureOf(instance, res);
@@ -76,7 +77,7 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
   // The key goes to this address on every poll, whatever the answer said.
   assertOwnHost(instance, pollingUrl);
   let failures = 0;
-  for (;;) {
+  for (let asked = 0; ; asked++) {
     const poll = await deps.fetch(pollingUrl, { method: 'GET', headers: headers(instance), signal: request.signal });
     if (!poll.ok) {
       if (!(poll.status === 429 || poll.status >= 500) || ++failures > MAX_POLL_FAILURES) {
@@ -115,12 +116,12 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
         return;
       }
     }
-    await waitFor(pollMs, request.signal);
+    await waitFor(delay(asked), request.signal);
   }
 }
 
 export function createOpenRouterVideo(instance: ImageInstance, deps: ImageAdapterDeps, options: { pollMs?: number } = {}): ImageAdapter {
-  const pollMs = options.pollMs ?? POLL_MS;
+  const delay = options.pollMs === undefined ? pollDelay : () => options.pollMs!;
   return {
     type: 'openrouter-video',
     async listModels(signal) {
@@ -131,7 +132,7 @@ export function createOpenRouterVideo(instance: ImageInstance, deps: ImageAdapte
       return probe(deps, instance, `${instance.baseUrl}/v1/videos/models`, headers(instance), signal);
     },
     generate(request) {
-      return guardImages(request, instance, () => run(instance, deps, request, pollMs));
+      return guardImages(request, instance, () => run(instance, deps, request, delay));
     },
   };
 }

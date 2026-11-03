@@ -17,6 +17,9 @@ import { firstFrame } from './video-frame.ts';
 import { formatClock, plannedVideoShape, shownVideos, videoFailure, videoFileName, videoFraction, videoPrompt, videoStatus, type ShownVideo } from './video-view.ts';
 import './generated-images.css';
 
+/** The widest a single frame gets, so a clip in a very wide column isn't a wall. */
+const MAX_FRAME_PX = 960;
+
 /** The user asked their system, or Atelier, for less motion. */
 const wantsLessMotion = () => (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) || document.documentElement.dataset.motion === 'reduced';
 
@@ -210,7 +213,8 @@ export function GeneratedVideos({ step, waiting }: { step: ImageStep; waiting: b
   const planned = plannedVideoShape(call, progress);
   const shape: ImageShape = video?.width && video.height ? { width: video.width, height: video.height } : (natural ?? planned);
   const ratio = shape.width / shape.height;
-  const width = `min(100%, calc(var(--at-image-max-height) * ${ratio.toFixed(4)}), ${Math.max(shape.width > 64 ? shape.width : 0, 640)}px)`;
+  // The same width while it is made and once it is there, whatever size the file turns out to be: a frame that changes size on arrival would jump.
+  const width = `min(100%, calc(var(--at-image-max-height) * ${ratio.toFixed(4)}), ${MAX_FRAME_PX}px)`;
 
   return (
     <figure className="flex flex-col">

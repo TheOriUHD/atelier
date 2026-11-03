@@ -9,6 +9,7 @@ export const FAKE_OLLAMA_PORT = Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11
 export const WEB_PORT = Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360);
 export const FAKE_OIDC_PORT = Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362);
 export const FAKE_IMAGES_PORT = Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610);
+export const FAKE_VIDEO_PORT = Number(process.env.ATELIER_E2E_VIDEO_PORT ?? 11620);
 
 /** e2e/serve.mjs starts the web server with this as ATELIER_SETUP_TOKEN. */
 export const SETUP_TOKEN = 'atelier-e2e-setup-token';
@@ -55,6 +56,31 @@ export const IMAGE_SETTINGS = {
   // The full prompt: compact models don't get GenerateImage's `count`.
   models: { overrides: { 'fake/fake-eyes:8b': { promptTier: 'full' } } },
 };
+
+/** Settings for the scripted fake video service (e2e/fake-video.mjs), on top of IMAGE_SETTINGS; e2e/serve.mjs gives the web server the same. */
+export const VIDEO_SETTINGS = {
+  imageProviders: [...IMAGE_SETTINGS.imageProviders, { id: 'fake-video', type: 'openrouter-video', preset: 'openrouter-video', name: 'Fake Video', baseUrl: `http://127.0.0.1:${FAKE_VIDEO_PORT}/api` }],
+  imagePricing: IMAGE_SETTINGS.imagePricing,
+  models: { ...IMAGE_SETTINGS.models, defaults: { video: 'fake-video/fake/dusk' } },
+};
+
+/** What the fake video service was asked to do, oldest first. */
+export interface FakeVideoJob {
+  model: string | null;
+  prompt: string;
+  duration: number | null;
+  resolution: string | null;
+  aspectRatio: string | null;
+  frames: string[];
+  audio: boolean | null;
+  seed: number | null;
+  polls: number;
+  downloaded: number;
+}
+
+export async function fakeVideoJobs(): Promise<FakeVideoJob[]> {
+  return (await fetch(`http://127.0.0.1:${FAKE_VIDEO_PORT}/__log`)).json() as Promise<FakeVideoJob[]>;
+}
 
 /** What the fake image server was asked to do, oldest first. */
 export interface FakeImageJob {
