@@ -292,7 +292,7 @@ Admins only.
 |---|---|
 | **Activity log** *(only where it works)* | Who changed what on this server, newest first: sign-ins and failed sign-ins, accounts, invites, settings, providers, secrets, connectors, plugins, models, limits and server updates. Passwords, keys and other secret values are never recorded. |
 | **Keep activity for** *(only where it works)* | Events older than this are deleted once a day. Between 7 and 365 days. |
-| **Export activity** *(only where it works)* | Saves the events that match the filters as a JSON file. |
+| **Export activity** *(only where it works)* | Saves the events that match the filters above as a JSON file, or everything recorded when none are set. |
 
 ## Settings › Admin › Developer
 
