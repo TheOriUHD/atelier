@@ -134,7 +134,7 @@ What that means:
 |---|---|
 | Run JavaScript and CSS in its own frame | Reach the page around it, its address, or your Atelier session |
 | Draw with the DOM, SVG and canvas | Read or write cookies, `localStorage`, `sessionStorage` or IndexedDB |
-| Show images from `data:` and `blob:` URLs, fonts from `data:` | Make any network request: `fetch`, XHR, WebSocket, or load a remote script, stylesheet, image, font or frame |
+| Show images from `data:` and `blob:` URLs (including the conversation's own images, which Atelier puts in as `data:` URLs), fonts from `data:` | Make any network request: `fetch`, XHR, WebSocket, or load a remote script, stylesheet, image, font or frame |
 | Respond to clicks, keys and form controls inside the frame | Submit a form, open a popup or a dialog, or start a download |
 | Use timers and animation frames | Call a model, read your files or use your connectors |
 
@@ -155,6 +155,22 @@ highlighted text; nothing in them runs.
 The sandbox protects *you* from the artifact. It does not make the artifact correct: a model can write a page that looks
 right and computes the wrong number, so check what matters.
 :::
+
+## Images you made, inside an artifact
+
+An artifact can't load a picture from Atelier's own address, so an image made with [image generation](/image-generation/)
+is put in by Atelier. The assistant writes the image's id where the picture goes:
+
+```html
+<img src="atelier-image:img_ab12cd34" alt="Lighthouse">
+```
+
+It works in HTML, React and SVG artifacts and in inline visuals (also in CSS `url()`), and `![](atelier-image:img_ab12cd34)`
+shows one in a reply. Before the page is handed to its frame, Atelier swaps each such id for the image itself as a `data:`
+URL, so the frame still has no network. Only images of the same conversation are found: any other id shows a grey
+"Image not available" placeholder. Large images are shrunk, a page takes at most 12 images and about 8 MB of them, and the
+rest show a placeholder. The id has to be written out in full; code that builds it won't work. A page you download or open
+outside Atelier has no such pictures, because they are only put in when it is shown in Atelier.
 
 ## Saving and exporting
 

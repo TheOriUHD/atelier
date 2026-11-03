@@ -19,6 +19,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 - **A model an admin hid can't be used by name:** on a server, anyone could still choose a hidden model by sending its name, and it ran. It is now refused unless you are an admin. A chat that already used a model that was hidden since carries on with the default model and says so in the conversation.
 - **Files and pictures are only for the account that holds them:** on a server, any signed-in account that knew a file's full address could download it, admins included. Now only the account whose conversations, files, projects or Images page hold it can (avatars still show to everyone), and attaching a file or setting an avatar needs a file you already hold.
+- **Change just one area of an image:** open an image and choose **Change an area**, paint over the part you want changed (brush size, eraser, undo and clear; mouse, pen, finger or the keyboard), say what it should become and press **Generate**. The assistant changes only that part, using an image model that takes a mask (OpenAI GPT Image, Stability AI, Ideogram, Bedrock's Stable Diffusion 3.5 Large, ComfyUI, Forge, AUTOMATIC1111, SwarmUI). If the model in use can't, you're told and offered one that can, instead of the whole picture being redrawn. Each service reads a mask its own way; Atelier now converts one mask for all of them.
+- **Images you made show inside artifacts, visuals and replies:** the assistant can put a generated image into an HTML, React or SVG artifact, an inline visual or a reply by its id. Only the conversation's own images are found, and the sandbox still has no network.
+- **Use as reference on the Images page:** the viewer there starts a new chat with the image attached.
+- **Small models can send a mask too:** the compact tool schema for image generation lacked the `mask` field, so a small model's call for a marked area was refused.
 
 ## [0.3.1] — 2026-11-02
 

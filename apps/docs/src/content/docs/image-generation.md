@@ -73,10 +73,22 @@ On local models you can ask for quality: `high` adds a second pass and a face fi
 
 - **Change an image.** Say what to change: "make the sky darker". This works on images you attach, too. The model needs an
   image model that can edit; if the one in use can't, it says so.
+- **Change just one area.** Open an image, choose **Change an area** (the brush), paint over the part to change, say what
+  it should become and press **Generate**. Atelier makes a mask the size of the picture and sends it with your words, and
+  the model asks the image model to change only that part. The brush has a size, an eraser, undo and clear, and works with
+  a mouse, a pen or a finger. With the keyboard, arrow keys move the brush, Space paints, and Shift with an arrow paints
+  while it moves. It is on every image in a conversation, and on the **Images** page, where it sends the change to the
+  conversation the image was made in. It needs an image model that takes a mask: OpenAI's GPT Image models, Stability AI,
+  Ideogram, Amazon Bedrock's Stable Diffusion 3.5 Large, ComfyUI (SD 1.5, SDXL and the other checkpoint families it lists as able), Forge and AUTOMATIC1111, and SwarmUI. If the model in use can't, you are told, and
+  the assistant offers one that can; it never quietly changes the whole picture instead.
 - **Save it.** In Code and Cowork, ask: "put it in public/hero.png". That's a file change like any other: it follows your
   permissions, shows in Cowork's output files, and Rewind undoes it.
 - **Choose the model.** Set your default in **Settings › General**, or pick one for this conversation from the **+** menu
   under **Image model**. You can also just name one when you ask.
+
+**Use as reference** on the **Images** page starts a new chat with that image attached.
+
+Artifacts, inline visuals and replies can show an image the assistant made: see [Images you made, in an artifact](/artifacts/#images-you-made-inside-an-artifact).
 
 Text models that can't see images can still make them: they get the image's id instead of the picture, so they can
 still ask for changes.
@@ -136,6 +148,7 @@ the workflow into its PNGs, and some cloud services add a content credential.
 | **Start it with --api** | Forge and AUTOMATIC1111 only answer requests with that flag. |
 | **Missing model** | The workflow names a file that isn't on the server. |
 | The GPU ran out of memory | Close other models, set **Shares a GPU with**, or use a smaller size. |
+| **The marked area can't be changed** | The image model in use takes no mask. Choose another from the **+** menu under **Image model**, or ask the assistant to change the whole picture. |
 | The provider refused the prompt | That's the provider's filter, and it's final. The assistant won't reword it to get past it. A blurred or filtered image counts as refused, and isn't kept. |
 | No previews on a personal image server | Update the desktop app. |
 | **ComfyUI isn't starting jobs** | It's stuck, usually because it ran out of memory. Restart it. |

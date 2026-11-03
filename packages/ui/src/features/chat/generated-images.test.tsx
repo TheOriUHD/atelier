@@ -174,6 +174,19 @@ describe('GeneratedImages when done', () => {
     expect(screen.getByText('The rest didn’t come back: The server fell over.')).toBeTruthy();
   });
 
+  it.each([2, 3, 4])('asked for %i, with one that failed: the frames go from the planned count to those that came, and say why the rest did not', (count) => {
+    const input = { prompt: 'A kite above the dunes', count };
+    const { container, rerender } = show(running(undefined, input));
+    expect(container.querySelectorAll('.group\\/image')).toHaveLength(count);
+    const came = Array.from({ length: count - 1 }, (_, i) => meta({ id: `img_${i}`, blob: `blob${i}` }));
+    rerender(wrap(<GeneratedImages step={finished({ generated: came, content: [{ type: 'text', text: `Generated ${count - 1} images.\nOnly these came back: The server fell over.` }] }, input)} waiting={false} />));
+    expect(container.querySelectorAll('.group\\/image')).toHaveLength(count - 1);
+    // Every frame that is left has an image in it: no empty frame stays behind for the one that failed.
+    expect(screen.getAllByRole('img', { hidden: true })).toHaveLength(count - 1);
+    expect(screen.getByText('The rest didn’t come back: The server fell over.')).toBeTruthy();
+    expect(screen.getByText(count - 1 === 1 ? 'Image ready' : `${count - 1} images ready`)).toBeTruthy();
+  });
+
   it('shows a mark in place of an image whose file is gone', () => {
     show(done(meta()));
     fireEvent.error(screen.getByRole('img', { hidden: true }));

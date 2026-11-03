@@ -165,7 +165,7 @@ An artifact runs in an iframe with `sandbox="allow-scripts"` and **no** `allow-s
 access to the app, cookies, local storage or your account. Its page carries a Content-Security-Policy with `connect-src
 'none'` (no network from script), `form-action 'none'`, `base-uri 'none'`, images only from `data:` and `blob:` and fonts
 only from `data:`. It talks to the app only through `postMessage` with a fixed message format. It bundles React and the libraries
-artifacts use, so nothing is loaded from the internet. Inline visuals in chat run in the same kind of frame.
+artifacts use, so nothing is loaded from the internet. Inline visuals in chat run in the same kind of frame. A generated image can appear in one by its id (`atelier-image:img_…`): the app, not the frame, swaps the id for a `data:` URL, and only for images of the same conversation, so the frame still can't ask for anything or reach another conversation's pictures.
 
 What it does not do: an artifact is code the model wrote, so it can use the CPU and draw anything on its frame, and
 anything you copy out of it is untrusted.
