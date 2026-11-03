@@ -7,7 +7,7 @@ import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { canExtractText, extractText } from '../files/text-extract.ts';
-import { assertPublicHost, type Lookup } from './address-guard.ts';
+import { resolvePublicHost, type Lookup, type Pin, type PinnedInit } from './address-guard.ts';
 import { textOutput, type DescribeContext, type Tool } from './types.ts';
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -15,7 +15,8 @@ const MAX_CHARS = 100_000;
 const MAX_REDIRECTS = 5;
 
 export interface WebFetchDeps {
-  fetch(url: string, init: RequestInit): Promise<Response>;
+  /** Gets `init.pin` (the addresses that were checked) as the only addresses to connect to; see address-guard.ts. */
+  fetch(url: string, init: PinnedInit): Promise<Response>;
   /** Whether private network addresses (LAN, VPN) may be fetched; see address-guard.ts. */
   allowPrivateNetworks(): boolean;
   /** DNS resolution for the address check; the system resolver by default. */
@@ -63,8 +64,9 @@ export function createWebFetchTool(deps: WebFetchDeps): Tool<Input> {
 
       let res: Response | undefined;
       for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+        let pin: Pin;
         try {
-          await assertPublicHost(url.hostname, deps.allowPrivateNetworks(), deps.lookup);
+          pin = await resolvePublicHost(url.hostname, deps.allowPrivateNetworks(), deps.lookup);
         } catch (e) {
           // Often an MCP server on the person's computer, which isn't for WebFetch anyway.
           const mcp = /\/(mcp|sse)\/?$/.test(url.pathname) ? ' It looks like an MCP server: add it with AddConnector to use its tools.' : '';
@@ -72,6 +74,8 @@ export function createWebFetchTool(deps: WebFetchDeps): Tool<Input> {
         }
         res = await deps.fetch(url.href, {
           redirect: 'manual',
+          // The connection goes to the addresses just checked, not to whatever the name resolves to a moment later.
+          pin,
           signal: AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)]),
           headers: { 'User-Agent': 'Atelier WebFetch', Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5' },
         });

@@ -4,14 +4,15 @@
  * it gets what WebFetch's URLs get: no private addresses, redirects checked one by one, no credentials, a size limit.
  */
 import { sniffMime, type ImageMime } from '../providers/images.ts';
-import { assertPublicHost, type Lookup } from '../tools/address-guard.ts';
+import { resolvePublicHost, type Lookup, type PinnedInit } from '../tools/address-guard.ts';
 import { readCapped } from '../tools/web-fetch.ts';
 
 export const MAX_IMAGE_BYTES = 64 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 
 export interface DownloadDeps {
-  fetch: (url: string, init: RequestInit) => Promise<Response>;
+  /** Gets `init.pin` (the addresses that were checked) as the only addresses to connect to; see address-guard.ts. */
+  fetch: (url: string, init: PinnedInit) => Promise<Response>;
   lookup?: Lookup;
   /** Tests point images at a local fake server. */
   allowPrivate?: boolean;
@@ -36,8 +37,8 @@ export async function downloadImage(deps: DownloadDeps, url: string, signal: Abo
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (current.protocol !== 'https:' && current.protocol !== 'http:') throw new Error(`Can't fetch an image from ${current.protocol}`);
     if (current.username || current.password) throw new Error("A URL with credentials isn't allowed.");
-    await assertPublicHost(current.hostname, deps.allowPrivate ?? false, deps.lookup);
-    const res = await deps.fetch(current.href, { redirect: 'manual', signal });
+    const pin = await resolvePublicHost(current.hostname, deps.allowPrivate ?? false, deps.lookup);
+    const res = await deps.fetch(current.href, { redirect: 'manual', pin, signal });
     if (res.status >= 300 && res.status < 400) {
       const next = res.headers.get('location');
       if (!next) throw new Error('A redirect went nowhere.');

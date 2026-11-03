@@ -22,7 +22,7 @@ import {
 import type { SecretStore } from '../secrets/secret-store.ts';
 import { personalSecretOf } from '../secrets/secret-store.ts';
 import type { BlobStore } from '../store/blobs.ts';
-import { assertPublicHost } from '../tools/address-guard.ts';
+import { resolvePublicHost, type Pin, type PinnedInit } from '../tools/address-guard.ts';
 import type { Tool } from '../tools/types.ts';
 import { deviceFetch } from '../workspaces/device-fetch.ts';
 import type { DeviceLinks } from '../workspaces/device-links.ts';
@@ -362,18 +362,31 @@ export class PersonalConnectors {
   }
 
   private isPublic(host: string): Promise<boolean> {
-    return (this.deps.publicHost ?? ((h: string) => assertPublicHost(h, false)))(host).then(
+    return this.publicPin(host).then(
       () => true,
       () => false,
     );
   }
 
-  /** The server's fetch, only ever to public addresses, following no redirect (one could lead to a private one). */
+  /** The addresses `host` was checked at (throws when one is not public); none for a test double, which has no network. */
+  private async publicPin(host: string): Promise<Pin | undefined> {
+    if (this.deps.publicHost) return void (await this.deps.publicHost(host));
+    return resolvePublicHost(host, false);
+  }
+
+  /**
+   * The server's fetch, only ever to public addresses, following no redirect (one could lead to a private one). It
+   * connects to the addresses it checked: resolving the name again for the connection would let a DNS server answer the
+   * check with a public address and the connection with an internal one.
+   */
   private guardedFetch(): FetchLike {
     return async (input, init) => {
       const url = new URL(String(input));
-      if (!(await this.isPublic(url.hostname))) throw new TypeError('fetch failed', { cause: new Error(`${url.host} is not a public address.`) });
-      return this.deps.fetch(url, { ...init, redirect: 'manual' });
+      const pin = await this.publicPin(url.hostname).catch(() => {
+        throw new TypeError('fetch failed', { cause: new Error(`${url.host} is not a public address.`) });
+      });
+      const pinned: PinnedInit = { ...init, redirect: 'manual', ...(pin ? { pin } : {}) };
+      return this.deps.fetch(url, pinned);
     };
   }
 

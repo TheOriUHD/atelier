@@ -150,8 +150,10 @@ Atelier's own API:
 - Every address a name resolves to is checked, and again for each redirect. Redirects to **another host** are not followed
   silently (the result names the new URL), so `WebFetch(domain:…)` rules cannot be sidestepped. URLs with embedded
   credentials are refused; responses over 10 MB are refused; at most 5 same-host redirects, 30 seconds, 100,000 characters.
-- The check resolves the name before connecting; it does not pin the connection to the checked address. A hostile DNS
-  server that answers differently the second time could get past it.
+- The connection goes to the addresses that were checked, not to a second answer from DNS, so a hostile DNS server that
+  answers differently the second time (DNS rebinding) gets nothing. The certificate and the `Host` header are still those of
+  the name in the URL. The same applies to search results' pages, a hosted image service's result and a server's personal
+  connectors.
 
 Search results' pages are opened with the same guard. Search queries never carry credentials: a query that looks like a
 key, token or password, or contains one of your stored secrets (8 characters or longer), is refused with "The query

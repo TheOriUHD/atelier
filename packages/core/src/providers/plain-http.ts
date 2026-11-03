@@ -6,9 +6,11 @@
  * (the stop button, the queue's limits), or nothing at all arrives for `idleMs` (15 minutes unless set), which reads as
  * a retryable "no response". HTTPS goes to the fallback, whose servers stream or ping.
  */
-import { request, type IncomingMessage } from 'node:http';
+import { request as httpRequest, type IncomingMessage } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { PassThrough, Readable } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
+import { pinnedLookup, type PinnedInit } from '../tools/address-guard.ts';
 import type { ProviderFetch } from './types.ts';
 
 export const DEFAULT_IDLE_MS = 15 * 60_000;
@@ -26,16 +28,23 @@ export class NoResponseError extends Error {
 export interface PlainHttpOptions {
   /** How long a request may receive nothing before it ends with `NoResponseError`. */
   idleMs?: number;
+  /** Only requests that carry a `pin` are made here (any other goes to the fallback): the fetch for everything but model servers. */
+  pinnedOnly?: boolean;
 }
 
-type Init = Parameters<ProviderFetch>[1];
+type Init = Parameters<ProviderFetch>[1] & PinnedInit;
 
 export function plainHttpFetch(fallback: ProviderFetch, options: PlainHttpOptions = {}): ProviderFetch {
   const idleMs = options.idleMs && options.idleMs > 0 ? options.idleMs : DEFAULT_IDLE_MS;
 
   const send = (url: string, init: Init, redirects: number): Promise<Response> => {
     const target = URL.parse(url);
-    if (target?.protocol !== 'http:') return fallback(url, init);
+    // A pinned request (address-guard.ts) connects to the addresses that were checked, over http or https; the name
+    // stays the URL's, so TLS verifies the certificate for it and the Host header is unchanged.
+    const pin = init.pin;
+    const secure = target?.protocol === 'https:';
+    if (!target || (target.protocol !== 'http:' && !(pin && secure)) || (options.pinnedOnly && !pin)) return fallback(url, init);
+    const request = secure ? httpsRequest : httpRequest;
     const signal = init.signal ?? undefined;
     if (signal?.aborted) return Promise.reject(abortError(signal));
     return new Promise<Response>((resolve, reject) => {
@@ -47,12 +56,14 @@ export function plainHttpFetch(fallback: ProviderFetch, options: PlainHttpOption
           method: init.method ?? 'GET',
           headers: Object.fromEntries(new Headers(init.headers)),
           ...(signal ? { signal } : {}),
+          ...(pin ? { lookup: pinnedLookup(pin) } : {}),
         },
         (res) => {
           watch();
           const status = res.statusCode ?? 502;
           const location = res.headers.location;
-          if (REDIRECTS.has(status) && location && init.redirect !== 'manual') {
+          // A pinned request never follows a redirect: the next host would be connected to without being checked.
+          if (REDIRECTS.has(status) && location && init.redirect !== 'manual' && !pin) {
             stop();
             res.resume();
             if (redirects >= MAX_REDIRECTS)

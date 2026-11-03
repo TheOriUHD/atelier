@@ -4,9 +4,20 @@
  * model read LAN services or Atelier's own API. Checked on every resolved address before fetching.
  */
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 
 export type Lookup = (host: string) => Promise<string[]>;
+
+/**
+ * The addresses a host was checked at. A request that carries one connects to exactly these: if it resolved the name
+ * again, a DNS server could answer the check with a public address and the connection with an internal one (rebinding).
+ */
+export interface Pin {
+  addresses: { address: string; family: 4 | 6 }[];
+}
+
+/** A request init that may carry the pin it must connect with (honored by providers/plain-http.ts's `plainHttpFetch`). */
+export type PinnedInit = RequestInit & { pin?: Pin };
 
 export const systemLookup: Lookup = async (host) => (await lookup(host, { all: true, verbatim: true })).map((a) => a.address);
 
@@ -34,8 +45,11 @@ function blockedV4([a, b]: V4, allowPrivate: boolean): string | null {
   return isPrivate && !allowPrivate ? 'a private network address' : null;
 }
 
-/** Throws a readable error when any address the host resolves to is off limits. */
-export async function assertPublicHost(host: string, allowPrivate: boolean, resolve: Lookup = systemLookup): Promise<void> {
+/**
+ * The addresses `host` resolves to, every one checked: throws a readable error when any is off limits. Connect to these
+ * (`pin` on the request) and not to a second answer from DNS.
+ */
+export async function resolvePublicHost(host: string, allowPrivate: boolean, resolve: Lookup = systemLookup): Promise<Pin> {
   const bare = host.replace(/^\[|\]$/g, '');
   const addresses = isIP(bare) ? [bare] : await resolve(bare).catch(() => {
     throw new Error(`Can't resolve ${host}.`);
@@ -44,6 +58,23 @@ export async function assertPublicHost(host: string, allowPrivate: boolean, reso
     const reason = blockedAddress(ip, allowPrivate);
     if (reason) throw new Error(`${host} resolves to ${reason}, which WebFetch may not access.`);
   }
+  if (addresses.length === 0) throw new Error(`Can't resolve ${host}.`);
+  return { addresses: addresses.map((address) => ({ address, family: isIP(address) === 6 || address.includes(':') ? 6 : 4 })) };
+}
+
+/** Throws a readable error when any address the host resolves to is off limits. */
+export async function assertPublicHost(host: string, allowPrivate: boolean, resolve: Lookup = systemLookup): Promise<void> {
+  await resolvePublicHost(host, allowPrivate, resolve);
+}
+
+/** `node:net`'s `lookup` option answering with the pinned addresses only, whatever name is asked. */
+export function pinnedLookup(pin: Pin): LookupFunction {
+  return (_host, options, callback) => {
+    const wanted = options.family === 4 || options.family === 6 ? pin.addresses.filter((a) => a.family === options.family) : pin.addresses;
+    const list = wanted.length > 0 ? wanted : pin.addresses;
+    if (options.all) callback(null, list.map(({ address, family }) => ({ address, family })));
+    else callback(null, list[0]!.address, list[0]!.family);
+  };
 }
 
 type V4 = [number, number, number, number];

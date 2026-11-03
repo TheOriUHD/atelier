@@ -39,6 +39,7 @@ describe('personal connectors', () => {
   let started: DeviceStart[];
   let shared: Record<string, McpServerConfig>;
   let people: PersonalConnectors;
+  let deps: PersonalConnectorsDeps;
 
   beforeEach(() => {
     prefs = new Map();
@@ -46,7 +47,7 @@ describe('personal connectors', () => {
     devices = new Map();
     started = [];
     shared = {};
-    const deps: PersonalConnectorsDeps = {
+    deps = {
       connectors: async (userId) => prefs.get(userId) ?? [],
       saveConnectors: async (userId, list) => void prefs.set(userId, list),
       shared: () => shared,
@@ -176,6 +177,19 @@ describe('personal connectors', () => {
     await people.test('u1', saved.id);
     // Through the device: its fetch asks the link to start an `http` request there.
     expect(started.at(-1)).toMatchObject({ kind: 'http', target: saved.id, url: 'http://192.168.1.20:8080/mcp' });
+  });
+
+  it('fetches only from the addresses it checked, and follows no redirect', async () => {
+    // The real address guard (no test double), on addresses written into the URL so no DNS is needed.
+    const seen: { url: string; init: { redirect?: string; pin?: unknown } }[] = [];
+    const { publicHost: _double, ...real } = deps;
+    const guarded = new PersonalConnectors({ ...real, fetch: async (url, init) => (seen.push({ url: String(url), init: init as never }), new Response('ok')) }) as unknown as { guardedFetch(): (url: string, init?: object) => Promise<Response> };
+    const fetch = guarded.guardedFetch();
+    await fetch('https://93.184.216.34/mcp', { method: 'POST', redirect: 'follow' });
+    expect(seen).toEqual([{ url: 'https://93.184.216.34/mcp', init: expect.objectContaining({ method: 'POST', redirect: 'manual', pin: { addresses: [{ address: '93.184.216.34', family: 4 }] } }) }]);
+    await expect(fetch('http://10.0.0.5/mcp')).rejects.toThrow('fetch failed');
+    await expect(fetch('http://[::ffff:7f00:1]/mcp')).rejects.toThrow('fetch failed');
+    expect(seen).toHaveLength(1);
   });
 
   it('creates one under an id chosen first (AddConnector), and only a new one', async () => {

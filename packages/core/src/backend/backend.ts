@@ -257,7 +257,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   await settings.load();
   settings.watch();
   const secrets = new SecretStore(db, platform.cipher);
-  const httpFetch = platform.fetch ?? ((url: string, init: RequestInit) => fetch(url, init));
+  // Requests that carry a `pin` (the addresses the address guard checked: WebFetch, search excerpts, personal connectors,
+  // hosted image results) connect to exactly those; every other request is the platform's `fetch`.
+  const httpFetch = platform.fetch ?? plainHttpFetch((url, init) => fetch(url, init), { pinnedOnly: true });
   const sessions = new SessionRepo(db);
   const groups = new GroupRepo(db);
   const artifacts = new ArtifactRepo(db);

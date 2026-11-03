@@ -4,10 +4,9 @@
  * content, and keeps the passages that say the most about the query, so a model that never calls WebFetch still gets
  * substance. Everything is bounded: a few pages, a few seconds, a few hundred characters each.
  */
-import { assertPublicHost, type Lookup } from '../tools/address-guard.ts';
+import { resolvePublicHost, type Lookup, type PinnedInit } from '../tools/address-guard.ts';
 import { htmlToMarkdown, readCapped } from '../tools/web-fetch.ts';
 import { BROWSER_UA } from './engines/common.ts';
-import type { Fetcher } from './types.ts';
 import { clean, queryWords } from './text.ts';
 
 const PAGE_BYTES = 1_500_000;
@@ -24,7 +23,8 @@ export function worthReading(url: string): boolean {
 
 /** The text of a page's main content, as Markdown, or null when it can't be had quickly and safely. */
 export interface ExcerptDeps {
-  fetch: Fetcher;
+  /** Gets `init.pin` (the addresses that were checked) as the only addresses to connect to; see address-guard.ts. */
+  fetch: (url: string, init: PinnedInit) => Promise<Response>;
   allowPrivateNetworks(): boolean;
   lookup?: Lookup | undefined;
 }
@@ -39,8 +39,8 @@ export function createExcerptReader(deps: ExcerptDeps): ExcerptReader {
       if (!url || url.username || url.password || !worthReading(href)) return null;
       let res: Response | undefined;
       for (let hop = 0; hop <= MAX_HOPS; hop++) {
-        await assertPublicHost(url.hostname, deps.allowPrivateNetworks(), deps.lookup);
-        res = await deps.fetch(url.href, { redirect: 'manual', signal, headers: { 'User-Agent': BROWSER_UA, 'Accept-Language': 'en-US,en;q=0.9', Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' } });
+        const pin = await resolvePublicHost(url.hostname, deps.allowPrivateNetworks(), deps.lookup);
+        res = await deps.fetch(url.href, { redirect: 'manual', pin, signal, headers: { 'User-Agent': BROWSER_UA, 'Accept-Language': 'en-US,en;q=0.9', Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' } });
         const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
         if (!location) break;
         const next = new URL(location, url);
