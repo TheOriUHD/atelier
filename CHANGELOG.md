@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Atelier keeps its icon on Windows after an update:** an update deletes `Atelier.exe` before it writes the new one, and Windows could keep the blank page it saw in that moment for the taskbar button and the shortcuts. Atelier's windows now carry the icon themselves, and its shortcuts (desktop, Start menu and every taskbar pin, whatever the pin is called) take their icon from a copy in Atelier's own data folder, which no update touches. The first start of this version mends shortcuts that are already blank.
+
 ## [0.4.0] — 2026-11-03
 
 - **Working outside the workspace folder works on a server too:** a Cowork or Code session on a Windows PC's folder, connected to a Linux server, took the PC's `C:\…` paths for relative names inside the workspace. It never noticed a path was outside the folder, so it never asked, never told the PC's runner to allow it, and the assistant was stuck with "outside the workspace" even after you said yes. Paths are now read the way the folder's own computer writes them.

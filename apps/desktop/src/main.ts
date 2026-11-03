@@ -5,6 +5,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, powerSaveBlocker, protocol, safeStorage, session, shell, systemPreferences, utilityProcess, webContents, type UtilityProcess, type WebContents } from 'electron';
 import { AppWindows } from './app-windows.ts';
+import { shortcutIcon, windowIconOption } from './app-icon.ts';
 import { fileExists, repairShortcuts, shortcutPaths } from './shortcuts.ts';
 import { ChatGptChatBrowser } from './chatgpt-chat.ts';
 import { connectIdentity } from './connect-identity.ts';
@@ -483,6 +484,7 @@ function createWindow(hash = ''): BrowserWindow {
     show: false,
     backgroundColor: '#FCFCFB',
     titleBarStyle: 'hidden',
+    ...windowIconOption(),
     ...(isMac ? { trafficLightPosition: { x: 16, y: 18 } } : { titleBarOverlay: THEME_OVERLAY.light }),
     webPreferences: {
       preload: join(import.meta.dirname, 'preload.cjs'),
@@ -948,7 +950,8 @@ app.whenReady().then(async () => {
 
 /**
  * Windows: Atelier's shortcuts get their icon and target back when something broke them, and after an update they're
- * rewritten anyway, so Windows reads the icon again (shortcuts.ts). Tests point it at a folder of their own.
+ * rewritten anyway, so Windows reads the icon again; their icon is a copy outside the install folder (shortcuts.ts,
+ * app-icon.ts). Tests point it at a folder of their own.
  */
 async function repairOwnShortcuts(): Promise<void> {
   const testDir = process.env.ATELIER_SHORTCUT_TEST_DIR;
@@ -957,7 +960,8 @@ async function repairOwnShortcuts(): Promise<void> {
   const marker = join(app.getPath('userData'), 'shortcuts-version');
   const checked = (await readFile(marker, 'utf8').catch(() => '')).trim();
   const paths = testDir ? [join(testDir, 'Atelier.lnk')] : shortcutPaths(process.env, app.getPath('desktop'));
-  const repaired = repairShortcuts(paths, exe, {
+  const icon = (await shortcutIcon().catch((e: unknown) => logMain(`shortcut icon copy failed: ${describe(e)}`))) ?? exe;
+  const repaired = repairShortcuts(paths, exe, icon, {
     exists: fileExists,
     read: (path) => {
       try {

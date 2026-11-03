@@ -22,7 +22,7 @@ test('desktop: a broken shortcut to Atelier is mended on the next start', async 
 
     const second = await launchDesktop(configDir, { ATELIER_SHORTCUT_TEST_DIR: links, ATELIER_SHORTCUT_TEST_EXE: exe });
     await second.firstWindow();
-    await expect.poll(() => second.evaluate(({ shell }, path) => shell.readShortcutLink(path), link), { timeout: 15_000 }).toMatchObject({ target: exe, icon: exe, iconIndex: 0 });
+    await expect.poll(() => second.evaluate(({ shell }, path) => shell.readShortcutLink(path), link), { timeout: 15_000 }).toMatchObject({ target: exe, icon: expect.stringMatching(/[\\/]app-icon\.ico$/i), iconIndex: 0 });
     await second.close();
   } finally {
     await rm(links, { recursive: true, force: true });

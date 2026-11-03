@@ -19,6 +19,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.4.1',
+    intro: 'Atelier keeps its icon on Windows.',
+    highlights: [
+      {
+        icon: AppWindow,
+        title: 'The taskbar icon survives updates',
+        body: 'After an update Windows could show a blank page instead of Atelier’s icon in the taskbar and on its shortcuts, because the update replaces Atelier.exe and Windows kept what it saw while the file was gone. Atelier’s windows now carry the icon themselves, and its shortcuts and taskbar pins take theirs from a copy that updates never touch. Shortcuts that are already blank are mended the first time this version starts.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.4.0',
     intro: 'Video generation, drawing over part of an image to change it, limits and an activity log for shared servers, and computer use on Linux.',
     highlights: [

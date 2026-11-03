@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, session } from 'electron';
 import { APP, OIDC_PATH } from '@atelier/protocol';
+import { windowIconOption } from './app-icon.ts';
 
 /** How it went: `code` is the server's `?signIn=` code, `message` its words when the flow never started. */
 export type ConnectOutcome = { status: 'connected' } | { status: 'cancelled' } | { status: 'failed'; code?: string; message?: string };
@@ -60,6 +61,7 @@ async function signIn({ serverUrl, token, provider, parent, hidden }: ConnectOpt
     width: 520,
     height: 720,
     show: false,
+    ...windowIconOption(),
     ...(parent ? { parent } : {}),
     webPreferences: { session: browserSession, nodeIntegration: false, contextIsolation: true, sandbox: true },
   });

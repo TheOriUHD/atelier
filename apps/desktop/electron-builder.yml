@@ -59,6 +59,10 @@ win:
       filter: ['atelier-computer-windows-*.exe']
     - from: ../../THIRD_PARTY_NOTICES.md
       to: THIRD_PARTY_NOTICES.md
+    # The windows' own icon, and the source of the shortcuts' copy (src/app-icon.ts): the .exe's icon can go blank in
+    # Windows' cache when an update replaces the file.
+    - from: resources/icon.ico
+      to: icon.ico
   target:
     - target: nsis
       arch: [x64, arm64]

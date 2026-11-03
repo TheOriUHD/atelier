@@ -2,6 +2,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { app, BrowserWindow, session } from 'electron';
 import { MARKDOWN_SCRIPT } from './chatgpt-markdown.ts';
 import { PICKER_SCRIPT } from './chatgpt-picker.ts';
+import { windowIconOption } from './app-icon.ts';
 
 const PARTITION = 'persist:atelier-chatgpt-chat';
 const CHAT_URL = 'https://chatgpt.com/';
@@ -149,7 +150,7 @@ export class ChatGptChatBrowser {
     // model", "Power", "3 of 5", "Remove …"): on a German system the model list came back empty and attachments never
     // finished. The session always asks for English (checked on chatgpt.com: that alone turns the page English).
     browserSession.setUserAgent(browserSession.getUserAgent(), 'en-US,en');
-    const win = new BrowserWindow({ title: 'ChatGPT Chat — Atelier', width: 1000, height: 780, show: false, autoHideMenuBar: true, webPreferences: { partition: PARTITION, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
+    const win = new BrowserWindow({ title: 'ChatGPT Chat — Atelier', width: 1000, height: 780, show: false, autoHideMenuBar: true, ...windowIconOption(), webPreferences: { partition: PARTITION, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false } });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     // Says whose window it is when the sign-in shows it: the page would call it just "ChatGPT".
     win.on('page-title-updated', (event) => event.preventDefault());
