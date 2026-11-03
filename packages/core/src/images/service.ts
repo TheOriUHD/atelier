@@ -4,7 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { imageId, IMAGE_ID_PREFIX, type GeneratedImageMeta, type ImageModelInfo, type ImageProgress, type ImageProviderDraft, type ImageTuning, type Message, type MessageError, type Settings } from '@atelier/protocol';
+import { imageId, IMAGE_ID_PREFIX, type GeneratedImageMeta, type ImageModelInfo, type ImageProviderDraft, type ImageTuning, type Message, type MessageError, type Settings } from '@atelier/protocol';
 import type { BlobStore } from '../store/blobs.ts';
 import type { Db } from '../store/db.ts';
 import { generatedImages, usageEvents } from '../store/schema.ts';
@@ -13,7 +13,6 @@ import { imageSize } from '../providers/image-size.ts';
 import { fitImage, sniffMime } from '../providers/images.ts';
 import { isLocalServer } from '../providers/scheduler.ts';
 import type { ProviderFetch } from '../providers/types.ts';
-import { toBase64 } from '../providers/util.ts';
 import { textOutput, type ToolContext, type ToolOutput } from '../tools/types.ts';
 import { checkImage, type DownloadedImage } from './download.ts';
 import { MaskError, normaliseMask } from './mask.ts';

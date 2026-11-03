@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GeneratedImageMeta, ImageProgress, ToolResultPart } from '@atelier/protocol';
 import { TooltipProvider, toast } from '../../components/ui/index.ts';
 import { saveBlob } from '../../lib/platform.ts';
-import { fakeRpc, resetBackend } from '../settings/test-backend.ts';
+import { resetBackend } from '../settings/test-backend.ts';
 import { ComposerImages, type ImageStep } from './generated-images.tsx';
 import { GeneratedVideos } from './generated-videos.tsx';
 import { firstFrame } from './video-frame.ts';

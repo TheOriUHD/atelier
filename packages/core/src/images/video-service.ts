@@ -6,7 +6,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { IMAGE_ID_PREFIX, videoId, type GeneratedImageMeta, type ImageModelInfo, type MessageError, type Message, type Settings } from '@atelier/protocol';
+import { IMAGE_ID_PREFIX, videoId, type GeneratedImageMeta, type ImageModelInfo, type Message, type Settings } from '@atelier/protocol';
 import type { BlobStore } from '../store/blobs.ts';
 import type { Db } from '../store/db.ts';
 import { generatedImages, usageEvents } from '../store/schema.ts';

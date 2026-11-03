@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { deps, events, fakeFetch, finishOf, instance, jsonResponse, KEY, PNG, request, stopped } from './__fixtures__/images.ts';
+import { deps, events, fakeFetch, finishOf, instance, jsonResponse, KEY, PNG, stopped } from './__fixtures__/images.ts';
 import { videoRequest, videoOf } from './__fixtures__/video.ts';
 import { createOpenRouterVideo } from './openrouter-video.ts';
 
@@ -8,7 +8,6 @@ const BASE = 'https://openrouter.ai/api';
 // The first five rows of what /api/v1/videos/models answered on 2026-11-03.
 const MODELS = JSON.parse(readFileSync(new URL('./__fixtures__/openrouter-video-models.json', import.meta.url), 'utf8'));
 const MP4 = new Uint8Array(readFileSync(new URL('../__fixtures__/tiny.mp4', import.meta.url)));
-const POLL = `${BASE}/v1/videos/job1`;
 const adapter = (fetch: Parameters<typeof deps>[0]) => createOpenRouterVideo(instance('openrouter-video', BASE), deps(fetch), { pollMs: 0 });
 const statuses = (...answers: unknown[]) => {
   let at = 0;
@@ -119,7 +118,5 @@ describe('OpenRouter video', () => {
   it('reports a finished job with no video', async () => {
     const empty = fakeFetch({ 'POST /api/v1/videos': () => jsonResponse(SUBMITTED, 202), 'GET /api/v1/videos/job1': statuses({ status: 'completed' }) });
     expect(finishOf(await events(adapter(empty.fetch).generate(videoRequest()))).error?.message).toContain('no video');
-    void request;
-    void POLL;
   });
 });

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { ImageWorkflow } from '@atelier/protocol';
 import { videoOf } from '../__fixtures__/video.ts';
-import { collectEvents, fakeServer, FakeSocket, fixture, IMAGE, instance, message as m, PNG, sentGraph, type Server } from './__fixtures__/comfy.ts';
+import { collectEvents, fakeServer, fixture, IMAGE, instance, message as m, PNG, sentGraph, type Server } from './__fixtures__/comfy.ts';
 import { outputImages } from './client.ts';
 import { createComfyUi } from './index.ts';
 import { frameCount, mapWorkflow, readWorkflow, workflowCapabilities } from './workflow.ts';
@@ -141,4 +141,3 @@ describe('generating a clip with a workflow', () => {
   });
 });
 
-void FakeSocket;
