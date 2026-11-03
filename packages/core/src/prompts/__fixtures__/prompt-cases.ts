@@ -72,6 +72,8 @@ export interface PromptCase {
   computer?: boolean;
   /** The session has an image model. */
   images?: boolean;
+  /** A video model: GenerateVideo and SaveVideo. */
+  videos?: boolean;
 }
 
 export interface Assembled {
@@ -297,6 +299,15 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
             },
           }
         : {}),
+      ...(c.videos
+        ? {
+            videos: {
+              generate: async () => ({ content: [] }),
+              available: async () => true,
+              modelList: async () => '- fal/kling/v4/text-to-video (Kling 4.0): 3 to 30 seconds, usually 5; 720p/1080p; 16:9 or 9:16 or 1:1; silent; can start from an image; prompt in plain sentences',
+            },
+          }
+        : {}),
       ...(c.computer
         ? {
             computer: {
@@ -499,6 +510,9 @@ export const CASES: Record<string, PromptCase> = {
   'chat.full.images': { mode: 'chat', images: true },
   'code.full.images': { mode: 'code', images: true },
   'code.compact.images': { mode: 'code', tier: 'compact', images: true },
+  'chat.full.videos': { mode: 'chat', videos: true },
+  'code.full.videos': { mode: 'code', videos: true },
+  'code.compact.videos': { mode: 'code', tier: 'compact', videos: true },
   'code.compact.computer': { mode: 'code', tier: 'compact', computer: true },
   'code.full': { mode: 'code' },
   'code.full.plan': { mode: 'code', permissionMode: 'plan' },

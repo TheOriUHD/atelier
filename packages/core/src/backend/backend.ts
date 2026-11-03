@@ -61,11 +61,12 @@ import { importClaudeCode } from '../mcp/import.ts';
 import { McpManager } from '../mcp/manager.ts';
 import { PersonalConnectorError, PersonalConnectors } from '../mcp/personal.ts';
 import { assertPublicHost } from '../tools/address-guard.ts';
-import { downloadImage } from '../images/download.ts';
+import { downloadImage, downloadVideo } from '../images/download.ts';
 import { createImageAdapter } from '../images/index.ts';
 import { generatedImagesFor } from '../images/library.ts';
 import { ImageProviderRegistry } from '../images/registry.ts';
 import { ImageService, type ImageSessionFacts } from '../images/service.ts';
+import { VideoService } from '../images/video-service.ts';
 import { openSocket } from '../images/socket.ts';
 import { connectorContext } from '../permissions/engine.ts';
 import { hostRunnerBinary } from '../workspaces/runner-client.ts';
@@ -954,6 +955,28 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     log: (message, error) => platform.logger.error(message, error),
   });
+  const videos = new VideoService({
+    registry: imageRegistry,
+    blobs,
+    files,
+    db,
+    settings: () => settings.effective,
+    session: async (id) => {
+      const row = await sessions.getRow(id);
+      if (!row) throw new Error(`Session ${id} not found`);
+      return imageFacts(row);
+    },
+    preferred: async (userId) => (userId ? (await prefs.get(userId)).models.video : undefined),
+    isAdmin: async (userId) => !userId || (await accounts.get(userId)).role === 'admin',
+    history: (id) => sessions.history(id),
+    turnStart: async (id) => (db.$client.prepare(`SELECT COALESCE(MAX(created_at), 0) AS at FROM messages WHERE session_id = ? AND role = 'user'`).get(id) as { at: number }).at,
+    // As for images: a person's own server's URL goes to their computer, and tests point hosted URLs at a local fake.
+    download: (url, signal, through) => downloadVideo(through ? { fetch: through, allowPrivate: true } : { fetch: httpFetch, allowPrivate: !!platform.env.ATELIER_IMAGE_DOWNLOAD_PRIVATE }, url, signal),
+    recordUsage: ({ providerId, modelId, sessionId, userId, mode, videos: count, videoSeconds, costUsd, costEstimated, durationMs }) => {
+      void db.insert(usageEvents).values({ id: newId(), ts: Date.now(), userId, providerId, modelId, sessionId, mode, input: 0, output: 0, durationMs, costUsd, costEstimated, videos: count, videoSeconds }).catch((e: unknown) => platform.logger.error('recording video usage failed', e));
+    },
+    log: (message, error) => platform.logger.error(message, error),
+  });
 
   const chat = new ChatService({
     limits: { admit: (userId) => limits.admit(userId), check: (userId) => limits.check(userId), warnings: (userId) => limits.warnings(userId) },
@@ -962,6 +985,11 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       available: (session) => images.available(imageFacts(session)),
       modelList: (session) => images.modelList(imageFacts(session)),
       areaNote: (sessionId, area) => images.areaNote(sessionId, area),
+    },
+    videos: {
+      generate: (input, ctx) => videos.generate(input, ctx),
+      available: (session) => videos.available(imageFacts(session)),
+      modelList: (session) => videos.modelList(imageFacts(session)),
     },
     usage: usageSource,
     search,
@@ -1442,6 +1470,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       imageGeneration: true,
       auditLog: !local,
       usageLimits: true,
+      videoGeneration: true,
     }),
 
     // ---------------------------------------------------------------- sign-in
@@ -1740,7 +1769,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'imageProviders.parseWorkflow': (source) => imageRegistry.parseWorkflow(source).catch(workflowRefusal),
     'imageProviders.savedWorkflows': ({ id }) => imageRegistry.savedWorkflows(id).catch(workflowRefusal),
     'imageModels.list': async (_input, ctx) => imageModelsFor(ctx.connection(), await imageRegistry.listModels(me(ctx).id)),
-    'generatedImages.list': ({ before, query, ref, limit }, ctx) => generatedImagesFor(db, me(ctx).id, { ...(before !== undefined ? { before } : {}), ...(query ? { query } : {}), ...(ref ? { ref } : {}), limit: limit ?? 60 }),
+    'generatedImages.list': ({ before, query, ref, kind, limit }, ctx) => generatedImagesFor(db, me(ctx).id, { ...(before !== undefined ? { before } : {}), ...(query ? { query } : {}), ...(ref ? { ref } : {}), ...(kind ? { kind } : {}), limit: limit ?? 60 }),
 
     // ------------------------------------------------- your models on your computers
     'personalImageProviders.list': (_input, ctx) => imageRegistry.personalProviders(me(ctx).id),

@@ -19,6 +19,8 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - fragments/no-search
 - fragments/search.compact
 - fragments/search.full
+- fragments/videos.compact
+- fragments/videos.full
 - memory-update
 - notes/after-compaction
 - notes/background-agent
@@ -56,6 +58,7 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - notes/ultracode-off
 - notes/ultracode-on
 - notes/ultracode-still-on
+- notes/video-models
 - notes/workspace-settings-changed
 - safeguards.compact
 - safeguards.full
@@ -544,6 +547,30 @@ File: packages/core/prompts/fragments/search.full.md
 
 ---
 
+## fragments/videos.compact
+
+File: packages/core/prompts/fragments/videos.compact.md
+
+````text
+Make videos with GenerateVideo only when the person asks for one. To start from a picture, pass its id as `first_frame`. You cannot watch the result, so say what you asked for. Keep your reply short: they can see the clip.
+````
+
+---
+
+## fragments/videos.full
+
+File: packages/core/prompts/fragments/videos.full.md
+
+````text
+# Making videos
+
+You can make short video clips with GenerateVideo. Reach for it when the person asks for a video, a clip or an animation, or wants a picture brought to life. A clip takes minutes and costs real money, so never make one they did not ask for, and do not use it for charts, diagrams or slides.
+
+Describe the scene as one continuous shot: what is there, what moves, how the camera behaves, the light. Keep every specific they gave you. To animate a picture, pass its id as `first_frame` and describe only the motion. You cannot watch the result, so do not describe what the clip shows; say what you asked for and offer one change. Keep your reply short: they can see the clip as soon as it is done.
+````
+
+---
+
 ## memory-update
 
 File: packages/core/prompts/memory-update.md
@@ -990,6 +1017,17 @@ Ultracode is still on: investigate and review in parallel with sub-agents, keep 
 <!-- if:!Agent -->
 Ultracode is still on: work in phases, and try to show each result wrong before you report it.
 <!-- endif -->
+````
+
+---
+
+## notes/video-models
+
+File: packages/core/prompts/notes/video-models.md
+
+````text
+Video models you can use with GenerateVideo, the person's choice first:
+{{list}}
 ````
 
 ---
@@ -2750,6 +2788,114 @@ Saves an image from this conversation (generated or attached, by its `img_…` i
   },
   "required": [
     "image",
+    "file_path"
+  ],
+  "additionalProperties": false
+}
+````
+
+### GenerateVideo
+
+````text
+Makes a short video clip from a text description and shows it in the conversation. A clip takes minutes and costs real money, so make one only when asked.
+- Use it when the person asks for a video, a clip, an animation or a moving version of a picture.
+- Write `prompt` as a scene in motion: who or what is there, what happens, how the camera moves, the light and the mood. One continuous shot; clips are a few seconds long.
+- A note tells you which video models you can use, how long each clip may be and what else each takes. Leave `model` out to use the person's choice.
+- `seconds` is the length. Leave it out for the model’s usual length: longer clips cost more. `aspect_ratio` is like `16:9`, or `9:16` for a phone.
+- To start from a picture, whether you made it or the person attached it, put its `img_…` id in `first_frame`; `last_frame` ends the clip on a second picture, for models that can. Turn a picture into a clip by describing the motion only.
+- Sound is off unless the person asks for it: set `audio` to true then.
+- You can't watch the result. Don't claim to describe what it shows; say what you asked for.
+- The clip appears by itself: never paste its id or a link into your reply.
+- A provider's refusal is final: tell the person, and don't reword the prompt to get around it. Never make sexual videos of minors, whatever the model allows.
+````
+
+````json
+{
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000,
+      "description": "The scene, its motion and the camera."
+    },
+    "negative_prompt": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "What it must not show, for models that take one."
+    },
+    "aspect_ratio": {
+      "type": "string",
+      "description": "Like 16:9, 9:16 or 1:1."
+    },
+    "resolution": {
+      "type": "string",
+      "description": "Like 720p or 1080p, for models that offer a choice. Higher costs more."
+    },
+    "seconds": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 120,
+      "description": "How long the clip is."
+    },
+    "audio": {
+      "type": "boolean",
+      "description": "Sound, for models that can switch it. Off unless the person asks."
+    },
+    "fps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120,
+      "description": "Frames per second, on models that let you choose."
+    },
+    "first_frame": {
+      "type": "string",
+      "pattern": "^img_[0-9a-f]{8}$",
+      "description": "An image id: the clip starts from this picture."
+    },
+    "last_frame": {
+      "type": "string",
+      "pattern": "^img_[0-9a-f]{8}$",
+      "description": "An image id: the clip ends on this picture, on models that can."
+    },
+    "model": {
+      "type": "string",
+      "description": "Which video model; leave it out for the person’s choice."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Repeats a result, on models that can."
+    }
+  },
+  "required": [
+    "prompt"
+  ],
+  "additionalProperties": false
+}
+````
+
+### SaveVideo
+
+````text
+Saves a video made in this conversation (by its `vid_…` id) as a file in the folder. Missing parent folders are created. The file type comes from the video, so the extension must match it.
+````
+
+````json
+{
+  "type": "object",
+  "properties": {
+    "video": {
+      "type": "string",
+      "description": "The video id, like vid_ab12cd34."
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Where to save it."
+    }
+  },
+  "required": [
+    "video",
     "file_path"
   ],
   "additionalProperties": false

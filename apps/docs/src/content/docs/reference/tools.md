@@ -49,6 +49,8 @@ without asking are on [Permissions](/permissions/), and how descriptions are kep
 | [`inline_visual`](#inline_visual) | Chat, Cowork | Shows a self-contained inline explainer or mini app in the conversation when seeing or interacting helps understanding; not for every answer. |
 | [`GenerateImage`](#generateimage) | Chat (some setups), Code (some setups) | Makes images from a text description and shows them in the conversation. |
 | [`SaveImage`](#saveimage) | Code (some setups) | Saves an image from this conversation (generated or attached, by its `img_…` id) as a file in the folder. |
+| [`GenerateVideo`](#generatevideo) | Chat (some setups), Code (some setups) | Makes a short video clip from a text description and shows it in the conversation. |
+| [`SaveVideo`](#savevideo) | Code (some setups) | Saves a video made in this conversation (by its `vid_…` id) as a file in the folder. |
 
 ## Read
 
@@ -1361,4 +1363,72 @@ Saves an image from this conversation (generated or attached, by its `img_…` i
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `image` | string | yes | The image id, like img_ab12cd34. |
+| `file_path` | string | yes | Where to save it. |
+
+## GenerateVideo
+
+**Available in:** Chat (some setups), Code (some setups)
+
+### Description
+
+````text wrap
+Makes a short video clip from a text description and shows it in the conversation. A clip takes minutes and costs real money, so make one only when asked.
+- Use it when the person asks for a video, a clip, an animation or a moving version of a picture.
+- Write `prompt` as a scene in motion: who or what is there, what happens, how the camera moves, the light and the mood. One continuous shot; clips are a few seconds long.
+- A note tells you which video models you can use, how long each clip may be and what else each takes. Leave `model` out to use the person's choice.
+- `seconds` is the length. Leave it out for the model’s usual length: longer clips cost more. `aspect_ratio` is like `16:9`, or `9:16` for a phone.
+- To start from a picture, whether you made it or the person attached it, put its `img_…` id in `first_frame`; `last_frame` ends the clip on a second picture, for models that can. Turn a picture into a clip by describing the motion only.
+- Sound is off unless the person asks for it: set `audio` to true then.
+- You can't watch the result. Don't claim to describe what it shows; say what you asked for.
+- The clip appears by itself: never paste its id or a link into your reply.
+- A provider's refusal is final: tell the person, and don't reword the prompt to get around it. Never make sexual videos of minors, whatever the model allows.
+````
+
+<details>
+<summary>The description reads differently in 1 other setup</summary>
+
+A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
+
+**Code, compact tier**
+
+````text wrap
+Makes a short video from a description and shows it to the person.
+- Only when the person asks for a video or an animation.
+- `prompt`: describe the action, the camera and the light. Follow the note about video models.
+- To start from a picture, put its `img_…` id in `first_frame`.
+````
+
+</details>
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | yes | The scene, its motion and the camera. |
+| `negative_prompt` | string | no | What it must not show, for models that take one. |
+| `aspect_ratio` | string | no | Like 16:9, 9:16 or 1:1. |
+| `resolution` | string | no | Like 720p or 1080p, for models that offer a choice. Higher costs more. |
+| `seconds` | number | no | How long the clip is. |
+| `audio` | boolean | no | Sound, for models that can switch it. Off unless the person asks. |
+| `fps` | integer | no | Frames per second, on models that let you choose. |
+| `first_frame` | string | no | An image id: the clip starts from this picture. |
+| `last_frame` | string | no | An image id: the clip ends on this picture, on models that can. |
+| `model` | string | no | Which video model; leave it out for the person’s choice. |
+| `seed` | integer | no | Repeats a result, on models that can. |
+
+## SaveVideo
+
+**Available in:** Code (some setups)
+
+### Description
+
+````text wrap
+Saves a video made in this conversation (by its `vid_…` id) as a file in the folder. Missing parent folders are created. The file type comes from the video, so the extension must match it.
+````
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `video` | string | yes | The video id, like vid_ab12cd34. |
 | `file_path` | string | yes | Where to save it. |

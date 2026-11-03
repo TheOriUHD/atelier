@@ -74,7 +74,9 @@ import type { JsonSchema, ProviderAdapter, QueueOptions, SystemBlock, ToolDef } 
 import { toSummary, type SessionRepo, type SessionRow } from '../sessions/session-repo.ts';
 import { usesPersonalContext } from '../sessions/temporary.ts';
 import { createGenerateImageTool, type GenerateImageDeps } from '../tools/generate-image.ts';
+import { createGenerateVideoTool, type GenerateVideoDeps } from '../tools/generate-video.ts';
 import { createSaveImageTool } from '../tools/save-image.ts';
+import { createSaveVideoTool } from '../tools/save-video.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { createArtifactTool } from '../tools/artifact.ts';
 import { createInlineVisualTool } from '../tools/inline-visual.ts';
@@ -242,6 +244,12 @@ export interface ChatServiceDeps {
     /** For requests nobody asked for: the error when the person is over a limit, without holding a place. */
     check(userId: string | null): Promise<MessageError | null>;
     warnings(userId: string): Promise<LimitWarning[]>;
+  };
+  /** Video generation (ARCHITECTURE §23): the same, for GenerateVideo. */
+  videos?: {
+    generate: GenerateVideoDeps['generate'];
+    available(session: SessionRow): Promise<boolean>;
+    modelList(session: SessionRow): Promise<string>;
   };
   /** File pre-images for Rewind; without it Write and Edit keep none. */
   checkpoints?: Checkpoints;
@@ -1316,6 +1324,7 @@ export class ChatService {
         safeguards: run.snapshot.safeguardsHash,
         research: session.overrides.research === true && settings.capabilities.webSearch.enabled,
         ...(run.tools.some((t) => t.name === 'GenerateImage') && this.deps.images ? { imageModels: await this.deps.images.modelList(session) } : {}),
+        ...(run.tools.some((t) => t.name === 'GenerateVideo') && this.deps.videos ? { videoModels: await this.deps.videos.modelList(session) } : {}),
         contextFill: context ? context.used / context.limit : 0,
         ...(session.mode === 'code' && this.deps.gitSnapshot ? { gitSnapshot: () => this.deps.gitSnapshot!(session) } : {}),
         todos: row.todos as Todo[],
@@ -1922,6 +1931,11 @@ export class ChatService {
     return !session.parentSessionId && !!(await this.deps.images?.available(session));
   }
 
+  /** Whether a session has video generation; a sub-agent's clips wouldn't show in the conversation it works for. */
+  private async videosFor(session: SessionRow): Promise<boolean> {
+    return !session.parentSessionId && !!(await this.deps.videos?.available(session));
+  }
+
   private async toolsFor(session: SessionRow): Promise<Tool[]> {
     const { webSearch, webFetch } = this.deps.settings().capabilities;
     const web = [...(webSearch.enabled ? [this.webSearch] : []), ...(webFetch ? [this.webFetch] : [])];
@@ -1938,7 +1952,8 @@ export class ChatService {
     const modelRef = session.parentSessionId ? undefined : await this.modelRef(session);
     const usage = modelRef && this.deps.usage?.offered(modelRef) ? [this.usage] : [];
     const images = (await this.imagesFor(session)) ? [createGenerateImageTool({ generate: (input, ctx) => this.deps.images!.generate(input, ctx) })] : [];
-    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...images, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
+    const videos = (await this.videosFor(session)) ? [createGenerateVideoTool({ generate: (input, ctx) => this.deps.videos!.generate(input, ctx) })] : [];
+    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...images, ...videos, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
     if (workspace) {
@@ -1971,7 +1986,9 @@ export class ChatService {
     const checkpoints = this.deps.checkpoints;
     // Only with image generation, so a session without an image provider asks the model for exactly what it did before.
     const saveImage = workspace && images.length ? [createSaveImageTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
-    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...saveImage, ...web, ...connect, ...computer, ...memory, ...mcp];
+    // The same, with video: SaveVideo exists only where a session can make one.
+    const saveVideo = workspace && videos.length ? [createSaveVideoTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
+    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...saveImage, ...saveVideo, ...web, ...connect, ...computer, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */
@@ -2485,7 +2502,7 @@ export class ChatService {
     const { resultChars, tailChars } = roomBudgets(run.threshold - run.fixedTokens);
     const history = await this.deps.repo.history(run.sessionId);
     const sent = run.mainSessionId ? withSideChatNote(history, await this.mainConversation(run.mainSessionId, tailChars)) : history;
-    return this.prepareHistory(sent, run.model.info, resultChars, run.tools.some((t) => t.name === 'GenerateImage' || t.name === 'SaveImage'));
+    return this.prepareHistory(sent, run.model.info, resultChars, run.tools.some((t) => t.name === 'GenerateImage' || t.name === 'SaveImage' || t.name === 'GenerateVideo'));
   }
 
   /** A side chat's note: the main conversation as it stands, its reply in progress too, in at most `maxChars`. */
@@ -2846,7 +2863,7 @@ const POSITION_WAIT_MS = 2000;
 const connectorOrNone = (name: string) => name.startsWith('mcp__');
 /** Tools that only look at files. */
 const LOOKS = new Set(['Read', 'Glob', 'Grep']);
-const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage']);
+const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage', 'SaveVideo']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
 const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'ComputerApps', 'OpenApp', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);
 /** One instruction file of a folder the session moved to, at most this long in the tool's result. */

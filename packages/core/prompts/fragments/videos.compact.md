@@ -1,0 +1,1 @@
+Make videos with GenerateVideo only when the person asks for one. To start from a picture, pass its id as `first_frame`. You cannot watch the result, so say what you asked for. Keep your reply short: they can see the clip.

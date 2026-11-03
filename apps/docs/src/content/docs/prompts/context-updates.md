@@ -57,6 +57,7 @@ Every note Atelier can send is below, verbatim. `{{name}}` is filled in when the
 | [`ultracode-off`](#ultracode-off) | Code: the first turn after Ultracode was switched off or clamped away. |
 | [`ultracode-on`](#ultracode-on) | Code: Ultracode started, on the first turn of a branch that runs at Ultracode, and on the first turn after a compaction. |
 | [`ultracode-still-on`](#ultracode-still-on) | Code: after ten person turns without an Ultracode note while it stays on. |
+| [`video-models`](#video-models) | A session with GenerateVideo: the first turn, and when the video models it can use, or their order, change. |
 | [`workspace-settings-changed`](#workspace-settings-changed) | Safeguards were turned off (neutral wording; it does not claim anything is lifted). |
 
 ## Long conversations
@@ -239,6 +240,17 @@ Source: [`packages/core/prompts/notes/skills-added.md`](https://github.com/TheOr
 
 ````text wrap
 New skills are available:
+{{list}}
+````
+
+### `video-models`
+
+A session with GenerateVideo: the first turn, and when the video models it can use, or their order, change.
+
+Source: [`packages/core/prompts/notes/video-models.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/notes/video-models.md)
+
+````text wrap
+Video models you can use with GenerateVideo, the person's choice first:
 {{list}}
 ````
 

@@ -68,6 +68,8 @@ export interface TurnFacts {
   research: boolean;
   /** The image models a session with GenerateImage can use, one per line. */
   imageModels?: string;
+  /** The video models a session with GenerateVideo can use, one per line. */
+  videoModels?: string;
   /** How full the context window was at the last request, from 0 to 1. */
   contextFill: number;
   /** Code: the repository as it is now, read only when it hasn't been announced. */
@@ -148,6 +150,10 @@ export async function turnNote(facts: TurnFacts, prior: NoteState, history: read
   if (facts.imageModels !== undefined) {
     if (prior.imageModels !== facts.imageModels) note('image-models', { list: escapeTags(facts.imageModels) });
     set('imageModels', facts.imageModels);
+  }
+  if (facts.videoModels !== undefined) {
+    if (prior.videoModels !== facts.videoModels) note('video-models', { list: escapeTags(facts.videoModels) });
+    set('videoModels', facts.videoModels);
   }
 
   if (facts.ultracode) {
