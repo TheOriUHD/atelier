@@ -114,6 +114,36 @@ Each row other than yours has a menu (**⋯**):
 - **Delete…** removes the account and everything it owns: its chats, projects, files, memory, devices and passkeys. This
   cannot be undone. Usage records stay, no longer tied to a name. Scratch folders on disk are not deleted.
 
+## Usage limits
+
+On a server shared by several people, **Settings › Admin › Limits** keeps one person from using all of a model. Every
+limit is off until you set it, and each applies to every person separately, across all of their chats, Cowork tasks and Code
+sessions together (deleted ones too, because the count comes from the usage records, not from the chats).
+
+| Limit | Counts |
+|---|---|
+| Tokens per day, tokens per 30 days | Input, output and cache tokens of every request, for every model, local ones included. |
+| Cost per day, cost per 30 days | Dollars, for requests to models that have a price (Settings › Usage › Prices, or the provider's list price). A model without a price costs nothing here, so limit local models by tokens. |
+| Requests per hour | Model requests in the last 60 minutes. Requests still under way count, so starting ten sub-agents at once doesn't get around it. |
+
+A day is a **UTC day**, the same as the image limits, so a daily limit resets at 00:00 UTC whatever time zone the server or
+the person is in. "30 days" is today and the 29 days before it; it lets requests through again as the oldest days leave. The
+person sees their own times in their time zone on **Settings › Usage › Your limits**, where each limit has a bar.
+
+- **Before every request.** A turn is checked before it starts and again before each model request in it, so a long
+  agent turn (and the sub-agents it starts) stops soon after the limit is reached, overshooting by at most the requests
+  that were already running. The reply is an error that says which limit, when it resets and which admin to ask. It is not
+  retried and does not loop. A `/loop` that finds its person over a limit stops, saying so once.
+- **Requests nobody asked for** (titles, suggested replies, memory updates, a page summary) count toward the limits, but
+  when the person is over a limit they are skipped without an error: a title falls back to the first words of the message.
+- **A warning at 80%.** Passing 80% of a limit shows one line above the message box, once per limit and day (for 30 days
+  and requests per hour, again after usage fell back under 80%).
+- **Per person.** On **Limits**, the pencil next to a person raises, lowers or lifts any one limit for them, or exempts them
+  from all. Admins are limited like everyone else unless you exempt them. The table shows who is near or at a limit.
+
+The desktop app running on this computer has one person, so it does not show the Limits page; limits written in its
+settings file still apply.
+
 ## Signing in
 
 - **Password**, from the sign-in screen (**Welcome back**).

@@ -86,6 +86,8 @@ see are hidden in the app.
 | **Tokens by day** | A chart of tokens per day, split by Chat, Cowork and Code. |
 | **By model** | Tokens, cost and average output speed of each model. |
 | **Images** *(only where it works)* | Images each model made and what they cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
+| **Your limits** *(only where it works)* | What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats, Cowork tasks and Code sessions, including deleted ones. A cost limit counts only requests to models with a price. |
+| **Limits by person** *(admins only, only where it works)* | Everyone’s usage against their limits, with who is near or at one. Edit a person’s limits here or under Admin › Limits. |
 | **Prices** *(admins only)* | Dollars per million tokens, per model, in place of the provider’s list price (Anthropic and OpenAI models without one here use it). A price counts for requests made after it is set. |
 
 ## Settings › Code
@@ -272,6 +274,19 @@ Admins only.
 | **Users** | Everyone who can sign in, with their role and status. |
 | **Waiting for approval** | People who signed up themselves. Approve them to let them in. |
 | **Invite codes** | Each code creates one account and expires after 7 days. Only the last group of a code is shown here. |
+
+## Settings › Admin › Limits
+
+Admins only.
+
+| Setting | What it does |
+|---|---|
+| **Tokens per person per day** | Input, output and cache tokens of text models, counted across all of a person’s conversations, including deleted ones. A day is a UTC day and resets at 00:00 UTC. Empty means no limit. |
+| **Tokens per person per 30 days** | The same count over today and the 29 days before it. Empty means no limit. |
+| **Cost per person per day** | In dollars. Counts only requests to models that have a price (Settings › Usage › Prices); local models cost nothing here, so limit them by tokens. Empty means no limit. |
+| **Cost per person per 30 days** | In dollars over today and the 29 days before it, for requests to models that have a price. Empty means no limit. |
+| **Requests per person per hour** | Model requests in the last 60 minutes, including titles, memory updates and sub-agents. Requests under way count too. Empty means no limit. |
+| **People** | Each person’s usage against their limits. Raise or lower a limit for one person, lift one, or exempt them from all. Admins are not exempt unless you say so. |
 
 ## Settings › Admin › Server
 
