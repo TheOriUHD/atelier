@@ -38,6 +38,11 @@ export interface Overlay {
   paused(on: boolean): void;
   /** Background: a small note that it works in an app (null: none). */
   working(app: string | null): void;
+  /**
+   * Linux: the windows can't be kept out of a screenshot there (X11 has no capture exclusion), so they are taken off the
+   * screen for the moment of the capture and put back after. Absent where the system leaves them out itself.
+   */
+  capturing?(on: boolean): Promise<void>;
 }
 
 export interface ControllerDeps {
@@ -58,6 +63,8 @@ export interface ControllerDeps {
   /** The settings or the state changed: the windows read the status again. */
   changed(): void;
   platform: NodeJS.Platform;
+  /** Linux: the kind of desktop session, and why there is no computer use at all (no X server) when that is so. */
+  environment?: { session: 'x11' | 'wayland' | null; unavailable?: string };
   /** The OS's own answer on the permissions, where main can ask it (macOS); the helper keeps the one it started with. */
   permissions?(): PermissionsStatus;
 }
@@ -135,10 +142,10 @@ const NEEDS: Partial<Record<ComputerActionItem['action'], AppTier>> = {
 /** Keys that switch apps rather than type into one: fine whatever app has the keyboard (Full control). */
 const SWITCH_KEYS = new Set(['cmd+tab', 'cmd+shift+tab', 'cmd+space', 'alt+tab', 'alt+shift+tab', 'win', 'win+s']);
 
-/** A key combination in one spelling: on macOS meta/super are cmd; on Windows cmd is ctrl and meta/super the Windows key. */
+/** A key combination in one spelling: on macOS meta/super are cmd; on Windows and Linux cmd is ctrl and meta/super the Windows (Super) key. */
 function comboOf(keys: string[], platform: NodeJS.Platform): string {
-  const windows = platform === 'win32';
-  const alias: Record<string, string> = windows
+  const ctrlIsPrimary = platform === 'win32' || platform === 'linux';
+  const alias: Record<string, string> = ctrlIsPrimary
     ? { command: 'ctrl', cmd: 'ctrl', meta: 'win', super: 'win', option: 'alt', opt: 'alt', control: 'ctrl' }
     : { command: 'cmd', meta: 'cmd', super: 'cmd', option: 'alt', opt: 'alt', control: 'ctrl' };
   return keys.map((k) => alias[k] ?? k).join('+');
@@ -224,9 +231,12 @@ export class ComputerController {
     const settings = await readComputerSettings(this.deps.settingsPath);
     const platform = this.deps.platform === 'win32' || this.deps.platform === 'linux' ? this.deps.platform : 'darwin';
     const permissions = await this.permissions();
+    const env = this.deps.environment;
     return {
-      available: this.deps.hasHelper,
+      available: this.deps.hasHelper && !env?.unavailable,
+      ...(env?.unavailable ? { unavailableReason: env.unavailable } : {}),
       platform,
+      ...(platform === 'linux' && env ? { session: env.session } : {}),
       permissions,
       background: await this.background(),
       settings,
@@ -499,7 +509,9 @@ export class ComputerController {
         const a = point([Math.min(x0, x1), Math.min(y0, y1)]);
         const b = point([Math.max(x0, x1), Math.max(y0, y1)]);
         const target = await this.display();
-        const shot = await helper.call('capture.display', { display: target.id, ...this.shows(policy), region: { x: a.x, y: a.y, width: Math.max(1, b.x - a.x), height: Math.max(1, b.y - a.y) }, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'png' });
+        const shot = await this.whileCapturing(() =>
+          helper.call('capture.display', { display: target.id, ...this.shows(policy), region: { x: a.x, y: a.y, width: Math.max(1, b.x - a.x), height: Math.max(1, b.y - a.y) }, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'png' }),
+        );
         // The zoom is for reading; coordinates stay those of the screenshot it came from.
         return { action: item.action, ok: true, note: 'Coordinates still refer to the screenshot before.', screenshot: { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height } };
       }
@@ -867,7 +879,18 @@ export class ComputerController {
   }
 
   private capture(display: HelperDisplay, policy: Policy, size: ScreenshotSize) {
-    return this.deps.helper.call('capture.display', { display: display.id, ...this.shows(policy), maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8 });
+    return this.whileCapturing(() => this.deps.helper.call('capture.display', { display: display.id, ...this.shows(policy), maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8 }));
+  }
+
+  /** Runs a capture with the overlay out of the picture where the system can't leave it out itself (Linux). */
+  private async whileCapturing<T>(capture: () => Promise<T>): Promise<T> {
+    const overlay = this.deps.overlay;
+    await overlay.capturing?.(true);
+    try {
+      return await capture();
+    } finally {
+      await overlay.capturing?.(false);
+    }
   }
 
   private write<T>(run: () => Promise<T>): Promise<T> {

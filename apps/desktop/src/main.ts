@@ -183,10 +183,11 @@ function runnerDir(): string {
   return app.isPackaged ? join(process.resourcesPath, 'runner') : join(import.meta.dirname, '..', '..', '..', 'runner', 'bin');
 }
 
-/** This system's computer use helper (macOS and Windows so far), by its file name in `native/bin`. */
+/** This system's computer use helper, by its file name in `native/bin`. */
 const COMPUTER_HELPER: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'atelier-computer-darwin',
   win32: `atelier-computer-windows-${process.arch === 'arm64' ? 'arm64' : 'x64'}.exe`,
+  linux: `atelier-computer-linux-${process.arch === 'arm64' ? 'arm64' : 'x64'}`,
 };
 
 /** The computer use helper: `native/bin` (from `pnpm computer:build`) in development, a resource when packaged. */
@@ -196,6 +197,24 @@ const computerHelperPath = (() => {
   if (!name) return null;
   return app.isPackaged ? join(process.resourcesPath, 'computer', name) : join(import.meta.dirname, '..', '..', '..', 'native', 'bin', name);
 })();
+
+/**
+ * Linux: the kind of desktop session, and whether there is an X server to talk to at all. The helper speaks X11 only: a
+ * Wayland session works for the apps that run through XWayland (it sets DISPLAY), a session with no DISPLAY (pure
+ * Wayland, a text console, ssh) has nothing to serve. A test's stand-in helper needs neither.
+ */
+function linuxEnvironment(): { session: 'x11' | 'wayland' | null; unavailable?: string } | undefined {
+  if (process.platform !== 'linux') return undefined;
+  const wayland = process.env.XDG_SESSION_TYPE === 'wayland' || (!!process.env.WAYLAND_DISPLAY && process.env.XDG_SESSION_TYPE !== 'x11');
+  const session = wayland ? 'wayland' : 'x11';
+  if (process.env.ATELIER_COMPUTER_HELPER || process.env.DISPLAY) return { session };
+  return {
+    session,
+    unavailable: wayland
+      ? 'This is a Wayland session without XWayland, so there is no X server for Atelier to see and control apps through.'
+      : 'This session has no X server (DISPLAY is not set), so Atelier has no screen to see and control.',
+  };
+}
 
 /** A test's stand-in helper answers for macOS's permissions too; the real one is checked against macOS itself. */
 const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COMPUTER_HELPER;
@@ -209,7 +228,7 @@ app.on('browser-window-focus', (_event, win) => appWindows.focused(win));
 const atelierWindows = () => appWindows.list();
 const computer = new ComputerController({
   helper: new ComputerHelper(computerHelperPath ?? '', APP.version),
-  // macOS and Windows (ARCHITECTURE §22); a test's stand-in anywhere.
+  // macOS, Windows and Linux (ARCHITECTURE §22); a test's stand-in anywhere.
   hasHelper: !!computerHelperPath && existsSync(computerHelperPath),
   settingsPath: computerSettingsFile(),
   overlay: screenOverlay,
@@ -238,6 +257,7 @@ const computer = new ComputerController({
     for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send('computer:changed');
   },
   platform: process.platform,
+  environment: linuxEnvironment(),
   // Main's own view of macOS's permissions (the helper keeps the answer it got until it starts again).
   ...(macPermissions
     ? { permissions: () => ({ accessibility: systemPreferences.isTrustedAccessibilityClient(false), screenRecording: systemPreferences.getMediaAccessStatus('screen') === 'granted' }) }

@@ -387,16 +387,19 @@ const isPrereleaseVersion = (version) => version.includes('-');
 // Tests, on the Linux machine
 
 /** The Linux machine's copy of the tree, uploaded as a tarball and unpacked fresh. */
-async function uploadTree({ host, ref, name, tarball, log, runnerTar }) {
+async function uploadTree({ host, ref, name, tarball, log, runnerTar, computerTar }) {
   // The tag's tarball is made once (makeTree) and shared by the machines; a tarball of HEAD is made for the tests.
   if (ref) await exec('git', ['archive', '--format=tar.gz', '-o', tarball, ref], { log });
   await exec('scp', ['-q', ...SSH, tarball, `${host}:builds/${name}.tar.gz`], { log });
   if (runnerTar) await exec('scp', ['-q', ...SSH, runnerTar, `${host}:builds/${name}-runner.tar.gz`], { log });
+  if (computerTar) await exec('scp', ['-q', ...SSH, computerTar, `${host}:builds/${name}-computer.tar.gz`], { log });
   const unpack = [
     'set -e',
     `rm -rf ~/builds/${name} && mkdir -p ~/builds/${name}`,
     `tar -xzf ~/builds/${name}.tar.gz -C ~/builds/${name}`,
     runnerTar ? `mkdir -p ~/builds/${name}/runner && tar -xzf ~/builds/${name}-runner.tar.gz -C ~/builds/${name}/runner` : 'true',
+    // The computer use helpers go where `pnpm computer:build` puts them, for the package and the end-to-end tests.
+    computerTar ? `mkdir -p ~/builds/${name}/native && tar -xzf ~/builds/${name}-computer.tar.gz -C ~/builds/${name}/native` : 'true',
     // Keep the three newest trees and tarballs.
     'cd ~/builds && ls -dt */ 2>/dev/null | tail -n +5 | xargs -r rm -rf; ls -t *.tar.gz 2>/dev/null | tail -n +7 | xargs -r rm -f',
   ].join('; ');
@@ -469,10 +472,11 @@ async function makeTree({ tag, tree, work, log }) {
   // All six runner builds: each package bundles its own OS's two.
   await exec('pnpm', ['runner:build'], { cwd: tree, log, env: { PATH: `${process.env.PATH}:/usr/local/go/bin:/opt/homebrew/bin` } });
   await exec('tar', ['-czf', join(work, 'runner-bin.tar.gz'), '-C', join(tree, 'runner'), 'bin'], { log });
-  // The computer use helpers: macOS's built here, Windows' cross-built with Go and handed to the Windows machine.
+  // The computer use helpers: macOS's built here, Windows' and Linux's cross-built with Go and handed to their machines.
   await exec('pnpm', ['computer:build'], { cwd: tree, log, env: { PATH: `${process.env.PATH}:/usr/local/go/bin:/opt/homebrew/bin` } });
   // COPYFILE_DISABLE: no macOS `._` files in the tarball.
   await exec('tar', ['-czf', join(work, 'computer-windows.tar.gz'), '-C', join(tree, 'native'), 'bin/atelier-computer-windows-x64.exe', 'bin/atelier-computer-windows-arm64.exe'], { log, env: { COPYFILE_DISABLE: '1' } });
+  await exec('tar', ['-czf', join(work, 'computer-linux.tar.gz'), '-C', join(tree, 'native'), 'bin/atelier-computer-linux-x64', 'bin/atelier-computer-linux-arm64'], { log, env: { COPYFILE_DISABLE: '1' } });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -482,7 +486,7 @@ async function buildLinux({ tag, version, work, artifacts, log, skipImage, skipE
   const host = CONFIG.linux;
   const name = tag;
   await exec('ssh', [...SSH, host, 'mkdir -p ~/builds'], { log });
-  await uploadTree({ host, ref: null, name, tarball: join(work, 'src.tar.gz'), runnerTar: join(work, 'runner-bin.tar.gz'), log });
+  await uploadTree({ host, ref: null, name, tarball: join(work, 'src.tar.gz'), runnerTar: join(work, 'runner-bin.tar.gz'), computerTar: join(work, 'computer-linux.tar.gz'), log });
   const env = 'export PATH=/usr/local/go/bin:$PATH CI=1';
   await exec('ssh', [...SSH, host, `${env}; cd ~/builds/${name} && pnpm install --frozen-lockfile`], { log });
   // nice: the packaging and the image build take the cores the end-to-end tests leave, not the other way round (a test

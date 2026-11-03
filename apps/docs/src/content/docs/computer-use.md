@@ -1,6 +1,6 @@
 ---
 title: Computer use
-description: Let the assistant see and use apps on your Mac or Windows PC in Code and Cowork. Turn it on, allow apps one by one, decide when it may take the mouse and keyboard, and take them back by holding Esc.
+description: Let the assistant see and use apps on your Mac, Windows PC or Linux desktop in Code and Cowork. Turn it on, allow apps one by one, decide when it may take the mouse and keyboard, and take them back by holding Esc.
 ---
 
 With computer use, the assistant in a Code session or a Cowork task can look at apps on your computer and use them:
@@ -11,8 +11,9 @@ assistant uses that: working on screen is slower and less reliable.
 It is off until you turn it on, it only uses apps you allow, and you can stop it at any moment.
 
 :::note
-Computer use works on **macOS** and **Windows**, in the desktop app with **Run on this computer**. Linux and a desktop
-app signed in to a server come later. A session in the browser can't use your computer.
+Computer use works on **macOS**, **Windows** and **Linux** (X11), in the desktop app with **Run on this computer**. A
+desktop app signed in to a server comes later. A session in the browser can't use your computer. [Linux](#linux) differs
+in a few ways, which are listed there.
 :::
 
 ## Turn it on
@@ -39,7 +40,8 @@ Windows asks for nothing. Two things work differently there:
 
 ## Allowing apps
 
-**How Atelier uses the apps you allow** in Settings decides how much it asks:
+**How Atelier uses the apps you allow** in Settings decides how much it asks (on Linux the first choice is called
+**Ask per app**, see [Linux](#linux)):
 
 - **Background** (the default): it asks for each app, then works in one app at a time **in the background**: it sees
   that app's window as it is (even when other windows cover it) and clicks, types and scrolls in it without moving your
@@ -117,6 +119,38 @@ The desktop app checks every action against what you allowed, whatever the model
 - text on the screen is treated as information, never as instructions.
 
 The assistant is also told never to type passwords, complete purchases or payments, or send messages you didn't ask for.
+
+## Linux
+
+Atelier talks to the **X11** display server, so it works in an X11 session and sees and controls what X11 draws. Nothing
+needs to be granted, as on Windows. What differs:
+
+- **No Background mode.** X11 can't send clicks and keys to a window that isn't in front without taking the real mouse and
+  keyboard, at least not in a way that works in every app, and a Background that dropped keys in some apps would be
+  worse than none. So the first choice in Settings is **Ask per app**: you allow apps one by one on a card, its
+  screenshots show only those apps, and it asks before it takes over your mouse and keyboard, hiding your other apps
+  (minimizing them) while it does. **Full control** is the same as elsewhere.
+- **Wayland sessions are limited.** On Wayland, Atelier can only see and control apps that run through XWayland (apps
+  that speak X11); apps that talk to Wayland directly don't show up in its screenshots (X11 knows nothing of them) and can't be
+  clicked. Some desktops also hold back input sent to XWayland apps. Settings shows a note when you
+  are on a Wayland session. For all your apps, log in to an X11 session (most login screens offer one under a gear
+  icon). Using Wayland's own screen sharing and remote desktop portals, which need your consent each time, isn't built
+  yet. With no X server at all (a text console, or Wayland without XWayland) computer use is unavailable, and Settings
+  says so.
+- **Password fields aren't recognized.** On macOS and Windows Atelier can tell that a field is a password field and
+  refuses to type into it. It can't yet on Linux, so it relies on other safeguards: password managers (1Password,
+  Bitwarden, KeePassXC, KeePass, Seahorse, KWalletManager, Enpass, Proton Pass) are on the denied list from the start,
+  authorization and password prompts (polkit agents, pinentry, askpass, the keyring's prompt), lock screens and system
+  settings are never used, and the assistant is told never to type a password. Links in mail apps aren't recognized
+  either, so Thunderbird, Evolution and the like are treated as mail but a link in them can't be told from other text.
+- **Apps running as another user** (a window opened with sudo or pkexec) are never used.
+- **Desktop entries name the apps.** The apps Atelier offers are the ones with a desktop entry (the launcher entries of
+  your distribution, Flatpak and Snap); an app that is running without one is named after its window class.
+- **The screen.** The glow along the screen's edges is a thin accent frame on Linux, because a soft glow needs a window
+  that is see-through, and many X sessions run without the compositor that requires. The frame and the panel go away for
+  the moment of each screenshot, so they are not in it. Atelier's own windows are minimized while it works, as on
+  Windows.
+- Shortcuts use **Ctrl** where a Mac uses **Cmd**, and the assistant switches apps with **Alt+Tab**.
 
 ## In the transcript
 

@@ -2,7 +2,9 @@
 // Builds the computer use helpers this machine can build, into native/bin (`pnpm computer:build`):
 //   - atelier-computer-darwin: the Swift helper (native/computer-macos/build.sh), on macOS only;
 //   - atelier-computer-windows-x64.exe and -arm64.exe: the Go helper (native/computer-windows), cross-compiled
-//     wherever `go` is on PATH.
+//     wherever `go` is on PATH;
+//   - atelier-computer-linux-x64 and -arm64: the Go helper for X11 (native/computer-linux), likewise. Pure Go with no
+//     cgo, so one static binary per architecture serves every distribution.
 // It says what it built and what it skipped; a build that fails fails the script.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, statSync } from 'node:fs';
@@ -57,8 +59,20 @@ if (has('go')) {
     });
     built.push(out);
   }
+  const linux = join(native, 'computer-linux');
+  for (const [goarch, name] of [
+    ['amd64', 'atelier-computer-linux-x64'],
+    ['arm64', 'atelier-computer-linux-arm64'],
+  ]) {
+    const out = join(bin, name);
+    run('go', ['build', '-trimpath', '-ldflags', '-s -w', '-o', out, '.'], {
+      cwd: linux,
+      env: { ...process.env, GOOS: 'linux', GOARCH: goarch, CGO_ENABLED: '0' },
+    });
+    built.push(out);
+  }
 } else {
-  skipped.push('atelier-computer-windows-*.exe: `go` is not on PATH');
+  skipped.push('atelier-computer-windows-*.exe and atelier-computer-linux-*: `go` is not on PATH');
 }
 
 for (const file of built) console.log(`built   ${relative(root, file)} (${size(file)})`);

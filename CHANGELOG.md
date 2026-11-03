@@ -27,6 +27,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 - **Images you made show inside artifacts, visuals and replies:** the assistant can put a generated image into an HTML, React or SVG artifact, an inline visual or a reply by its id. Only the conversation's own images are found, and the sandbox still has no network.
 - **Use as reference on the Images page:** the viewer there starts a new chat with the image attached.
 - **Small models can send a mask too:** the compact tool schema for image generation lacked the `mask` field, so a small model's call for a marked area was refused.
+- **Computer use on Linux:** on an X11 desktop the assistant can now see and use the apps you allow, as on macOS and Windows: screenshots (with your denied apps left out), clicks, typing and keys, app cards, Full control, a frame and panel while it has your mouse and keyboard, and holding Esc for a second takes them back. There is no Background mode there (X11 can't do it reliably), so Settings offers **Ask per app** and **Full control**. On a Wayland session only apps that run through XWayland can be seen and used, and Settings says so. Atelier can't recognize password fields on Linux yet: password managers are denied from the start and authorization prompts are never used. See [Computer use](https://docs.atelierhq.dev/computer-use/).
 
 ## [0.3.1] — 2026-11-02
 

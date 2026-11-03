@@ -81,7 +81,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 20, 14435 characters of JSON
+# Tools: 20, 14445 characters of JSON
 
 [
   {
@@ -709,7 +709,7 @@ Recent commit subjects:
               },
               "text": {
                 "type": "string",
-                "description": "type: the text; key: the keys, like \"cmd+s\" (macOS) or \"ctrl+s\" (Windows)."
+                "description": "type: the text; key: the keys, like \"cmd+s\" (macOS) or \"ctrl+s\" (Windows and Linux)."
               },
               "replace": {
                 "type": "boolean",

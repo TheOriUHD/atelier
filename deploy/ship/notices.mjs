@@ -136,8 +136,8 @@ function homepage(pkg) {
 }
 
 /** The modules a Go main package links, with their license files from the module cache. */
-function goModules(moduleDir, pkg) {
-  const out = execFileSync('go', ['list', '-deps', '-json', pkg], { cwd: join(repo, moduleDir), encoding: 'utf8', maxBuffer: 64 << 20 });
+function goModules(moduleDir, pkg, env = {}) {
+  const out = execFileSync('go', ['list', '-deps', '-json', pkg], { cwd: join(repo, moduleDir), encoding: 'utf8', maxBuffer: 64 << 20, env: { ...process.env, ...env } });
   const modules = new Map();
   for (const chunk of out.split(/\n(?=\{)/)) {
     const m = JSON.parse(chunk).Module;
@@ -206,12 +206,15 @@ ${parts.join('\n\n==========\n\n')}
 const npm = npmPackages();
 const runner = goModules('runner', './cmd/atelier-runner');
 const setup = goModules('setup', './cmd/atelier-setup');
+// The Linux computer use helper (native/computer-linux): its X11 client. Built for Linux only, like the helper.
+const computerLinux = goModules('native/computer-linux', '.', { GOOS: 'linux' });
 
 const files = {
   'THIRD_PARTY_NOTICES.md': [
     HEADER,
     section('JavaScript packages', 'Bundled into the desktop app and the server (the interface, the backend and the server).', npm),
     section('Go modules in the runner', 'Linked into atelier-runner, which the desktop app and the server image ship and copy to SSH hosts.', runner),
+    section('Go modules in the Linux computer use helper', 'Linked into atelier-computer-linux, which the Linux desktop app ships to see and control apps through X11.', computerLinux),
     section('Go modules in the setup program', 'Linked into atelier-setup, the server installer (also listed by `atelier-setup licenses`).', setup),
   ].join('\n'),
   'setup/internal/notices/NOTICES.txt': [
@@ -241,4 +244,4 @@ if (check && stale.length) {
   console.error(`Third-party notices are out of date: ${stale.join(', ')}. Run pnpm notices and commit the result.`);
   process.exit(1);
 }
-if (!check) console.log(`${npm.length} npm packages, ${runner.length} runner modules, ${setup.length} setup modules`);
+if (!check) console.log(`${npm.length} npm packages, ${runner.length} runner modules, ${computerLinux.length} Linux helper modules, ${setup.length} setup modules`);

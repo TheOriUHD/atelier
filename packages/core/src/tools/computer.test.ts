@@ -191,6 +191,20 @@ describe('Full control', () => {
     expect(out).toContain('(ctrl+L). Shortcuts use ctrl on Windows.');
   });
 
+  it('names Linux’s shortcuts, and says the computer can’t tell a password field', async () => {
+    const { tool } = setup([], {
+      'access.prepare': () => ({ apps: [], unknown: [] }),
+      'access.state': () => ({ ...state([], false, 'full'), platform: 'linux' }),
+    });
+    const out = text(await tool('ComputerAccess').run({ apps: [] }, ctx));
+    expect(out).toContain('(or alt+tab)');
+    expect(out).toContain('(ctrl+L). Shortcuts use ctrl on Linux.');
+    expect(out).toContain('can’t tell you when a field is a password field: never type a password');
+    // The other systems can tell, and don't say so.
+    const mac = setup([], { 'access.prepare': () => ({ apps: [], unknown: [] }), 'access.state': () => state([], false, 'full') });
+    expect(text(await mac.tool('ComputerAccess').run({ apps: [] }, ctx))).not.toContain('password field');
+  });
+
   it('needs no card for apps, and says what it may use', async () => {
     const { tool, asked } = setup([], {
       'access.prepare': () => ({ apps: [prepared('Safari', { granted: 'full' }), prepared('1Password', { denied: true })], unknown: [] }),

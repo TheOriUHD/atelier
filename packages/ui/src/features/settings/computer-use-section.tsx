@@ -1,7 +1,8 @@
 /**
  * Settings › System › Computer use (ARCHITECTURE §22; design/components.md › Computer use): on or off, how the
  * assistant uses the apps the person allows, whether hidden apps come back, the denied apps, the apps allowed for good,
- * and the macOS permissions it needs. Kept by this computer's main process, not the account.
+ * and the macOS permissions it needs. Kept by this computer's main process, not the account. On Linux it also says what
+ * that system can't do: no Background mode, a Wayland session's limits, and no way yet to tell a password field.
  */
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,10 +14,24 @@ import type { SettingId } from './search-index.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useWrite } from './use-setting.ts';
 
-const MODES: { value: ComputerMode; label: string }[] = [
-  { value: 'background', label: 'Background' },
+/**
+ * Where the helper can work in an app's window without the person's mouse and keyboard the first mode is Background; where
+ * it can't (Linux: X11 can't send input to a window reliably without the real ones) it is what it then really is, apps
+ * allowed one by one. The stored value is the same.
+ */
+const modes = (background: boolean): { value: ComputerMode; label: string }[] => [
+  { value: 'background', label: background ? 'Background' : 'Ask per app' },
   { value: 'full', label: 'Full control' },
 ];
+
+const NO_BACKGROUND =
+  'This system can’t let Atelier work in an app’s window in the background: X11 only takes input through the real mouse and keyboard. So you allow apps one by one on a card, Atelier sees only those, and it asks before it takes over your mouse and keyboard. Full control takes over your computer as it is, any app but your denied ones.';
+
+const WAYLAND =
+  'You are on a Wayland session. Atelier can only see and control apps that run through XWayland (apps that speak X11), not apps that talk to Wayland directly, and some desktops hold back input sent to them. Log in to an X11 session to use all your apps.';
+
+const NO_PASSWORD_CHECK =
+  'Atelier can’t tell a password field from other text on Linux yet, so password managers, authorization prompts and apps running as another user are off limits as a whole, and it is told never to type passwords.';
 
 export function ComputerUseSection() {
   const status = useComputerStatus();
@@ -30,7 +45,9 @@ export function ComputerUseSection() {
   if (!status.available) {
     return (
       <SettingsSection title="Computer use">
-        <p className="pb-3 text-body text-fg-muted">Computer use isn’t available on this computer yet: it works on macOS and Windows so far.</p>
+        <p className="pb-3 text-body text-fg-muted">
+          {status.unavailableReason ? `Computer use isn’t available here. ${status.unavailableReason}` : 'Computer use isn’t available on this computer: the helper that sees and controls apps is missing from this install.'}
+        </p>
       </SettingsSection>
     );
   }
@@ -45,8 +62,8 @@ export function ComputerUseSection() {
           <SettingRow id="system.computerUnhide" error={error}>
             {(label) => <Switch {...label} checked={settings.unhideOnFinish} onCheckedChange={(on) => change(() => computer.settings({ unhideOnFinish: on }))} />}
           </SettingRow>
-          <SettingRow id="system.computerMode" error={error}>
-            {(label) => <SegmentedControl {...label} items={MODES} value={settings.mode} onValueChange={(mode) => change(() => computer.settings({ mode }))} />}
+          <SettingRow id="system.computerMode" error={error} detail={status.background ? undefined : NO_BACKGROUND}>
+            {(label) => <SegmentedControl {...label} items={modes(status.background)} value={settings.mode} onValueChange={(mode) => change(() => computer.settings({ mode }))} />}
           </SettingRow>
           <SettingRow id="system.computerDenied" stacked error={error}>
             <div className="flex flex-col gap-2">
@@ -63,6 +80,8 @@ export function ComputerUseSection() {
           )}
         </>
       )}
+      {status.platform === 'linux' && status.session === 'wayland' && <p className="pt-2 text-body text-fg-muted">{WAYLAND}</p>}
+      {status.platform === 'linux' && <p className="pt-2 text-body text-fg-muted">{NO_PASSWORD_CHECK}</p>}
       {status.platform === 'darwin' && (
         <>
           <PermissionRow id="system.computerAccessibility" granted={status.permissions.accessibility} kind="accessibility" />

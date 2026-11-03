@@ -24,6 +24,8 @@ class FakeHelper {
   under: Partial<InspectPointResult> & { app: HelperApp | null } = { app: APPS[0]!, secure: false, link: null };
   focused: Partial<InspectPointResult> & { app: HelperApp | null } = { app: APPS[0]!, secure: false, link: null };
   permissions = { accessibility: true, screenRecording: true };
+  /** The apps `apps.list` answers with. */
+  apps = APPS;
   front: HelperApp | null = null;
   /** Whether it can work in a window without the mouse and keyboard. */
   background = false;
@@ -50,7 +52,7 @@ class FakeHelper {
         case 'displays.list':
           return { displays: [{ id: '1', name: 'Main', x: 0, y: 0, width: 1000, height: 500, scale: 2, primary: true }] };
         case 'apps.list':
-          return { apps: APPS };
+          return { apps: this.apps };
         case 'apps.frontmost':
           return { app: this.front };
         case 'window.capture':
@@ -457,6 +459,95 @@ describe('on Windows', () => {
     // cmd+tab is ctrl+tab there: typing into Atelier, refused.
     expect(await press('cmd+tab')).toMatchObject({ ok: false, note: /The keyboard goes to Atelier/ });
     await run('turn.end', {});
+  });
+});
+
+describe('on Linux', () => {
+  const LINUX = [app('xterm', 'XTerm'), app('org.mozilla.firefox', 'Firefox'), app('atelier', 'Atelier')];
+  const linux = (extra: Partial<ConstructorParameters<typeof ComputerController>[0]> = {}, log: string[] = []) =>
+    new ComputerController({
+      helper: helper as unknown as ComputerHelper,
+      hasHelper: true,
+      settingsPath,
+      overlay: {
+        show() {},
+        hide() {},
+        esc() {},
+        paused() {},
+        working() {},
+        capturing: async (on) => void log.push(`capturing:${on}`),
+      },
+      windows: { hide() {}, restore() {}, focus() {} },
+      event() {},
+      changed() {},
+      platform: 'linux',
+      ...extra,
+    });
+
+  it('reads cmd as ctrl, lets alt+tab and the Super key switch apps, and refuses typing into Atelier', async () => {
+    const c = linux();
+    await changeComputerSettings(settingsPath, (s) => ({ ...s, mode: 'full' }));
+    const run = <M extends keyof ControllerMethods>(method: M, params: ControllerMethods[M]['params']) => c.handle('local', 'l1', method, params);
+    expect(await run('access.state', {})).toMatchObject({ platform: 'linux', background: false });
+    expect(await run('control.request', {})).toEqual({ granted: true });
+    helper.focused = { app: LINUX[2]! };
+    const press = async (text: string) => (await run('control.batch', { actions: [{ action: 'key', text }], size: SIZE })).results[0];
+    expect(await press('alt+tab')).toEqual({ action: 'key', ok: true });
+    expect(await press('super')).toEqual({ action: 'key', ok: true });
+    expect(await press('cmd+tab')).toMatchObject({ ok: false, note: /The keyboard goes to Atelier/ });
+    // `replace` selects with ctrl+a there.
+    helper.focused = { app: LINUX[0]! };
+    await run('control.batch', { actions: [{ action: 'type', text: 'hi', replace: true }], size: SIZE });
+    expect(helper.did('key.press').at(-1)?.params).toEqual({ keys: ['ctrl', 'a'] });
+    await run('turn.end', {});
+  });
+
+  it('takes the overlay out of every screenshot and zoom, and puts it back even when the capture fails', async () => {
+    const log: string[] = [];
+    const c = linux({}, log);
+    await changeComputerSettings(settingsPath, (s) => ({ ...s, mode: 'full' }));
+    const run = <M extends keyof ControllerMethods>(method: M, params: ControllerMethods[M]['params']) => c.handle('local', 'l2', method, params);
+    await run('control.request', {});
+    await run('screenshot', { size: SIZE });
+    expect(log).toEqual(['capturing:true', 'capturing:false']);
+    log.length = 0;
+    await run('control.batch', { actions: [{ action: 'screenshot' }], size: SIZE });
+    expect(log).toEqual(['capturing:true', 'capturing:false']);
+    log.length = 0;
+    await run('control.batch', { actions: [{ action: 'zoom', region: [0, 0, 100, 50] }], size: SIZE });
+    expect(log).toEqual(['capturing:true', 'capturing:false']);
+    log.length = 0;
+    const call = helper.call.bind(helper);
+    helper.call = (async (method: string, params: unknown) => (method === 'capture.display' ? Promise.reject(new HelperError('boom', -32603)) : call(method as never, params as never))) as typeof helper.call;
+    await expect(run('screenshot', { size: SIZE })).rejects.toThrow('boom');
+    expect(log).toEqual(['capturing:true', 'capturing:false']);
+    await run('turn.end', {});
+  });
+
+  it('says why there is no computer use, and which kind of session it is', async () => {
+    const wayland = linux({ environment: { session: 'wayland' } });
+    expect(await wayland.status()).toMatchObject({ available: true, platform: 'linux', session: 'wayland', background: false });
+    const none = linux({ environment: { session: null, unavailable: 'There is no X server to talk to.' } });
+    expect(await none.status()).toMatchObject({ available: false, unavailableReason: 'There is no X server to talk to.' });
+    await expect(none.handle('local', 'l3', 'screenshot', { size: SIZE })).rejects.toThrow();
+  });
+
+  it('works through per-app cards when the helper has no Background mode, hiding the other apps while it controls', async () => {
+    helper.apps = [...APPS, app('xterm', 'XTerm')];
+    const c = linux();
+    await c.grant('local', 'l4', [{ id: 'xterm', tier: 'click' }], false);
+    expect(helper.background).toBe(false);
+    expect(await c.handle('local', 'l4', 'control.request', {})).toEqual({ granted: false, reason: 'ask' });
+    await c.allowControl('local', 'l4', false);
+    expect(await c.handle('local', 'l4', 'control.request', {})).toEqual({ granted: true });
+    expect(helper.did('control.begin')).toHaveLength(1);
+    // Everything else running is minimized meanwhile, and shown again after.
+    const hidden = (helper.did('apps.hide')[0]?.params as { ids: string[] }).ids;
+    expect(hidden).toContain('com.apple.Safari');
+    expect(hidden).not.toContain('xterm');
+    expect(hidden).not.toContain('com.apple.systempreferences');
+    await c.handle('local', 'l4', 'turn.end', {});
+    expect(helper.did('apps.unhide')).toHaveLength(1);
   });
 });
 

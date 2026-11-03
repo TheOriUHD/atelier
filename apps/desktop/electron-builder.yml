@@ -90,6 +90,10 @@ linux:
     - from: ../../runner/bin
       to: runner
       filter: ['atelier-runner-linux-*', 'atelier-runner-darwin-*', 'checksums.json']
+    # The computer use helpers (`pnpm computer:build`, Go, X11): main picks this machine's architecture.
+    - from: ../../native/bin
+      to: computer
+      filter: ['atelier-computer-linux-*']
     - from: ../../THIRD_PARTY_NOTICES.md
       to: THIRD_PARTY_NOTICES.md
   target:

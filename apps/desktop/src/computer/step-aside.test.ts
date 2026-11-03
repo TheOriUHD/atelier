@@ -30,6 +30,14 @@ describe('Atelier stepping aside', () => {
     expect(win.calls).toEqual(['minimize']);
   });
 
+  it('minimizes on Linux too, where a hidden window leaves the window list and Atelier has no tray icon to bring it back', () => {
+    const win = fakeWindow();
+    expect(stepAside([win], 'linux')).toEqual([win]);
+    expect(win.calls).toEqual(['minimize']);
+    stepBack([win]);
+    expect(win.calls).toEqual(['minimize', 'restore']);
+  });
+
   it('hides on macOS, where the Dock icon stays', () => {
     const win = fakeWindow();
     stepAside([win], 'darwin');

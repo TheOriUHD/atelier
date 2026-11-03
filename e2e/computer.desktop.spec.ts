@@ -143,7 +143,7 @@ test('desktop: in Full control the assistant takes the computer as it is, withou
     const shot = entries.find((e) => e.method === 'capture.display');
     expect(shot).toMatchObject({ apps: null });
     // Each system's own password managers start on the denied list.
-    expect(shot?.exclude).toContain(process.platform === 'win32' ? '1password.exe' : 'com.1password.1password');
+    expect(shot?.exclude).toContain({ win32: '1password.exe', linux: '1password' }[process.platform as string] ?? 'com.1password.1password');
     expect(entries.find((e) => e.method === 'key.type')).toMatchObject({ text: 'amazon.de' });
     // Done: the turn ends, the computer goes back and Atelier comes to the front.
     await expect.poll(async () => (await helperLog(log)).map((e) => e.method)).toEqual(expect.arrayContaining(['control.end', 'apps.activate']));

@@ -283,10 +283,12 @@ func (m *Monitor) loop(samples <-chan Sample, quit <-chan struct{}, done chan<- 
 
 // poll is Esc's key state, or nil while the helper owns Esc.
 func (m *Monitor) poll() *bool {
+	// The key state first, then whose it is: the helper may press Esc between the two, and asking afterwards sees it; asking
+	// first would take that press for the person's.
+	down := m.escapeKey()
 	if m.input.OwnsEscape() {
 		return nil
 	}
-	down := m.escapeKey()
 	return &down
 }
 

@@ -1,9 +1,10 @@
 /**
  * Computer use (docs/ARCHITECTURE.md §22): the assistant sees and acts in apps on the person's computer, in the apps
  * they allow. The desktop app's main process owns it (`apps/desktop/src/computer/`) and drives a native helper per OS
- * (`native/computer-macos/` on macOS) over computer protocol v1: JSON-RPC 2.0, one JSON object per line over stdio,
+ * (`native/computer-macos/` on macOS, `native/computer-windows/` and `native/computer-linux/`) over computer protocol v1: JSON-RPC 2.0, one JSON object per line over stdio,
  * like the runner's. The helper only does what the OS offers (screenshots, input, apps); every rule lives in main.
- * Mirrored by hand in `native/computer-macos/Sources/AtelierComputer/Protocol.swift`; keep both in sync.
+ * Mirrored by hand in `native/computer-macos/Sources/AtelierComputer/Protocol.swift` and in the Go `internal/proto` packages of
+ * `native/computer-windows` and `native/computer-linux` (their parity tests read this file); keep them in sync.
  */
 import { z } from 'zod';
 
@@ -69,9 +70,16 @@ export type ComputerSettings = z.infer<typeof ComputerSettings>;
 
 /** What this computer can do and has been allowed, for Settings and the cards. */
 export const ComputerStatus = z.object({
-  /** Computer use is possible here at all (a helper for this OS exists). */
+  /** Computer use is possible here at all (a helper for this OS exists, and on Linux an X server to talk to). */
   available: z.boolean(),
+  /** Why not, in a sentence, where the system could be told (Linux without an X server). */
+  unavailableReason: z.string().optional(),
   platform: z.enum(['darwin', 'win32', 'linux']),
+  /**
+   * Linux only: the kind of desktop session. `wayland` is limited: only apps that run through XWayland can be seen and
+   * controlled (docs/ARCHITECTURE.md §22).
+   */
+  session: z.enum(['x11', 'wayland']).nullable().optional(),
   /** The OS permissions it needs, where the OS asks for them (macOS). */
   permissions: z.object({ accessibility: z.boolean(), screenRecording: z.boolean() }),
   /** Background mode exists on this computer. */
@@ -112,7 +120,7 @@ export interface PermissionsRequestParams {
   kind: 'accessibility' | 'screenRecording';
 }
 
-/** A rectangle in global screen coordinates: points on macOS, the top-left of the main display at 0,0. */
+/** A rectangle in global screen coordinates: points on macOS, pixels on Windows and Linux, the top-left of the main display at 0,0. */
 export interface ScreenRect {
   x: number;
   y: number;

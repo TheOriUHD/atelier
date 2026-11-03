@@ -309,9 +309,19 @@ func (c *Conn) clickThrough(ids map[xproto.Window]bool) map[xproto.Window]bool {
 	}
 	for w, ck := range cookies {
 		r, err := ck.Reply()
-		out[w] = err == nil && r != nil && len(r.Rectangles) == 0
+		out[w] = err == nil && r != nil && tinyInputArea(r.Rectangles)
 	}
 	return out
+}
+
+// tinyInputArea: the input shape takes no pointer input worth the name: empty, or one pixel. Electron's
+// setIgnoreMouseEvents on X11 sets a 1×1 input shape rather than an empty one.
+func tinyInputArea(rects []xproto.Rectangle) bool {
+	area := 0
+	for _, r := range rects {
+		area += int(r.Width) * int(r.Height)
+	}
+	return area <= 1
 }
 
 // WindowAt is the topmost window that takes a click at the point (the root's coordinates).
