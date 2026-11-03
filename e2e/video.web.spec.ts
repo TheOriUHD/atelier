@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { call, fakeVideoJobs, settled } from './fixtures.ts';
 
@@ -220,6 +221,39 @@ test('a picture from the conversation becomes the first frame, sent to a model t
   await send(page, generate({ prompt: 'From nowhere', first_frame: 'img_00000000' }));
   await expect(newest(page).getByText(/There's no image img_00000000 in this conversation/)).toBeVisible({ timeout: 15_000 });
   expect((await fakeVideoJobs()).length).toBe(before);
+});
+
+test('no serious accessibility problems while a clip is made, once it is there, or in the viewer, and the controls are reachable by keyboard', async ({ page }) => {
+  test.setTimeout(120_000);
+  const problems = async (include: string) => {
+    const { violations } = await new AxeBuilder({ page }).include(include).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    return violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').flatMap((v) => v.nodes.map((n) => `${v.id}: ${n.target.join(' ')}`));
+  };
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await page.goto('/');
+    await send(page, generate({ prompt: 'An unhurried study of still water', aspect_ratio: '16:9' }));
+    const figure = newest(page);
+    await expect(figure.getByRole('status').first()).toBeVisible({ timeout: 10_000 });
+    expect(await problems('main')).toEqual([]);
+    await expect(player(figure)).toBeVisible({ timeout: 40_000 });
+    await idle(page);
+    // Reduced motion: nothing plays on its own, however it arrived.
+    expect(await player(figure).evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
+    await figure.getByRole('button', { name: /^Show the prompt/ }).click();
+    expect(await problems('main')).toEqual([]);
+    // The actions are buttons in the tab order, which appear on focus.
+    await figure.getByRole('button', { name: 'Open larger' }).focus();
+    await expect(figure.getByRole('button', { name: 'Open larger' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    const viewer = page.getByRole('dialog', { name: 'Video' });
+    await expect(viewer.locator('video')).toBeVisible();
+    await viewer.getByRole('button', { name: 'Details' }).click();
+    await viewer.getByRole('complementary', { name: 'Details' }).waitFor();
+    expect(await problems('[role=dialog]')).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(viewer).toHaveCount(0);
+  }
 });
 
 test.describe('beside the pictures', () => {
