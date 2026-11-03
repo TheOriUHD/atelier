@@ -2,16 +2,19 @@
  * An image from the Images page in the `Lightbox`, with what made it and the way back to its conversation.
  */
 import { useState, type ReactNode } from 'react';
-import { Link } from '@tanstack/react-router';
-import { Download, MessageCircle } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { Download, ImagePlus, MessageCircle, Paintbrush } from 'lucide-react';
 import type { GeneratedImage } from '@atelier/protocol';
-import { Button, Icon, Lightbox, toast } from '../../components/ui/index.ts';
+import { Button, Icon, IconButton, Lightbox, toast } from '../../components/ui/index.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
 import { shortDate } from '../../lib/dates.ts';
 import { blobUrl, saveBlob } from '../../lib/platform.ts';
 import { describeError } from '../../lib/rpc.ts';
 import { sessionTitle } from '../../lib/sessions.ts';
 import { formatUsd } from '../settings/usage-data.ts';
+import { AreaEditor } from './area-editor.tsx';
+import { sendAreaChange } from './change-area.tsx';
+import { useInNewChat } from './use-in-new-chat.ts';
 
 export interface ImageViewerProps {
   images: readonly GeneratedImage[];
@@ -22,15 +25,45 @@ export interface ImageViewerProps {
 
 export function ImageViewer({ images, index, onIndexChange }: ImageViewerProps) {
   const [detailsOpen, setDetailsOpen] = useState(true);
+  const inNewChat = useInNewChat();
+  const navigate = useNavigate();
+  // The image being marked stays through the editor's fade, and the lightbox is closed behind it.
+  const [marking, setMarking] = useState<{ image: GeneratedImage; open: boolean } | null>(null);
+  const area = marking?.image;
   return (
+    <>
     <Lightbox
       images={images.map((image) => ({ src: blobUrl(image.blob), alt: image.prompt }))}
       index={index}
       onIndexChange={onIndexChange}
+      actions={(at) => {
+        const image = images[at];
+        if (!image) return null;
+        return (
+          <>
+            <IconButton icon={ImagePlus} label="Use as reference" iconSize="md" size="lg" onClick={() => void inNewChat(image).then(() => onIndexChange(null))} />
+            {/* The change goes to the conversation the image was made in, which is where its result will be. */}
+            {image.sessionId && image.sessionMode && <IconButton icon={Paintbrush} label="Change an area" iconSize="md" size="lg" onClick={() => { setMarking({ image, open: true }); onIndexChange(null); }} />}
+          </>
+        );
+      }}
       details={(at) => images[at] && <Details image={images[at]} onLeave={() => onIndexChange(null)} />}
       detailsOpen={detailsOpen}
       onDetailsOpenChange={setDetailsOpen}
     />
+    {marking && area?.sessionId && area.sessionMode && (
+      <AreaEditor
+        open={marking.open}
+        src={blobUrl(area.blob)}
+        alt={area.prompt}
+        onClose={() => setMarking((now) => now && { ...now, open: false })}
+        onSubmit={async (instruction, mask) => {
+          await sendAreaChange(area.sessionId!, area, instruction, mask);
+          await navigate({ to: SESSION_ROUTE[area.sessionMode!], params: { sessionId: area.sessionId! } });
+        }}
+      />
+    )}
+    </>
   );
 }
 

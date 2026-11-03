@@ -6,6 +6,9 @@ import { artifactRuntimeUrl } from '../../lib/platform.ts';
 import { useResolvedTheme } from '../../lib/theme.ts';
 import { useReducedMotion } from '../../lib/motion.ts';
 import { downloadText } from '../artifacts/artifact-files.ts';
+import { MAX_TOTAL_CHARS } from '../artifacts/image-refs.ts';
+import { useInlinedImages } from '../artifacts/use-inlined-images.ts';
+import { useSessionImages } from '../images/session-images.tsx';
 import { visualField } from './inline-visual-input.ts';
 
 export const InlineVisual = memo(function InlineVisual({ call, result, partialInput, running }: {
@@ -16,7 +19,9 @@ export const InlineVisual = memo(function InlineVisual({ call, result, partialIn
 }) {
   const input = call.input as Record<string, unknown>;
   const field = (name: string) => typeof input?.[name] === 'string' ? input[name] : visualField(partialInput, name);
-  const html = unescapeTags(field('html') ?? '');
+  const written = unescapeTags(field('html') ?? '');
+  // Pictures the model refers to by id (`atelier-image:img_…`) are put in as data URLs here: the frame can't fetch anything.
+  const html = useInlinedImages(written, useSessionImages()).content;
   const title = field('title') ?? 'Interactive visual';
   const description = field('description') ?? title;
   const final = !!result && !result.isError;
@@ -41,7 +46,7 @@ export const InlineVisual = memo(function InlineVisual({ call, result, partialIn
       if (data.type === 'inline:ready') { setReady(true); send(); }
       else if (data.type === 'inline:height' && typeof data.height === 'number' && Number.isFinite(data.height)) setHeight(Math.max(64, Math.min(1200, Math.ceil(data.height))));
       else if (data.type === 'inline:error') setError(typeof data.message === 'string' ? data.message.slice(0, 300) : 'The visual could not render.');
-      else if (data.type === 'inline:export' && exportPending.current && typeof data.html === 'string' && data.html.length <= 200_000) {
+      else if (data.type === 'inline:export' && exportPending.current && typeof data.html === 'string' && data.html.length <= 200_000 + MAX_TOTAL_CHARS) {
         exportPending.current = false;
         downloadText(`${title.replace(/[^a-z0-9_-]+/gi, '-').slice(0, 80) || 'visual'}.html`, data.html);
       }

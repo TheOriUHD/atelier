@@ -3,7 +3,7 @@
  * final shape from the first moment, the picture forming in it, then the finished image in the same place, big.
  */
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { Check, Copy, Download, Ellipsis, ImageOff, ImagePlus, Info, OctagonX, type LucideIcon } from 'lucide-react';
+import { Check, Copy, Download, Ellipsis, ImageOff, ImagePlus, Info, OctagonX, Paintbrush, type LucideIcon } from 'lucide-react';
 import { Icon, IconButton, Lightbox, Menu, MenuContent, MenuItem, MenuTrigger, cn, toast, type ButtonSize } from '../../components/ui/index.ts';
 import { reducedMotionClass } from '../../components/ui/styles.ts';
 import { useOpenSettings } from '../../app/navigation.ts';
@@ -11,6 +11,7 @@ import { blobUrl, saveBlob } from '../../lib/platform.ts';
 import { useAccount } from '../../lib/queries.ts';
 import { describeError } from '../../lib/rpc.ts';
 import { formatUsd } from '../settings/usage-data.ts';
+import { useChangeArea } from '../images/change-area.tsx';
 import { CopyButton } from './copy-button.tsx';
 import { formatDuration, imageFailure, imageFileName, imageFraction, imageLayout, imageStatus, missingNote, plannedCount, plannedShape, previewBlur, promptOf, resultText, shownImages, type ImageFailure, type ImageLayout, type ImageShape, type ShownImage } from './image-view.ts';
 import { Chevron } from './parts.tsx';
@@ -60,9 +61,10 @@ interface ImageAction {
 }
 
 /** What can be done with an image, wherever it is shown. */
-function useImageActions(image: ShownImage, { onDetails, onAttached }: { onDetails?: (() => void) | undefined; onAttached?: (() => void) | undefined }): ImageAction[] {
+function useImageActions(image: ShownImage, { onDetails, onAttached, onAway }: { onDetails?: (() => void) | undefined; onAttached?: (() => void) | undefined; onAway?: (() => void) | undefined }): ImageAction[] {
   const [copied, setCopied] = useState(false);
   const composer = useContext(ComposerImages);
+  const area = useChangeArea();
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 1500);
@@ -92,6 +94,20 @@ function useImageActions(image: ShownImage, { onDetails, onAttached }: { onDetai
               composer.attach(image);
               if (onAttached) onAttached();
               else composer.focus();
+            },
+          },
+        ]
+      : []),
+    ...(area
+      ? [
+          {
+            id: 'area',
+            label: 'Change an area',
+            icon: Paintbrush,
+            run() {
+              area.open(image);
+              // From the lightbox: it closes, so the editor is the only thing over the page.
+              onAway?.();
             },
           },
         ]
@@ -134,8 +150,8 @@ function ImageOverlayActions({ image, onDetails }: { image: ShownImage; onDetail
   );
 }
 
-function LightboxActions({ image, onAttached }: { image: ShownImage; onAttached(): void }) {
-  return <ActionButtons actions={useImageActions(image, { onAttached })} size="lg" />;
+function LightboxActions({ image, onAttached, onAway }: { image: ShownImage; onAttached(): void; onAway(): void }) {
+  return <ActionButtons actions={useImageActions(image, { onAttached, onAway })} size="lg" />;
 }
 
 function Detail({ label, children }: { label: string; children: ReactNode }) {
@@ -501,6 +517,7 @@ export function GeneratedImages({ step, waiting }: { step: ImageStep; waiting: b
           images[index] && (
             <LightboxActions
               image={images[index]}
+              onAway={() => setOpened(null)}
               onAttached={() => {
                 toComposer.current = true;
                 setOpened(null);

@@ -13,6 +13,7 @@ import { useResolvedTheme } from '../../lib/theme.ts';
 import { useUi, type ArtifactPanelState } from '../../lib/ui-store.ts';
 import { CodePre, useHighlightedLines } from '../chat/code-block.tsx';
 import { CopyButton } from '../chat/copy-button.tsx';
+import { useSessionImagesOf } from '../images/session-images.tsx';
 import { ArtifactFrame, FrameSkeleton } from './artifact-frame.tsx';
 import { PREVIEWABLE, artifactFilename, downloadText, sourceLanguage } from './artifact-files.ts';
 
@@ -84,10 +85,15 @@ export function ArtifactBody({ data, error, view }: { data: LoadedArtifact | und
       <FrameSkeleton />
     );
   return view === 'preview' && PREVIEWABLE.has(data.type) ? (
-    <ArtifactFrame key={`${data.id}:${data.content.version}:${theme}`} type={data.type} content={data.content.content} theme={theme} />
+    <ArtifactPreview key={`${data.id}:${data.content.version}:${theme}`} data={data} theme={theme} />
   ) : (
     <SourceView code={data.content.content} language={sourceLanguage(data.type, data.language)} />
   );
+}
+
+/** The sandboxed preview, given the images of the conversation the artifact belongs to, for the pictures it refers to by id. */
+function ArtifactPreview({ data, theme }: { data: LoadedArtifact; theme: 'light' | 'dark' }) {
+  return <ArtifactFrame type={data.type} content={data.content.content} theme={theme} images={useSessionImagesOf(data.sessionId)} />;
 }
 
 /** `summary` is the live summary from the session (undefined until known); it drives "follow the latest version". */

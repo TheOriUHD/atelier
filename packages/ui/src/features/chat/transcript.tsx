@@ -18,6 +18,9 @@ import { PhaseText, usePhaseText } from './run-phase.tsx';
 import { ArtifactCard } from './artifact-card.tsx';
 import { InlineVisual } from './inline-visual.tsx';
 import { GeneratedImages } from './generated-images.tsx';
+import { AreaPreview } from '../images/area-preview.tsx';
+import { ChangeAreaProvider } from '../images/change-area.tsx';
+import { SessionImagesProvider } from '../images/session-images.tsx';
 import { ZoomableImage } from './images.tsx';
 import { CopyButton } from './copy-button.tsx';
 import { ReadAloudButton } from './read-aloud.tsx';
@@ -66,6 +69,8 @@ export function Transcript({
   useLowestIndicatorOnly(column);
 
   return (
+    <ChangeAreaProvider sessionId={sessionId}>
+    <SessionImagesProvider messages={live.messages}>
     <div ref={column} className={cn('mx-auto flex w-full max-w-[calc(var(--at-transcript-max)+48px)] flex-col px-6 pt-9 pb-10 max-md:px-4', ROW_GAPS)}>
       {turns.map((turn, i) =>
         turn.kind === 'user' ? (
@@ -130,6 +135,8 @@ export function Transcript({
         </div>
       )}
     </div>
+    </SessionImagesProvider>
+    </ChangeAreaProvider>
   );
 }
 
@@ -206,6 +213,8 @@ const UserMessage = memo(function UserMessage({
   const notice = noticeOf(message);
   // Passages of earlier messages this one replies to.
   const quotes = message.parts.filter((p) => p.type === 'context' && p.notice?.kind === 'quote');
+  // An image they brushed over, to have the marked part changed.
+  const areas = message.parts.flatMap((p) => (p.type === 'context' && p.notice?.kind === 'area' ? [p] : []));
 
   // Only hidden context: a background sub-agent's end as one row, or a muted note, e.g. a Stop hook's feedback that
   // kept the run going, instead of a bubble.
@@ -235,6 +244,7 @@ const UserMessage = memo(function UserMessage({
         </Badge>
       )}
       {quotes.map((p, i) => (p.type === 'context' && p.notice?.kind === 'quote' ? <QuoteBlock key={i} text={p.notice.text} /> : null))}
+      {areas.map((p, i) => (p.notice?.kind === 'area' ? <AreaPreview key={i} image={p.notice.image} mask={p.notice.mask} /> : null))}
       {files.length > 0 && (
         <div className="flex max-w-[85%] flex-wrap justify-end gap-2">
           {files.map((p, i) =>
@@ -256,7 +266,7 @@ const UserMessage = memo(function UserMessage({
           initial={text}
           onCancel={() => onEditing(null)}
           onSave={async (next) => {
-            const parts: Part[] = [...quotes, ...files, { type: 'text', text: next }];
+            const parts: Part[] = [...quotes, ...areas, ...files, { type: 'text', text: next }];
             await rpc().call('chat.edit', { sessionId, messageId: message.id, parts });
             onEditing(null);
           }}
@@ -284,7 +294,7 @@ const UserMessage = memo(function UserMessage({
 
 /** What a message stands for besides its text: a loop's send, or a background sub-agent's end. */
 function noticeOf(message: Message): Notice | undefined {
-  for (const p of message.parts) if (p.type === 'context' && p.notice && p.notice.kind !== 'quote') return p.notice;
+  for (const p of message.parts) if (p.type === 'context' && p.notice && p.notice.kind !== 'quote' && p.notice.kind !== 'area') return p.notice;
   return undefined;
 }
 

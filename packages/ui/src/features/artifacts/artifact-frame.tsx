@@ -4,15 +4,20 @@
  * talks to us through postMessage, and we only listen to messages from this frame's window:
  *   runtime → { type: 'ready' } | { type: 'rendered' } | { type: 'error', message }
  *   parent  → { type: 'render', artifactType, content, theme }   (after 'ready')
- * An HTML artifact replaces the runtime document (and its listeners), so the owner remounts the
+ * `content` has its `atelier-image:img_…` references swapped for data URLs of the conversation's own images first
+ * (image-refs.ts), so the sandbox needs no way to ask for anything. An HTML artifact replaces the runtime document (and its listeners), so the owner remounts the
  * frame (React `key`) whenever content, version or theme change.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { CircleAlert } from 'lucide-react';
 import type { ArtifactType } from '@atelier/protocol';
 import { Icon, cn } from '../../components/ui/index.ts';
 import { reducedMotionClass } from '../../components/ui/styles.ts';
 import { artifactRuntimeUrl } from '../../lib/platform.ts';
+import type { ImageIndex } from '../images/session-images.tsx';
+import { useInlinedImages } from './use-inlined-images.ts';
+
+const NO_IMAGES: ImageIndex = new Map();
 
 type FrameState = { status: 'loading' } | { status: 'rendered' } | { status: 'error'; message: string };
 
@@ -20,21 +25,38 @@ export function ArtifactFrame({
   type,
   content,
   theme,
+  images = NO_IMAGES,
 }: {
   type: ArtifactType;
   content: string;
   theme: 'light' | 'dark';
+  /** The conversation's images, by id, for the `atelier-image:` references in `content`. */
+  images?: ImageIndex;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [state, setState] = useState<FrameState>({ status: 'loading' });
+  const inlined = useInlinedImages(content, images);
+  // The frame says it is ready once; the pictures may still be coming. It is sent what it asked for when both are true.
+  const ready = useRef(false);
+  const sent = useRef(false);
+  const send = useEffectEvent(() => {
+    const target = frame.current?.contentWindow;
+    if (!target || !ready.current || sent.current || inlined.pending) return;
+    sent.current = true;
+    target.postMessage({ type: 'render', artifactType: type, content: inlined.content, theme }, '*');
+  });
+  useEffect(() => send(), [inlined.pending]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const target = frame.current?.contentWindow;
       if (!target || event.source !== target) return;
       const data = event.data as { type?: unknown; message?: unknown } | null;
-      if (data?.type === 'ready') target.postMessage({ type: 'render', artifactType: type, content, theme }, '*');
-      else if (data?.type === 'rendered') setState((s) => (s.status === 'error' ? s : { status: 'rendered' }));
+      if (data?.type === 'ready') {
+        ready.current = true;
+        sent.current = false;
+        send();
+      } else if (data?.type === 'rendered') setState((s) => (s.status === 'error' ? s : { status: 'rendered' }));
       else if (data?.type === 'error')
         setState({
           status: 'error',
