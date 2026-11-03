@@ -120,6 +120,12 @@ scripts or images from other hosts (its Content-Security-Policy would not allow 
 address. The runner program, which runs your commands, contains no network code of its own. The documentation site and the
 product website are separate from the app.
 
+**Copy diagnostics** (**Settings › System**, and the screen shown when a page breaks) sends nothing. It builds a plain-text
+summary on your computer, puts it on your clipboard, and stops there; whether it goes anywhere is up to you when you paste
+it. The summary has the version, system, how many providers and connectors are set up and their types, the last error and
+the end of the app's log, with keys, tokens, addresses, file paths outside Atelier's own folders, email addresses, account and
+computer names and message text taken out. See [Troubleshooting](/troubleshooting/#reporting-a-bug).
+
 With no chat running, the only things Atelier contacts by itself are the desktop update check above and the health and
 model-list requests to the providers you added (for ChatGPT Plan, also the version lookup and the usage request in the
 table). Opening the **Connect to a server** form scans your local network once.

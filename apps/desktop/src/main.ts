@@ -12,7 +12,7 @@ import { autoUpdater } from 'electron-updater';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { access, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { homedir, networkInterfaces } from 'node:os';
+import { homedir, hostname, networkInterfaces, userInfo } from 'node:os';
 import { basename, join, normalize, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
@@ -38,7 +38,8 @@ import { ComputerController } from './computer/controller.ts';
 import { ComputerHelper } from './computer/helper.ts';
 import { createOverlay, type ScreenOverlay } from './computer/overlay.ts';
 import { stepAside, stepBack } from './computer/step-aside.ts';
-import { describe, logMain, openMainLog } from './main-log.ts';
+import { collectDesktopDiagnostics } from './diagnostics.ts';
+import { describe, logMain, openMainLog, readMainLogTail } from './main-log.ts';
 import {
   clearConnection,
   clearToken,
@@ -819,6 +820,20 @@ function registerIpc(): void {
   ipcMain.handle('updates:download', () => updates.download());
   ipcMain.handle('updates:install', () => updates.install());
   ipcMain.handle('system:get', async () => ({ openAtLogin: await launchAtLogin.get(), dataFolder: dataFolder() }));
+  // "Copy diagnostics": the versions and log tail only main has, and this computer's words for the window to hide. The
+  // window redacts and copies; nothing is sent anywhere.
+  ipcMain.handle('diagnostics:get', (_e, input: unknown) =>
+    collectDesktopDiagnostics(input, {
+      versions: process.versions,
+      arch: process.arch,
+      packaged: app.isPackaged,
+      readLog: readMainLogTail,
+      username: () => userInfo().username,
+      hostname,
+      home: homedir,
+      folders: () => [dataFolder(), app.getPath('userData'), app.getPath('logs')],
+    }),
+  );
   ipcMain.handle('system:setOpenAtLogin', (_e, input: unknown) => launchAtLogin.set(z.boolean().parse(input)));
   ipcMain.handle('system:showDataFolder', async () => {
     const error = await shell.openPath(dataFolder());

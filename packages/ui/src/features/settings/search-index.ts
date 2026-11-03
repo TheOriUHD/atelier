@@ -611,6 +611,14 @@ export const SETTINGS_INDEX = [
     available: () => !isLocal(),
   },
   {
+    id: 'system.diagnostics',
+    page: 'system',
+    label: 'Copy diagnostics',
+    description:
+      'Puts a plain-text summary on the clipboard to paste into a bug report: version, system, the last lines of the app log and the last error. Atelier sends nothing by itself, and the text leaves out keys, addresses, message text, file paths and names.',
+    keywords: ['bug report', 'support', 'debug', 'log', 'logs', 'crash', 'error', 'report a problem', 'troubleshooting', 'copy'],
+  },
+  {
     id: 'system.dataFolder',
     page: 'system',
     label: 'Data folder',

@@ -157,6 +157,7 @@ Desktop app only.
 | **Addresses reached from here** *(only where it works)* | Model servers and connectors on this computer or its network that the server may reach through it. |
 | **ChatGPT Chat on this computer** *(only where it works)* | Your ChatGPT Chat models answer through the ChatGPT window of this app. |
 | **Your instructions and skills from this computer** *(only where it works)* | Sessions in folders on this computer use your ~/.claude/CLAUDE.md, ~/.atelier/ATELIER.md, skills, agents, commands and Claude Code settings here. |
+| **Copy diagnostics** | Puts a plain-text summary on the clipboard to paste into a bug report: version, system, the last lines of the app log and the last error. Atelier sends nothing by itself, and the text leaves out keys, addresses, message text, file paths and names. |
 | **Data folder** | Where Atelier keeps its data on this computer. |
 
 ## Settings › Admin › Providers

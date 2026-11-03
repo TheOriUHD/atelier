@@ -172,6 +172,13 @@ interface DesktopBridge {
     showDataFolder(): Promise<void>;
   };
   /**
+   * "Copy diagnostics": versions, the end of the main log and this computer's identifying words (so they can be hidden),
+   * all raw; the window redacts before copying. Absent in desktop shells older than the UI bundle.
+   */
+  diagnostics?: {
+    get(lines?: number): Promise<{ arch: string; electron: string; chrome: string; packaged: boolean; log: string[]; privateStrings: string[]; appFolders: string[] }>;
+  };
+  /**
    * Keeps the computer from sleeping while any of these sessions runs ("Keep computer awake" in a Code session's More
    * menu); an empty list lets it sleep again.
    */

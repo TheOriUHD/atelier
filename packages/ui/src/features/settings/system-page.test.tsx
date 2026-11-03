@@ -90,6 +90,14 @@ describe('System page', () => {
     expect(bridge.updates.check).toHaveBeenCalledTimes(1);
   });
 
+  it('has Copy diagnostics among the computer’s rows', async () => {
+    desktopBridge();
+    renderPage();
+    await waitFor(() => expect(row('system.diagnostics')).toBeTruthy());
+    expect(row('system.diagnostics').textContent).toContain('Copy diagnostics');
+    expect(row('system.diagnostics').textContent).toContain('Atelier sends nothing by itself');
+  });
+
   it('shows the copyright under the version, the name linking to the author', async () => {
     desktopBridge();
     renderPage();

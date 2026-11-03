@@ -337,6 +337,15 @@ See [Run a server](/self-hosting/#the-updater-service).
 
 ## Reporting a bug
 
+Press **Copy diagnostics** (in the desktop app: **Settings › System**, or on the screen Atelier shows when a page breaks)
+and paste the result into your report instead of a photo of the screen. It puts plain text on your clipboard: the version,
+system, whether you run on this computer or a server, the Electron and Chrome versions, your screen size and theme, how many
+providers, image providers and connectors are set up and which provider types, the last error the window hit, and the last
+100 lines of the app's log. It leaves out keys and tokens, addresses (a server shows as `https://server`), file paths
+outside Atelier's own folders, email addresses, your account and computer names, secret ids and anything you wrote or the
+model answered. Read it before you share it; it is only on your clipboard until you paste it. A browser has no app log: for
+a server, add the lines of `docker compose logs atelier` around the time it happened.
+
 Open an issue in the project's GitHub repository. The most useful report has:
 
 - The Atelier version (**Settings › System › Version** in the desktop app; **Settings › Admin › Server** for a server) and

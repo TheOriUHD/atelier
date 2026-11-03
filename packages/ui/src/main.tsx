@@ -8,8 +8,10 @@ import { router } from './app/router.tsx';
 import { Toaster, TooltipProvider } from './components/ui/index.ts';
 import { AuthGate } from './features/auth/auth-gate.tsx';
 import { trackTabFocus } from './lib/focus-mode.ts';
+import { trackErrors } from './lib/last-error.ts';
 
 trackTabFocus();
+trackErrors();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

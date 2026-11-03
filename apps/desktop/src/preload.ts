@@ -104,6 +104,7 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     setOpenAtLogin: (open: boolean) => ipcRenderer.invoke('system:setOpenAtLogin', open),
     showDataFolder: () => ipcRenderer.invoke('system:showDataFolder'),
   },
+  diagnostics: { get: (lines?: number) => ipcRenderer.invoke('diagnostics:get', lines === undefined ? undefined : { lines }) },
   keepAwake: { set: (sessionIds: string[]) => ipcRenderer.send('keep-awake:set', sessionIds) },
   browser: {
     onOpen: (handler: (event: { webContentsId: number; url: string }) => void) => {
