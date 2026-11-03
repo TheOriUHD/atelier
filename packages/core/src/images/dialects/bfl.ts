@@ -12,8 +12,11 @@ import { num, rec, str, strings, toBase64 } from '../../providers/util.ts';
 import { BFL_MODEL_IDS, BFL_MODELS, lookUp } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest } from '../types.ts';
+import { hostedVideo } from './video-common.ts';
 import { assertOwnHost, failure, failureOf, listedModel, noImage, refusal, waitFor } from './hosted.ts';
 
+/** A clip takes minutes. */
+const VIDEO_POLL_MS = 3_000;
 const POLL_MS = 500;
 /** A poll that fails for a moment mustn't lose an image that's already paid for. */
 const MAX_POLL_FAILURES = 5;
@@ -24,7 +27,39 @@ const USD_PER_CREDIT = 0.01;
 
 const headers = (instance: ImageInstance): Record<string, string> => ({ 'content-type': 'application/json', accept: 'application/json', ...instance.headers, ...(instance.apiKey ? { 'x-key': instance.apiKey } : {}) });
 
+/**
+ * FLUX 3 video (read on 2026-11-03: https://docs.bfl.ml/flux_3/flux3_video.md). One endpoint, `mode` says text or image to
+ * video. The docs give a start image as `keyframes` (a URL or base64, not saying whether base64 takes a data URL prefix,
+ * so the bare form the image endpoints take is used); they don't show the JSON of a start and end pair, so there is no
+ * last frame. Not verified against a live key.
+ */
+const VIDEO_MODEL = 'flux-3-video';
+const videoCapabilities = hostedVideo({
+  family: 'flux3-video',
+  ratios: ['21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'],
+  // Names as BFL spells them; hd is 1280 wide, and each step up costs more.
+  resolutions: ['hd', 'fhd', 'qhd', 'uhd'],
+  durations: { kind: 'range', min: 5, max: 20, step: 1 },
+  defaultSeconds: 5,
+  firstFrame: true,
+  audio: 'optional',
+});
+
+function videoBody(request: ImageRequest): Record<string, unknown> {
+  const video = request.video!;
+  return {
+    mode: video.firstFrame ? 'i2v' : 't2v',
+    prompt: request.prompt,
+    duration: video.seconds,
+    ...(video.resolution ? { resolution: video.resolution } : {}),
+    ...(request.aspectRatio ? { aspect_ratio: request.aspectRatio } : {}),
+    ...(video.audio !== undefined ? { generate_audio: video.audio } : {}),
+    ...(video.firstFrame ? { keyframes: toBase64(video.firstFrame.bytes) } : {}),
+  };
+}
+
 function body(request: ImageRequest): Record<string, unknown> {
+  if (request.video) return videoBody(request);
   const images = request.references.map((image) => toBase64(image.bytes));
   // FLUX 3 refuses unknown fields, including FLUX.2's `seed` and `input_image`.
   if (request.capabilities.family === 'flux3') {
@@ -69,6 +104,11 @@ async function* poll(instance: ImageInstance, deps: ImageAdapterDeps, request: I
         const sample = str(result.sample);
         if (!sample) {
           yield noImage(instance);
+          return;
+        }
+        if (request.video) {
+          yield { type: 'video', url: sample };
+          yield { type: 'finish', reason: 'done' };
           return;
         }
         const seed = num(result.seed);
@@ -116,15 +156,15 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
 }
 
 export function createBfl(instance: ImageInstance, deps: ImageAdapterDeps, options: { pollMs?: number } = {}): ImageAdapter {
-  const pollMs = options.pollMs ?? POLL_MS;
-  const ids = [...new Set([...BFL_MODEL_IDS, ...instance.models])];
+  const forVideo = instance.preset === 'bfl-video';
+  const ids = [...new Set([...(forVideo ? [VIDEO_MODEL] : BFL_MODEL_IDS), ...instance.models])];
   return {
     type: 'bfl',
-    listModels: () => Promise.resolve(ids.map((id) => listedModel(instance, id, lookUp(BFL_MODELS, id), instance.models.includes(id) ? 'default' : 'catalog'))),
+    listModels: () => Promise.resolve(ids.map((id) => listedModel(instance, id, forVideo ? videoCapabilities : lookUp(BFL_MODELS, id), instance.models.includes(id) ? 'default' : 'catalog'))),
     // No route says whether a key works without spending credits on it, so the first image does.
     health: () => Promise.resolve({ ok: !!instance.apiKey, latencyMs: null, warnings: [], ...(instance.apiKey ? {} : { error: 'This needs an API key.' }) }),
     generate(request) {
-      return guardImages(request, instance, () => run(instance, deps, request, pollMs));
+      return guardImages(request, instance, () => run(instance, deps, request, options.pollMs ?? (request.video ? VIDEO_POLL_MS : POLL_MS)));
     },
   };
 }

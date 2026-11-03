@@ -239,6 +239,25 @@ describe('VideoService', () => {
     });
   });
 
+  describe('models that need a picture', () => {
+    const needsPicture = () => info({ capabilities: { ...videoCaps, video: { ...videoCaps.video!, firstFrameRequired: true } } });
+
+    it('says so before using a slot, a limit or any money', async () => {
+      const t = setup({ models: [needsPicture()], settings: { maxVideosPerTurn: 1 } });
+      const out = await t.service.generate({ prompt: 'x' }, t.ctx());
+      expect(out.isError).toBe(true);
+      expect(text(out)).toBe('Clip Model makes video only from a picture. Pass the id of one in first_frame, or choose another model.');
+      expect(t.requests).toHaveLength(0);
+      // The turn's one video is still there to use.
+      expect((await setup({ models: [info()], settings: { maxVideosPerTurn: 1 } }).service.generate({ prompt: 'x' }, t.ctx())).isError).toBeUndefined();
+    });
+
+    it('tells the model in the list, and about a length it cannot choose', async () => {
+      const t = setup({ models: [info({ capabilities: { ...videoCaps, video: { ...videoCaps.video!, firstFrameRequired: true, fixedLength: true } } })] });
+      expect(await t.service.modelList({ userId: null, mode: 'chat', temporary: false })).toContain('the model chooses the length; 480p/720p; 16:9 or 9:16; sound optional; needs a picture to start from, in first_frame');
+    });
+  });
+
   describe('limits', () => {
     it('allows two clips a turn and then says to stop', async () => {
       const t = setup();

@@ -49,6 +49,8 @@ export const VideoCapabilities = z.object({
   durations: VideoDurations,
   /** The length used when the call names none. A person can change it per model. */
   defaultSeconds: z.number().positive(),
+  /** The model decides how long the clip is and takes no length: `durations` and `defaultSeconds` are only a guess for sums. */
+  fixedLength: z.boolean().optional(),
   /** Frame rates it takes; absent when it has one it doesn't let anyone change. */
   fps: z.array(z.number().int().positive()).optional(),
   defaultFps: z.number().int().positive().optional(),

@@ -116,11 +116,11 @@ export class VideoService {
         const { video, promptStyle, negativePrompt } = m.capabilities;
         if (!video) return '';
         const traits = [
-          `${describeDurations(video.durations)}, usually ${video.defaultSeconds}`,
+          video.fixedLength ? 'the model chooses the length' : `${describeDurations(video.durations)}, usually ${video.defaultSeconds}`,
           ...(video.resolutions?.length ? [video.resolutions.join('/')] : []),
           ...(m.capabilities.sizes.kind === 'aspect' ? [m.capabilities.sizes.ratios.join(' or ')] : []),
           video.audio === 'none' ? 'silent' : video.audio === 'always' ? 'with sound' : 'sound optional',
-          ...(video.firstFrame ? [video.lastFrame ? 'can start from and end on an image' : 'can start from an image'] : []),
+          ...(video.firstFrameRequired ? ['needs a picture to start from, in first_frame'] : video.firstFrame ? [video.lastFrame ? 'can start from and end on an image' : 'can start from an image'] : []),
           promptStyle === 'tags' ? 'prompt in comma-separated tags' : 'prompt in plain sentences',
           ...(negativePrompt ? ['takes a negative prompt'] : []),
         ];

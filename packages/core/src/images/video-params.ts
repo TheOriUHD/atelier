@@ -99,8 +99,13 @@ export function fitVideo(capabilities: ImageCapabilities, ask: VideoAsk, default
   };
 
   const wanted = ask.seconds ?? defaults.seconds ?? video.defaultSeconds;
-  out.seconds = fitSeconds(video.durations, wanted);
-  if (ask.seconds !== undefined && out.seconds !== ask.seconds) notes.push(`This model makes ${describeDurations(video.durations)}, so the clip is ${out.seconds} seconds.`);
+  if (video.fixedLength) {
+    out.seconds = video.defaultSeconds;
+    if (ask.seconds !== undefined) notes.push('This model chooses how long the clip is, so the length asked for was left out.');
+  } else {
+    out.seconds = fitSeconds(video.durations, wanted);
+    if (ask.seconds !== undefined && out.seconds !== ask.seconds) notes.push(`This model makes ${describeDurations(video.durations)}, so the clip is ${out.seconds} seconds.`);
+  }
 
   // Resolution: by name where the model has names, else by the short side in pixels on a model with free sizes.
   const names = video.resolutions;

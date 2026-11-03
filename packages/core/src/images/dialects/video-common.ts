@@ -25,6 +25,7 @@ export function hostedVideo(options: {
   firstFrame: boolean;
   lastFrame?: boolean;
   firstFrameRequired?: boolean;
+  fixedLength?: boolean;
   audio: VideoCapabilities['audio'];
   seed?: boolean;
   negativePrompt?: boolean;
@@ -43,6 +44,7 @@ export function hostedVideo(options: {
     video: {
       durations: options.durations,
       defaultSeconds: options.defaultSeconds,
+      ...(options.fixedLength ? { fixedLength: true } : {}),
       ...(resolutions ? { resolutions } : {}),
       ...(options.fps?.length ? { fps: [...options.fps] } : {}),
       ...(options.defaultFps ? { defaultFps: options.defaultFps } : {}),

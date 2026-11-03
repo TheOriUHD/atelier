@@ -16,6 +16,7 @@ import { GEMINI_MODELS, lookUp } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 import { failureOf, listedModel, noImage, refusal } from './hosted.ts';
+import { OMNI_MODELS, omniCapabilities, omniHealth, runOmni } from './gemini-omni.ts';
 
 /** The reasons that mean the content was turned down, as opposed to the model making nothing. */
 const REFUSED_FINISH = new Set(['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'RECITATION', 'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION']);
@@ -112,17 +113,20 @@ export function createGemini(instance: ImageInstance, deps: ImageAdapterDeps): I
   return {
     type: 'gemini',
     async listModels(signal) {
+      // Added for video: Gemini Omni, which the models list doesn't mark as a video model, so these are known by name.
+      if (instance.preset === 'gemini-video') return [...new Set([...OMNI_MODELS, ...instance.models])].map((id) => listedModel(instance, id, omniCapabilities, instance.models.includes(id) ? 'default' : 'catalog'));
       // Express mode on Vertex has no list of models.
       if (isVertex(instance)) return typedIn();
       const typed = new Set(instance.models);
       return [...typedIn(), ...(await discovered(signal)).filter((m) => !typed.has(m.modelId))];
     },
     health(signal) {
+      if (instance.preset === 'gemini-video') return omniHealth(instance, deps, signal);
       if (isVertex(instance)) return Promise.resolve({ ok: true, latencyMs: null, warnings: [] });
       return probe(deps, instance, `${root(instance)}/v1beta/models?pageSize=1`, headers(instance), signal);
     },
     generate(request) {
-      return guardImages(request, instance, () => run(instance, deps, request));
+      return guardImages(request, instance, () => (request.video ? runOmni(instance, deps, request) : run(instance, deps, request)));
     },
   };
 }
