@@ -127,18 +127,24 @@ notarization login stay on this Mac; GitHub's own macOS job builds unsigned pack
 | `typecheck`, `lint` and the unit tests | the Linux build machine |
 | `APP.version` and `apps/desktop/package.json` raised, the changelog's Unreleased section cut into the version, the commit `release: <version>` and the tag | this Mac (local only) |
 | Linux packages (AppImage and deb, x64 and arm64), the server images (built, not yet pushed) and the whole end-to-end suite (browser and Electron, under a virtual display) | the Linux build machine |
-| The Windows installer (x64 and arm64) | the Windows build machine |
-| The macOS apps, signed and notarized, in a clean checkout of the tag | this Mac |
+| The Windows installers (one for x64, one for arm64) | the Windows build machine |
+| The macOS apps, signed and notarized, in a clean checkout of the tag: x64 and arm64 signed and sent to Apple side by side, each collected when Apple accepts it | this Mac |
 | Every file checked against its update file (sha512 and size), signatures made | this Mac |
 | **The question:** what will be pushed and published; you type `publish` | |
 | Server images pushed, then `git push` of `main` and the tag, the GitHub release and the update feed, the website's download list, the documentation | |
 | What is live, checked: the feed's files and signatures, the release's assets | |
 
-The three builds run side by side; Apple's notarization is usually the longest wait. When a step fails the command stops and
+The three builds run side by side. The Mac is the longest: signing takes about 2 minutes (both architectures at once), Apple's notarization about 3, and the disk images and zips a minute. (Signing used to take 16: `electron-builder.signed.yml` now skips Chromium's 220 `locale.pak` data files, each of which cost a round trip to Apple's timestamp server.) The Mac's display is kept awake with `caffeinate -d`, because a locked screen locks the keychain and the notarization login can't be read; if a submission fails anyway, the signed apps are kept and the next run only sends them (`package:mac --submit`). When a step fails the command stops and
 says why; run the same command again and finished steps are skipped (the state, the logs and the built files are in
 `~/.atelier-release/builds/<version>/`). Nothing leaves your Mac before the question. `--build-only` builds and checks
 everything and publishes nothing; `--skip qa,e2e,linux,windows,mac,image,docs` leaves parts out; `--yes` publishes without
 asking; `--trailer` adds a line to the commits it makes.
+
+**The preflight** stops before anything is built, with one line per failed check: not on `main`, uncommitted changes, a version that isn't newer, no "What's new" notes or changelog entries, a `*(next release)*` marker left in the docs, out-of-date third-party notices, a build machine that doesn't answer over ssh, no Linux ghcr login (unless `--skip image`), no Developer ID certificate, a notarization login that can't be read (a locked Mac), no Go, `gh` not signed in, no update-signing key, and a Cloudflare login that can't reach the bucket (`wrangler r2 bucket info`, which also renews wrangler's OAuth token).
+
+**Uploads.** The GitHub release and the update feed are filled at the same time, and are limited by the Mac's upload speed (about 6 MB/s in total, 2.7 GB for both before the changes below). So the release sends fewer bytes: the macOS `.dmg` files go to the GitHub release only (see below), and with `--yes` the Linux and Windows packages go to the feed while the Mac is still building (`publish.mjs --packages-only`: no update file, so no app is told about them, and the Worker's download page lists only what the update files announce). `--no-stage` turns that off; without `--yes` nothing leaves the Mac before the question. `publish.mjs` sends 3 files at a time (`ATELIER_PUBLISH_JOBS`), renews wrangler's login once before it starts (several wranglers starting together race on the token and some get a 401), and skips a package that the feed already has with the same size and signature, so a run that continues after a failure sends only what is missing. The GitHub upload likewise skips assets GitHub already has whole (same size and sha256). The site list and the docs deploy side by side.
+
+**The end-to-end tests** run beside the Linux packaging and the image build, which are started with `nice -n 19` and a 10-core cap on the builder container so they don't starve the tests. A test that still fails is run again by itself once those builds are done (`--last-failed`); only a failure that survives that stops the release.
 
 **The build machines** are reached by `ssh` with a key, by the names `atelier-linux` and `atelier-win`
 (`ATELIER_RELEASE_LINUX`, `ATELIER_RELEASE_WINDOWS`, and `ATELIER_RELEASE_WINDOWS_ROOT` for the folder on the Windows
@@ -151,6 +157,25 @@ Mac, and so do your `gh` and `wrangler` logins.
 
 The GitHub workflows `Package` and `Server image` no longer run on tags: they are a fallback, started by hand
 (Actions › Run workflow, choosing the tag), for when the machines are not available. `CI` still runs on every push to `main`.
+
+## Windows installers
+
+The Windows build makes one installer per architecture, `Atelier-Setup-<version>-x64.exe` and `-arm64.exe`
+(`nsis.buildUniversalInstaller: false` in `electron-builder.yml`), and a single `latest.yml` that lists both. Before 0.3.2
+one installer carried both (252 MB, now two files of about 125 MB each). electron-updater picks the entry whose name contains
+`process.arch` (`findFile` in `electron-updater/out/providers/Provider.js`) and falls back to the first `.exe`, in
+electron-updater 6.8.10, which every Atelier from 0.1.0 to now ships, so installed apps choose the right file from the new
+feed without an update of their own (`apps/desktop/src/update-feed-layout.test.ts` runs that code over the real file).
+Keep the architecture in the file name, and keep x64 first in the file. The app also checks the `.sig` of every file the
+update file lists, so both installers need theirs (the release command makes them).
+
+## macOS disk images
+
+A `.dmg` is for a first install, and for the **Download** button on a Mac whose Atelier can't replace itself. It is not
+uploaded to the feed bucket any more (`publish.mjs --disk-images` does it again): it stays on the GitHub release, the website
+links to it there, and the Worker answers a request for a missing `Atelier-<version>[-arm64].dmg` on the feed with a redirect to
+the same file on the release (`GITHUB_REPO` in `wrangler.toml`; the repository must be public). Its `.sig` is on the feed,
+because the app asks for it first. Older releases keep their disk images in the bucket and are served from it.
 
 ## Publish a version by hand
 

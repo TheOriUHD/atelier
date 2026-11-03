@@ -6,7 +6,8 @@
  *   pnpm release 0.1.11 --build-only everything up to a folder of signed files; publishes nothing
  *   pnpm release 0.1.11              run again after a failure: finished steps are skipped (~/.atelier-release/builds/<version>/state.json)
  *
- * Flags: --yes (publish without asking), --skip qa,e2e,linux,windows,mac,image,installer,docs (comma list), --trailer "<line>"
+ * Flags: --yes (publish without asking; it also lets the Linux and Windows packages go to the update feed while the Mac is
+ * still building, see --no-stage), --no-stage, --skip qa,e2e,linux,windows,mac,image,installer,docs (comma list), --trailer "<line>"
  * (added to the commits it makes). The browser and desktop end-to-end tests run on the Linux machine beside the builds.
  *
  * Where things are built (all settable with environment variables, see CONFIG below):
@@ -24,15 +25,18 @@ import { createInterface } from 'node:readline/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+  assetIsCurrent,
   changelogSection,
   checkRelease,
   compareVersions,
   cutChangelog,
   duration,
+  e2eScript,
   expectedFiles,
   hasReleaseNotes,
   imageNames,
   isPackage,
+  nextReleaseProblem,
   parseNotarizationStatus,
   parseUpdateFile,
   parseVersion,
@@ -43,6 +47,8 @@ import {
   setAppVersion,
   setPackageVersion,
 } from './lib.mjs';
+import { ARCHS, macPlan, macProgress } from '../../apps/desktop/scripts/mac-lib.mjs';
+import { onFeed } from '../../apps/site/scripts/kinds.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -63,11 +69,12 @@ const SSH = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliv
 // Arguments
 
 function parseArgs(argv) {
-  const args = { yes: false, buildOnly: false, skip: new Set(), trailer: '', version: undefined };
+  const args = { yes: false, noStage: false, buildOnly: false, skip: new Set(), trailer: '', version: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--yes') args.yes = true;
     else if (a === '--build-only') args.buildOnly = true;
+    else if (a === '--no-stage') args.noStage = true;
     else if (a === '--skip') for (const s of (argv[++i] ?? '').split(',')) args.skip.add(s.trim());
     else if (a === '--trailer') args.trailer = argv[++i] ?? '';
     else if (a === '--help' || a === '-h') args.help = true;
@@ -195,6 +202,20 @@ async function main() {
   await once('tree', 'clean checkout of the tag and the runners', () => makeTree({ tag, tree, work, log: log('tree') }));
 
   // 5. Builds, side by side -------------------------------------------------------------------------------------------
+  // With --yes nobody answers a question later, so what is finished can already go to the update feed while the Mac is
+  // still being signed: the packages only, no update file, so no app is told about them and the Worker's download page
+  // (which lists what the update files announce) doesn't show them. The uplink is idle during the build and the
+  // GitHub release can't be filled early (its tag is pushed after the question), so this takes the feed's share off the end.
+  const staging = args.yes && !args.noStage && !args.buildOnly;
+  if (staging) await once('worker', 'update-feed worker (only when its code changed)', () => deployWorker({ tag, log: log('worker') }));
+  const stage = (platform) =>
+    staging
+      ? once(`staged:${platform}`, `stage the ${platform} packages on the update feed`, async () => {
+          const problems = checkRelease(join(artifacts, platform), version, [platform]);
+          if (problems.length) throw new Error(problems.join('; '));
+          await exec('node', ['deploy/cloudflare/publish.mjs', join(artifacts, platform), channel, '--packages-only'], { log: log(`stage-${platform}`) });
+        }).catch((e) => say(`staging ${platform} failed, the publish sends it later: ${e.message.split('\n')[0]}`))
+      : Promise.resolve();
   const builds = [
     ['installer', () => buildInstaller({ version, tree, work, log: log('installer') })],
     ['linux', () => buildLinux({ tag, version, work, artifacts, log: log('linux'), skipImage: skipped('image'), skipE2e: skipped('e2e'), imageBase: imageNames(repo, tag, prerelease).base })],
@@ -203,10 +224,12 @@ async function main() {
   ].filter(([name]) => !skipped(name));
   const results = await Promise.allSettled(
     builds.map(([name, fn]) =>
-      once(`build:${name}`, `build ${name}`, fn).catch((e) => {
-        say(`${name} failed: ${e.message.split('\n')[0]}`);
-        throw e;
-      }),
+      once(`build:${name}`, `build ${name}`, fn)
+        .then(() => (name === 'windows' || name === 'linux' ? stage(name) : undefined))
+        .catch((e) => {
+          say(`${name} failed: ${e.message.split('\n')[0]}`);
+          throw e;
+        }),
     ),
   );
   const failed = results.map((r, i) => (r.status === 'rejected' ? `${builds[i][0]}: ${r.reason.message}` : null)).filter(Boolean);
@@ -246,8 +269,11 @@ async function main() {
     once('feed', `update feed (${channel})`, () => exec('node', ['deploy/cloudflare/publish.mjs', publish, channel], { log: log('feed') })),
   ]);
   if (!prerelease) {
-    await once('site', 'website download list and deploy', () => deploySite({ tag, version, trailer, log: log('site') }));
-    if (!skipped('docs')) await once('docs', 'documentation deploy', () => deployDocs({ log: log('docs') }));
+    // Independent of each other: the docs build doesn't need the download list.
+    await Promise.all([
+      once('site', 'website download list and deploy', () => deploySite({ tag, version, trailer, log: log('site') })),
+      ...(skipped('docs') ? [] : [once('docs', 'documentation deploy', () => deployDocs({ log: log('docs') }))]),
+    ]);
   }
 
   // 9. Look at what is live --------------------------------------------------------------------------------------------
@@ -305,6 +331,11 @@ async function preflight({ version, tag, args, done = {} }) {
       const notes = readFileSync(join(ROOT, 'packages/ui/src/features/whats-new/release-notes.ts'), 'utf8');
       need(hasReleaseNotes(notes, version), `No "What's new" notes for ${version}: add them to packages/ui/src/features/whats-new/release-notes.ts first.`);
     }
+    if (!isPrereleaseVersion(version)) {
+      const markers = await exec('git', ['grep', '-n', '-F', '*(next release)*', '--', 'apps/docs', 'docs', 'README.md'], { check: false });
+      const marked = nextReleaseProblem(markers.out);
+      if (marked) problems.push(marked);
+    }
     const notices = await exec('node', [join(ROOT, 'deploy/ship/notices.mjs'), '--check'], { check: false });
     need(notices.code === 0, 'The third-party notices are out of date: run pnpm notices and commit the result.');
     const changelog = readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8');
@@ -331,7 +362,11 @@ async function preflight({ version, tag, args, done = {} }) {
     const ids = (await exec('security', ['find-identity', '-v', '-p', 'codesigning'], { check: false })).out;
     need(/Developer ID Application/.test(ids), 'No "Developer ID Application" certificate in the keychain: the macOS apps cannot be signed.');
     const notary = await exec('xcrun', ['notarytool', 'history', '--keychain-profile', process.env.APPLE_KEYCHAIN_PROFILE ?? 'atelier-notary'], { check: false });
-    need(notary.code === 0, 'The notarization login "atelier-notary" does not work (docs/updates.md, "Signing the macOS build").');
+    // A locked keychain (the screen locked) answers "No Keychain password item found": unlock the Mac and keep it awake.
+    need(notary.code === 0, `The notarization login "atelier-notary" does not work${/No Keychain password item/.test(notary.out) ? ' (the Mac looks locked: unlock it, the build keeps it awake from then on)' : ''} (docs/updates.md, "Signing the macOS build").`);
+  }
+  if (!skip('image') && !finished.linux && !skip('linux') && !(await ghcrLogin())) {
+    need(false, `The Linux machine is not logged in to ghcr.io, so the server images could not be pushed: docker login ghcr.io there (or --skip image).`);
   }
   if (!skip('installer')) {
     const go = await exec('go', ['version'], { check: false, env: { PATH: `${process.env.PATH}:/usr/local/go/bin:/opt/homebrew/bin` } });
@@ -340,7 +375,9 @@ async function preflight({ version, tag, args, done = {} }) {
   if (!args.buildOnly) {
     need((await exec('gh', ['auth', 'status'], { check: false })).code === 0, 'The GitHub CLI is not signed in (gh auth login).');
     need(existsSync(CONFIG.updateKey), `No update-signing key at ${CONFIG.updateKey}.`);
-    need((await exec('npx', ['--yes', 'wrangler@4', 'whoami'], { check: false })).out.includes('You are logged in'), 'wrangler is not logged in to Cloudflare (npx wrangler login).');
+    // Asks the bucket itself, which also renews wrangler's OAuth token if it ran out: a login that only says "logged in" can still be refused at the first upload.
+    const bucket = process.env.ATELIER_RELEASES_BUCKET ?? 'atelier-releases';
+    need((await exec('npx', ['--yes', 'wrangler@4', 'r2', 'bucket', 'info', bucket], { check: false })).code === 0, `wrangler can't reach the Cloudflare bucket "${bucket}" (npx wrangler login).`);
   }
   if (problems.length) throw new Error(`Not ready:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
 }
@@ -448,10 +485,19 @@ async function buildLinux({ tag, version, work, artifacts, log, skipImage, skipE
   await uploadTree({ host, ref: null, name, tarball: join(work, 'src.tar.gz'), runnerTar: join(work, 'runner-bin.tar.gz'), log });
   const env = 'export PATH=/usr/local/go/bin:$PATH CI=1';
   await exec('ssh', [...SSH, host, `${env}; cd ~/builds/${name} && pnpm install --frozen-lockfile`], { log });
-  const packages = exec('ssh', [...SSH, host, `${env}; cd ~/builds/${name}/apps/desktop && node scripts/build.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --config electron-builder.yml --linux --publish never`], { log });
+  // nice: the packaging and the image build take the cores the end-to-end tests leave, not the other way round (a test
+  // timed out under their load in 0.3.1).
+  const packages = exec('ssh', [...SSH, host, `${env}; cd ~/builds/${name}/apps/desktop && nice -n 19 node scripts/build.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false nice -n 19 pnpm exec electron-builder --config electron-builder.yml --linux --publish never`], { log });
   const image = skipImage ? Promise.resolve() : buildImages({ host, name, tag, imageBase, log });
-  const e2e = skipE2e ? Promise.resolve() : runE2e({ host, name, log });
-  await Promise.all([packages, image, e2e]);
+  const e2e = skipE2e ? Promise.resolve(null) : runE2e({ host, name, log });
+  const [, , first] = await Promise.all([packages, image, e2e]);
+  if (first && !first.ok) {
+    // It failed beside the builds. Those are done now: the tests that failed run again alone, on a quiet machine.
+    say('end-to-end tests failed while the machine was busy; running the failed ones again on their own …');
+    const again = await runE2e({ host, name, log, lastFailed: true });
+    if (!again.ok) throw new Error(`The end-to-end tests failed on the Linux machine, also when run again alone:\n${again.tail}\n\nThe first run:\n${first.tail}`);
+    say('the failed tests pass on a quiet machine: not a regression, but a test that needs load to fail. See the log.');
+  }
   const dest = join(artifacts, 'linux');
   mkdirSync(dest, { recursive: true });
   const wanted = expectedFiles(version).linux;
@@ -459,7 +505,8 @@ async function buildLinux({ tag, version, work, artifacts, log, skipImage, skipE
 }
 
 async function buildImages({ host, name, tag, imageBase, log }) {
-  const prep = 'docker buildx inspect atelier >/dev/null 2>&1 || docker buildx create --name atelier --driver docker-container >/dev/null; docker buildx use atelier';
+  // The builder runs in a container; capped at 10 of the machine's cores so the tests running beside it keep the rest.
+  const prep = 'docker buildx inspect atelier >/dev/null 2>&1 || docker buildx create --name atelier --driver docker-container >/dev/null; docker buildx use atelier; docker buildx inspect atelier --bootstrap >/dev/null 2>&1; docker update --cpus 10 $(docker ps -q --filter name=buildx_buildkit_atelier) >/dev/null 2>&1 || true';
   const build = (target) => `docker buildx build --platform linux/amd64,linux/arm64 -f apps/server/Dockerfile ${target ? `--target ${target} ` : ''}--build-arg ATELIER_VERSION=${tag} --build-arg ATELIER_IMAGE=${imageBase} --output type=cacheonly .`;
   // The main image first: the other two reuse its layers.
   await exec('ssh', [...SSH, host, `${prep}; cd ~/builds/${name} && ${build('')}`], { log });
@@ -471,21 +518,9 @@ async function buildImages({ host, name, tag, imageBase, log }) {
  * runs it on request. It works in a copy of the tree, because packaging rebuilds the desktop bundle in the other one.
  * One retry absorbs a slow first start of Electron.
  */
-async function runE2e({ host, name, log }) {
-  const script = [
-    'set -eo pipefail',
-    'export PATH=/usr/local/go/bin:$PATH CI=1',
-    // Leftovers of an earlier run that was stopped (ssh does not stop what it started) would hold the test servers' ports.
-    "pkill -u $USER -f 'e2e/serve.mjs|e2e/fake-ollama.mjs|apps/server/dist/server.mjs|playwright' || true",
-    `rm -rf ~/builds/${name}-e2e && cp -a ~/builds/${name} ~/builds/${name}-e2e && cd ~/builds/${name}-e2e`,
-    'pnpm --filter @atelier/server build >/dev/null 2>&1',
-    'pnpm --filter @atelier/desktop build >/dev/null 2>&1',
-    'pnpm exec playwright install chromium >/dev/null 2>&1',
-    'node apps/desktop/node_modules/electron/install.js >/dev/null 2>&1',
-    'ATELIER_SHOW_WINDOW=1 xvfb-run --auto-servernum pnpm e2e --retries=1 2>&1 | tail -40',
-  ].join('\n');
-  const r = await exec('ssh', [...SSH, host, 'bash -s'], { input: script, log, check: false });
-  if (r.code !== 0) throw new Error(`The end-to-end tests failed on the Linux machine:\n${r.out.split('\n').slice(-40).join('\n')}`);
+async function runE2e({ host, name, log, lastFailed = false }) {
+  const r = await exec('ssh', [...SSH, host, 'bash -s'], { input: e2eScript({ name, lastFailed }), log, check: false });
+  return { ok: r.code === 0, tail: r.out.split('\n').slice(-40).join('\n') };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -511,30 +546,40 @@ async function buildWindows({ version, work, artifacts, log }) {
 // macOS: signed and notarized here, in the clean worktree
 
 async function buildMac({ version, tree, artifacts, log }) {
-  // The Mac must stay awake while Apple works on it.
-  const awake = spawn('caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
+  // The Mac must stay awake while it signs and Apple works on it, and its screen must not lock: a locked screen locks the
+  // keychain, and then the notarization login can't be read (0.3.1 lost 23 minutes to that).
+  const awake = spawn('caffeinate', ['-dims', '-w', String(process.pid)], { stdio: 'ignore' });
   awake.unref();
-  const mac = (...extra) => exec('node', ['apps/desktop/scripts/package-mac.mjs', ...extra], { cwd: tree, log, check: false });
-  const state = join(tree, 'apps/desktop/release-mac/notarization.json');
-  if (!existsSync(state)) {
-    const r = await exec('pnpm', ['--filter', '@atelier/desktop', 'package:mac'], { cwd: tree, log });
-    if (!/Both are with Apple/.test(r.out)) throw new Error('package:mac did not send both apps to Apple. See the log.');
-  }
+  const script = 'apps/desktop/scripts/package-mac.mjs';
+  const mac = (...extra) => exec('node', [script, ...extra], { cwd: tree, log, check: false });
+  const archArgs = (archs) => archs.flatMap((arch) => ['--arch', arch]);
+  const release = join(tree, 'apps/desktop/release-mac');
+  // Where each architecture is (a run that failed or was stopped resumes from there; a failed submission needn't sign again).
+  const plan = macPlan(macProgress(release, version, existsSync));
+  const sends = [];
+  if (plan.sign.length) sends.push(exec('node', [script, ...archArgs(plan.sign)], { cwd: tree, log }));
+  if (plan.submit.length) sends.push(exec('node', [script, '--submit', ...archArgs(plan.submit)], { cwd: tree, log }));
+  await Promise.all(sends);
+  // Each architecture is collected as soon as Apple has accepted it, while the other may still be waiting.
   const deadline = Date.now() + CONFIG.notaryTimeoutHours * 3_600_000;
-  for (;;) {
-    const status = parseNotarizationStatus((await mac('--status')).out);
-    const answers = Object.values(status);
-    if (answers.length === 2 && answers.every((s) => s === 'Accepted')) break;
-    const bad = Object.entries(status).find(([, s]) => s === 'Invalid' || s === 'Rejected');
-    if (bad) throw new Error(`Apple rejected the ${bad[0]} app (${bad[1]}). Read the log: ${log}`);
-    if (Date.now() > deadline) throw new Error(`Apple has not finished in ${CONFIG.notaryTimeoutHours} hours (${JSON.stringify(status)}). Run the command again later: the submissions are kept.`);
-    await new Promise((r) => setTimeout(r, 30_000));
-  }
-  const done = await mac('--finish');
-  if (done.code !== 0) throw new Error(`package:mac --finish failed. See the log: ${log}`);
+  await Promise.all(
+    ARCHS.map(async (arch) => {
+      if (macProgress(release, version, existsSync)[arch] === 'done') return;
+      for (;;) {
+        const status = parseNotarizationStatus((await mac('--status', '--arch', arch)).out)[arch];
+        if (status === 'Accepted') break;
+        if (status === 'Invalid' || status === 'Rejected') throw new Error(`Apple rejected the ${arch} app (${status}). Read the log: ${log}`);
+        if (Date.now() > deadline) throw new Error(`Apple has not finished in ${CONFIG.notaryTimeoutHours} hours (${arch}: ${status}). Run the command again later: the submissions are kept.`);
+        await new Promise((r) => setTimeout(r, 15_000));
+      }
+      const done = await mac('--finish', '--arch', arch);
+      if (done.code !== 0) throw new Error(`package:mac --finish --arch ${arch} failed. See the log: ${log}`);
+    }),
+  );
+  if (!existsSync(join(release, 'latest-mac.yml'))) await exec('node', [script, '--feed'], { cwd: tree, log });
   const dest = join(artifacts, 'mac');
   mkdirSync(dest, { recursive: true });
-  for (const file of expectedFiles(version).mac) copyFileSync(join(tree, 'apps/desktop/release-mac', file), join(dest, file));
+  for (const file of expectedFiles(version).mac) copyFileSync(join(release, file), join(dest, file));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -603,7 +648,17 @@ async function githubRelease({ tag, version, repo, prerelease: pre, publish, not
   if (!exists) {
     await exec('gh', ['release', 'create', tag, '--repo', repo, '--draft', '--verify-tag', '--title', `Atelier ${version}`, '--notes-file', notesFile, ...(pre ? ['--prerelease'] : [])], { log });
   }
-  const files = [...readdirSync(publish).map((f) => join(publish, f)), ...(extra ?? [])];
+  const all = [...readdirSync(publish).map((f) => join(publish, f)), ...(extra ?? [])];
+  // A run that continues after a failure sends only what GitHub doesn't have whole: same size and same sha256 (it reports both).
+  const remote = new Map(JSON.parse((await exec('gh', ['release', 'view', tag, '--repo', repo, '--json', 'assets'], { check: false })).out || '{"assets":[]}').assets.map((a) => [a.name, a]));
+  const files = all.filter((f) => {
+    const name = f.split('/').pop();
+    const size = statSync(f).size;
+    const there = remote.get(name);
+    // Small files (signatures, update files) are always sent again: reading them costs nothing and they decide what is served.
+    return !(size > 1_000_000 && there && there.size === size && assetIsCurrent(there, size, createHash('sha256').update(readFileSync(f)).digest('hex')));
+  });
+  if (files.length < all.length) say(`GitHub has ${all.length - files.length} of the files already`);
   for (let i = 0; i < files.length; i += 8) await exec('gh', ['release', 'upload', tag, '--repo', repo, '--clobber', ...files.slice(i, i + 8)], { log });
   await exec('gh', ['release', 'edit', tag, '--repo', repo, '--draft=false', ...(pre ? [] : ['--latest'])], { log });
 }
@@ -611,7 +666,8 @@ async function githubRelease({ tag, version, repo, prerelease: pre, publish, not
 async function deploySite({ tag, version, trailer, log }) {
   await exec('node', ['apps/site/scripts/releases.mjs', tag], { log });
   const list = JSON.parse(readFileSync(join(ROOT, 'apps/site/public/releases.json'), 'utf8'));
-  const unmirrored = Object.values(list.assets).filter((a) => !a.url.startsWith(CONFIG.feed));
+  // The macOS disk images link to the GitHub release; everything else must be on the feed.
+  const unmirrored = Object.entries(list.assets).filter(([kind, a]) => onFeed(kind) && !a.url.startsWith(CONFIG.feed)).map(([, a]) => a);
   if (unmirrored.length) throw new Error(`The download list still points at GitHub for ${unmirrored.map((a) => a.name).join(', ')}: the feed copy is missing or a different size.`);
   await exec('npx', ['--yes', 'wrangler@4', 'deploy', '-c', 'apps/site/wrangler.jsonc'], { log });
   if (git('status', '--porcelain', 'apps/site/public/releases.json')) {
@@ -684,8 +740,11 @@ async function verifyLive({ version, tag, channel, repo, publish, installerFiles
   }
   for (const file of names.filter(isPackage)) {
     const size = statSync(join(publish, file)).size;
-    const head = await fetch(`${CONFIG.feed}/${channel}/${encodeURIComponent(file)}`, { method: 'HEAD' }).catch(() => null);
-    if (!head?.ok) problems.push(`feed: ${file} is not served (${head?.status ?? 'no answer'})`);
+    const head = await fetch(`${CONFIG.feed}/${channel}/${encodeURIComponent(file)}`, { method: 'HEAD', redirect: 'manual' }).catch(() => null);
+    if (file.endsWith('.dmg') && head && head.status >= 300 && head.status < 400) {
+      // Not in the bucket: the Worker sends it to the same file on the GitHub release (checked below with the assets).
+      if (!(head.headers.get('location') ?? '').includes(`/releases/download/${tag}/`)) problems.push(`feed: ${file} is sent to ${head.headers.get('location')}, not to the ${tag} release`);
+    } else if (!head?.ok) problems.push(`feed: ${file} is not served (${head?.status ?? 'no answer'})`);
     else if (Number(head.headers.get('content-length')) !== size) problems.push(`feed: ${file} is ${head.headers.get('content-length')} bytes there, ${size} here`);
     const sig = await fetch(`${CONFIG.feed}/${channel}/${encodeURIComponent(`${file}.sig`)}`, { method: 'HEAD' }).catch(() => null);
     if (!sig?.ok) problems.push(`feed: ${file}.sig is not served`);

@@ -97,7 +97,8 @@ export function expectedFiles(version) {
   const macPackages = [`Atelier-${v}-mac.zip`, `Atelier-${v}-arm64-mac.zip`, `Atelier-${v}.dmg`, `Atelier-${v}-arm64.dmg`];
   return {
     linux: [`Atelier-${v}.AppImage`, `Atelier-${v}-arm64.AppImage`, `Atelier-${v}-amd64.deb`, `Atelier-${v}-arm64.deb`, 'latest-linux.yml', 'latest-linux-arm64.yml'],
-    windows: [`Atelier-Setup-${v}.exe`, `Atelier-Setup-${v}.exe.blockmap`, 'latest.yml'],
+    // One installer per architecture (electron-builder.yml, nsis.buildUniversalInstaller): latest.yml lists both.
+    windows: [`Atelier-Setup-${v}-x64.exe`, `Atelier-Setup-${v}-x64.exe.blockmap`, `Atelier-Setup-${v}-arm64.exe`, `Atelier-Setup-${v}-arm64.exe.blockmap`, 'latest.yml'],
     mac: [...macPackages, ...blockmaps(macPackages), 'latest-mac.yml'],
   };
 }
@@ -205,4 +206,51 @@ export function renderInstaller(template, version, sums) {
   if (!template.includes('@VERSION@') || !template.includes('@SUMS@')) throw new Error('The installer template lacks @VERSION@ or @SUMS@.');
   // The checksums sit on separate lines inside the shell string.
   return template.replace('@VERSION@', version).replace('@SUMS@', `\n${lines.join('\n')}\n`);
+}
+
+
+/** The doc markers for features that are not out yet; a release must not leave one behind (it stayed in three pages for six releases). */
+export const NEXT_RELEASE_MARKER = '*(next release)*';
+
+/** The search output for the marker (file:line:text per line) as a one-line problem for the preflight, or null when there is none. */
+export function nextReleaseProblem(searchOutput) {
+  const lines = searchOutput.split('\n').filter(Boolean);
+  if (!lines.length) return null;
+  const where = lines.slice(0, 4).map((l) => l.split(':').slice(0, 2).join(':'));
+  return `${lines.length} place${lines.length === 1 ? '' : 's'} in the docs still say ${NEXT_RELEASE_MARKER} (${where.join(', ')}${lines.length > 4 ? ', …' : ''}): remove the marker or the text.`;
+}
+
+/**
+ * The shell script that runs the end-to-end suite on the Linux machine. The first pass runs beside the package and image
+ * builds, which can slow a test past its timeout; a test that fails then is run again by itself (`lastFailed`) once those
+ * are done, on a quiet machine, so only a failure that stays counts. `name` is the build's folder under ~/builds.
+ */
+export function e2eScript({ name, lastFailed = false }) {
+  const run = 'ATELIER_SHOW_WINDOW=1 xvfb-run --auto-servernum pnpm e2e --retries=1 2>&1 | tail -40';
+  return [
+    'set -eo pipefail',
+    'export PATH=/usr/local/go/bin:$PATH CI=1',
+    // Leftovers of an earlier run that was stopped (ssh does not stop what it started) would hold the test servers' ports.
+    "pkill -u $USER -f 'e2e/serve.mjs|e2e/fake-ollama.mjs|apps/server/dist/server.mjs|playwright' || true",
+    ...(lastFailed
+      ? [
+          `cd ~/builds/${name}-e2e`,
+          // Nothing recorded (the suite never started) means there is nothing to run again: that failure stands.
+          `node -e "const r=require('./test-results/.last-run.json'); process.exit(r.failedTests && r.failedTests.length ? 0 : 1)" || { echo 'no failed tests were recorded'; exit 1; }`,
+          run.replace('pnpm e2e --retries=1', 'pnpm e2e --last-failed --retries=1'),
+        ]
+      : [
+          `rm -rf ~/builds/${name}-e2e && cp -a ~/builds/${name} ~/builds/${name}-e2e && cd ~/builds/${name}-e2e`,
+          'pnpm --filter @atelier/server build >/dev/null 2>&1',
+          'pnpm --filter @atelier/desktop build >/dev/null 2>&1',
+          'pnpm exec playwright install chromium >/dev/null 2>&1',
+          'node apps/desktop/node_modules/electron/install.js >/dev/null 2>&1',
+          run,
+        ]),
+  ].join('\n');
+}
+
+/** Whether a release asset that GitHub has (`gh release view --json assets`) is this very file: uploaded whole, same size, same sha256. */
+export function assetIsCurrent(remote, size, sha256) {
+  return !!remote && remote.state === 'uploaded' && remote.size === size && remote.digest === `sha256:${sha256}`;
 }

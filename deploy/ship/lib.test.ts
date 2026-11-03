@@ -4,14 +4,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  assetIsCurrent,
   changelogSection,
   checkRelease,
   compareVersions,
   cutChangelog,
   duration,
+  e2eScript,
   expectedFiles,
   hasReleaseNotes,
   imageNames,
+  nextReleaseProblem,
   parseNotarizationStatus,
   parseUpdateFile,
   parseVersion,
@@ -98,7 +101,7 @@ describe('update files', () => {
   it('lists what a release has per platform', () => {
     const files = expectedFiles('0.1.10');
     expect(files.linux).toContain('Atelier-0.1.10-amd64.deb');
-    expect(files.windows).toEqual(['Atelier-Setup-0.1.10.exe', 'Atelier-Setup-0.1.10.exe.blockmap', 'latest.yml']);
+    expect(files.windows).toEqual(['Atelier-Setup-0.1.10-x64.exe', 'Atelier-Setup-0.1.10-x64.exe.blockmap', 'Atelier-Setup-0.1.10-arm64.exe', 'Atelier-Setup-0.1.10-arm64.exe.blockmap', 'latest.yml']);
     expect(files.mac).toContain('Atelier-0.1.10-arm64.dmg.blockmap');
     expect(files.mac).toContain('latest-mac.yml');
   });
@@ -109,14 +112,17 @@ describe('checking a folder of built files', () => {
   afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
   const sha = (data: string) => createHash('sha512').update(data).digest('base64');
 
-  /** A complete Windows release: the installer, its block map and an update file that describes them. */
+  /** A complete Windows release: an installer per architecture, their block maps and the update file that lists both. */
   function windowsFolder(version: string, content = 'installer bytes') {
     const dir = mkdtempSync(join(tmpdir(), 'release-check-'));
     dirs.push(dir);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `Atelier-Setup-${version}.exe`), content);
-    writeFileSync(join(dir, `Atelier-Setup-${version}.exe.blockmap`), 'map');
-    writeFileSync(join(dir, 'latest.yml'), `version: ${version}\nfiles:\n  - url: Atelier-Setup-${version}.exe\n    sha512: ${sha('installer bytes')}\n    size: ${content.length}\npath: x\n`);
+    const entries = ['x64', 'arm64'].map((arch) => {
+      writeFileSync(join(dir, `Atelier-Setup-${version}-${arch}.exe`), arch === 'x64' ? content : 'arm installer bytes');
+      writeFileSync(join(dir, `Atelier-Setup-${version}-${arch}.exe.blockmap`), 'map');
+      return `  - url: Atelier-Setup-${version}-${arch}.exe\n    sha512: ${sha(arch === 'x64' ? 'installer bytes' : 'arm installer bytes')}\n    size: ${(arch === 'x64' ? content : 'arm installer bytes').length}\n`;
+    });
+    writeFileSync(join(dir, 'latest.yml'), `version: ${version}\nfiles:\n${entries.join('')}path: x\n`);
     return dir;
   }
 
@@ -126,9 +132,13 @@ describe('checking a folder of built files', () => {
 
   it('names every problem: a missing file, another version, a changed package', () => {
     expect(checkRelease(windowsFolder('0.1.10'), '0.1.10', ['windows', 'linux']).filter((p) => p.startsWith('linux'))).toHaveLength(6);
-    expect(checkRelease(windowsFolder('0.1.9'), '0.1.10', ['windows']).join('\n')).toMatch(/Atelier-Setup-0\.1\.10\.exe is missing/);
+    // Both installers are held to the update file: a missing ARM64 one is named, too.
+    const noArm = windowsFolder('0.1.10');
+    rmSync(join(noArm, 'Atelier-Setup-0.1.10-arm64.exe'));
+    expect(checkRelease(noArm, '0.1.10', ['windows']).join('\n')).toMatch(/Atelier-Setup-0\.1\.10-arm64\.exe is missing/);
+    expect(checkRelease(windowsFolder('0.1.9'), '0.1.10', ['windows']).join('\n')).toMatch(/Atelier-Setup-0\.1\.10-x64\.exe is missing/);
     const tampered = windowsFolder('0.1.10', 'different bytes!');
-    expect(checkRelease(tampered, '0.1.10', ['windows'])).toEqual(['Atelier-Setup-0.1.10.exe does not match the sha512 in latest.yml']);
+    expect(checkRelease(tampered, '0.1.10', ['windows'])).toEqual(['Atelier-Setup-0.1.10-x64.exe does not match the sha512 in latest.yml']);
     const wrongVersion = windowsFolder('0.1.10');
     writeFileSync(join(wrongVersion, 'latest.yml'), readYml(wrongVersion).replace('version: 0.1.10', 'version: 0.1.9'));
     expect(checkRelease(wrongVersion, '0.1.10', ['windows'])).toEqual(['latest.yml says version 0.1.9, not 0.1.10']);
@@ -157,6 +167,39 @@ describe('smaller helpers', () => {
   it('says how long something took, and reads Apple’s answers', () => {
     expect([4_000, 65_000, 3_700_000].map(duration)).toEqual(['4s', '1m 05s', '1h 01m']);
     expect(parseNotarizationStatus('  arm64: Accepted  (29fee00c, sent 2026-10-21)\n  x64: In Progress  (bd59, sent x)\n')).toEqual({ arm64: 'Accepted', x64: 'In Progress' });
+  });
+});
+
+describe('what the preflight and the Linux machine are told', () => {
+  it('names where a leftover *(next release)* marker is, and says nothing without one', () => {
+    expect(nextReleaseProblem('')).toBeNull();
+    expect(nextReleaseProblem('apps/docs/a.md:3:- x *(next release)*\ndocs/b.md:9:y *(next release)*\n')).toBe('2 places in the docs still say *(next release)* (apps/docs/a.md:3, docs/b.md:9): remove the marker or the text.');
+    expect(nextReleaseProblem('README.md:1:x')).toMatch(/^1 place in/);
+    expect(nextReleaseProblem(['a:1:x', 'b:2:x', 'c:3:x', 'd:4:x', 'e:5:x'].join('\n'))).toMatch(/d:4, …\)/);
+  });
+
+  it('runs the end-to-end suite in a copy of the build, and runs only the failed tests again for the second pass', () => {
+    const first = e2eScript({ name: 'v1.2.3' });
+    expect(first).toContain('cp -a ~/builds/v1.2.3 ~/builds/v1.2.3-e2e');
+    expect(first).toContain('pnpm e2e --retries=1');
+    expect(first).not.toContain('--last-failed');
+    const again = e2eScript({ name: 'v1.2.3', lastFailed: true });
+    expect(again).toContain('cd ~/builds/v1.2.3-e2e');
+    expect(again).toContain('pnpm e2e --last-failed --retries=1');
+    // The second pass doesn't copy the build over the results it reads, and refuses to pass when no failure was recorded.
+    expect(again).not.toContain('cp -a');
+    expect(again).toContain('no failed tests were recorded');
+    // Leftover test servers from a stopped run go first in both.
+    expect(again).toMatch(/^pkill|\npkill -u \$USER/m);
+  });
+
+  it('counts a GitHub asset as there only when it is uploaded whole with the same size and sha256', () => {
+    const remote = { state: 'uploaded', size: 10, digest: 'sha256:abc' };
+    expect(assetIsCurrent(remote, 10, 'abc')).toBe(true);
+    expect(assetIsCurrent(remote, 11, 'abc')).toBe(false);
+    expect(assetIsCurrent(remote, 10, 'abd')).toBe(false);
+    expect(assetIsCurrent({ ...remote, state: 'starter' }, 10, 'abc')).toBe(false);
+    expect(assetIsCurrent(undefined, 10, 'abc')).toBe(false);
   });
 });
 
