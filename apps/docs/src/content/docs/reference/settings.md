@@ -23,6 +23,7 @@ see are hidden in the app.
 | **Default model** | New chats start with this model. “Server default” follows the one set for everyone. |
 | **Start with the model I used last** | The model you pick in a conversation is the one the next new conversation starts with. Turn it off to always start with the default model above. |
 | **Default image model** *(only where it works)* | What makes your images, unless you pick another in a conversation or name one when you ask. |
+| **Default video model** *(only where it works)* | What makes your videos, unless you name another when you ask. A model that makes video from a picture only needs one to start from. |
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |
 
@@ -172,21 +173,26 @@ Admins only.
 | **Detected on this machine** | Local servers on their default ports and API keys in the environment. |
 | **Add provider** | Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, GitHub Copilot, OpenRouter, a ChatGPT plan or any OpenAI-compatible endpoint. |
 
-## Settings › Admin › Image providers
+## Settings › Admin › Image & video
 
 Admins only.
 
 | Setting | What it does |
 |---|---|
 | **Found on this computer** | Image servers answering on their default ports here. |
-| **Image providers** | Where images are made, separate from the providers of text models. |
-| **Add image provider** | Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai. |
-| **Image models** | Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler. The text model reads the description when it chooses. |
+| **Image and video providers** | Where images and videos are made, separate from the providers of text models. |
+| **Add image or video provider** | Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai. The video ones are listed with their own names. |
+| **Image and video models** | Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler, or for video its usual length, frame rate and resolution. The text model reads the description when it chooses. |
 | **Default image model for everyone** | What makes images unless a person or a conversation chooses another. |
+| **Default video model for everyone** *(only where it works)* | What makes videos unless a person chooses another or names one when they ask. |
 | **Let models make images** | Off: conversations don’t get the tool, whichever providers are set up. |
 | **Images per turn** | How many images one reply can make, so text on a web page can’t run up a bill. |
 | **Images per person per day** | Counted across all of a person’s conversations, including deleted ones. |
 | **Spend per person per day** | Counts images with a known or estimated cost. Local servers cost nothing here. |
+| **Let models make videos** *(only where it works)* | Off: conversations don’t get the video tool, whichever providers are set up. Images are not affected. |
+| **Videos per turn** *(only where it works)* | How many videos one reply can make. A video takes minutes and costs far more than an image, so the default is 2. |
+| **Videos per person per day** *(only where it works)* | Counted across all of a person’s conversations, including deleted ones. |
+| **Video spend per person per day** *(only where it works)* | Counts videos with a known or estimated cost. Local servers cost nothing here. |
 
 ## Settings › Admin › Models
 

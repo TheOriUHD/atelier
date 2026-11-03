@@ -1,4 +1,4 @@
-/** Settings › Admin › Image providers (ARCHITECTURE §23): where images are made, which models people get, and the limits. */
+/** Settings › Admin › Image & video (ARCHITECTURE §23): where images and videos are made, which models people get, and the limits. */
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Cloud, MoreHorizontal, Pencil, Plus, RefreshCw, Server, SlidersHorizontal, Star, Trash2, Workflow } from 'lucide-react';
@@ -19,7 +19,7 @@ import {
   cn,
   toast,
 } from '../../components/ui/index.ts';
-import { keys, useImageModels, useImageProviderStatus, useSettings } from '../../lib/queries.ts';
+import { keys, makesVideo, useImageModels, useImageProviderStatus, useSettings, useVideoGeneration } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { ImageModelDialog } from './image-model-dialog.tsx';
 import { detectedDraft, presetFor } from './image-provider-form.ts';
@@ -241,19 +241,28 @@ function ImageModelsSection() {
     return [...byProvider];
   }, [models]);
   const fallback = useSetting<string | undefined>(['models', 'defaults', 'image']);
-  const visible = models.filter((m) => !m.hidden);
+  const videoFallback = useSetting<string | undefined>(['models', 'defaults', 'video']);
+  const videos = useVideoGeneration();
+  // Pictures and clips each have a default: a picture model can't make a clip, nor the other way round.
+  const visible = models.filter((m) => !m.hidden && !makesVideo(m));
+  const visibleVideos = models.filter((m) => !m.hidden && makesVideo(m));
   const entry = settingEntry('imageModels.list');
   return (
     <SettingsSection id="imageModels.list" title={entry.label} description={entry.description}>
       <SettingRow id="models.defaults.image" setting={fallback} error={isUnavailable(fallback.value, visible) ? 'This model is no longer available. Images use the first available model until you choose another.' : null}>
         {(label) => <ModelSelect {...label} setting={fallback} unsetLabel="First available model" models={visible} providerNames={providerNames} />}
       </SettingRow>
+      {videos && (
+        <SettingRow id="models.defaults.video" setting={videoFallback} error={isUnavailable(videoFallback.value, visibleVideos) ? 'This model is no longer available. Videos use the first available model until you choose another.' : null}>
+          {(label) => <ModelSelect {...label} setting={videoFallback} unsetLabel="First available model" models={visibleVideos} providerNames={providerNames} />}
+        </SettingRow>
+      )}
       {groups.length === 0 ? (
-        <p className="py-3 text-body text-fg-muted">Models appear here once an image provider is connected.</p>
+        <p className="py-3 text-body text-fg-muted">Models appear here once an image or video provider is connected.</p>
       ) : (
         <div className="mt-3 flex flex-col gap-6">
           {groups.map(([providerId, group]) => (
-            <ImageModelTable key={providerId} label={providerNames.get(providerId) ?? providerId} models={group} defaultRef={fallback.value} onMakeDefault={(ref) => void fallback.set(ref)} />
+            <ImageModelTable key={providerId} label={providerNames.get(providerId) ?? providerId} models={group} defaultRef={fallback.value} defaultVideoRef={videoFallback.value} onMakeDefault={(model) => void (makesVideo(model) ? videoFallback : fallback).set(model.ref)} />
           ))}
         </div>
       )}
@@ -267,7 +276,7 @@ const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_176px_32px_44px_32px] items-cente
 /** Past this many a table gets a search box: a ComfyUI folder can hold dozens of checkpoints. */
 const SEARCH_FROM = 10;
 
-function ImageModelTable({ label, models, defaultRef, onMakeDefault }: { label: string; models: ImageModelInfo[]; defaultRef: string | undefined; onMakeDefault(ref: string): void }) {
+function ImageModelTable({ label, models, defaultRef, defaultVideoRef, onMakeDefault }: { label: string; models: ImageModelInfo[]; defaultRef: string | undefined; defaultVideoRef: string | undefined; onMakeDefault(model: ImageModelInfo): void }) {
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
   const shown = models.filter((m) => !query || `${m.displayName} ${m.modelId}`.toLowerCase().includes(query));
@@ -294,7 +303,7 @@ function ImageModelTable({ label, models, defaultRef, onMakeDefault }: { label: 
           </span>
         </div>
         {shown.map((m) => (
-          <ImageModelRow key={m.ref} model={m} isDefault={m.ref === defaultRef} onMakeDefault={() => onMakeDefault(m.ref)} />
+          <ImageModelRow key={m.ref} model={m} isDefault={m.ref === (makesVideo(m) ? defaultVideoRef : defaultRef)} onMakeDefault={() => onMakeDefault(m)} />
         ))}
       </div>
       {shown.length === 0 && <p className="py-6 text-center text-body text-fg-muted">No matching models.</p>}
@@ -344,9 +353,20 @@ function ImageModelRow({ model, isDefault, onMakeDefault }: { model: ImageModelI
         {model.description && <p className="truncate text-footnote text-fg-muted">{model.description}</p>}
       </div>
       <div role="cell" className="flex flex-wrap gap-1 max-md:hidden">
-        {family && <Badge>{family}</Badge>}
-        {caps.edit && <Badge>Edits</Badge>}
-        {caps.previews && <Badge>Previews</Badge>}
+        {caps.video ? (
+          <>
+            <Badge tone="accent">Video</Badge>
+            <Badge>{lengthLabel(caps.video)}</Badge>
+            {caps.video.audio !== 'none' && <Badge>Sound</Badge>}
+            {caps.video.firstFrame && <Badge>{caps.video.firstFrameRequired ? 'From a picture' : 'Starts from a picture'}</Badge>}
+          </>
+        ) : (
+          <>
+            {family && <Badge>{family}</Badge>}
+            {caps.edit && <Badge>Edits</Badge>}
+            {caps.previews && <Badge>Previews</Badge>}
+          </>
+        )}
       </div>
       <div role="cell">
         <Button iconOnly size="sm" variant="ghost" aria-label={`Favorite ${name}`} aria-pressed={isFavorite} onClick={() => (isFavorite ? favorite.clear() : favorite.set(true))}>
@@ -374,16 +394,41 @@ function ImageModelRow({ model, isDefault, onMakeDefault }: { model: ImageModelI
   );
 }
 
+/** "4 to 8 s", "6 s", "1 to 15 s": the lengths a video model makes, for its row. */
+function lengthLabel(video: NonNullable<ImageModelInfo['capabilities']['video']>): string {
+  if (video.fixedLength) return 'Its own length';
+  const { durations } = video;
+  const [low, high] = durations.kind === 'list' ? [Math.min(...durations.seconds), Math.max(...durations.seconds)] : [durations.min, durations.max];
+  return low === high ? `${low} s` : `${low}–${high} s`;
+}
+
+function VideoGenerationRows() {
+  const enabled = useSetting<boolean | undefined>(['imageGeneration', 'videoEnabled']);
+  return (
+    <>
+      {/* Absent means on, for settings saved before video existed. */}
+      <SettingRow id="imageGeneration.videoEnabled" setting={enabled}>
+        {(label) => <Switch {...label} checked={enabled.value !== false} onCheckedChange={(on) => void enabled.set(on)} />}
+      </SettingRow>
+      <LimitRow id="imageGeneration.maxVideosPerTurn" field="maxVideosPerTurn" problem="Enter a whole number from 1 to 20." parse={(text) => wholeNumber(text, 20)} unit="videos" fallback="2" />
+      <LimitRow id="imageGeneration.maxVideosPerUserPerDay" field="maxVideosPerUserPerDay" problem="Enter a whole number, or leave it empty for no limit." parse={(text) => wholeNumber(text, Number.MAX_SAFE_INTEGER)} unit="videos" />
+      <LimitRow id="imageGeneration.maxVideoSpendPerUserPerDayUsd" field="maxVideoSpendPerUserPerDayUsd" problem="Enter dollars, or leave it empty for no limit." parse={dollars} unit="dollars" />
+    </>
+  );
+}
+
 function ImageGenerationSection() {
   const enabled = useSetting<boolean>(['imageGeneration', 'enabled']);
+  const videos = useVideoGeneration();
   return (
-    <SettingsSection title="Image generation">
+    <SettingsSection title="Image and video generation">
       <SettingRow id="imageGeneration.enabled" setting={enabled}>
         {(label) => <Switch {...label} checked={enabled.value} onCheckedChange={(on) => void enabled.set(on)} />}
       </SettingRow>
       <LimitRow id="imageGeneration.maxImagesPerTurn" field="maxImagesPerTurn" problem="Enter a whole number from 1 to 100." parse={(text) => wholeNumber(text, 100)} required unit="images" />
       <LimitRow id="imageGeneration.maxImagesPerUserPerDay" field="maxImagesPerUserPerDay" problem="Enter a whole number, or leave it empty for no limit." parse={(text) => wholeNumber(text, Number.MAX_SAFE_INTEGER)} unit="images" />
       <LimitRow id="imageGeneration.maxSpendPerUserPerDayUsd" field="maxSpendPerUserPerDayUsd" problem="Enter dollars, or leave it empty for no limit." parse={dollars} unit="dollars" />
+      {videos && <VideoGenerationRows />}
     </SettingsSection>
   );
 }
@@ -399,7 +444,7 @@ function dollars(text: string): number | null {
 }
 
 /** A number that saves as it's typed. Left empty, an optional limit goes, and a required one keeps its value. */
-function LimitRow({ id, field, problem, parse, required, unit }: { id: SettingId; field: keyof Settings['imageGeneration']; problem: string; parse(text: string): number | null; required?: boolean; unit: string }) {
+function LimitRow({ id, field, problem, parse, required, unit, fallback }: { id: SettingId; field: keyof Settings['imageGeneration']; problem: string; parse(text: string): number | null; required?: boolean; unit: string; /** What applies while it is empty, shown in the field. */ fallback?: string }) {
   const setting = useSetting<number | undefined>(['imageGeneration', field]);
   const [invalid, setInvalid] = useState(false);
   const draft = useDraftText({
@@ -419,7 +464,7 @@ function LimitRow({ id, field, problem, parse, required, unit }: { id: SettingId
     <SettingRow id={id} setting={setting} error={invalid ? problem : null}>
       {(label) => (
         <div className="flex items-center gap-2">
-          <TextField {...label} {...draft} inputMode="decimal" placeholder={required ? undefined : 'No limit'} invalid={invalid} className="w-24 text-right" />
+          <TextField {...label} {...draft} inputMode="decimal" placeholder={required ? undefined : (fallback ?? 'No limit')} invalid={invalid} className="w-24 text-right" />
           <span className="text-body text-fg-muted">{unit}</span>
         </div>
       )}

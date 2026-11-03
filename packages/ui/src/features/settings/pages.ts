@@ -86,7 +86,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'system', label: 'System', icon: Laptop, group: 'Settings', available: () => !!desktop },
   { id: 'providers', label: 'Providers', icon: Plug, group: 'Admin' },
   // Separate from text providers (ARCHITECTURE §23). An older server has neither the page's calls nor its settings.
-  { id: 'image-providers', label: 'Image providers', icon: Images, group: 'Admin', available: () => imageGenerationOffered() },
+  { id: 'image-providers', label: 'Image & video', icon: Images, group: 'Admin', available: () => imageGenerationOffered() },
   { id: 'models', label: 'Models', icon: Box, group: 'Admin' },
   { id: 'capabilities', label: 'Capabilities', icon: BriefcaseBusiness, group: 'Admin' },
   // Everyone's Code sessions: permission rules and the system AGENTS.md.

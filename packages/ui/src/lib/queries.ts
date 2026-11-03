@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the RPC contract; backend events keep caches fresh without polling. */
 import { useEffect } from 'react';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { defaultUserPrefs, type AppInfo, type DiffCompare, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { defaultUserPrefs, type AppInfo, type DiffCompare, type ImageModelInfo, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
 import { setPath } from './json-path.ts';
 import { rpc } from './rpc.ts';
 
@@ -272,6 +272,17 @@ export function useLimits() {
   const offered = !!useAppInfo().data?.usageLimits;
   return useQuery({ queryKey: keys.limits, queryFn: () => rpc().call('limits.mine', {}), enabled: offered, staleTime: 0 });
 }
+
+/** For code outside React: this backend can make video too. */
+export const videoGenerationOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.videoGeneration;
+
+/** This backend can generate video: false on an older server, and until `app.info` answers. */
+export function useVideoGeneration(): boolean {
+  return !!useAppInfo().data?.videoGeneration;
+}
+
+/** Whether a model makes video. The picture pickers leave these out; the video ones keep only these. A model without capabilities (an older backend's cache) makes pictures. */
+export const makesVideo = (model: Pick<ImageModelInfo, 'capabilities'>): boolean => (model.capabilities as ImageModelInfo['capabilities'] | undefined)?.output === 'video';
 
 /** This backend can generate images: false on an older server, and until `app.info` answers. */
 export function useImageGeneration(): boolean {

@@ -194,7 +194,12 @@ export function ImageProviderWizard({ open, onOpenChange, existing }: ImageProvi
                 onHiddenChange={(m, value) => setHidden((h) => new Map(h).set(m.ref, value))}
               />
             )}
-            {models.length > 0 && <TestImage key={tested.run} draft={toImageDraft(form)} preset={form.preset} models={models} />}
+            {models.some((m) => m.capabilities.output !== 'video') && <TestImage key={tested.run} draft={toImageDraft(form)} preset={form.preset} models={models.filter((m) => m.capabilities.output !== 'video')} />}
+            {models.length > 0 && models.every((m) => m.capabilities.output === 'video') && (
+              <p className="mt-4 rounded-xl border border-line bg-fill-control p-4 text-footnote text-fg-secondary">
+                There is no test clip: a video takes minutes and costs real money, so the check above, which lists the models with your key, is all this does. The first video is made when someone asks for one in a chat.
+              </p>
+            )}
             {saveError && (
               <p role="alert" className="mt-4 text-body text-danger-text">
                 {saveError}

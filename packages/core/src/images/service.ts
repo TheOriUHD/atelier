@@ -141,7 +141,7 @@ export class ImageService {
 
   private async pick(session: ImageSessionFacts, asked: string | undefined): Promise<ResolvedImageModel> {
     const models = await this.models(session);
-    if (models.length === 0) throw new ImageCallError('No image model is available. An admin adds one in Settings › Image providers.');
+    if (models.length === 0) throw new ImageCallError('No image model is available. An admin adds one in Settings › Image & video.');
     const wanted = asked?.toLowerCase();
     const match = wanted ? models.find((m) => m.ref.toLowerCase() === wanted || m.modelId.toLowerCase() === wanted || m.displayName.toLowerCase() === wanted) : models[0];
     if (!match) throw new ImageCallError(`There's no image model "${asked}". You can use: ${models.map((m) => m.ref).join(', ')}.`);

@@ -14,6 +14,10 @@ interface Form {
   guidance: string;
   sampler: string;
   scheduler: string;
+  /** A video model's own length, frame rate and resolution. */
+  seconds: string;
+  fps: string;
+  resolution: string;
 }
 
 function toForm(o: ImageModelOverride): Form {
@@ -24,7 +28,19 @@ function toForm(o: ImageModelOverride): Form {
     guidance: o.tuning?.guidance?.toString() ?? '',
     sampler: o.tuning?.sampler ?? AUTO,
     scheduler: o.tuning?.scheduler ?? AUTO,
+    seconds: o.video?.seconds?.toString() ?? '',
+    fps: o.video?.fps?.toString() ?? '',
+    resolution: o.video?.resolution ?? AUTO,
   };
+}
+
+/** The length, frame rate and resolution as typed, with what's left empty gone. */
+function videoOf(f: Form): Record<string, unknown> {
+  const video: Record<string, unknown> = {};
+  if (f.seconds.trim()) video.seconds = Number(f.seconds);
+  if (f.fps.trim()) video.fps = Number(f.fps);
+  if (f.resolution !== AUTO && f.resolution.trim()) video.resolution = f.resolution.trim();
+  return video;
 }
 
 /** The tuning as typed, with what's left empty gone, so the model's own setting applies. */
@@ -70,6 +86,8 @@ function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): vo
   const save = async () => {
     const tuning = ImageTuning.safeParse(tuningOf(form));
     if (!tuning.success) return setInvalid(new Set(tuning.error.issues.map((i) => String(i.path[0]))));
+    const video = ImageModelOverride.shape.video.unwrap().safeParse(videoOf(form));
+    if (!video.success) return setInvalid(new Set(video.error.issues.map((i) => String(i.path[0]))));
     setInvalid(new Set());
     setSaving(true);
     setError(null);
@@ -77,9 +95,10 @@ function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): vo
       ...(form.displayName.trim() ? { displayName: form.displayName.trim() } : {}),
       ...(form.description.trim() ? { description: form.description.trim() } : {}),
       ...(Object.keys(tuning.data).length ? { tuning: tuning.data } : {}),
+      ...(Object.keys(video.data).length ? { video: video.data } : {}),
     };
     try {
-      for (const key of ['displayName', 'description', 'tuning'] as const) {
+      for (const key of ['displayName', 'description', 'tuning', 'video'] as const) {
         if (JSON.stringify(next[key]) === JSON.stringify(current[key])) continue;
         const path = ['imageModels', 'overrides', model.ref, key];
         if (next[key] === undefined) await rpc().call('settings.reset', { layer: 'global', path });
@@ -108,7 +127,20 @@ function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): vo
       <Field label="What it’s good at" description="The text model reads this when it chooses a model.">
         <TextArea rows={2} maxLength={200} placeholder="Photos of people, fast drafts, posters with text…" {...field('description')} />
       </Field>
-      {caps.tunable && (
+      {caps.video && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-4 max-md:grid-cols-1">
+          <Field label="Length in seconds" description={caps.video.fixedLength ? 'This model chooses how long its clips are.' : undefined} error={invalid.has('seconds') ? 'Enter a number of seconds from 1 to 600.' : undefined}>
+            <TextField inputMode="decimal" disabled={caps.video.fixedLength === true} placeholder={current.video?.seconds === undefined ? `${caps.video.defaultSeconds} (its usual)` : 'Automatic'} {...field('seconds')} />
+          </Field>
+          {caps.video.fps || caps.video.defaultFps ? (
+            <Field label="Frames per second" error={invalid.has('fps') ? 'Enter a whole number from 1 to 240.' : undefined}>
+              <TextField inputMode="numeric" placeholder={current.video?.fps === undefined && caps.video.defaultFps ? String(caps.video.defaultFps) : 'Automatic'} {...field('fps')} />
+            </Field>
+          ) : null}
+          {caps.video.resolutions?.length ? <Choice label="Resolution" choices={caps.video.resolutions} own={current.video?.resolution ? undefined : '720p when offered'} value={form.resolution} onChange={(resolution) => setForm((f) => ({ ...f, resolution }))} /> : null}
+        </div>
+      )}
+      {caps.tunable && !caps.video && (
         <div className="grid grid-cols-2 gap-x-3 gap-y-4 max-md:grid-cols-1">
           <Field label="Steps" error={invalid.has('steps') ? 'Enter a whole number from 1 to 200.' : undefined}>
             <TextField inputMode="numeric" placeholder={detected('steps')} {...field('steps')} />

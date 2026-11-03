@@ -124,7 +124,7 @@ describe('imageFailure', () => {
   });
 
   it('tells a setup problem an admin can fix from one that isn’t', () => {
-    for (const text of ['No image model is available. An admin adds one in Settings › Image providers.', 'Cannot reach ComfyUI at 127.0.0.1:8188', 'OpenAI rejected the credentials (401)', 'ComfyUI is turned off.', 'ComfyUI has no model "x". Refresh it in Settings if it was just added.', 'Model not found: gpt-image']) expect(imageFailure(text).kind).toBe('setup');
+    for (const text of ['No image model is available. An admin adds one in Settings › Image & video.', 'Cannot reach ComfyUI at 127.0.0.1:8188', 'OpenAI rejected the credentials (401)', 'ComfyUI is turned off.', 'ComfyUI has no model "x". Refresh it in Settings if it was just added.', 'Model not found: gpt-image']) expect(imageFailure(text).kind).toBe('setup');
     expect(imageFailure('Fake Images request failed (500): The server fell over.').kind).toBe('failed');
     expect(imageFailure("There's no image img_1 in this conversation.").kind).toBe('failed');
   });

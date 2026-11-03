@@ -2,7 +2,7 @@ import { useMemo, useReducer } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import type { UserPrefs } from '@atelier/protocol';
 import { SegmentedControl, Select, Switch, type SegmentedControlItem } from '../../components/ui/index.ts';
-import { useImageGeneration, useImageModels, useModels, useSettings } from '../../lib/queries.ts';
+import { makesVideo, useImageGeneration, useImageModels, useModels, useSettings, useVideoGeneration } from '../../lib/queries.ts';
 import { notificationsBlocked } from '../work/notifications.ts';
 import { isUnavailable, ModelSelect } from './model-select.tsx';
 import type { SettingId } from './search-index.ts';
@@ -45,6 +45,7 @@ const MOTION: SegmentedControlItem<Appearance['motion']>[] = [
 export function GeneralPage() {
   const chatFont = usePref<Appearance['chatFont']>(['appearance', 'chatFont']);
   const images = useImageGeneration();
+  const videos = useVideoGeneration();
   return (
     <>
       <SettingsSection title="Appearance">
@@ -68,6 +69,7 @@ export function GeneralPage() {
         <DefaultModelRow />
         <RememberModelRow />
         {images && <DefaultImageModelRow />}
+        {videos && <DefaultVideoModelRow />}
       </SettingsSection>
       <SettingsSection title="Notifications">
         <NotificationRow id="notifications.taskFinished" field="taskFinished" />
@@ -133,13 +135,32 @@ function DefaultImageModelRow() {
   const { data: models = [] } = useImageModels();
   const { settings } = useSettings();
   const providerNames = useMemo(() => new Map(settings?.imageProviders?.map((p) => [p.id, p.name])), [settings?.imageProviders]);
-  const visible = models.filter((m) => !m.hidden);
+  // Video models are listed beside the pictures' and have a row of their own.
+  const visible = models.filter((m) => !m.hidden && !makesVideo(m));
   if (!settings?.imageGeneration?.enabled || (visible.length === 0 && !setting.value)) return null;
   const server = visible.find((m) => m.ref === settings?.models.defaults.image) ?? visible[0];
   const named = server ? ` (${server.displayName})` : '';
   const warning = isUnavailable(setting.value, visible) ? `This model is no longer available. Your images use the server default${named} until you choose another.` : null;
   return (
     <SettingRow id="prefs.models.image" setting={setting} error={warning}>
+      {(label) => <ModelSelect {...label} setting={setting} unsetLabel={`Server default${named}`} models={visible} providerNames={providerNames} />}
+    </SettingRow>
+  );
+}
+
+/** The same for video: nothing to choose until a video provider is added, or while videos are off. */
+function DefaultVideoModelRow() {
+  const setting = usePref<string | undefined>(['models', 'video']);
+  const { data: models = [] } = useImageModels();
+  const { settings } = useSettings();
+  const providerNames = useMemo(() => new Map(settings?.imageProviders?.map((p) => [p.id, p.name])), [settings?.imageProviders]);
+  const visible = models.filter((m) => !m.hidden && makesVideo(m));
+  if (!settings?.imageGeneration?.enabled || settings.imageGeneration.videoEnabled === false || (visible.length === 0 && !setting.value)) return null;
+  const server = visible.find((m) => m.ref === settings.models.defaults.video) ?? visible[0];
+  const named = server ? ` (${server.displayName})` : '';
+  const warning = isUnavailable(setting.value, visible) ? `This model is no longer available. Your videos use the server default${named} until you choose another.` : null;
+  return (
+    <SettingRow id="prefs.models.video" setting={setting} error={warning}>
       {(label) => <ModelSelect {...label} setting={setting} unsetLabel={`Server default${named}`} models={visible} providerNames={providerNames} />}
     </SettingRow>
   );

@@ -7,7 +7,7 @@ import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
 import { identityProvidersOffered } from '../auth/sign-in.ts';
 import { desktop, isMac } from '../../lib/platform.ts';
-import { auditLogOffered, imageGenerationOffered, usageLimitsOffered } from '../../lib/queries.ts';
+import { auditLogOffered, imageGenerationOffered, usageLimitsOffered, videoGenerationOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
 
@@ -80,6 +80,14 @@ export const SETTINGS_INDEX = [
     description: 'What makes your images, unless you pick another in a conversation or name one when you ask.',
     keywords: ['image generation', 'pictures', 'comfyui', 'server default'],
     available: () => imageGenerationOffered(),
+  },
+  {
+    id: 'prefs.models.video',
+    page: 'general',
+    label: 'Default video model',
+    description: 'What makes your videos, unless you name another when you ask. A model that makes video from a picture only needs one to start from.',
+    keywords: ['video generation', 'clips', 'animation', 'server default'],
+    available: () => videoGenerationOffered(),
   },
   {
     id: 'notifications.taskFinished',
@@ -715,23 +723,23 @@ export const SETTINGS_INDEX = [
   {
     id: 'imageProviders.list',
     page: 'image-providers',
-    label: 'Image providers',
-    description: 'Where images are made, separate from the providers of text models.',
-    keywords: ['image generation', 'pictures', 'comfyui', 'workflows', 'health', 'gpu'],
+    label: 'Image and video providers',
+    description: 'Where images and videos are made, separate from the providers of text models.',
+    keywords: ['image generation', 'video generation', 'pictures', 'clips', 'comfyui', 'workflows', 'health', 'gpu'],
   },
   {
     id: 'imageProviders.add',
     page: 'image-providers',
-    label: 'Add image provider',
-    description: 'Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai.',
-    keywords: ['connect', 'api key', 'base url', 'endpoint', 'comfyui', 'forge', 'automatic1111', 'openai', 'gemini', 'stability', 'black forest labs', 'fal', 'replicate', 'openrouter', 'test image'],
+    label: 'Add image or video provider',
+    description: 'Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai. The video ones are listed with their own names.',
+    keywords: ['connect', 'api key', 'base url', 'endpoint', 'comfyui', 'forge', 'automatic1111', 'openai', 'gemini', 'stability', 'black forest labs', 'fal', 'replicate', 'openrouter', 'xai', 'test image'],
   },
   {
     id: 'imageModels.list',
     page: 'image-providers',
-    label: 'Image models',
-    description: 'Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler. The text model reads the description when it chooses.',
-    keywords: ['hide', 'favorite', 'visibility', 'description', 'tuning', 'steps', 'guidance', 'cfg', 'sampler', 'scheduler'],
+    label: 'Image and video models',
+    description: 'Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler, or for video its usual length, frame rate and resolution. The text model reads the description when it chooses.',
+    keywords: ['hide', 'favorite', 'visibility', 'description', 'tuning', 'steps', 'guidance', 'cfg', 'sampler', 'scheduler', 'video', 'length', 'seconds', 'fps', 'resolution'],
   },
   {
     id: 'models.defaults.image',
@@ -739,6 +747,14 @@ export const SETTINGS_INDEX = [
     label: 'Default image model for everyone',
     description: 'What makes images unless a person or a conversation chooses another.',
     keywords: ['server default', 'system default', 'image generation'],
+  },
+  {
+    id: 'models.defaults.video',
+    page: 'image-providers',
+    label: 'Default video model for everyone',
+    description: 'What makes videos unless a person chooses another or names one when they ask.',
+    keywords: ['server default', 'system default', 'video generation'],
+    available: () => videoGenerationOffered(),
   },
   {
     id: 'imageGeneration.enabled',
@@ -767,6 +783,38 @@ export const SETTINGS_INDEX = [
     label: 'Spend per person per day',
     description: 'Counts images with a known or estimated cost. Local servers cost nothing here.',
     keywords: ['limit', 'cap', 'quota', 'budget', 'dollars', 'money', 'cost'],
+  },
+  {
+    id: 'imageGeneration.videoEnabled',
+    page: 'image-providers',
+    label: 'Let models make videos',
+    description: 'Off: conversations don’t get the video tool, whichever providers are set up. Images are not affected.',
+    keywords: ['turn off', 'disable', 'clips', 'generate video'],
+    available: () => videoGenerationOffered(),
+  },
+  {
+    id: 'imageGeneration.maxVideosPerTurn',
+    page: 'image-providers',
+    label: 'Videos per turn',
+    description: 'How many videos one reply can make. A video takes minutes and costs far more than an image, so the default is 2.',
+    keywords: ['limit', 'cap', 'budget', 'prompt injection', 'clips'],
+    available: () => videoGenerationOffered(),
+  },
+  {
+    id: 'imageGeneration.maxVideosPerUserPerDay',
+    page: 'image-providers',
+    label: 'Videos per person per day',
+    description: 'Counted across all of a person’s conversations, including deleted ones.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'accounts', 'clips'],
+    available: () => videoGenerationOffered(),
+  },
+  {
+    id: 'imageGeneration.maxVideoSpendPerUserPerDayUsd',
+    page: 'image-providers',
+    label: 'Video spend per person per day',
+    description: 'Counts videos with a known or estimated cost. Local servers cost nothing here.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'dollars', 'money', 'cost', 'clips'],
+    available: () => videoGenerationOffered(),
   },
   {
     id: 'models.defaults.chat',

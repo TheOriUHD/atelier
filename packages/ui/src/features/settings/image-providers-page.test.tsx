@@ -58,10 +58,10 @@ function pick(option: HTMLElement) {
 }
 
 /** The backend's settings, which each write changes. */
-function renderPage(extra: Partial<Settings> = {}, models: ImageModelInfo[] = [], detected: DetectedImageServer[] = []) {
+function renderPage(extra: Partial<Settings> = {}, models: ImageModelInfo[] = [], detected: DetectedImageServer[] = [], info: Record<string, boolean> = { imageGeneration: true }) {
   let settings = snapshot({ providers: [{ id: 'ollama', type: 'ollama', name: 'Ollama', baseUrl: 'http://192.168.20.25:11434', headers: {}, enabled: true }], imageProviders: [comfy, cloud], ...extra });
   resetBackend({
-    'app.info': () => ({ imageGeneration: true }),
+    'app.info': () => info,
     'settings.get': () => settings,
     'settings.set': ({ path, value }: { path: SettingsPath; value: unknown }) => {
       settings = { ...settings, effective: setPath(settings.effective, path, value) };
@@ -171,7 +171,7 @@ describe('image models', () => {
 
   it('points to providers while there are no models', async () => {
     renderPage();
-    expect(await screen.findByText('Models appear here once an image provider is connected.')).toBeTruthy();
+    expect(await screen.findByText('Models appear here once an image or video provider is connected.')).toBeTruthy();
   });
 
   it('shows each model by provider with its capabilities and what it’s good at', async () => {
@@ -309,5 +309,122 @@ describe('image generation limits', () => {
     await waitFor(() => expect(screen.getByText('Enter a whole number from 1 to 100.')).toBeTruthy());
     expect(callsTo('settings.set')).toEqual([]);
     expect(callsTo('settings.reset')).toEqual([]);
+  });
+});
+
+const videoModel = (providerId: string, modelId: string, video: Partial<NonNullable<ImageModelInfo['capabilities']['video']>> = {}): ImageModelInfo =>
+  imageModel(providerId, modelId, {
+    capabilities: {
+      ...imageModel(providerId, modelId).capabilities,
+      family: 'fal-video',
+      output: 'video',
+      tunable: false,
+      edit: false,
+      previews: false,
+      video: { durations: { kind: 'list', seconds: [4, 6, 8] }, defaultSeconds: 6, resolutions: ['720p', '1080p'], firstFrame: true, lastFrame: false, audio: 'optional', ...video },
+    },
+  });
+const BOTH = { imageGeneration: true, videoGeneration: true };
+
+describe('video models', () => {
+  it('marks a video model by what it makes: video, its lengths, sound and a starting picture', async () => {
+    renderPage({}, [videoModel('comfy', 'kling')], [], BOTH);
+    const row = (await screen.findByRole('row', { name: /kling/ }));
+    for (const text of ['Video', '4–8 s', 'Sound', 'Starts from a picture']) expect(within(row).getByText(text)).toBeTruthy();
+    expect(within(row).queryByText('SDXL')).toBeNull();
+    expect(within(row).queryByText('Edits')).toBeNull();
+  });
+
+  it('says a model that needs its picture, and one whose clips have a length of their own', async () => {
+    renderPage({}, [videoModel('comfy', 'i2v', { firstFrameRequired: true }), videoModel('comfy', 'omni', { fixedLength: true, audio: 'always' })], [], BOTH);
+    expect(within(await screen.findByRole('row', { name: /i2v/ })).getByText('From a picture')).toBeTruthy();
+    expect(within(screen.getByRole('row', { name: /omni/ })).getByText('Its own length')).toBeTruthy();
+  });
+
+  it('keeps a default for pictures and one for videos, each from its own models', async () => {
+    renderPage({}, [imageModel('comfy', 'z-image'), videoModel('comfy', 'kling')], [], BOTH);
+    const image = await screen.findByRole('combobox', { name: 'Default image model for everyone' });
+    const video = await screen.findByRole('combobox', { name: 'Default video model for everyone' });
+    fireEvent.click(image);
+    const pictures = (await screen.findAllByRole('option')).map((o) => o.textContent ?? '');
+    expect(pictures.some((t) => t.startsWith('z-image'))).toBe(true);
+    expect(pictures.some((t) => t.startsWith('kling'))).toBe(false);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryAllByRole('option')).toHaveLength(0));
+    fireEvent.click(video);
+    const clips = (await screen.findAllByRole('option')).map((o) => o.textContent ?? '');
+    expect(clips.some((t) => t.startsWith('kling'))).toBe(true);
+    expect(clips.some((t) => t.startsWith('z-image'))).toBe(false);
+  });
+
+  it('makes a video model the video default, not the picture one', async () => {
+    renderPage({}, [videoModel('comfy', 'kling')], [], BOTH);
+    fireEvent.click(await screen.findByRole('button', { name: 'kling options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Make default' }));
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['models', 'defaults', 'video'], value: 'comfy/kling' }]));
+  });
+
+  it('tunes a video model’s usual length, frame rate and resolution instead of its steps', async () => {
+    renderPage({}, [videoModel('comfy', 'kling', { fps: [24, 48], defaultFps: 24 })], [], BOTH);
+    fireEvent.click(await screen.findByRole('button', { name: 'kling options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Description and tuning…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'kling' });
+    expect(within(dialog).queryByLabelText('Steps')).toBeNull();
+    const length = within(dialog).getByLabelText('Length in seconds') as HTMLInputElement;
+    expect(length.placeholder).toBe('6 (its usual)');
+    fireEvent.change(length, { target: { value: '8' } });
+    fireEvent.change(within(dialog).getByLabelText('Frames per second'), { target: { value: '48' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['imageModels', 'overrides', 'comfy/kling', 'video'], value: { seconds: 8, fps: 48 } }]));
+  });
+
+  it('refuses a length it cannot use', async () => {
+    renderPage({}, [videoModel('comfy', 'kling')], [], BOTH);
+    fireEvent.click(await screen.findByRole('button', { name: 'kling options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Description and tuning…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'kling' });
+    fireEvent.change(within(dialog).getByLabelText('Length in seconds'), { target: { value: '9000' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await within(dialog).findByText('Enter a number of seconds from 1 to 600.')).toBeTruthy();
+    expect(callsTo('settings.set')).toEqual([]);
+  });
+
+  it('does not let a model that chooses its own length be given one', async () => {
+    renderPage({}, [videoModel('comfy', 'omni', { fixedLength: true })], [], BOTH);
+    fireEvent.click(await screen.findByRole('button', { name: 'omni options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Description and tuning…' }));
+    expect((within(await screen.findByRole('dialog', { name: 'omni' })).getByLabelText('Length in seconds') as HTMLInputElement).disabled).toBe(true);
+  });
+});
+
+describe('video generation limits', () => {
+  it('has its own switch, which is on until it is turned off', async () => {
+    renderPage({}, [], [], BOTH);
+    const toggle = await screen.findByRole('switch', { name: 'Let models make videos' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(toggle);
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['imageGeneration', 'videoEnabled'], value: false }]));
+  });
+
+  it('shows two videos a turn until it says otherwise, and saves its limits', async () => {
+    renderPage({}, [], [], BOTH);
+    const perTurn = await screen.findByRole('textbox', { name: 'Videos per turn' });
+    expect((perTurn as HTMLInputElement).placeholder).toBe('2');
+    fireEvent.focus(perTurn);
+    fireEvent.change(perTurn, { target: { value: '3' } });
+    fireEvent.blur(perTurn);
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['imageGeneration', 'maxVideosPerTurn'], value: 3 }]));
+    const spend = screen.getByRole('textbox', { name: 'Video spend per person per day' });
+    fireEvent.focus(spend);
+    fireEvent.change(spend, { target: { value: '5' } });
+    fireEvent.blur(spend);
+    await waitFor(() => expect(callsTo('settings.set').at(-1)).toEqual({ layer: 'global', path: ['imageGeneration', 'maxVideoSpendPerUserPerDayUsd'], value: 5 }));
+  });
+
+  it('is not shown by an older server that cannot make video', async () => {
+    renderPage();
+    await screen.findByRole('switch', { name: 'Let models make images' });
+    expect(screen.queryByRole('switch', { name: 'Let models make videos' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Default video model for everyone' })).toBeNull();
   });
 });
