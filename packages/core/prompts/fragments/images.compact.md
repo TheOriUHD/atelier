@@ -1,1 +1,1 @@
-Make images with GenerateImage only when the person asks for one. To change an image, pass its id in `reference_images`. Keep your reply short: they can see the result.
+Make images with GenerateImage only when the person asks for one. To change an image, pass its id in `reference_images`. In an artifact or visual, an image's source is `atelier-image:` and its id. Keep your reply short: they can see the result.

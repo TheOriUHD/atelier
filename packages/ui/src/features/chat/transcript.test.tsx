@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Message, RunPhase } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
 import type { LiveSessionState } from '../../lib/live-session.ts';
@@ -284,6 +284,30 @@ describe('Transcript', () => {
     expect(callsTo('chat.edit')[0]).toMatchObject({
       messageId: 'u1',
       parts: [{ type: 'context', notice: { kind: 'quote', text: 'The kettle boils at 100 °C.' } }, { type: 'text', text: 'Why is it exactly that?' }],
+    });
+  });
+
+  describe('an area the person marked', () => {
+    const area = { type: 'context' as const, text: 'Change img_aaaaaaaa…', notice: { kind: 'area' as const, image: { blob: 'shaImg', mime: 'image/png' }, mask: { blob: 'shaMask', mime: 'image/png' } } };
+    const marked = message('u2', 'user', { parts: [area, { type: 'text', text: 'Make the sky purple' }] });
+    // The tint is drawn from the mask's file, which this test has no server for.
+    beforeEach(() => void vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false }))));
+    afterEach(() => void vi.unstubAllGlobals());
+
+    it('shows their words with the marked image above them, and not the note the model got', () => {
+      show([marked]);
+      expect(screen.getByText('Make the sky purple')).toBeTruthy();
+      expect(screen.getByRole('img', { name: 'The image, with the area to change marked' }).getAttribute('src')).toContain('shaImg');
+      expect(screen.queryByText(/Change img_aaaaaaaa/)).toBeNull();
+    });
+
+    it('keeps the marked area when they edit the words', async () => {
+      show([marked]);
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'Edit message' }), { target: { value: 'Make the sky green' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(callsTo('chat.edit')).toHaveLength(1));
+      expect(callsTo('chat.edit')[0]).toMatchObject({ messageId: 'u2', parts: [{ type: 'context', notice: area.notice }, { type: 'text', text: 'Make the sky green' }] });
     });
   });
 

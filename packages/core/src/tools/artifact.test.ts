@@ -9,6 +9,7 @@ import { ArtifactRepo } from '../artifacts/artifact-repo.ts';
 import { hostRunnerBinary, RunnerClient } from '../workspaces/runner-client.ts';
 import type { Workspace } from '../workspaces/workspace.ts';
 import { createArtifactTool, typeForPath } from './artifact.ts';
+import { describeTool, type Tool } from './types.ts';
 
 let db: Db;
 let repo: ArtifactRepo;
@@ -23,6 +24,30 @@ beforeEach(async () => {
   events.length = 0;
 });
 afterEach(() => db.$client.close());
+
+describe('artifact tool descriptions and generated images', () => {
+  const file = { runner: {} } as unknown as Workspace;
+  const forms = [
+    ['content', () => createArtifactTool(repo)],
+    ['file', () => createArtifactTool(repo, file)],
+  ] as const;
+
+  it.each(forms)('%s form: names the image reference only to a session that has GenerateImage', (_name, make) => {
+    for (const tier of ['full', 'compact'] as const) {
+      const without = describeTool(make() as Tool, { tier, mode: 'chat', has: () => false }).description;
+      const withImages = describeTool(make() as Tool, { tier, mode: 'chat', has: (n) => n === 'GenerateImage' }).description;
+      expect(without).not.toContain('atelier-image');
+      expect(withImages).toContain('atelier-image:img_ab12cd34');
+      // Nothing else changes, so a session without image tools sends the bytes it always did.
+      expect(withImages.startsWith(without.split('\n')[0]!)).toBe(true);
+    }
+  });
+
+  it('is a function of the tool set alone: the same context always gives the same text', () => {
+    const ctxs = { tier: 'full' as const, mode: 'chat' as const, has: (n: string) => n === 'GenerateImage' };
+    expect(describeTool(createArtifactTool(repo) as Tool, ctxs).description).toBe(describeTool(createArtifactTool(repo) as Tool, ctxs).description);
+  });
+});
 
 describe('artifact tool', () => {
   it('creates, patches and rewrites with versions', async () => {

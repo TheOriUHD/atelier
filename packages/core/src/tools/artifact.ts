@@ -30,13 +30,21 @@ const MAX_CONTENT = 500_000;
 const RUNTIME =
   'Artifacts run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission (use click and change handlers). A `react` artifact is one default-exported component without required props, styled with Tailwind utility classes, importing only React, lucide-react and recharts.';
 
-function describe({ tier }: DescribeContext): string {
+/**
+ * An image the model made can't be loaded from a URL in the sandbox; the app swaps this reference for it
+ * (packages/ui/src/features/artifacts/image-refs.ts). Said only to sessions that have GenerateImage, so the tool's
+ * description stays a function of the tool set and nothing else.
+ */
+const IMAGES = 'To show an image you made with GenerateImage, write its id in full as the source, like `<img src="atelier-image:img_ab12cd34">` (also in CSS `url()` and Markdown): Atelier puts the picture in. Only images of this conversation work, and never build the id in code.';
+
+function describe({ tier, has }: DescribeContext): string {
   if (tier === 'compact') {
     return [
       'Creates or changes a standalone piece of content shown in a panel next to the chat.',
       '- `create` needs identifier, type, title and the complete content; `rewrite` replaces the content.',
       '- `type` is html, react, svg, mermaid, markdown or code.',
       `- ${RUNTIME}`,
+      ...(has('GenerateImage') ? [`- ${IMAGES}`] : []),
     ].join('\n');
   }
   return [
@@ -46,18 +54,20 @@ function describe({ tier }: DescribeContext): string {
     '- `rewrite` replaces the whole content (and optionally the title). Use it for larger changes.',
     '- Types: `html`, `react`, `svg`, `mermaid`, `markdown`, and `code` with `language`.',
     `- ${RUNTIME}`,
+    ...(has('GenerateImage') ? [`- ${IMAGES}`] : []),
     '- Content must be complete: no placeholders or "rest unchanged" comments.',
     '- A reply makes a single artifact unless the person asks for several.',
   ].join('\n');
 }
 
-function describeFile({ tier }: DescribeContext): string {
-  if (tier === 'compact') return 'Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs.';
+function describeFile({ tier, has }: DescribeContext): string {
+  if (tier === 'compact') return `Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs.${has('GenerateImage') ? ` ${IMAGES}` : ''}`;
   return [
     'Shows a file from the workspace in the Artifact pane beside the conversation, so the person can look at what you made without leaving Atelier.',
     '- `file_path` is relative to the workspace root, or absolute. The extension decides how the file is shown: `.html` as a page, `.svg` as an image, `.md` as a document, `.mmd` as a Mermaid diagram, anything else as code.',
     '- Write the file first. Calling it again for the same path after a change adds a new version; the pane follows the latest.',
     '- Pages run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission. Keep a page you mean to show self-contained.',
+    ...(has('GenerateImage') ? [`- ${IMAGES} A page opened outside Atelier has no such pictures.`] : []),
   ].join('\n');
 }
 

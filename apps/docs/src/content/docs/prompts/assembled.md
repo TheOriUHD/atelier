@@ -42,8 +42,8 @@ prompts or replies.
 | [`work.compact`](/prompts/assembled/work.compact.txt) | Cowork, compact tier. | 21 KB |
 | [`work.full.memory`](/prompts/assembled/work.full.memory.txt) | Cowork for a person with memory. | 50 KB |
 | [`work.full.computer`](/prompts/assembled/work.full.computer.txt) | Cowork in the desktop app with computer use on: the computer use tools. | 49 KB |
-| [`chat.full.images`](/prompts/assembled/chat.full.images.txt) | Chat with an image model: GenerateImage and how to use it. | 29 KB |
-| [`code.full.images`](/prompts/assembled/code.full.images.txt) | Code with an image model: GenerateImage and SaveImage. | 57 KB |
+| [`chat.full.images`](/prompts/assembled/chat.full.images.txt) | Chat with an image model: GenerateImage and how to use it. | 30 KB |
+| [`code.full.images`](/prompts/assembled/code.full.images.txt) | Code with an image model: GenerateImage and SaveImage. | 58 KB |
 | [`code.compact.images`](/prompts/assembled/code.compact.images.txt) | Code, compact tier, with an image model: the shorter GenerateImage schema. | 23 KB |
 | [`code.compact.computer`](/prompts/assembled/code.compact.computer.txt) | Code, compact tier, with computer use on. | 26 KB |
 | [`code.full`](/prompts/assembled/code.full.txt) | Code, full tier: the baseline. | 51 KB |

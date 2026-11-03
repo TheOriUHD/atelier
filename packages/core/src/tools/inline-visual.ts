@@ -6,6 +6,7 @@ function describe({ tier, has }: DescribeContext): string {
     'Shows a self-contained inline explainer or mini app in the conversation when seeing or interacting helps understanding; not for every answer.',
     ...(has('artifact') ? ['Use artifact for a standalone deliverable to keep or edit; inline_visual is for understanding and quick prototypes.'] : []),
     'Write an HTML fragment with CSS and any script last, not an iframe or a full page. Use vanilla JS, CSS, SVG or Canvas; no external network, assets, libraries or storage.',
+    ...(has('GenerateImage') ? ['To show an image you made with GenerateImage, write its id in full as the source, like `<img src="atelier-image:img_ab12cd34">`: Atelier puts the picture in. Only images of this conversation work.'] : []),
     'Blend into the conversation: no app chrome or repeated page heading unless useful. Use theme variables --text-primary, --text-secondary, --text-muted, --surface-1, --surface-2, --border, --border-strong and --text-accent.',
     'Provide accessible, keyboard-operable controls and a plain-language description. Animate with requestAnimationFrame and elapsed time, and respect prefers-reduced-motion.',
   ];

@@ -1,4 +1,4 @@
-# System prompt: 6 blocks, 4515 characters
+# System prompt: 6 blocks, 4591 characters
 
 ## Block 1
 
@@ -42,7 +42,7 @@ Web search:
 
 ## Block 3 (cache breakpoint)
 
-Make images with GenerateImage only when the person asks for one. To change an image, pass its id in `reference_images`. Keep your reply short: they can see the result.
+Make images with GenerateImage only when the person asks for one. To change an image, pass its id in `reference_images`. In an artifact or visual, an image's source is `atelier-image:` and its id. Keep your reply short: they can see the result.
 
 ## Block 4
 
@@ -88,7 +88,7 @@ Image models you can use with GenerateImage, the person's choice first:
 - comfy/sdxl (SDXL): prompt in comma-separated tags, takes a negative prompt, can change images
 </context-update>
 
-# Tools: 18, 12627 characters of JSON
+# Tools: 18, 12990 characters of JSON
 
 [
   {
@@ -598,7 +598,7 @@ Image models you can use with GenerateImage, the person's choice first:
   },
   {
     "name": "artifact",
-    "description": "Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs.",
+    "description": "Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs. To show an image you made with GenerateImage, write its id in full as the source, like `<img src=\"atelier-image:img_ab12cd34\">` (also in CSS `url()` and Markdown): Atelier puts the picture in. Only images of this conversation work, and never build the id in code.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -614,7 +614,7 @@ Image models you can use with GenerateImage, the person's choice first:
   },
   {
     "name": "GenerateImage",
-    "description": "Makes an image from a description and shows it to the person.\n- Only when the person asks for an image.\n- `prompt`: describe what it shows, in detail. Follow the prompt style in the note about image models.\n- To change an earlier or attached image, put its `img_…` id in `reference_images`.",
+    "description": "Makes an image from a description and shows it to the person.\n- Only when the person asks for an image.\n- `prompt`: describe what it shows, in detail. Follow the prompt style in the note about image models.\n- To change an earlier or attached image, put its `img_…` id in `reference_images`.\n- A marked area comes with a mask id: pass it as `mask`, the image first in `reference_images`.",
     "inputSchema": {
       "type": "object",
       "properties": {

@@ -3,6 +3,7 @@ import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, crea
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GeneratedImage } from '@atelier/protocol';
+import { draftAttachments, draftKeys } from '../../lib/drafts.ts';
 import { callsTo, resetBackend, snapshot, user } from '../settings/test-backend.ts';
 import { ImagesPage, totalSize } from './images-page.tsx';
 
@@ -172,6 +173,42 @@ describe('opening an image', () => {
     fireEvent.click(await screen.findByAltText('Prompt 1'));
     await screen.findByRole('dialog', { name: 'Image' });
     expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('starts a new chat with the image attached as a reference', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, blob: async () => new Blob(['123456']) })));
+    const router = renderPage(() => ({ items: [image(1)], next: null, totalBytes: 1 }));
+    fireEvent.click(await screen.findByAltText('Prompt 1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Use as reference' }));
+    expect(await screen.findByText('Home')).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/');
+    // The home page's message box opens with it: the same draft it reads its attachments from.
+    const kept = draftAttachments(`${user().id}|${draftKeys.newChat}`);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ mime: 'image/png', size: 6, file: { blob: image(1).blob } });
+    // Asking twice doesn't attach it twice.
+    router.history.back();
+    fireEvent.click(await screen.findByAltText('Prompt 1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Use as reference' }));
+    await screen.findByText('Home');
+    expect(draftAttachments(`${user().id}|${draftKeys.newChat}`)).toHaveLength(1);
+  });
+
+  it('opens the editor to change an area, and the lightbox gets out of its way', async () => {
+    renderPage(() => ({ items: [image(1)], next: null, totalBytes: 1 }));
+    fireEvent.click(await screen.findByAltText('Prompt 1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Change an area' }));
+    const editor = await screen.findByRole('dialog', { name: 'Change an area' });
+    expect(editor.querySelector('img')!.getAttribute('src')).toContain(image(1).blob);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Image' })).toBeNull());
+  });
+
+  it('offers no area change for an image whose conversation is gone: there is nowhere to send it', async () => {
+    renderPage(() => ({ items: [image(1, { sessionId: null, sessionMode: null, sessionTitle: null })], next: null, totalBytes: 1 }));
+    fireEvent.click(await screen.findByAltText('Prompt 1'));
+    await screen.findByRole('dialog', { name: 'Image' });
+    expect(screen.queryByRole('button', { name: 'Change an area' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Use as reference' })).toBeTruthy();
   });
 
   it('closes on a click beside the image', async () => {

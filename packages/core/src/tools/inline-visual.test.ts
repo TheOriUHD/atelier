@@ -27,6 +27,15 @@ describe('inline_visual', () => {
     expect(orderTools([{ name: 'mcp__x' }, { name: 'inline_visual' }, { name: 'artifact' }]).map((t) => t.name)).toEqual(['artifact', 'inline_visual', 'mcp__x']);
   });
 
+  it('names the image reference only to a session that has GenerateImage', () => {
+    for (const tier of ['full', 'compact'] as const) {
+      const without = describeTool(createInlineVisualTool(), { tier, mode: 'chat', has: () => false }).description;
+      const withImages = describeTool(createInlineVisualTool(), { tier, mode: 'chat', has: (n) => n === 'GenerateImage' }).description;
+      expect(without).not.toContain('atelier-image');
+      expect(withImages).toContain('atelier-image:img_ab12cd34');
+    }
+  });
+
   it.each(['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'] as const)('is safe display in %s mode', (mode) => {
     const permission = { mode, cwd: '/work', projectRoot: '/work', home: '/home/test', roots: ['/work'], rules: { allow: [], ask: [], deny: [] }, isReadOnly: () => true };
     expect(decide({ name: 'inline_visual', input }, permission).behavior).toBe('allow');

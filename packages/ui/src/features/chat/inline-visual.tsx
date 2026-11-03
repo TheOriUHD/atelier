@@ -21,10 +21,13 @@ export const InlineVisual = memo(function InlineVisual({ call, result, partialIn
   const field = (name: string) => typeof input?.[name] === 'string' ? input[name] : visualField(partialInput, name);
   const written = unescapeTags(field('html') ?? '');
   // Pictures the model refers to by id (`atelier-image:img_…`) are put in as data URLs here: the frame can't fetch anything.
-  const html = useInlinedImages(written, useSessionImages()).content;
+  const inlined = useInlinedImages(written, useSessionImages());
+  const html = inlined.content;
   const title = field('title') ?? 'Interactive visual';
   const description = field('description') ?? title;
-  const final = !!result && !result.isError;
+  const done = !!result && !result.isError;
+  // A finished visual is immutable in its frame, so it is sent as finished only once its pictures are in.
+  const final = done && !inlined.pending;
   const theme = useResolvedTheme();
   const reducedMotion = useReducedMotion();
   const container = useRef<HTMLElement>(null);

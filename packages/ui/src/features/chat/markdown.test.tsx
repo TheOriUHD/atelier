@@ -1,10 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { displayMathLines, Markdown } from './markdown.tsx';
+import { imageId } from '@atelier/protocol';
+import { SessionImagesProvider, type ImageIndex } from '../images/session-images.tsx';
+import { displayMathLines, Markdown, withImageIds } from './markdown.tsx';
 import { RunInTerminal, isShellLanguage } from './run-in-terminal.ts';
 
 const openExternal = vi.fn();
-vi.mock('../../lib/platform.ts', () => ({ openExternal: (url: string) => openExternal(url) }));
+const platform = vi.hoisted(() => ({ blobScheme: 'https://app.test/api/blobs/' }));
+vi.mock('../../lib/platform.ts', () => ({ openExternal: (url: string) => openExternal(url), blobUrl: (sha: string) => `${platform.blobScheme}${sha}` }));
 
 describe('displayMathLines', () => {
   it('turns a one-line $$…$$ into display math, but not inside code fences', () => {
@@ -111,5 +114,42 @@ describe('Markdown images', () => {
     fireEvent.click(button);
     const dialog = await screen.findByRole('dialog', { name: 'Image' });
     expect(dialog.querySelector('img')!.getAttribute('src')).toBe('https://example.com/chart.png');
+  });
+});
+
+describe('Markdown images by id', () => {
+  const sha = 'abcd1234'.padEnd(64, '0');
+  const id = imageId(sha);
+  const index: ImageIndex = new Map([[id, { id, blob: sha, mime: 'image/png' }]]);
+  const toolImage = { id: 'm', sessionId: 's', parentId: null, role: 'tool' as const, parts: [{ type: 'tool_result' as const, callId: 'c', content: [{ type: 'image' as const, mime: 'image/png', blob: sha }] }], model: null, usage: null, stopReason: null, error: null, kind: 'normal' as const, summarizesThroughId: null, createdAt: 0 };
+  const shown = (text: string) =>
+    render(
+      <SessionImagesProvider messages={[toolImage]}>
+        <Markdown streaming={false} text={text} />
+      </SessionImagesProvider>,
+    );
+
+  // Both ways the app addresses a blob: a path in the browser, a custom scheme in the desktop app.
+  it.each(['https://app.test/api/blobs/', 'atelier-blob://'])("shows the conversation's image with that id (%s)", async (scheme) => {
+    platform.blobScheme = scheme;
+    shown(`Here you go: ![A kite](atelier-image:${id})`);
+    const picture = await screen.findByRole('button', { name: 'A kite' });
+    expect(picture.querySelector('img')!.getAttribute('src')).toBe(`${scheme}${sha}`);
+  });
+
+  it('shows nothing for an id from outside the conversation', () => {
+    platform.blobScheme = 'https://app.test/api/blobs/';
+    const view = shown('Look: ![Secret](atelier-image:img_deadbeef)');
+    expect(view.container.querySelector('img')).toBeNull();
+  });
+
+  it('leaves a file shown verbatim exactly as it is', () => {
+    const view = render(<Markdown streaming={false} verbatim text={`![x](atelier-image:${id})`} />);
+    expect(view.container.querySelector('img')).toBeNull();
+  });
+
+  it('only rewrites ids it knows', () => {
+    expect(withImageIds(`a atelier-image:${id} b atelier-image:img_00000000 c`, index)).toBe(`a https://atelier-image.invalid/${id} b  c`);
+    expect(withImageIds('no ids here', index)).toBe('no ids here');
   });
 });

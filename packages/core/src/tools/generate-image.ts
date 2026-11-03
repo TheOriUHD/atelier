@@ -13,6 +13,7 @@ function describe({ tier, has }: DescribeContext): string {
       '- Only when the person asks for an image.',
       '- `prompt`: describe what it shows, in detail. Follow the prompt style in the note about image models.',
       '- To change an earlier or attached image, put its `img_…` id in `reference_images`.',
+      '- A marked area comes with a mask id: pass it as `mask`, the image first in `reference_images`.',
     ].join('\n');
   }
   return [
@@ -21,6 +22,7 @@ function describe({ tier, has }: DescribeContext): string {
     '- Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.',
     "- A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.",
     '- To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want.' + (has('Read') ? ' For an image file in the folder, open it with Read first: that gives you its id.' : ''),
+    '- When the person marked an area of an image, their message gives that image\'s id and a mask id: pass the image first in `reference_images` and the mask as `mask`, and describe the whole picture as it should look after the change. If the model can\'t change one area, the result says which can: tell the person, then call again with that `model`.',
     '- `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.',
     "- If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.",
     '- The images appear by themselves: never paste their ids or links into your reply.',

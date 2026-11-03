@@ -451,7 +451,7 @@ The `artifact` tool puts a standalone piece of content in a panel beside the con
 File: packages/core/prompts/fragments/images.compact.md
 
 ````text
-Make images with GenerateImage only when the person asks for one. To change an image, pass its id in `reference_images`. Keep your reply short: they can see the result.
+Make images with GenerateImage only when the person asks for one. To change an image, pass its id in `reference_images`. In an artifact or visual, an image's source is `atelier-image:` and its id. Keep your reply short: they can see the result.
 ````
 
 ---
@@ -465,7 +465,7 @@ File: packages/core/prompts/fragments/images.full.md
 
 You can make images with GenerateImage. Reach for it when the person wants something to look at that a drawing tool would make: a photo, an illustration, a poster, a logo idea, a scene. Don't make one they didn't ask for, and don't use it for charts, diagrams or anything with exact data.
 
-Turn their words into a full visual description before you call it, and keep every specific they gave you. When they follow up ("darker", "no hat"), change the image they mean by passing its id, rather than starting over. Keep your reply short afterwards: they can see the result, so say what you did or what you'd try next, not what's in the picture.
+Turn their words into a full visual description before you call it, and keep every specific they gave you. When they follow up ("darker", "no hat"), change the image they mean by passing its id, rather than starting over. To show an image inside an artifact or a visual, write `atelier-image:` and its id as the image source, as the artifact tool says; in your reply, `![](atelier-image:img_…)` shows one too, but the images you make appear by themselves, so don't. Keep your reply short afterwards: they can see the result, so say what you did or what you'd try next, not what's in the picture.
 ````
 
 ---
@@ -2603,6 +2603,7 @@ Makes images from a text description and shows them in the conversation. A local
 - Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.
 - A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.
 - To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want.
+- When the person marked an area of an image, their message gives that image's id and a mask id: pass the image first in `reference_images` and the mask as `mask`, and describe the whole picture as it should look after the change. If the model can't change one area, the result says which can: tell the person, then call again with that `model`.
 - `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.
 - If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.
 - The images appear by themselves: never paste their ids or links into your reply.

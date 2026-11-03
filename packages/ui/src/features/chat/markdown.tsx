@@ -16,7 +16,9 @@ import {
   type ExtraProps,
 } from 'streamdown';
 import { IconButton } from '../../components/ui/index.ts';
-import { openExternal } from '../../lib/platform.ts';
+import { blobUrl, openExternal } from '../../lib/platform.ts';
+import { referencedImages } from '../artifacts/image-refs.ts';
+import { useSessionImages, type ImageIndex } from '../images/session-images.tsx';
 import { useResolvedTheme } from '../../lib/theme.ts';
 import { CodeBlock, CodeFrame, CodePre, useHighlightedLines } from './code-block.tsx';
 import { CopyButton } from './copy-button.tsx';
@@ -155,11 +157,26 @@ const plain = (tag: string) =>
     return createElement(tag, props);
   };
 
+/**
+ * Streamdown's sanitizer drops a source whose scheme it doesn't know, and the desktop app addresses its files with its
+ * own (`atelier-blob://`). So a conversation's image is written into the text under a made-up https address that gets
+ * through, and swapped for the real one here, where the table of the conversation's images is at hand.
+ */
+const IMAGE_HOST = 'https://atelier-image.invalid/';
+
+function MarkdownImage({ node: _node, alt, src }: ComponentProps<'img'> & ExtraProps) {
+  const images = useSessionImages();
+  if (typeof src !== 'string' || !src) return null;
+  const own = src.startsWith(IMAGE_HOST) ? images.get(src.slice(IMAGE_HOST.length)) : undefined;
+  if (src.startsWith(IMAGE_HOST) && !own) return null;
+  return <ZoomableImage group={[{ src: own ? blobUrl(own.blob) : src, alt: alt ?? '' }]} className="max-w-full rounded-lg" />;
+}
+
 const components: Components = {
   code: Code,
   inlineCode: InlineCode,
   a: Link,
-  img: ({ node: _node, alt, src }) => (typeof src === 'string' && src ? <ZoomableImage group={[{ src, alt: alt ?? '' }]} className="max-w-full rounded-lg" /> : null),
+  img: MarkdownImage,
   table: ({ node: _node, ...props }) => (
     <div data-prose-block className="overflow-x-auto rounded-md border border-line">
       <table {...props} className="w-full border-collapse" />
@@ -225,6 +242,18 @@ export function displayMathLines(text: string): string {
     .join('\n');
 }
 
+/**
+ * `![alt](atelier-image:img_ab12cd34)` shows the conversation's image with that id, as it does in an artifact. Here the
+ * page can load the file itself, so no data URL is needed (`MarkdownImage` puts in its address); an id from outside the
+ * conversation shows nothing.
+ */
+export function withImageIds(text: string, images: ImageIndex): string {
+  if (!text.includes('atelier-image:')) return text;
+  let out = text;
+  for (const id of referencedImages(text)) out = out.replaceAll(`atelier-image:${id}`, images.has(id) ? `${IMAGE_HOST}${id}` : '');
+  return out;
+}
+
 /** New words are wrapped and staggered by Streamdown; markdown.css fades each one in over 600ms. */
 const animated: AnimateOptions = { animation: 'fadeIn', duration: 600, stagger: 30 };
 const linkSafety = { enabled: false };
@@ -234,6 +263,7 @@ const linkSafety = { enabled: false };
  * file as it is, without turning escaped tags back.
  */
 export const Markdown = memo(function Markdown({ text, streaming, verbatim = false }: { text: string; streaming: boolean; verbatim?: boolean }) {
+  const images = useSessionImages();
   return (
     <Streamdown
       className="atelier-prose"
@@ -245,7 +275,7 @@ export const Markdown = memo(function Markdown({ text, streaming, verbatim = fal
       linkSafety={linkSafety}
       controls={false}
     >
-      {displayMathLines(protectCurrency(text))}
+      {displayMathLines(protectCurrency(verbatim ? text : withImageIds(text, images)))}
     </Streamdown>
   );
 });

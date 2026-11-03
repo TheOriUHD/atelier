@@ -1,8 +1,10 @@
-import { act, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { imageId } from '@atelier/protocol';
 import { ArtifactFrame } from './artifact-frame.tsx';
+import { PLACEHOLDERS } from './image-refs.ts';
 
-vi.mock('../../lib/platform.ts', () => ({ artifactRuntimeUrl: () => 'about:blank' }));
+vi.mock('../../lib/platform.ts', () => ({ artifactRuntimeUrl: () => 'about:blank', blobUrl: (sha: string) => `https://app.test/api/blobs/${sha}` }));
 
 function setup() {
   const view = render(<ArtifactFrame type="html" content="<h1>Hi</h1>" theme="dark" />);
@@ -50,5 +52,43 @@ describe('ArtifactFrame', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(frame.className).toContain('invisible');
     other.remove();
+  });
+
+  describe('generated images', () => {
+    const blob = 'f00dface'.padEnd(64, '0');
+    const id = imageId(blob);
+    const images = new Map([[id, { id, blob, mime: 'image/png' }]]);
+    const html = (ref: string) => `<img src="atelier-image:${ref}">`;
+
+    function withImages(content: string) {
+      const view = render(<ArtifactFrame type="html" content={content} theme="light" images={images} />);
+      const frame = view.container.querySelector('iframe')!;
+      const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+      const send = (data: unknown) => act(() => void window.dispatchEvent(new MessageEvent('message', { data, source: frame.contentWindow })));
+      return { post, send };
+    }
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('hands the sandbox the picture as a data URL once it is loaded, not a link it could not follow', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, blob: async () => new Blob(['px'], { type: 'image/png' }) })));
+      const { post, send } = withImages(html(id));
+      // The frame is ready before the picture is: it is sent what it asked for when both are.
+      send({ type: 'ready' });
+      expect(post).not.toHaveBeenCalled();
+      await waitFor(() => expect(post).toHaveBeenCalledOnce());
+      const sent = post.mock.calls[0]![0] as { content: string };
+      expect(sent.content).toBe(`<img src="data:image/png;base64,${Buffer.from('px').toString('base64')}">`);
+      expect(sent.content).not.toContain('atelier-image');
+    });
+
+    it("shows a placeholder for an id that is not this conversation's, and fetches nothing for it", () => {
+      const fetching = vi.fn();
+      vi.stubGlobal('fetch', fetching);
+      const { post, send } = withImages(html('img_deadbeef'));
+      send({ type: 'ready' });
+      expect(post).toHaveBeenCalledWith({ type: 'render', artifactType: 'html', content: `<img src="${PLACEHOLDERS.unknown}">`, theme: 'light' }, '*');
+      expect(fetching).not.toHaveBeenCalled();
+    });
   });
 });

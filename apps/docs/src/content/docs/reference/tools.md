@@ -1130,7 +1130,7 @@ Shows a file from the workspace in the Artifact pane beside the conversation, so
 ````
 
 <details>
-<summary>The description reads differently in 3 other setups</summary>
+<summary>The description reads differently in 6 other setups</summary>
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
@@ -1147,6 +1147,30 @@ Creates or changes a standalone piece of content (a document, program, web page,
 - A reply makes a single artifact unless the person asks for several.
 ````
 
+**Chat, full tier**
+
+````text wrap
+Creates or changes a standalone piece of content (a document, program, web page, React component, SVG or Mermaid diagram) shown in a panel next to the conversation. Every change makes a new version.
+- `create` takes a new `identifier` (kebab-case, unique in this conversation), a `type`, a `title` and the complete `content`.
+- `update` replaces `old`, which must occur exactly once in the latest version, with `new`. Use it for small, local edits.
+- `rewrite` replaces the whole content (and optionally the title). Use it for larger changes.
+- Types: `html`, `react`, `svg`, `mermaid`, `markdown`, and `code` with `language`.
+- Artifacts run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission (use click and change handlers). A `react` artifact is one default-exported component without required props, styled with Tailwind utility classes, importing only React, lucide-react and recharts.
+- To show an image you made with GenerateImage, write its id in full as the source, like `<img src="atelier-image:img_ab12cd34">` (also in CSS `url()` and Markdown): Atelier puts the picture in. Only images of this conversation work, and never build the id in code.
+- Content must be complete: no placeholders or "rest unchanged" comments.
+- A reply makes a single artifact unless the person asks for several.
+````
+
+**Code, full tier**
+
+````text wrap
+Shows a file from the workspace in the Artifact pane beside the conversation, so the person can look at what you made without leaving Atelier.
+- `file_path` is relative to the workspace root, or absolute. The extension decides how the file is shown: `.html` as a page, `.svg` as an image, `.md` as a document, `.mmd` as a Mermaid diagram, anything else as code.
+- Write the file first. Calling it again for the same path after a change adds a new version; the pane follows the latest.
+- Pages run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission. Keep a page you mean to show self-contained.
+- To show an image you made with GenerateImage, write its id in full as the source, like `<img src="atelier-image:img_ab12cd34">` (also in CSS `url()` and Markdown): Atelier puts the picture in. Only images of this conversation work, and never build the id in code. A page opened outside Atelier has no such pictures.
+````
+
 **Code, compact tier**
 
 ````text wrap
@@ -1160,6 +1184,12 @@ Creates or changes a standalone piece of content shown in a panel next to the ch
 - `create` needs identifier, type, title and the complete content; `rewrite` replaces the content.
 - `type` is html, react, svg, mermaid, markdown or code.
 - Artifacts run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission (use click and change handlers). A `react` artifact is one default-exported component without required props, styled with Tailwind utility classes, importing only React, lucide-react and recharts.
+````
+
+**Code, compact tier**
+
+````text wrap
+Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs. To show an image you made with GenerateImage, write its id in full as the source, like `<img src="atelier-image:img_ab12cd34">` (also in CSS `url()` and Markdown): Atelier puts the picture in. Only images of this conversation work, and never build the id in code.
 ````
 
 </details>
@@ -1192,7 +1222,7 @@ Keep the visual focused and readable at conversation width. Make controls do som
 ````
 
 <details>
-<summary>The description reads differently in 3 other setups</summary>
+<summary>The description reads differently in 4 other setups</summary>
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
@@ -1202,6 +1232,18 @@ A description depends on the prompt tier, the mode and which other tools the ses
 Shows a self-contained inline explainer or mini app in the conversation when seeing or interacting helps understanding; not for every answer.
 Use artifact for a standalone deliverable to keep or edit; inline_visual is for understanding and quick prototypes.
 Write an HTML fragment with CSS and any script last, not an iframe or a full page. Use vanilla JS, CSS, SVG or Canvas; no external network, assets, libraries or storage.
+Blend into the conversation: no app chrome or repeated page heading unless useful. Use theme variables --text-primary, --text-secondary, --text-muted, --surface-1, --surface-2, --border, --border-strong and --text-accent.
+Provide accessible, keyboard-operable controls and a plain-language description. Animate with requestAnimationFrame and elapsed time, and respect prefers-reduced-motion.
+Keep the visual focused and readable at conversation width. Make controls do something useful; use clear labels and visible focus, and do not rely on color alone. The description explains what the visual shows without needing to see it.
+````
+
+**Chat, full tier**
+
+````text wrap
+Shows a self-contained inline explainer or mini app in the conversation when seeing or interacting helps understanding; not for every answer.
+Use artifact for a standalone deliverable to keep or edit; inline_visual is for understanding and quick prototypes.
+Write an HTML fragment with CSS and any script last, not an iframe or a full page. Use vanilla JS, CSS, SVG or Canvas; no external network, assets, libraries or storage.
+To show an image you made with GenerateImage, write its id in full as the source, like `<img src="atelier-image:img_ab12cd34">`: Atelier puts the picture in. Only images of this conversation work.
 Blend into the conversation: no app chrome or repeated page heading unless useful. Use theme variables --text-primary, --text-secondary, --text-muted, --surface-1, --surface-2, --border, --border-strong and --text-accent.
 Provide accessible, keyboard-operable controls and a plain-language description. Animate with requestAnimationFrame and elapsed time, and respect prefers-reduced-motion.
 Keep the visual focused and readable at conversation width. Make controls do something useful; use clear labels and visible focus, and do not rely on color alone. The description explains what the visual shows without needing to see it.
@@ -1248,6 +1290,7 @@ Makes images from a text description and shows them in the conversation. A local
 - Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.
 - A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.
 - To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want.
+- When the person marked an area of an image, their message gives that image's id and a mask id: pass the image first in `reference_images` and the mask as `mask`, and describe the whole picture as it should look after the change. If the model can't change one area, the result says which can: tell the person, then call again with that `model`.
 - `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.
 - If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.
 - The images appear by themselves: never paste their ids or links into your reply.
@@ -1267,6 +1310,7 @@ Makes images from a text description and shows them in the conversation. A local
 - Write `prompt` as a full visual description: subject, setting, style, light, framing. Keep the person’s specifics. Put text that must appear in the image in quotes.
 - A note tells you which image models you can use and how each wants its prompt. Leave `model` out to use the person's choice; switching models can be slow on a local server, so only switch when asked or when another model clearly fits better.
 - To change an image, whether you made it or the person attached it, put its `img_…` id in `reference_images` and describe the result you want. For an image file in the folder, open it with Read first: that gives you its id.
+- When the person marked an area of an image, their message gives that image's id and a mask id: pass the image first in `reference_images` and the mask as `mask`, and describe the whole picture as it should look after the change. If the model can't change one area, the result says which can: tell the person, then call again with that `model`.
 - `aspect_ratio` is like `16:9`, and people usually look best in a portrait format like `2:3`. `count` is for when the person wants options to pick from.
 - If you can see the result and it has a clear flaw, try once more with a better prompt. Don't keep going without asking.
 - The images appear by themselves: never paste their ids or links into your reply.
@@ -1280,6 +1324,7 @@ Makes an image from a description and shows it to the person.
 - Only when the person asks for an image.
 - `prompt`: describe what it shows, in detail. Follow the prompt style in the note about image models.
 - To change an earlier or attached image, put its `img_…` id in `reference_images`.
+- A marked area comes with a mask id: pass it as `mask`, the image first in `reference_images`.
 ````
 
 </details>
