@@ -67,6 +67,13 @@ export const SETTINGS_INDEX = [
     keywords: ['default chat model', 'chat', 'model picker', 'server default'],
   },
   {
+    id: 'prefs.models.rememberLast',
+    page: 'general',
+    label: 'Start with the model I used last',
+    description: 'The model you pick in a conversation is the one the next new conversation starts with. Turn it off to always start with the default model above.',
+    keywords: ['remember model', 'last model', 'default model', 'model picker', 'new chat'],
+  },
+  {
     id: 'prefs.models.image',
     page: 'general',
     label: 'Default image model',

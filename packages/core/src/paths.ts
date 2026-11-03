@@ -9,6 +9,9 @@ import { posix, win32 } from 'node:path';
 
 export type PathFlavor = 'posix' | 'win32';
 
+/** How a folder's own computer writes paths, from the separator its runner reported: a Windows PC's folder seen from a Linux server. */
+export const flavorOfSep = (sep: string): PathFlavor => (sep === '\\' ? 'win32' : 'posix');
+
 export interface PathOps {
   flavor: PathFlavor;
   isAbsolute(path: string): boolean;

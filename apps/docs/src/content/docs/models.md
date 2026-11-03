@@ -279,3 +279,7 @@ has no such control. Leave it empty unless you have a reason.
 Overrides, defaults and aliases live in the settings file's `models` section (`defaults`, `aliases`, `overrides`), shared by
 everyone on this installation; your own default model is part of your account's preferences. See
 [Settings reference](/reference/settings/) and [Data and files](/data-and-files/).
+
+## The model you used last
+
+The model you pick in a conversation is the model the next new conversation starts with, per kind of conversation (Chat, Cowork, Code). Turn it off in **Settings › General › Start with the model I used last** to always start with your default model.

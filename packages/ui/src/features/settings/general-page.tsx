@@ -66,6 +66,7 @@ export function GeneralPage() {
       </SettingsSection>
       <SettingsSection title="Chat">
         <DefaultModelRow />
+        <RememberModelRow />
         {images && <DefaultImageModelRow />}
       </SettingsSection>
       <SettingsSection title="Notifications">
@@ -112,6 +113,16 @@ function DefaultModelRow() {
   return (
     <SettingRow id="prefs.models.chat" setting={setting} error={warning}>
       {(label) => <ModelSelect {...label} setting={setting} unsetLabel={unsetLabel} models={visible} providerNames={providerNames} />}
+    </SettingRow>
+  );
+}
+
+/** On by default: the model picked in a conversation becomes the one new conversations start with. */
+function RememberModelRow() {
+  const setting = usePref<boolean | undefined>(['models', 'rememberLast']);
+  return (
+    <SettingRow id="prefs.models.rememberLast" setting={setting}>
+      {(label) => <Switch {...label} checked={setting.value !== false} onCheckedChange={(on) => void setting.set(on)} />}
     </SettingRow>
   );
 }

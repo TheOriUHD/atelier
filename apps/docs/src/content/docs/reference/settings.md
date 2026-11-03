@@ -21,6 +21,7 @@ see are hidden in the app.
 | **Transcript width** | Maximum width of the transcript and composer columns. |
 | **Motion** | Reduce animation in streaming responses and other interface elements. |
 | **Default model** | New chats start with this model. “Server default” follows the one set for everyone. |
+| **Start with the model I used last** | The model you pick in a conversation is the one the next new conversation starts with. Turn it off to always start with the default model above. |
 | **Default image model** *(only where it works)* | What makes your images, unless you pick another in a conversation or name one when you ask. |
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |

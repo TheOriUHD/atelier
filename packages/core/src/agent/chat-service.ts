@@ -94,6 +94,8 @@ import { approvedMode, createExitPlanModeTool } from '../tools/exit-plan-mode.ts
 import { createAddConnectorTool, type AddedConnector, type NewConnector } from '../tools/add-connector.ts';
 import { createComputerTools, type ComputerCall } from '../tools/computer.ts';
 import { keepRecentGenerated, keepRecentScreenshots } from './screenshots.ts';
+import { credentialPath } from '../permissions/sensitive.ts';
+import { flavorOfSep } from '../paths.ts';
 import { createChangeDirectoryTool } from '../tools/change-directory.ts';
 import { createTaskStopTool } from '../tools/task-stop.ts';
 import { createTimeTool } from '../tools/time.ts';
@@ -501,6 +503,8 @@ export class ChatService {
   private readonly interactions: InteractionBroker;
   /** "Allow for this session" approvals, kept while the backend runs. */
   private sessionRules = new Map<string, string[]>();
+  /** Folders elsewhere the person allowed looking at, as `Read(//folder/**)` rules: kept apart so credential files never ride along. */
+  private folderRules = new Map<string, string[]>();
   /** Messages sent while a run was going, by session: delivered at its next step or when it ends (`outbox`). */
   private outboxes = new Map<string, OutboxMessage[]>();
   /** A waiting message sent "now": the run it interrupted hands it the next turn when it has ended. */
@@ -918,6 +922,7 @@ export class ChatService {
       this.loops.forget(sessionId);
       await this.stop(sessionId);
       this.sessionRules.delete(sessionId);
+      this.folderRules.delete(sessionId);
       this.sinceTodo.delete(sessionId);
       this.nested.delete(sessionId);
       this.seqs.delete(sessionId);
@@ -1430,7 +1435,9 @@ export class ChatService {
     // A sub-agent's questions appear in its parent's transcript, where the person is looking.
     const asker = askerOf(session);
     const subject = { name: call.name, input: (call.input ?? {}) as Record<string, unknown> };
-    const rules = { ...ctx.rules, allow: [...ctx.rules.allow, ...(this.sessionRules.get(asker) ?? []), ...(main ? (this.sessionRules.get(main.id) ?? []) : [])] };
+    const target = connectorOrNone(call.name) ? null : outsideRoots(subject, ctx);
+    const folders = target && credentialPath(target) ? [] : [...(this.folderRules.get(asker) ?? []), ...(main ? (this.folderRules.get(main.id) ?? []) : [])];
+    const rules = { ...ctx.rules, allow: [...ctx.rules.allow, ...(this.sessionRules.get(asker) ?? []), ...(main ? (this.sessionRules.get(main.id) ?? []) : []), ...folders] };
     const judge: PermissionContext = { ...ctx, rules, isReadOnly: (name) => (name === tool.name && tool.readOnly) || ctx.isReadOnly(name), offers: (name) => offered.has(name) };
     const decision = current.mode === 'chat' && SANDBOX_TOOLS.has(call.name) ? await this.sandboxDecision(current, subject) : decide(subject, judge);
     if (decision.behavior === 'deny') return { allow: false, message: refusal(decision) };
@@ -1475,7 +1482,16 @@ export class ChatService {
     // Approving resumes Auto mode after it paused.
     this.autoBlocks.delete(asker);
     // Dangerous commands are approved one call at a time.
-    if (verdict.warning || !answer.remember) return { allow: true, ...(input ? { input } : {}) };
+    if (verdict.warning) return { allow: true, ...(input ? { input } : {}) };
+    // Looking at a folder elsewhere on the machine is approved once for the folder, not once per file: moving or reading a
+    // whole project would otherwise ask more than the same work inside the workspace does. Writes stay per call, and
+    // credentials and private data never ride along.
+    const looked = !answer.remember && LOOKS.has(call.name) ? outsideRoots({ name: call.name, input: (final.input ?? {}) as Record<string, unknown> }, ctx) : null;
+    if (looked && !credentialPath(looked)) {
+      this.folderRules.set(asker, [...(this.folderRules.get(asker) ?? []), request.suggestedRule]);
+      return { allow: true, ...(input ? { input } : {}) };
+    }
+    if (!answer.remember) return { allow: true, ...(input ? { input } : {}) };
     // Every scope covers the rest of this session at once (project files are re-read only every few seconds).
     this.sessionRules.set(asker, [...(this.sessionRules.get(asker) ?? []), request.suggestedRule]);
     if (answer.remember === 'project') await this.deps.rememberProjectRule?.(session, request.suggestedRule);
@@ -1967,7 +1983,7 @@ export class ChatService {
   private async sandboxDecision(session: SessionRow, call: { name: string; input: Record<string, unknown> }): Promise<Decision> {
     try {
       const workspace = await this.deps.chatSandbox!(session);
-      const flavor = workspace.pathSep === '\\' ? 'win32' : 'posix';
+      const flavor = flavorOfSep(workspace.pathSep);
       return sandboxDecide(call, { root: workspace.root, home: workspace.home, confined: workspace.sandbox?.confined ?? false, flavor });
     } catch (error) {
       return { behavior: 'deny', reason: `The sandbox isn't available: ${error instanceof Error ? error.message : String(error)}` };
@@ -2827,6 +2843,9 @@ const COMPACT_CONNECTOR_CHARS = 200;
 /** How long a permission prompt waits to learn where an Edit lands before it goes out without line numbers. */
 const POSITION_WAIT_MS = 2000;
 /** Tools whose path the runner scopes to the workspace's roots. */
+const connectorOrNone = (name: string) => name.startsWith('mcp__');
+/** Tools that only look at files. */
+const LOOKS = new Set(['Read', 'Glob', 'Grep']);
 const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
 const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'ComputerApps', 'OpenApp', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);

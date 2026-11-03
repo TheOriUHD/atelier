@@ -1607,6 +1607,46 @@ describe('files outside the folder', () => {
     expect(reached).toEqual([resolve('/tmp/taste-skill/SKILL.md')]);
   });
 
+  /** Reads each of `files` in turn, then says it is done. */
+  const readsInTurn = (files: string[]): ProviderAdapter => ({
+    ...reader,
+    async *stream(req): AsyncIterable<StreamEvent> {
+      if (req.system.some((b) => b.text.includes('short title'))) return yield* reader.stream(req);
+      const done = req.messages.filter((m) => m.role === 'tool').length;
+      if (done >= files.length) {
+        yield { type: 'text', delta: 'done' };
+        yield { type: 'finish', reason: 'end' };
+        return;
+      }
+      yield { type: 'tool_call_start', id: `r${done}`, name: 'Read' };
+      yield { type: 'tool_call_end', id: `r${done}`, input: { file_path: files[done] } };
+      yield { type: 'finish', reason: 'tool_use' };
+    },
+  });
+
+  it('asks once for a folder elsewhere, not once per file in it', async () => {
+    const chat = service(readsInTurn(['/tmp/proj/a.md', '/tmp/proj/sub/b.md', '/tmp/proj/c.md']), [readTool as Tool], undefined, {}, withReach);
+    const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'default' });
+    await chat.send(s.id, [{ type: 'text', text: 'move the project' }]);
+    await until(() => lastPending() !== null);
+    chat.respond(s.id, lastPending()!.id, { behavior: 'allow' });
+    await chat.settle(s.id);
+    expect(reads).toBe(3);
+    expect(events.filter((e) => e.type === 'pending' && e.pending).length).toBe(1);
+  });
+
+  it('still asks about a credential file in a folder it was allowed to look at, and about other folders', async () => {
+    const chat = service(readsInTurn(['/tmp/proj/a.md', '/tmp/proj/.env']), [readTool as Tool], undefined, {}, withReach);
+    const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'default' });
+    await chat.send(s.id, [{ type: 'text', text: 'look' }]);
+    await until(() => lastPending() !== null);
+    chat.respond(s.id, lastPending()!.id, { behavior: 'allow' });
+    await until(() => events.filter((e) => e.type === 'pending' && e.pending).length === 2);
+    chat.respond(s.id, lastPending()!.id, { behavior: 'deny' });
+    await chat.settle(s.id);
+    expect(events.filter((e) => e.type === 'pending' && e.pending).length).toBe(2);
+  });
+
   it('does not tell the runner about a call that was refused', async () => {
     const chat = service(reader, [readTool as Tool], undefined, {}, withReach);
     const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'default' });

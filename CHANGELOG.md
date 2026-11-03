@@ -4,6 +4,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Working outside the workspace folder works on a server too:** a Cowork or Code session on a Windows PC's folder, connected to a Linux server, took the PC's `C:\…` paths for relative names inside the workspace. It never noticed a path was outside the folder, so it never asked, never told the PC's runner to allow it, and the assistant was stuck with "outside the workspace" even after you said yes. Paths are now read the way the folder's own computer writes them.
+- **One approval covers a folder elsewhere:** in Ask and Accept edits, allowing one look at a file outside the workspace allows looking at that folder for the rest of the session, so moving or reading a whole project doesn't ask for every file. Credential files still ask, and changes still ask per call, like edits in the workspace. Auto mode already did this.
+- **The model you pick stays picked:** the model chosen in a conversation is the one the next new conversation starts with (Settings › General › **Start with the model I used last**, on by default; turn it off to always start with your default model).
+
 - **Smaller Windows downloads:** there is now an installer for x64 and one for ARM64 (`Atelier-Setup-<version>-x64.exe`, `-arm64.exe`), each about half the size of the one installer that carried both. Installed copies pick theirs by themselves. The website's Windows tab offers the right one for your PC.
 - **Copy diagnostics:** **Settings › System** and the screen shown when a page breaks have a **Copy diagnostics** button. It puts a plain-text summary on your clipboard to paste into a bug report: version, system, mode, Electron and Chrome versions, screen and theme, how many providers and connectors with their types, the last error and the end of the app log. Keys, addresses, file paths outside Atelier's folders, email addresses, names and message text are left out, and Atelier still sends nothing by itself.
 

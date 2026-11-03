@@ -4,7 +4,8 @@
  */
 import { homedir } from 'node:os';
 import { z } from 'zod';
-import { dirname, join, posix } from 'node:path';
+import { dirname, join, posix, win32 } from 'node:path';
+import { flavorOfSep, pathOps } from '../paths.ts';
 import {
   ADMIN_PROCEDURES,
   APP,
@@ -1020,6 +1021,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         home: workspace.home,
         projectRoot: workspace.root,
         roots: [workspace.root, ...system.additionalDirectories],
+        // The folder's own computer decides how its paths read: a Windows PC's folder on a Linux server is `C:\\…`, which
+        // posix rules take for a relative name inside the workspace, so a call outside it was never noticed (or asked about).
+        flavor: flavorOfSep(workspace.pathSep),
         isReadOnly: () => false,
       };
     },
@@ -1050,12 +1054,15 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     reach: async (session, path) => {
       if (!session.workspaceId || !session.userId) return;
       const workspace = await workspaceManager.open(session.userId, session.workspaceId);
-      // A POSIX path stays POSIX whatever this computer is (an SSH host seen from Windows).
-      const parentOf = (p: string) => (p.startsWith('/') ? posix.dirname(p) : dirname(p));
-      const never = new Set(['/', parentOf(workspace.home), workspace.home].map((p) => p.replace(/\/+$/, '') || '/'));
+      // Paths read the way the folder's own computer writes them: a Windows PC's from a Linux server, or an SSH host's POSIX
+      // paths from Windows.
+      const win = flavorOfSep(workspace.pathSep) === 'win32' || /^[a-zA-Z]:[\\/]/.test(path);
+      const ops = pathOps(win ? 'win32' : 'posix');
+      const parentOf = (p: string) => (win ? win32.dirname(p) : p.startsWith('/') ? posix.dirname(p) : dirname(p));
+      const never = new Set(['/', parentOf(workspace.home), workspace.home].map((p) => ops.key(p)));
       let dir = path;
       for (let i = 0; i < 8; i++) {
-        if (never.has(dir.replace(/\/+$/, '') || '/')) return;
+        if (never.has(ops.key(dir))) return;
         try {
           await workspace.runner.call('sys.addRoot', { path: dir });
           return;

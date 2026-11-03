@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { splitCommand } from './bash.ts';
 import { dangerousReason } from './dangerous.ts';
 import type { PermissionMode } from '@atelier/protocol';
-import { decide, sandboxDecide, suggestRule, type PermissionContext, type RuleSet } from './engine.ts';
+import { decide, outsideRoots, sandboxDecide, suggestRule, type PermissionContext, type RuleSet } from './engine.ts';
+import { flavorOfSep } from '../paths.ts';
 import { bashMatches, parseRule, pathMatches, ruleMatches } from './rules.ts';
 import { credentialPath } from './sensitive.ts';
 
@@ -639,5 +640,29 @@ describe('Windows paths', () => {
     expect(credentialPath('C:\\Users\\me\\.SSH\\id_rsa')).toBe('credentials or keys');
     expect(credentialPath('C:\\Users\\me\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies')).toContain('browser');
     expect(credentialPath('C:\\work\\app\\src\\main.ts')).toBeNull();
+  });
+});
+
+describe('a Windows PC’s folder, judged on a Linux server', () => {
+  // The server is Linux, the folder is `C:\…`: read as posix it is a relative name, so the path that went to the runner
+  // to widen its roots was garbage, and the runner on the PC refused the call.
+  const call = { name: 'Read', input: { file_path: 'C:\\Users\\me\\Documents\\Vibecoding\\H3' } };
+  const base = { cwd: 'C:\\Users\\me\\.atelier\\scratch-1', roots: ['C:\\Users\\me\\.atelier\\scratch-1'] };
+
+  it('sees a path outside the workspace once the PC’s path style is used', () => {
+    expect(outsideRoots(call, { ...base, flavor: 'win32' })).toBe('C:\\Users\\me\\Documents\\Vibecoding\\H3');
+    // Read as posix it comes back mangled onto the server's own folder, which the runner on the PC can't be told to allow.
+    expect(outsideRoots(call, { ...base, flavor: 'posix' })).not.toBe('C:\\Users\\me\\Documents\\Vibecoding\\H3');
+  });
+
+  it('reads the separator the runner reports as the path style', () => {
+    expect(flavorOfSep('\\')).toBe('win32');
+    expect(flavorOfSep('/')).toBe('posix');
+  });
+
+  it('lets Auto read there, and has Ask ask', () => {
+    const ctxFor = (mode: PermissionMode) => ({ ...base, flavor: 'win32' as const, home: 'C:\\Users\\me', projectRoot: base.cwd, mode, rules: { allow: [], ask: [], deny: [] }, isReadOnly: (n: string) => n === 'Read' });
+    expect(decide(call, ctxFor('auto')).behavior).toBe('allow');
+    expect(decide(call, ctxFor('default')).behavior).toBe('ask');
   });
 });

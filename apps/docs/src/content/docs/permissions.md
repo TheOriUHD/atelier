@@ -71,7 +71,7 @@ For one tool call the engine checks these in order and stops at the first that d
 6. **Bypass** runs everything left.
 7. **Auto only:** clearing build output and temp files runs without review ([routine cleanup](#what-runs-unreviewed-in-auto)).
 8. **ChangeDirectory**, **AddConnector**, **ComputerAccess** and **FullControl** ask for themselves, each with its own card. A computer use step that only looks (screenshots, scrolling, waiting) runs; clicks, typing, keys and opening apps continue below like any other action ([Computer use](/computer-use/)).
-9. **Files outside the folder.** Read-only tools run in Auto (credential-looking paths go to the reviewer); everything else asks, or goes to the reviewer in Auto.
+9. **Files outside the folder.** Read-only tools run in Auto (credential-looking paths go to the reviewer); everything else asks, or goes to the reviewer in Auto. In Ask and Accept edits, allowing one look at a file allows looking at that folder for the rest of the session (credential files still ask), so reading or moving a whole project is one approval. Changes ask per call, like edits in the workspace. On a server, paths are read the way the folder's own computer writes them, so a Windows PC's folder works from a Linux server.
 10. **Read-only tools and the session tools** (TodoWrite, AskUser, ExitPlanMode, artifact) run.
 11. **Accept edits** runs file edits. **Auto** runs file edits too, except protected files, which go to the reviewer.
 12. **Everything else** asks, or goes to the reviewer in Auto.

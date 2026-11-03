@@ -43,6 +43,14 @@ export function ModelPicker({ model, mode, effort, onModelChange, onEffortChange
   const { settings } = useSettings();
   const { prefs } = usePrefs();
   const setPref = useSetPref();
+  /**
+   * A model picked in a conversation is the one the next conversation starts with, unless the person turned that off:
+   * it's saved as their model for this mode, the same preference Settings › General shows.
+   */
+  const choose = (ref: string) => {
+    onModelChange(ref);
+    if (prefs && prefs.models.rememberLast !== false && prefs.models[mode] !== ref) void setPref.mutateAsync({ path: ['models', mode], value: ref }).catch(() => undefined);
+  };
   const changeEffort = (next: Effort | null) => {
     const result = onEffortChange(next);
     return result instanceof Promise ? result.catch(() => toast.error('Couldn’t change effort')) : undefined;
@@ -50,7 +58,7 @@ export function ModelPicker({ model, mode, effort, onModelChange, onEffortChange
 
   return (
     <>
-      <ModelMenu value={model?.ref ?? null} label={model?.displayName ?? 'Choose a model'} onChange={(ref) => ref && onModelChange(ref)} open={open} onOpenChange={onOpenChange} />
+      <ModelMenu value={model?.ref ?? null} label={model?.displayName ?? 'Choose a model'} onChange={(ref) => ref && choose(ref)} open={open} onOpenChange={onOpenChange} />
       <EffortControl model={model} mode={mode} effort={effort} onChange={changeEffort} inSession={inSession} thinking={thinking ?? prefs?.thinking ?? true} onThinkingChange={sessionId ? (value) => rpc().call('sessions.update', { id: sessionId, thinking: value }).catch(() => toast.error('Couldn’t change thinking')) : (value) => setPref.mutate({ path: ['thinking'], value })} ultracode={settings?.ultracode?.enabled !== false} />
     </>
   );

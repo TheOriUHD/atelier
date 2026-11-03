@@ -361,7 +361,7 @@ export const UserPrefs = z.object({
       atelierMd: '',
     }),
   /** Preferred model per mode, chosen from the models the admin enabled and the person's own (personal providers). */
-  models: z.object({ chat: z.string(), work: z.string(), code: z.string(), image: z.string() }).partial().default({}),
+  models: z.object({ chat: z.string(), work: z.string(), code: z.string(), image: z.string(), rememberLast: z.boolean() }).partial().default({}),
   /** The person's own models (personal providers), by ref: how they call tools, as "Test tool calling" found. */
   personalModels: z.record(z.string(), ModelOverride.pick({ toolCalling: true })).default({}),
   /** Chat: the offer under a reply that used the sandbox to continue in Cowork; off once dismissed. */
