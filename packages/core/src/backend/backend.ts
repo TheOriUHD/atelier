@@ -85,6 +85,7 @@ import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
 import { ChatService, type ExtensionCatalog } from '../agent/chat-service.ts';
 import { isSideChat } from '../agent/side-chat.ts';
 import { LoopLimitError } from '../agent/loops.ts';
+import { UsageLimits } from '../usage/limits.ts';
 import { sessionUsage, statsSummary, usageSummary } from '../usage/usage.ts';
 import { GitHub, GitHubError } from '../cloud/github.ts';
 import { Codespaces } from '../cloud/codespaces.ts';
@@ -824,12 +825,22 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       : { excerpt: createExcerptReader({ fetch: httpFetch, allowPrivateNetworks: () => settings.effective.capabilities.webFetchPrivateNetworks }) }),
   });
 
+  // Per-person limits on text models (ARCHITECTURE §8): running totals per person, seeded from the usage events.
+  const limits = new UsageLimits({
+    db,
+    settings: () => settings.effective,
+    person: async (userId) => (await accounts.get(userId)).limits ?? null,
+    admins: async () => (await accounts.list()).filter((u) => u.role === 'admin' && !u.disabled).map((u) => u.name || u.username),
+  });
+
   /** One model request's tokens and cost, for Settings › Usage. */
   const recordUsage = ({ model, sessionId, mode, usage, userId }: { model: ModelInfo; sessionId: string | null; mode: string; usage: Usage; userId: string | null }) => {
     // A price the person set wins; else the provider's list price where Atelier knows it (providers/prices.ts).
     const providerType = settings.effective.providers.find((p) => p.id === model.providerId)?.type;
     const price = settings.effective.pricing[model.ref] ?? (providerType ? listPrice(providerType, model.modelId) : null);
     const cost = price ? costOf(price, usage) : null;
+    // Before the row is inserted: a person the limits see for the first time is seeded from the table without it.
+    limits.record(userId, { tokens: usage.input + usage.output + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0), costUsd: cost });
     void db.insert(usageEvents).values({
       id: newId(),
       ts: Date.now(),
@@ -859,6 +870,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     promptOverrides: () => promptOverrides,
     changed: (userId) => emitToUser(userId, 'memory.changed', {}),
     recordUsage: ({ model, sessionId, userId, usage }) => recordUsage({ model, sessionId, userId, usage, mode: 'chat' }),
+    limit: (userId) => limits.check(userId),
     onError: (message, e) => platform.logger.error(message, e),
   });
 
@@ -927,6 +939,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   });
 
   const chat = new ChatService({
+    limits: { admit: (userId) => limits.admit(userId), check: (userId) => limits.check(userId), warnings: (userId) => limits.warnings(userId) },
     images: {
       generate: (input, ctx) => images.generate(input, ctx),
       available: (session) => images.available(imageFacts(session)),
@@ -1380,6 +1393,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...SERVER_DEVICE_SERVICES] } } : {}),
       imageGeneration: true,
       auditLog: !local,
+      usageLimits: true,
     }),
 
     // ---------------------------------------------------------------- sign-in
@@ -2042,6 +2056,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (everyone && me(ctx).role !== 'admin') throw appError('forbidden', 'Only admins can see everyone’s usage.');
       return usageSummary(db, { userId: everyone ? null : me(ctx).id, days, timezoneOffset });
     },
+    'limits.mine': (_input, ctx) => limits.status(me(ctx).id),
+    'limits.everyone': async () =>
+      Promise.all(
+        (await accounts.list())
+          .filter((u) => u.role !== 'pending')
+          .map(async (u) => ({ id: u.id, username: u.username, name: u.name, disabled: u.disabled, status: await limits.status(u.id), own: u.limits ?? {} })),
+      ),
     'stats.summary': ({ mode, days, timezoneOffset }, ctx) => statsSummary(db, { userId: me(ctx).id, mode, days: days ?? null, timezoneOffset }),
     'privacy.export': async (_input, ctx) => {
       const blob = await blobs.put(await exportAll(db, blobs, me(ctx).id), 'application/zip');

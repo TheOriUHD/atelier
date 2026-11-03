@@ -1510,3 +1510,124 @@ describe('server updates', () => {
     }
   });
 });
+
+describe('usage limits', () => {
+  /** A server whose one model answers every chat request with `used` tokens (titles with 2), signed in as its admin Ada. */
+  async function limitedServer(used: { input: number; output: number }) {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-limits-'));
+    const reply = sse([{ data: { choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }] } }, { data: { choices: [], usage: { prompt_tokens: used.input, completion_tokens: used.output } } }], true);
+    const tiny = sse([{ data: { choices: [{ index: 0, delta: { content: 'A title' }, finish_reason: 'stop' }] } }, { data: { choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } } }], true);
+    const asked: string[] = [];
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      fetch: async (url, init) => {
+        if (!String(url).endsWith('/chat/completions')) return jsonResponse({ data: [] });
+        const body = JSON.parse(String(init.body)) as { messages: { role: string; content: unknown }[] };
+        const title = JSON.stringify(body.messages.filter((m) => m.role === 'system')).includes('short title');
+        asked.push(title ? 'title' : 'reply');
+        return streamResponse(title ? tiny : reply);
+      },
+    });
+    const signIn = () => {
+      const [clientSide, serverSide] = createMemoryTransportPair();
+      server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+      return createRpcClient(contract, clientSide);
+    };
+    const ada = signIn();
+    await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+    await ada.call('settings.set', { layer: 'global', path: ['providers'], value: [{ id: 'fake', type: 'openai-compatible', name: 'Fake', baseUrl: 'http://fake.test/v1', headers: {}, enabled: true }] });
+    const { user, temporaryPassword } = await ada.call('users.create', { username: 'bob', name: 'Bob', role: 'user' });
+    const bob = signIn();
+    await bob.call('auth.login', { username: 'bob', password: temporaryPassword, clientKind: 'web' });
+    await bob.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
+    const say = async (who: RpcClient<AppContract>, sessionId: string) => {
+      await who.call('chat.send', { sessionId, parts: [{ type: 'text', text: 'hi' }] });
+      await vi.waitFor(async () => expect((await who.call('sessions.subscribe', { id: sessionId })).session.status).not.toBe('running'));
+      const { messages } = await who.call('sessions.subscribe', { id: sessionId });
+      return messages.at(-1)!;
+    };
+    return { server, home, ada, bob, bobId: user.id, asked, say };
+  }
+
+  it('stops a person at the limit an admin set, shows them and the admin the numbers, and lets an admin lift it for one person', async () => {
+    const { server, home, ada, bob, bobId, asked, say } = await limitedServer({ input: 400, output: 100 });
+    try {
+      expect(await bob.call('limits.mine', {})).toEqual({ exempt: false, rows: [], unpriced: 0 });
+      await ada.call('settings.set', { layer: 'global', path: ['limits', 'tokensPerDay'], value: 600 });
+      expect(await bob.call('limits.mine', {})).toMatchObject({ rows: [{ key: 'tokensPerDay', used: 0, max: 600, reached: false, near: false }] });
+
+      const chat = await bob.call('sessions.create', { mode: 'chat', model: 'fake/m' });
+      expect((await say(bob, chat.id)).error).toBeNull();
+      // 500 for the reply and 2 for its title are counted; the second message passes the line, and the third meets it.
+      expect((await say(bob, chat.id)).error).toBeNull();
+      const refused = await say(bob, chat.id);
+      expect(refused.error).toMatchObject({ code: 'limit_reached', retryable: false });
+      expect(refused.error?.message).toContain('You’ve reached your limit of 600 tokens (tokens per day)');
+      expect(refused.error?.message).toContain('Ask an admin (Ada)');
+      expect(asked.filter((a) => a === 'reply')).toHaveLength(2);
+      expect(await bob.call('limits.mine', {})).toMatchObject({ rows: [{ key: 'tokensPerDay', used: 1002, max: 600, reached: true, near: true }], unpriced: 3 });
+
+      // Only admins see everyone, with each person's own override.
+      expect(await code(bob.call('limits.everyone', {}))).toBe('forbidden');
+      expect(await ada.call('limits.everyone', {})).toMatchObject([
+        { username: 'ada', status: { rows: [{ key: 'tokensPerDay', used: 0 }] }, own: {} },
+        { username: 'bob', status: { rows: [{ key: 'tokensPerDay', used: 1002, reached: true }] }, own: {} },
+      ]);
+
+      // Raised for Bob alone, then lifted altogether. The person's own windows hear about their account at once.
+      const heard: unknown[] = [];
+      bob.on('account.changed', (u) => heard.push(u.limits));
+      await ada.call('users.update', { id: bobId, limits: { tokensPerDay: 5000 } });
+      expect((await ada.call('users.list', {})).find((u) => u.id === bobId)?.limits).toEqual({ tokensPerDay: 5000 });
+      expect(heard).toEqual([{ tokensPerDay: 5000 }]);
+      expect((await say(bob, chat.id)).error).toBeNull();
+      await ada.call('users.update', { id: bobId, limits: { exempt: true } });
+      expect(await bob.call('limits.mine', {})).toMatchObject({ exempt: true, rows: [] });
+      await ada.call('settings.set', { layer: 'global', path: ['limits', 'tokensPerDay'], value: 100 });
+      expect((await say(bob, chat.id)).error).toBeNull();
+      // Taking the override away puts the system limit back.
+      await ada.call('users.update', { id: bobId, limits: {} });
+      expect((await ada.call('users.list', {})).find((u) => u.id === bobId)).not.toHaveProperty('limits');
+      expect((await say(bob, chat.id)).error?.code).toBe('limit_reached');
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('keeps what was used across a restart, because the totals come from the usage events', async () => {
+    const { server, home, ada, bob } = await limitedServer({ input: 400, output: 100 });
+    try {
+      await ada.call('settings.set', { layer: 'global', path: ['limits', 'tokensPerDay'], value: 600 });
+      const chat = await bob.call('sessions.create', { mode: 'chat', model: 'fake/m' });
+      await bob.call('chat.send', { sessionId: chat.id, parts: [{ type: 'text', text: 'hi' }] });
+      await vi.waitFor(async () => expect((await bob.call('limits.mine', {})).rows[0]?.used).toBe(502));
+      await server.dispose();
+      const again = await createBackend({
+        surface: 'web',
+        configDir: home,
+        dataDir: home,
+        cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+        env: {},
+        logger: { info: () => {}, error: () => {} },
+        fetch: async () => Promise.reject(new Error('offline')),
+      });
+      try {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        again.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+        const bobAgain = createRpcClient(contract, clientSide);
+        await bobAgain.call('auth.login', { username: 'bob', password: 'bob-new-password', clientKind: 'web' });
+        expect(await bobAgain.call('limits.mine', {})).toMatchObject({ rows: [{ key: 'tokensPerDay', used: 502, max: 600 }] });
+      } finally {
+        await again.dispose();
+      }
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+});

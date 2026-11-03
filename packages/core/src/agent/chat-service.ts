@@ -27,6 +27,7 @@ import {
   type ElicitationRequest,
   type HookEvent,
   type HooksConfig,
+  type LimitWarning,
   type Message,
   type MessageError,
   type ModelInfo,
@@ -51,7 +52,8 @@ import {
   type Usage,
   type UserPrefs,
 } from '@atelier/protocol';
-import { imageId, type ImageProgress } from '@atelier/protocol';
+import { imageId, LIMIT_REACHED, type ImageProgress } from '@atelier/protocol';
+import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
 import { BLOCKS_IN_A_ROW, BLOCKS_TOTAL, parseVerdict, reviewInput, reviewLeniency } from '../permissions/auto-mode.ts';
@@ -214,6 +216,16 @@ export interface ChatServiceDeps {
     available(session: SessionRow): Promise<boolean>;
     /** The models, one per line with what the text model needs to choose. */
     modelList(session: SessionRow): Promise<string>;
+  };
+  /**
+   * Per-person usage limits (ARCHITECTURE §8): `admit` is asked before every model request (a refusal ends the turn),
+   * `warnings` after each recorded one. Without it nothing is limited.
+   */
+  limits?: {
+    admit(userId: string | null): Promise<Admission>;
+    /** For requests nobody asked for: the error when the person is over a limit, without holding a place. */
+    check(userId: string | null): Promise<MessageError | null>;
+    warnings(userId: string): Promise<LimitWarning[]>;
   };
   /** File pre-images for Rewind; without it Write and Edit keep none. */
   checkpoints?: Checkpoints;
@@ -425,6 +437,8 @@ export class ChatService {
   /** The guess at each session's next message while it stands, and the requests still working one out. */
   private suggestions = new Map<string, string>();
   private suggesting = new Map<string, AbortController>();
+  /** The usage-limit warning each session shows while it stands (cleared by the person's next turn). */
+  private limitWarnings = new Map<string, LimitWarning>();
   /** Running sub-agents' own stop (the Background tasks pane's), which also reaches one still waiting for its turn. */
   private agentStops = new Map<string, AbortController>();
   /** Counts events that reflect stored changes (everything but streaming output), so snapshots can detect races. */
@@ -668,6 +682,7 @@ export class ChatService {
         phase: this.phases.get(sessionId) ?? null,
         retryAttempt: this.retryAttempts.get(sessionId),
         suggestion: this.suggestions.get(sessionId) ?? null,
+        limitWarning: this.limitWarnings.get(sessionId) ?? null,
         outbox: [...(this.outboxes.get(sessionId) ?? [])],
         seq: this.seqs.get(sessionId) ?? 0,
       };
@@ -932,6 +947,8 @@ export class ChatService {
     const done = (async () => {
       try {
         const session = await this.requireSession(sessionId);
+        const refused = await this.limitError(session.userId);
+        if (refused) throw new Error(refused.message);
         const ref = await this.modelRef(session);
         if (!ref) throw new ModelUnavailableError('No model available for compaction.');
         // At once, before anything slow (the model, the tools, the prompt) is looked up: the command in the conversation
@@ -1010,6 +1027,7 @@ export class ChatService {
     const controller = new AbortController();
     // A new turn makes the guess at the next message moot, and the request still working one out gives way.
     this.dropSuggestion(sessionId);
+    if (this.limitWarnings.delete(sessionId)) this.emit(sessionId, { type: 'limit_warning', warning: null });
     // This turn picks up the ends waiting for it at its first request; if it fails before that, the next turn does.
     for (const notice of this.notices.get(sessionId) ?? []) notice.wake = false;
     // A woken turn continues the chain of the messages it picks up (`deliverNotices`); any other starts a new one.
@@ -1078,6 +1096,23 @@ export class ChatService {
   /** A loop's send: its prompt as the person's message, marked as the loop's, with a note that it repeats. */
   private sendFromLoop(sessionId: string, tick: LoopTick): void {
     if (this.closing || this.discarding.has(sessionId)) return;
+    // Over a usage limit, a loop would add a message and an error every interval: it ends instead, and says why once.
+    if (this.deps.limits) {
+      void (async () => {
+        const row = await this.deps.repo.getRow(sessionId);
+        const refused = row ? await this.limitError(row.userId) : null;
+        if (refused) {
+          this.loops.stop(sessionId);
+          await this.failTurn(sessionId, { ...refused, message: `${refused.message} The loop was stopped; start it again once the limit resets.` });
+        } else this.sendLoopTick(sessionId, tick);
+      })().catch(() => this.sendLoopTick(sessionId, tick));
+      return;
+    }
+    this.sendLoopTick(sessionId, tick);
+  }
+
+  private sendLoopTick(sessionId: string, tick: LoopTick): void {
+    if (this.closing || this.discarding.has(sessionId)) return;
     const note = renderNote('notes/loop-tick', { interval: formatInterval(tick.intervalMs), run: String(tick.run) }, this.deps.promptOverrides());
     const parts: Part[] = [
       { type: 'text', text: tick.prompt },
@@ -1109,6 +1144,13 @@ export class ChatService {
     let finalStatus: 'idle' | 'error' = 'idle';
     try {
       const session = await this.requireSession(sessionId);
+      // Over a usage limit: nothing is sent. A turn started for background sub-agents' ends just waits for the person.
+      const refused = await this.limitError(session.userId);
+      if (refused) {
+        if (!wake) await this.failTurn(sessionId, refused);
+        finalStatus = wake ? 'idle' : 'error';
+        return;
+      }
       const hooks = await this.deps.hooks?.(session);
       // Sub-agents get tool hooks only: their prompt comes from the parent, and their end is the parent's tool result.
       const turnHooks = session.parentSessionId ? undefined : hooks;
@@ -1161,11 +1203,14 @@ export class ChatService {
           run.threshold = Math.floor(Math.min(run.threshold, run.last?.used ?? run.threshold) * 0.8);
         },
         authorize: (call, tool) => this.authorize(session, call, tool, offered, signal),
+        // Before each request, so a long turn (and its sub-agents) stops soon after a limit is reached.
+        ...(this.deps.limits ? { admit: () => this.deps.limits!.admit(session.userId) } : {}),
         afterTool: (call, output) => this.afterTool(session, hooks ?? null, call, output, signal),
         onOutputCut: () => this.addContextMessage(sessionId, renderNote('notes/output-cut', {}, this.deps.promptOverrides(), [...offered])),
         onUsage: (usage) => {
           this.observeUsage(run, usage);
           this.deps.recordUsage({ model: resolved.info, sessionId, userId: session.userId, mode: session.mode, usage });
+          this.warnAboutLimits(sessionId, session.userId);
         },
       });
       let result = await turn();
@@ -1177,6 +1222,9 @@ export class ChatService {
         result = await turn();
       }
       if (result.stopReason === 'error') finalStatus = 'error';
+      // A usage limit reached before a request: nothing was sent, so the error is a reply of its own, after the last tool results
+      // (where a sub-agent's report and the person's transcript look for it).
+      if (result.error?.code === LIMIT_REACHED) await this.failTurn(sessionId, result.error);
       // Errors raised after the last reply finished (the step limit, a loop) belong on that reply.
       if (result.error && result.lastAssistantId && (result.error.code === 'max_steps' || result.error.code === 'repeating')) {
         await this.deps.repo.updateMessage(result.lastAssistantId, { error: result.error });
@@ -1448,6 +1496,8 @@ export class ChatService {
         maxOutputTokens: 400,
         signal: AbortSignal.any([signal, AbortSignal.timeout(10 * 60_000)]),
         queue: { priority: 'urgent', timeoutMs: 90_000 },
+        // A review belongs to a turn that was let through, so it isn't held back; it counts toward the person's limits.
+        onUsage: (usage) => this.deps.recordUsage({ model: model.info, sessionId: session.id, userId: session.userId, mode: session.mode, usage }),
       });
     } catch (error) {
       if (signal.aborted) return { behavior: 'deny', message: 'The response was stopped.' };
@@ -1756,6 +1806,34 @@ export class ChatService {
   }
 
   /** Ends the turn with an error reply in place of the model's. */
+  /** The error that ends a turn of this person's, if they are over a usage limit; nothing is held back. */
+  private async limitError(userId: string | null): Promise<MessageError | null> {
+    const admission = await this.deps.limits?.admit(userId);
+    if (!admission) return null;
+    if (admission.error) return admission.error;
+    admission.release();
+    return null;
+  }
+
+  /** May a request the person didn't ask for (a title, a suggestion, a page's summary) go ahead? Over a limit, it is skipped without a word. */
+  private async backgroundAllowed(userId: string | null): Promise<boolean> {
+    return !(await this.deps.limits?.check(userId));
+  }
+
+  /** After a request was recorded: the person's windows hear once when they pass 80% of a limit (the closest one). */
+  private warnAboutLimits(sessionId: string, userId: string | null): void {
+    if (!userId || !this.deps.limits) return;
+    void this.deps.limits
+      .warnings(userId)
+      .then((found) => {
+        const closest = found.sort((a, b) => b.used / b.max - a.used / a.max)[0];
+        if (!closest) return;
+        this.limitWarnings.set(sessionId, closest);
+        this.emit(sessionId, { type: 'limit_warning', warning: closest });
+      })
+      .catch(() => undefined);
+  }
+
   private async failTurn(sessionId: string, error: MessageError): Promise<void> {
     const session = await this.deps.repo.getRow(sessionId);
     const message = await this.deps.repo.insertMessage({
@@ -2096,12 +2174,15 @@ export class ChatService {
     const session = await this.requireSession(sessionId);
     const model = await this.smallModel(session.model);
     if (!model) return null;
+    // Over a usage limit the page goes to the main model instead, whose own next request is refused.
+    if (!(await this.backgroundAllowed(session.userId))) return null;
     return collectText(model, {
       system: [{ text: template('web-fetch', this.deps.promptOverrides()) }],
       user: `<page>\n${escapeTags(content)}\n</page>\n\nQuestion: ${prompt}`,
       maxOutputTokens: Math.min(model.info.maxOutput, 4000),
       signal,
       queue: { priority: session.parentSessionId ? 'subagent' : 'foreground' },
+      onUsage: (usage) => this.deps.recordUsage({ model: model.info, sessionId, userId: session.userId, mode: session.mode, usage }),
     });
   }
 
@@ -2599,6 +2680,7 @@ export class ChatService {
       const model = (await this.smallModel(current.info.ref)) ?? current;
       // Browser chat has one conversation slot, which the person's next message needs.
       if (model.adapter.type === 'chatgpt-chat') return;
+      if (!(await this.backgroundAllowed(session.userId))) return;
       const text = await collectText(model, {
         system: [{ text: template('suggestion', this.deps.promptOverrides()) }],
         user: `The person's messages so far, oldest first:\n${said.map((m) => `- ${m.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}\n\nThe assistant's last reply:\n${messageText(reply.parts).slice(-3000)}`,
@@ -2643,8 +2725,11 @@ export class ChatService {
       const userText = messageText(firstUser.parts) || '(attachment)';
       const small = (await this.smallModel(current.info.ref)) ?? current;
       // Browser chat has one conversation slot; a local title avoids an extra page load ahead of the reply.
-      const ask = (model: ResolvedModel) => {
-        if (model.adapter.type === 'chatgpt-chat') return Promise.resolve('');
+      const row = await this.deps.repo.getRow(sessionId);
+      const ask = async (model: ResolvedModel) => {
+        if (model.adapter.type === 'chatgpt-chat') return '';
+        // Over a usage limit the title is the first words of the message; the person's own turn is what gets the error.
+        if (!(await this.backgroundAllowed(row?.userId ?? null))) return '';
         return collectText(model, {
           system: [{ text: template('title', this.deps.promptOverrides()) }],
           user: `First message:\n${userText.slice(0, 2000)}`,
@@ -2652,6 +2737,7 @@ export class ChatService {
           // A short request that goes ahead of the queue; once it runs, 30 seconds is plenty.
           signal: AbortSignal.timeout(5 * 60_000),
           queue: { priority: 'urgent', timeoutMs: 30_000, owner: sessionId },
+          onUsage: (usage) => this.deps.recordUsage({ model: model.info, sessionId, userId: row?.userId ?? null, mode: row?.mode ?? 'chat', usage }),
         });
       };
       // A failing small model falls back to the chat's model, then to the first words of the message.

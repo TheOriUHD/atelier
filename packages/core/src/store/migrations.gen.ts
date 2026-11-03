@@ -209,5 +209,11 @@ export const migrations: { name: string; statements: string[] }[] = [
       "CREATE INDEX `audit_events_kind` ON `audit_events` (`kind`,`at`);",
       "CREATE INDEX `audit_events_actor` ON `audit_events` (`actor`,`at`);"
     ]
+  },
+  {
+    "name": "20261102170842_user_limits",
+    "statements": [
+      "ALTER TABLE `users` ADD `limits` text;"
+    ]
   }
 ];

@@ -52,7 +52,7 @@ const adapter: ProviderAdapter = {
   },
 };
 
-function service(extra: { idleMs?: number; models?: ModelResolver; settings?: () => Settings } = {}) {
+function service(extra: { idleMs?: number; models?: ModelResolver; settings?: () => Settings; limit?: (userId: string) => Promise<{ message: string } | null> } = {}) {
   return new MemoryService({
     db,
     sessions,
@@ -539,6 +539,25 @@ describe('the background update', () => {
     const text = requests[1]!.messages[0]!.parts.map((p) => (p.type === 'text' ? p.text : '')).join('');
     expect(text).toContain('I moved to Leeds.');
     expect(text).not.toContain('Beans turned four');
+  });
+
+  it('waits, unread and without an error, while the person is over a usage limit, and reads the conversation once they are not', async () => {
+    let over = true;
+    const s = service({ limit: async () => (over ? { message: 'You’ve reached your limit.' } : null) });
+    const chat = await sessions.create({ mode: 'chat', userId: 'u1' });
+    await say(chat.id, 'user', 'My dog Beans turned four.');
+    expect(await s.generate(chat.id)).toEqual([]);
+    expect(requests).toHaveLength(0);
+    over = false;
+    replies.push(JSON.stringify({ ops: [{ op: 'create', section: 'topic', title: 'Beans', summary: 'Ada’s dog', details: '- Turned four' }] }));
+    expect((await s.generate(chat.id)).map((c) => c.title)).toEqual(['Beans']);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('tells the person when a change they asked for is refused for a usage limit', async () => {
+    const s = service({ limit: async () => ({ message: 'You’ve reached your limit of 100 tokens.' }) });
+    await expect(s.instruct('u1', 'Remember that I like tea.')).rejects.toThrow('You’ve reached your limit of 100 tokens.');
+    expect(requests).toHaveLength(0);
   });
 
   it("doesn't run for people who turned it off, for Code, sub-agents or temporary chats", async () => {

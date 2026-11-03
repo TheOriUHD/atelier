@@ -20,6 +20,8 @@ export const users = sqliteTable(
     disabledAt: integer('disabled_at'),
     /** The admin's safeguards override for this person; `inherit` follows the system setting. */
     safeguards: text('safeguards', { enum: ['inherit', 'on', 'off'] }).notNull().default('inherit'),
+    /** The admin's usage-limit override for this person as JSON (`UserLimits`); null follows the system limits. */
+    limits: text('limits'),
   },
   (t) => [uniqueIndex('users_username').on(t.username)],
 );

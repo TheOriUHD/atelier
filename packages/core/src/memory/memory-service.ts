@@ -79,12 +79,17 @@ export interface MemoryServiceDeps {
   /** The person's memory changed: their windows reload it. */
   changed(userId: string): void;
   recordUsage?(entry: { model: ResolvedModel['info']; sessionId: string | null; userId: string; usage: Usage }): void;
+  /** Per-person usage limits (ARCHITECTURE §8): the error to tell the person when they are over one, else null. Asked before each model request. */
+  limit?(userId: string): Promise<{ message: string } | null>;
   onError?(message: string, error: unknown): void;
   idleMs?: number;
   now?: () => number;
   /** Entry ids (tests pin them). */
   newId?: () => string;
 }
+
+/** The person is over a usage limit: a background update waits (and tries again later), a request of theirs says so. */
+export class MemoryLimitError extends Error {}
 
 /** Facts as a model gives them: a list, or a bullet list in one string. */
 const Lines = z.union([z.string(), z.array(z.string())]);
@@ -447,7 +452,9 @@ export class MemoryService implements MemoryHooks {
     let transcript = fresh.map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${messageText(m.parts).trim()}`).join('\n\n');
     if (transcript.length > TRANSCRIPT_CHARS) transcript = `[… earlier part left out]\n${transcript.slice(-TRANSCRIPT_CHARS)}`;
     const scope = session.projectId;
-    const changes = await this.locked(userId, async () => {
+    let changes: MemoryChange[];
+    try {
+      changes = await this.locked(userId, async () => {
       const entries = (await this.repo.list(userId)).filter(visibleIn(scope));
       const project = scope ? (await this.repo.projects(userId)).filter((p) => p.id === scope) : [];
       const where = project[0]
@@ -457,7 +464,12 @@ export class MemoryService implements MemoryHooks {
       const user = `<memory>\n${renderMemory(entries, access.sensitive, project)}\n</memory>\n\n<transcript>\n${escapeTags(transcript)}\n</transcript>`;
       const ops = await this.ask(userId, task, user, access.sensitive, { maxOutputTokens: 8_000, priority: 'background', session });
       return this.applyAll(userId, ops, { source: 'background', sessionId, sensitive: access.sensitive, rewrite: false, scope });
-    });
+      });
+    } catch (error) {
+      // Over a limit: the conversation stays unread, and the next update picks it up.
+      if (error instanceof MemoryLimitError) return [];
+      throw error;
+    }
     await this.repo.setProgress(userId, sessionId, last.id);
     return changes;
   }
@@ -494,6 +506,18 @@ export class MemoryService implements MemoryHooks {
   }
 
   private async ask(
+    userId: string,
+    task: string,
+    user: string,
+    sensitive: boolean,
+    opts: { maxOutputTokens: number; priority: QueuePriority; session?: SessionRow; model?: string | undefined },
+  ): Promise<ModelOp[]> {
+    const refused = await this.deps.limit?.(userId);
+    if (refused) throw new MemoryLimitError(refused.message);
+    return this.askModel(userId, task, user, sensitive, opts);
+  }
+
+  private async askModel(
     userId: string,
     task: string,
     user: string,

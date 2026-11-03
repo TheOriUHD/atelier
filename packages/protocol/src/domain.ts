@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ImageProgress } from './images.ts';
 import { Message, MessageError, Part, Usage } from './messages.ts';
+import { LimitWarning } from './limits.ts';
 import { Effort } from './models.ts';
 import { Mode, PermissionMode, SettingsLayer } from './settings.ts';
 
@@ -417,6 +418,8 @@ export const SessionSnapshot = z.object({
   retryAttempt: z.number().int().min(1).max(10).optional(),
   /** The guess at the person's next message, while it stands (the `suggestion` run event). */
   suggestion: z.string().max(200).nullable().optional(),
+  /** The usage-limit warning, while it stands (the `limit_warning` run event). */
+  limitWarning: LimitWarning.nullable().optional(),
   /** Messages sent while the agent worked that it hasn't taken yet, oldest first. */
   outbox: z.array(OutboxMessage),
   seq: z.number().int().nonnegative(),
@@ -452,6 +455,8 @@ export const RunEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('branch') }),
   /** A short guess at the person's next message, shown in the message box (Tab puts it in); null takes it back. */
   z.object({ type: z.literal('suggestion'), text: z.string().max(200).nullable() }),
+  /** The person passed 80% of a usage limit (shown above the message box), or the warning no longer applies (null). */
+  z.object({ type: z.literal('limit_warning'), warning: LimitWarning.nullable() }),
   /** Waiting for a turn on the model's server with this many ahead (requests, or sub-agents), or no longer (null). */
   z.object({ type: z.literal('queued'), ahead: z.number().int().nonnegative().nullable() }),
   /** The model server is loading the model or reading the prompt (RunPhase), or the reply started or ended (null). */
@@ -615,5 +620,7 @@ export const AppInfo = z.object({
   imageGeneration: z.boolean().optional(),
   /** This backend keeps the admin activity log (a shared server); absent on the desktop app's own backend and on older servers. */
   auditLog: z.boolean().optional(),
+  /** This backend keeps per-person usage limits (ARCHITECTURE §8); a newer app hides them on an older server. */
+  usageLimits: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

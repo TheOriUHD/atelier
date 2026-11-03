@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { ImageModelOverride, ImagePrice, ImageProviderConfig } from './images.ts';
+import { LimitsSettings } from './limits.ts';
 import { McpServerConfig, McpServerName } from './mcp.ts';
 import { ProviderId, ProviderType, PromptTier } from './models.ts';
 
@@ -158,6 +159,8 @@ export const SettingsSchema = z.object({
       maxSpendPerUserPerDayUsd: z.number().positive().optional(),
     })
     .default({ enabled: true, maxImagesPerTurn: 8 }),
+  /** Per-person limits on text models for a shared server (ARCHITECTURE §8); none until an admin sets one. */
+  limits: LimitsSettings.default({}),
   context: z
     .object({ autoCompactAt: z.number().min(0.5).max(0.98).default(0.85) })
     .default({ autoCompactAt: 0.85 }),

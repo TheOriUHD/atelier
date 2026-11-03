@@ -8,6 +8,7 @@ import {
   formatInviteCode,
   INVITE_CODE_ALPHABET,
   normalizeInviteCode,
+  UserLimits,
   type AuthSessionSummary,
   type ClientKind,
   type InviteSummary,
@@ -72,7 +73,19 @@ export interface Authenticated {
   sessionId: string;
 }
 
+/** The stored override, or null when there is none (or it can't be read: then the system limits apply). */
+export function userLimitsOf(r: Pick<UserRow, 'limits'>): UserLimits | null {
+  if (!r.limits) return null;
+  try {
+    const parsed = UserLimits.safeParse(JSON.parse(r.limits));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export function toUserSummary(r: UserRow): UserSummary {
+  const limits = userLimitsOf(r);
   return {
     id: r.id,
     username: r.username,
@@ -83,6 +96,7 @@ export function toUserSummary(r: UserRow): UserSummary {
     hasPassword: r.passwordHash !== '',
     disabled: r.disabledAt !== null,
     safeguards: r.safeguards,
+    ...(limits ? { limits } : {}),
     createdAt: r.createdAt,
     lastActiveAt: r.lastActiveAt,
   };
@@ -265,7 +279,7 @@ export class AccountService {
     return { user: toUserSummary(user), temporaryPassword: password };
   }
 
-  async adminUpdate(id: string, patch: { name?: string; role?: UserRole; disabled?: boolean; safeguards?: SafeguardsOverride }): Promise<UserSummary> {
+  async adminUpdate(id: string, patch: { name?: string; role?: UserRole; disabled?: boolean; safeguards?: SafeguardsOverride; limits?: UserLimits }): Promise<UserSummary> {
     const row = await this.row(id);
     const losesAdmin = row.role === 'admin' && ((patch.role !== undefined && patch.role !== 'admin') || patch.disabled === true);
     if (losesAdmin) await this.assertOtherAdmin(id);
@@ -276,6 +290,8 @@ export class AccountService {
         ...(patch.role !== undefined ? { role: patch.role } : {}),
         ...(patch.disabled !== undefined ? { disabledAt: patch.disabled ? Date.now() : null } : {}),
         ...(patch.safeguards !== undefined ? { safeguards: patch.safeguards } : {}),
+        // An override with nothing set is no override.
+        ...(patch.limits !== undefined ? { limits: Object.values(patch.limits).some((v) => v !== undefined && v !== false) ? JSON.stringify(patch.limits) : null } : {}),
         updatedAt: Date.now(),
       })
       .where(eq(users.id, id));
@@ -338,6 +354,7 @@ export class AccountService {
       passwordHash: input.password === null ? '' : await hashPassword(input.password),
       mustChangePassword: input.mustChangePassword,
       safeguards: 'inherit',
+      limits: null,
       avatarBlob: null,
       createdAt: now,
       updatedAt: now,

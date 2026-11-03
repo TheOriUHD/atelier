@@ -53,6 +53,11 @@ export interface TurnOptions {
   /** The provider rejected a request as too long: prepare a smaller one for the single retry. */
   recoverOverflow?(): void;
   onUsage?(usage: Usage, messageId: string): void;
+  /**
+   * Asked before each model request, so a long turn can't run far past a usage limit: an `error` ends the turn there
+   * (nothing is sent, nothing retried), otherwise `release` is called when the request is over.
+   */
+  admit?(): Promise<{ error: MessageError } | { error?: undefined; release(): void }>;
 }
 
 export interface PreparedRequest {
@@ -97,11 +102,18 @@ export async function runTurn(opts: TurnOptions): Promise<TurnResult> {
   const recent: string[] = [];
   for (let step = 0; step < maxSteps; step++) {
     if (opts.signal.aborted) return { stopReason: 'aborted', error: null, lastAssistantId };
-    let result = await streamAssistantMessage(opts, await opts.prepare(), !!opts.recoverOverflow);
-    // Too long after all (estimates are estimates): fit it again, tighter, and retry into the same message once.
-    if (result.detached && opts.recoverOverflow) {
-      opts.recoverOverflow();
-      result = await streamAssistantMessage(opts, await opts.prepare(), false, result.message);
+    const admission = (await opts.admit?.()) ?? { release: () => {} };
+    if (admission.error) return { stopReason: 'error', error: admission.error, lastAssistantId };
+    let result: Awaited<ReturnType<typeof streamAssistantMessage>>;
+    try {
+      result = await streamAssistantMessage(opts, await opts.prepare(), !!opts.recoverOverflow);
+      // Too long after all (estimates are estimates): fit it again, tighter, and retry into the same message once.
+      if (result.detached && opts.recoverOverflow) {
+        opts.recoverOverflow();
+        result = await streamAssistantMessage(opts, await opts.prepare(), false, result.message);
+      }
+    } finally {
+      admission.release();
     }
     lastAssistantId = result.message.id;
     const calls = result.message.parts.filter((p): p is Extract<Part, { type: 'tool_call' }> => p.type === 'tool_call');

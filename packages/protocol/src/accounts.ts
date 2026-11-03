@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Mode, ModelOverride, SignupPolicy, type SafeguardCategories, type SafeguardsSettings } from './settings.ts';
 import { TemporaryMode } from './domain.ts';
 import { SshConnection } from './ssh.ts';
+import { UserLimits } from './limits.ts';
 import { DeviceLending } from './device-link.ts';
 import { PersonalConnector } from './mcp.ts';
 import { ShortcutPrefs } from './shortcuts.ts';
@@ -53,6 +54,8 @@ export const UserSummary = z.object({
   disabled: z.boolean(),
   /** Admin-set: `inherit` follows the system safeguards setting. */
   safeguards: SafeguardsOverride,
+  /** Admin-set: this person's own usage limits over the system's (absent on servers from before limits). */
+  limits: UserLimits.optional(),
   createdAt: z.number(),
   lastActiveAt: z.number().nullable(),
 });

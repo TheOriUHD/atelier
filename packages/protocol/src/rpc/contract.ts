@@ -38,6 +38,7 @@ import { AuditExport, AuditFilter, AuditPage } from '../audit.ts';
 import { McpImportEntry, McpServerName, McpServerStatus, PersonalConnector, PersonalConnectorInput, PersonalConnectorView } from '../mcp.ts';
 import { MEMORY_DETAILS_MAX, MEMORY_SUMMARY_MAX, MEMORY_TITLE_MAX, MemoryChange, MemoryEntry, MemorySection } from '../memory.ts';
 import { LOOP_MAX_INTERVAL_MS } from '../loops.ts';
+import { LimitsStatus, PersonLimits, UserLimits } from '../limits.ts';
 import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
@@ -201,7 +202,7 @@ export const contract = {
       output: z.object({ user: UserSummary, temporaryPassword: z.string() }),
     },
     'users.update': {
-      input: z.object({ id: z.string(), name: z.string().trim().min(1).max(80).optional(), role: UserRole.optional(), disabled: z.boolean().optional(), safeguards: SafeguardsOverride.optional() }),
+      input: z.object({ id: z.string(), name: z.string().trim().min(1).max(80).optional(), role: UserRole.optional(), disabled: z.boolean().optional(), safeguards: SafeguardsOverride.optional(), limits: UserLimits.optional() }),
       output: UserSummary,
     },
     'users.resetPassword': { input: Id, output: z.object({ temporaryPassword: z.string() }) },
@@ -463,6 +464,10 @@ export const contract = {
       input: z.object({ days: z.number().int().min(1).max(366), timezoneOffset: z.number().int().min(-840).max(840), everyone: z.boolean().optional() }),
       output: z.array(UsageRow),
     },
+    /** The signed-in person's usage against the limits that apply to them (none: an empty `rows`). */
+    'limits.mine': { input: Empty, output: LimitsStatus },
+    /** Everyone's usage against their limits, for the Limits page (admins only). */
+    'limits.everyone': { input: Empty, output: z.array(PersonLimits) },
     /** The signed-in person's stats for a mode's home over the last `days` days (null: all time). */
     'stats.summary': {
       input: z.object({ mode: Mode, days: z.union([z.literal(7), z.literal(30)]).nullable().optional(), timezoneOffset: z.number().int().min(-840).max(840) }),
@@ -794,6 +799,7 @@ export const LOCKED_PROCEDURES: ReadonlySet<ProcedureName> = PUBLIC_PROCEDURES;
 export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureName>([
   'settings.set',
   'settings.reset',
+  'limits.everyone',
   'oidc.list',
   'oidc.save',
   'oidc.remove',
