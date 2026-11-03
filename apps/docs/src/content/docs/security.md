@@ -285,8 +285,12 @@ computer. Turning off the home folder in the desktop app (**Settings › System*
 - `/api/blobs/<hash>` (attachments, generated files, avatars) requires a sign-in and returns a file only to an account that
   holds something referring to it: its own conversations (messages, tool results, generated images), files, projects and
   checkpoints, or an avatar, which everyone sees. Anyone else, admins included, gets "not found", as for a file that does not
-  exist. It serves only common image types inline (PNG, JPEG, GIF, WebP, AVIF) and everything else as a download, with
-  `Content-Security-Policy: default-src 'none'; sandbox` and `nosniff`.
+  exist. It serves only common image types inline
+  (PNG, JPEG, GIF, WebP, AVIF) and MP4 and WebM video, and everything else as a download, with
+  `Content-Security-Policy: default-src 'none'; sandbox` and `nosniff`. It answers `Range` requests with `206` in pieces of
+  at most 16 MiB, so a video plays and seeks without a whole file being read into memory; a range past the end is `416`.
+  The app's own policy has `media-src 'self' blob:`, and the desktop app's `media-src` adds its own blob scheme. The desktop
+  app's blob scheme follows the same rules, from one shared function.
 - The server does **not** send `Strict-Transport-Security` or `Referrer-Policy`: add `Strict-Transport-Security` at your
   proxy once HTTPS works.
 
@@ -333,6 +337,9 @@ Making an image sends the prompt and any input images to the image provider, and
 - **What a model can send.** A model can only use images from its own conversation as input, by their ids. It can't name a file: to use one it opens it with Read, which follows your permissions, so `GenerateImage` is never a way to send a file to a provider. Saving to your folder follows `Edit` rules.
 - **Other people's images.** Generated images are stored like other files, so `/api/blobs` applies: only the account whose conversation (or Images page) holds an image can fetch it, even with the full hash.
 - **Hidden models.** A model an admin hides can't be used by anyone else, even by name, for images and for text: choosing it for a chat is refused, and a chat that already used it moves to the default model and says so. Admins can still use them.
+- **Video.** A clip is held to the same rules as an image, with a larger limit: a hosted result's URL gets WebFetch's treatment (private addresses refused, every redirect checked, no credentials), and downloads stop at 512 MB. The bytes must really be MP4 (an `ftyp` box, and not the brand of an AVIF or HEIC picture) or WebM (the EBML header and the `webm` doctype), so an error page or a Matroska file is never stored as a video. Where a service wants the key to hand a clip over (OpenRouter, Gemini), the address must be on the service's own host. A video service's answer can be about 700 MB (a clip wrapped in base64 and JSON), and stays at 256 MB for the others. Videos are never retried automatically: a second job would be billed again. Each turn can make at most 2 videos (an admin can change it), and admins can limit videos and their spending per person per day separately from images.
+- **Other people's images.** Generated images are stored like other files, so `/api/blobs` applies: any signed-in account that knows a file's full hash can fetch it.
+- **Hidden models.** A model an admin hides can't be used by anyone else, even by name.
 - **Local servers.** ComfyUI and most local servers have no sign-in: anyone who can reach the port can use them. Keep them on a network you trust.
 - **Image servers on a desktop.** A server can open a WebSocket through your desktop only to an address you lent it, at or below that address, over `ws` for `http` and `wss` for `https`. Your desktop re-reads what you lent for each connection and each message the server sends, and closes the connection as soon as you take the address back. It refuses redirects and any header except sign-in headers, and limits each message to 32 MiB and each address to 8 connections. A lent address is lent for requests and WebSockets alike. An image URL from a personal server goes through the same check: the server never fetches it itself.
 

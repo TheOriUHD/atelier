@@ -67,7 +67,7 @@ On the desktop, Atelier also reads and writes folders it shares with other agent
 
 Atelier keeps no application log; see [Troubleshooting](/troubleshooting/#reading-logs).
 
-Generated images are blobs like attachments, with a row in `generated_images` for the **Images** page. They go with their
+Generated images and videos are blobs like attachments, with a row in `generated_images` (a `kind` column says which) for the **Images** page. A video can be up to 512 MB. They go with their
 conversation, and they're included when you export your data.
 
 ### What is encrypted and what is not

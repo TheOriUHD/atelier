@@ -26,7 +26,7 @@ export default defineConfig({
         },
         {
           label: 'Using Atelier',
-          items: ['chat', 'artifacts', 'image-generation', 'projects', 'cowork', 'code', 'permissions', 'computer-use', 'effort', 'sessions', 'loops', 'shortcuts', 'web-search', 'memory'],
+          items: ['chat', 'artifacts', 'image-generation', 'video-generation', 'projects', 'cowork', 'code', 'permissions', 'computer-use', 'effort', 'sessions', 'loops', 'shortcuts', 'web-search', 'memory'],
         },
         {
           label: 'Extend',

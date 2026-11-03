@@ -31,7 +31,7 @@ test('the frame has the clip’s shape from the first moment, and the player lan
   const figure = newest(page);
   const status = figure.getByRole('status').first();
   // Waiting in the service's queue, then making it: one line says which.
-  await expect(status).toHaveText(/^(Waiting in line|Loading the model|Making a 5 s video)$/, { timeout: 10_000 });
+  await expect(status).toHaveText(/^(Waiting in line|Making a 5 s video)$/, { timeout: 10_000 });
   await expect(player(figure)).toHaveCount(0);
   await expect.poll(async () => { const box = (await frame(figure).boundingBox())!; return (box.width / box.height).toFixed(2); }).toBe('1.78');
   await settled(frame(figure));

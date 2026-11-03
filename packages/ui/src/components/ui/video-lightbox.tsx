@@ -67,7 +67,8 @@ export function VideoLightbox({ videos, index, onIndexChange, actions, details, 
           <div
             role="presentation"
             onClick={(e) => e.target === e.currentTarget && onIndexChange(null)}
-            className={cn('absolute inset-0 flex items-center justify-center p-16 transition-[padding] duration-(--at-duration-base) ease-out max-md:p-4 max-md:pt-16', details && detailsOpen && 'md:pr-[352px] md:pl-4')}
+            // A size container: the video is as large as fits this area in its own shape, which a max-width and max-height alone would not do for a small clip.
+            className={cn('absolute inset-0 box-border flex items-center justify-center p-16 transition-[padding] duration-(--at-duration-base) ease-out [container-type:size] max-md:p-4 max-md:pt-16', details && detailsOpen && 'md:pr-[352px] md:pl-4 max-md:pb-[46dvh]')}
           >
             {video && (
               <video
@@ -80,7 +81,7 @@ export function VideoLightbox({ videos, index, onIndexChange, actions, details, 
                 autoPlay
                 playsInline
                 preload="metadata"
-                style={video.width && video.height ? { aspectRatio: `${video.width} / ${video.height}` } : undefined}
+                style={video.width && video.height ? { aspectRatio: `${video.width} / ${video.height}`, width: `min(100cqw, calc(100cqh * ${video.width / video.height}))` } : undefined}
                 className="max-h-full max-w-full rounded-xl bg-black object-contain shadow-lg outline-none focus-visible:shadow-[var(--at-shadow-focus)]"
               />
             )}

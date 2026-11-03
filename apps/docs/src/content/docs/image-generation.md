@@ -7,13 +7,13 @@ Add an image provider, and the assistant can make images in Chat, Code and Cowor
 model writes the prompt, and the image appears in the conversation while you watch it being made. Ask for a change and
 the model edits that image. In Code and Cowork it can save an image into your folder.
 
-Image providers are separate from the [text providers](/providers/). A text model calls the image model as a tool, so it
+Image providers are separate from the [text providers](/providers/), and the same page adds [video providers](/video-generation/). A text model calls the image model as a tool, so it
 works with any text model that can call tools, local ones included. Nothing changes until you add one: without an image
 provider, Atelier sends models exactly what it sent before.
 
 ## Add an image provider
 
-Open **Settings › Admin › Image providers**. Servers running on this computer on their usual port show under **Found on
+Open **Settings › Admin › Image & video**. Servers running on this computer on their usual port show under **Found on
 this computer**, one click from added. **Add** lists every service.
 
 After you add one, **Test** checks that it answers and lists its models. **Make a test image** makes one small real
@@ -114,7 +114,8 @@ hold both.
 ## Your own ComfyUI workflows
 
 Your checkpoints and models work without this: each appears as a model with a recipe that suits it. A model Atelier has no
-recipe for, such as a video model, is left out, and that's what workflows are for.
+recipe for, such as a video model, is left out, and that's what workflows are for (a workflow that saves video makes a
+[video model](/video-generation/#your-own-comfyui-workflows)).
 
 Open the ComfyUI provider's **Workflows**. Paste a workflow exported with **Save (API)**, or drop a JSON file or a PNG made
 by ComfyUI, which carries its workflow. Atelier finds the prompt, seed, steps, size and input image, and shows you what it
@@ -130,7 +131,7 @@ ComfyUI restarts.
 **Settings › Usage** shows images and what they cost. A cost a service reports is exact; otherwise it comes from a list of
 prices and shows as an estimate. You can set your own price per model.
 
-Admins can set limits under **Settings › Admin › Image providers**: images per turn, and images or spending per person per
+Admins can set limits under **Settings › Admin › Image & video**: images per turn, and images or spending per person per
 day. They can also hide a model from other accounts, which stops anyone else using it, even by name.
 
 ## Where images are kept

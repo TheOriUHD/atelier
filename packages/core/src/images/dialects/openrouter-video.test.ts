@@ -48,7 +48,7 @@ describe('OpenRouter video', () => {
     expect(calls[0]?.body).toEqual({ model: 'google/veo-3.1', prompt: 'a red lighthouse', duration: 6, resolution: '1080p', aspect_ratio: '16:9', generate_audio: true, seed: 4 });
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual(['/api/v1/videos', '/api/v1/videos/job1', '/api/v1/videos/job1', '/api/v1/videos/job1', '/api/v1/videos/job1/content']);
     expect(calls.at(-1)?.headers.authorization).toBe(`Bearer ${KEY}`);
-    expect(out).toContainEqual({ type: 'loading', what: 'Waiting for a free slot' });
+    expect(out).toContainEqual({ type: 'queued', ahead: 0 });
     expect(out).toContainEqual({ type: 'progress' });
     expect(out).toContainEqual({ type: 'usage', costUsd: 0.4 });
     const clip = out.find((e) => e.type === 'video');

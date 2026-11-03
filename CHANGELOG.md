@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 - **Working outside the workspace folder works on a server too:** a Cowork or Code session on a Windows PC's folder, connected to a Linux server, took the PC's `C:\…` paths for relative names inside the workspace. It never noticed a path was outside the folder, so it never asked, never told the PC's runner to allow it, and the assistant was stuck with "outside the workspace" even after you said yes. Paths are now read the way the folder's own computer writes them.
 - **One approval covers a folder elsewhere:** in Ask and Accept edits, allowing one look at a file outside the workspace allows looking at that folder for the rest of the session, so moving or reading a whole project doesn't ask for every file. Credential files still ask, and changes still ask per call, like edits in the workspace. Auto mode already did this.
 - **The model you pick stays picked:** the model chosen in a conversation is the one the next new conversation starts with (Settings › General › **Start with the model I used last**, on by default; turn it off to always start with your default model).
@@ -28,6 +29,9 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 - **Use as reference on the Images page:** the viewer there starts a new chat with the image attached.
 - **Small models can send a mask too:** the compact tool schema for image generation lacked the `mask` field, so a small model's call for a marked area was refused.
 - **Computer use on Linux:** on an X11 desktop the assistant can now see and use the apps you allow, as on macOS and Windows: screenshots (with your denied apps left out), clicks, typing and keys, app cards, Full control, a frame and panel while it has your mouse and keyboard, and holding Esc for a second takes them back. There is no Background mode there (X11 can't do it reliably), so Settings offers **Ask per app** and **Full control**. On a Wayland session only apps that run through XWayland can be seen and used, and Settings says so. Atelier can't recognize password fields on Linux yet: password managers are denied from the start and authorization prompts are never used. See [Computer use](https://docs.atelierhq.dev/computer-use/).
+=======
+- **Video generation:** add a video provider in **Settings › Admin › Image & video** (OpenRouter, xAI, fal.ai, Replicate, Black Forest Labs, Google Gemini Omni, SwarmUI, or a ComfyUI workflow that saves video), and any text model that can call tools can make short clips in Chat, Code and Cowork. The clip's frame has its shape from the first moment and says what it waits for, then plays in the conversation; start from a picture, take a clip's first frame as a reference, and save it to your folder with **SaveVideo**. **Images** in the sidebar keeps clips too. Videos are served in ranges so they seek, and cost, length and limits are counted apart from images. See [Video generation](https://docs.atelierhq.dev/video-generation/).
+>>>>>>> 35e28797 (docs(video): video generation page, security, data, architecture and design notes)
 
 ## [0.3.1] — 2026-11-02
 

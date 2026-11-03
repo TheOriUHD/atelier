@@ -47,7 +47,7 @@ test('desktop Code: Ask shows what will be made, the clip plays through the appâ
     await shot(page, 'desktop-video-ask');
     await ask.getByRole('button', { name: 'Allow once' }).click();
 
-    await expect(newest(page).getByRole('status').first()).toHaveText(/^(Waiting in line|Loading the model|Making a 5 s video)$/, { timeout: 15_000 });
+    await expect(newest(page).getByRole('status').first()).toHaveText(/^(Waiting in line|Making a 5 s video)$/, { timeout: 15_000 });
     await shot(page, 'desktop-video-running');
     await expect(player(page)).toBeVisible({ timeout: 40_000 });
     await expect.poll(() => player(page).evaluate((el: HTMLVideoElement) => el.videoWidth)).toBe(640);

@@ -88,7 +88,8 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
       failures = 0;
       const job = rec(await poll.json());
       const status = str(job.status);
-      if (status === 'pending') yield { type: 'loading', what: 'Waiting for a free slot' };
+      // Waiting at OpenRouter for a provider to take it: the line says so, not that a model is loading.
+      if (status === 'pending') yield { type: 'queued', ahead: 0 };
       else if (status === 'in_progress') yield { type: 'progress' };
       else if (status === 'completed') {
         const url = str(arr(job.unsigned_urls)[0]);
