@@ -85,6 +85,7 @@ export type TurnItem =
   | { kind: 'visual'; ref: PartRef<ToolCallPart> }
   /** A generated image: seen, not a step of the work, so it leaves the run in Chat, Code and Cowork alike. */
   | { kind: 'image'; ref: PartRef<ToolCallPart> }
+  | { kind: 'video'; ref: PartRef<ToolCallPart> }
   /** A run of tool calls, with the thinking between them, shown as one collapsible summary. */
   | { kind: 'activity'; key: string; steps: ActivityStep[] }
   | { kind: 'error'; message: Message }
@@ -92,7 +93,7 @@ export type TurnItem =
   | { kind: 'refusal'; message: Message };
 
 /** Tool calls the transcript shows as items of their own, not as steps of an activity run. */
-const OWN_ITEM: Record<string, 'artifact' | 'visual' | 'image'> = { artifact: 'artifact', inline_visual: 'visual', GenerateImage: 'image' };
+const OWN_ITEM: Record<string, 'artifact' | 'visual' | 'image' | 'video'> = { artifact: 'artifact', inline_visual: 'visual', GenerateImage: 'image', GenerateVideo: 'video' };
 
 /** What an assistant turn renders, in order. Thinking only joins an activity run when the run has a tool call. */
 export function turnItems(messages: readonly Message[]): TurnItem[] {

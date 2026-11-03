@@ -82,6 +82,8 @@ const TOOL_VERBS: Record<string, string> = {
   Edit: 'Editing',
   GenerateImage: 'Making an image',
   SaveImage: 'Saving an image',
+  GenerateVideo: 'Making a video',
+  SaveVideo: 'Saving a video',
   WebSearch: 'Searching the web',
   WebFetch: 'Reading the web',
   Agent: 'Running a sub-agent',
@@ -133,7 +135,7 @@ export function liveStatus(state: LiveSessionState): LiveStatus | null {
   const phase = state.queued === null && !state.compacting ? state.phase : null;
   const end = turnItems(turn).at(-1);
   const activity = end?.kind === 'activity';
-  const image = end?.kind === 'image' && !toolResults(turn).has(end.ref.part.id);
+  const image = (end?.kind === 'image' || end?.kind === 'video') && !toolResults(turn).has(end.ref.part.id);
   const context = liveContext(state);
   const window = { contextUsed: context?.used ?? null, contextLimit: context?.limit ?? null };
   if (command) return { verb: 'Compacting conversation', phase: null, since: command.createdAt, tokens: 0, counts: false, queued: null, activity: false, image: false, rate: null, generating: false, ...window };

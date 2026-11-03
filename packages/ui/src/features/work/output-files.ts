@@ -23,9 +23,9 @@ export function inFolder(path: string, root: string): string | null {
 }
 
 /** Tools that leave a file in the folder, at their `file_path`. */
-const OUTPUT_TOOLS = new Set(['Write', 'Edit', 'SaveImage']);
+const OUTPUT_TOOLS = new Set(['Write', 'Edit', 'SaveImage', 'SaveVideo']);
 
-/** Files Write, Edit and SaveImage changed in the folder, each once where it last changed (newest last). Failed or unanswered calls don't count. */
+/** Files Write, Edit, SaveImage and SaveVideo changed in the folder, each once where it last changed (newest last). Failed or unanswered calls don't count. */
 export function outputFiles(messages: readonly Message[], root: string): OutputFile[] {
   const results = toolResults(messages);
   const paths = new Set<string>();

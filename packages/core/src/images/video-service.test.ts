@@ -269,6 +269,15 @@ describe('VideoService', () => {
       expect(t.requests).toHaveLength(2);
     });
 
+    it('allows two a turn when the admin has set nothing, as settings saved before video did', async () => {
+      const t = setup();
+      const settings = t.service['deps'].settings;
+      t.service['deps'].settings = () => ({ ...settings(), imageGeneration: { enabled: true, maxImagesPerTurn: 8 } }) as never;
+      expect((await t.service.generate({ prompt: 'a' }, t.ctx())).isError).toBeUndefined();
+      expect((await t.service.generate({ prompt: 'b' }, t.ctx())).isError).toBeUndefined();
+      expect((await t.service.generate({ prompt: 'c' }, t.ctx())).isError).toBe(true);
+    });
+
     it('counts parallel calls, and hands a failed one’s place back', async () => {
       const t = setup({ settings: { maxVideosPerTurn: 1 } });
       const [a, b] = await Promise.all([t.service.generate({ prompt: 'a' }, t.ctx()), t.service.generate({ prompt: 'b' }, t.ctx())]);

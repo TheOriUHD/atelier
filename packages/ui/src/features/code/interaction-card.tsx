@@ -312,7 +312,10 @@ function permissionTitle(request: PermissionRequest, root: string | null): strin
       const count = typeof input.count === 'number' && input.count > 1 ? input.count : 1;
       return `Allow ${who} to make ${count > 1 ? `${count} images` : 'an image'}?`;
     }
+    case 'GenerateVideo':
+      return `Allow ${who} to make a video? It can take minutes and cost more than an image.`;
     case 'SaveImage':
+    case 'SaveVideo':
       return `Allow ${who} to save ${displayPath(str(input.file_path), root)}?`;
     case 'ComputerAction':
       return `Allow ${who} to use your computer?`;
@@ -363,6 +366,7 @@ function CallPreview({ request }: { request: PermissionRequest }) {
       );
     }
     case 'GenerateImage':
+    case 'GenerateVideo':
       return (
         <div className="flex flex-col gap-1.5">
           <p className={cn(box, 'font-sans')}>{str(input.prompt)}</p>

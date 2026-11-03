@@ -21,19 +21,20 @@ import type { Attachments } from './use-attachments.ts';
 import './generated-images.css';
 
 /** What a page offers an image: into the message box as an attachment. Absent where a transcript has no box of its own. */
-export const ComposerImages = createContext<{ attach(image: { blob: string; mime: string }): void; focus(): void } | null>(null);
+export const ComposerImages = createContext<{ attach(image: { blob: string; mime: string }): void; focus(): void; /** A file made on the page, such as a video's first frame. */ addFile?(file: File): void } | null>(null);
 
 /** The message box as images see it: an image goes in once, is sent with the next message, and the model gets its id. */
-export function useImageReference(attachments: Pick<Attachments, 'items' | 'restore'>, composer: RefObject<ComposerHandle | null>) {
-  const { items, restore } = attachments;
+export function useImageReference(attachments: Pick<Attachments, 'items' | 'restore'> & Partial<Pick<Attachments, 'add'>>, composer: RefObject<ComposerHandle | null>) {
+  const { items, restore, add } = attachments;
   return useMemo(
     () => ({
       attach(image: { blob: string; mime: string }) {
         if (!items.some((a) => a.file?.blob === image.blob)) restore([{ type: 'image', blob: image.blob, mime: image.mime }]);
       },
       focus: () => composer.current?.focus(),
+      ...(add ? { addFile: (file: File) => void add([file]) } : {}),
     }),
-    [items, restore, composer],
+    [items, restore, add, composer],
   );
 }
 
@@ -154,7 +155,7 @@ function LightboxActions({ image, onAttached, onAway }: { image: ShownImage; onA
   return <ActionButtons actions={useImageActions(image, { onAttached, onAway })} size="lg" />;
 }
 
-function Detail({ label, children }: { label: string; children: ReactNode }) {
+export function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
       <dt className="shrink-0 text-footnote text-fg-muted">{label}</dt>
@@ -163,7 +164,7 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function PromptDetail({ label, text }: { label: string; text: string }) {
+export function PromptDetail({ label, text }: { label: string; text: string }) {
   return (
     <section className="flex flex-col gap-1">
       <div className="flex h-6 items-center justify-between">
@@ -290,7 +291,7 @@ function Bar({ fraction, label }: { fraction: number; label: string }) {
 
 /** The time the crossfade takes, and a little over, before the preview under the image can go. */
 const CROSSFADE_MS = 520;
-const ALT_CHARS = 200;
+export const ALT_CHARS = 200;
 
 function FinishedImage({ image, position, arrived, shapeKnown, onShape, onLanded, onOpen }: { image: ShownImage; position: string; arrived: boolean; shapeKnown: boolean; onShape(shape: ImageShape): void; onLanded(): void; onOpen(): void }) {
   const ref = useRef<HTMLImageElement>(null);
@@ -342,7 +343,7 @@ function FinishedImage({ image, position, arrived, shapeKnown, onShape, onLanded
 const NOTICE_ICON: Partial<Record<ImageFailure['kind'], LucideIcon>> = { refused: OctagonX, setup: ImageOff, failed: ImageOff };
 
 /** Why there is no image: said once, quietly, with the way to fix it for those who can. */
-function ImageNotice({ failure }: { failure: ImageFailure }) {
+export function ImageNotice({ failure }: { failure: ImageFailure }) {
   const { account } = useAccount();
   const openSettings = useOpenSettings();
   const icon = NOTICE_ICON[failure.kind];
@@ -362,7 +363,7 @@ function ImageNotice({ failure }: { failure: ImageFailure }) {
 }
 
 /** The prompt under the images: one line that opens to all of it, with how the service reworded it if it did. */
-function PromptLine({ prompt, revised }: { prompt: string; revised: string | undefined }) {
+export function PromptLine({ prompt, revised }: { prompt: string; revised: string | undefined }) {
   const [open, setOpen] = useState(false);
   if (!prompt && !revised) return null;
   return (

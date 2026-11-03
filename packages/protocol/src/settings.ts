@@ -158,8 +158,9 @@ export const SettingsSchema = z.object({
       maxImagesPerUserPerDay: z.number().int().min(1).optional(),
       maxSpendPerUserPerDayUsd: z.number().positive().optional(),
       /** Video generation (ARCHITECTURE §23): a clip costs far more than an image, so it has limits of its own. */
-      videoEnabled: z.boolean().default(true),
-      maxVideosPerTurn: z.number().int().min(1).max(20).default(2),
+      // Absent means on, and two a turn: settings saved before video existed stay valid as they are.
+      videoEnabled: z.boolean().optional(),
+      maxVideosPerTurn: z.number().int().min(1).max(20).optional(),
       maxVideosPerUserPerDay: z.number().int().min(1).optional(),
       maxVideoSpendPerUserPerDayUsd: z.number().positive().optional(),
     })

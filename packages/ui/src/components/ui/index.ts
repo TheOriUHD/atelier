@@ -39,6 +39,7 @@ export {
   type DialogFooterProps,
 } from './dialog.tsx';
 export { Lightbox, type LightboxImage, type LightboxProps } from './lightbox.tsx';
+export { VideoLightbox, type LightboxVideo, type VideoLightboxProps } from './video-lightbox.tsx';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog.tsx';
 export { Field, type FieldProps } from './field.tsx';
 export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './text-field.tsx';

@@ -3,7 +3,7 @@
  * edits as inline diffs, commands with their live output and exit status, sub-agents with their own transcript.
  */
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { Bot, ListChecks, MessageSquare } from 'lucide-react';
+import { Bot, Film, ListChecks, MessageSquare } from 'lucide-react';
 import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolCallPart, type ToolResultPart } from '@atelier/protocol';
 import { Badge, DiffStat, Icon, ThinkingDots, cn } from '../../components/ui/index.ts';
 import { queuedLabel, useLiveSession, type LiveSessionState } from '../../lib/live-session.ts';
@@ -187,6 +187,7 @@ function ActivityRow({ step }: { step: ActivityStepView }) {
         body = text != null ? <SearchResults text={text} failed={failed} /> : null;
         break;
       case 'SaveImage':
+      case 'SaveVideo':
         title = `${summary.verb} ${summary.target}`;
         if (step.result?.saved) status = <SavedThumbnail image={step.result.saved} />;
         body = <pre className={cn(detailClass, failed ? 'text-danger-text' : 'text-fg')}>{text ?? JSON.stringify(step.call.input, null, 2)}</pre>;
@@ -221,6 +222,8 @@ function ActivityRow({ step }: { step: ActivityStepView }) {
 
 /** The image a SaveImage call wrote, small enough to sit on its row. */
 function SavedThumbnail({ image }: { image: NonNullable<ToolResultPart['saved']> }) {
+  // A clip has no picture of its own to put on a row; the film mark says what was saved.
+  if (image.mime.startsWith('video/')) return <span aria-hidden="true" className="flex h-6 w-8 shrink-0 items-center justify-center rounded-[6px] border border-line bg-fill-ghost-hover text-fg-muted"><Film className="size-3.5" /></span>;
   return <img src={blobUrl(image.blob)} alt="" loading="lazy" className="h-6 w-8 shrink-0 rounded-[6px] border border-line bg-fill-ghost-hover object-cover" />;
 }
 
@@ -337,6 +340,8 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return files(list).length === 1 ? `edited ${file(list[0]!)}` : `edited ${files(list).length} files`;
       case 'SaveImage':
         return files(list).length === 1 ? `saved ${file(list[0]!)}` : `saved ${files(list).length} images`;
+      case 'SaveVideo':
+        return files(list).length === 1 ? `saved ${file(list[0]!)}` : `saved ${files(list).length} videos`;
       case 'Grep':
         return plural(n, 'searched the code', 'searched the code # times');
       case 'WebSearch':
@@ -530,6 +535,7 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
     case 'Write':
       return { verb: call.name, target: displayPath(str(input.file_path), root) };
     case 'SaveImage':
+    case 'SaveVideo':
       return { verb: result === null ? 'Save' : 'Saved', target: displayPath(str(input.file_path), root) };
     case 'Bash':
       return { verb: 'Ran', target: str(input.description) || str(input.command) };
@@ -644,7 +650,7 @@ function OneLineCard({ step, detail }: { step: ToolStep; detail?: ReactNode }) {
   return (
     <div className="flex flex-col">
       <WithViewedImages steps={[step]}>
-        {step.call.name === 'Read' || step.call.name === 'SaveImage' ? (
+        {step.call.name === 'Read' || step.call.name === 'SaveImage' || step.call.name === 'SaveVideo' ? (
           <FileSummary open={open} onToggle={() => setOpen((o) => !o)} running={step.running} verb={verb} path={str(asRecord(step.call.input).file_path)}>
             {after}
           </FileSummary>

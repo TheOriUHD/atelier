@@ -42,6 +42,7 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
     case 'Edit':
       return `Editing ${path()}`;
     case 'SaveImage':
+    case 'SaveVideo':
       return `Saving ${path()}`;
     case 'Glob':
     case 'Grep':

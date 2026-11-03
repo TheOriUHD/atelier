@@ -86,7 +86,7 @@ const MIME_EXTENSIONS: Record<string, string> = { 'image/png': 'png', 'image/jpe
 const extensionOf = (mime: string) => MIME_EXTENSIONS[mime] ?? (/^[a-z]+\/([a-z0-9]+)/.exec(mime)?.[1] ?? 'bin');
 const safeName = (name: string) => [...name.replace(/[\\/:*?"<>|]/g, '_')].filter((c) => c.charCodeAt(0) >= 32).join('').trim().slice(0, 100) || 'file';
 /** Pictures and PDFs are compressed already; storing them as they are saves the time. */
-const compressible = (mime: string) => !/^(image\/|application\/(pdf|zip))/.test(mime);
+const compressible = (mime: string) => !/^(image\/|video\/|application\/(pdf|zip))/.test(mime);
 
 /**
  * Everything the person has, as a zip written chunk by chunk: every conversation with its full message tree (JSON) and its

@@ -62,6 +62,8 @@ export interface VideoServiceDeps {
 /** With nothing from the server for this long, it isn't coming. Many services say nothing between "queued" and "done", which the total limit covers. */
 const IDLE_MS = 15 * 60_000;
 const TOTAL_MS = 60 * 60_000;
+/** A turn may make this many clips unless the admin says otherwise: each costs minutes and real money. */
+export const DEFAULT_VIDEOS_PER_TURN = 2;
 const MAX_FRAME_SIDE = 2048;
 const MAX_FRAME_BYTES = 20 * 1024 * 1024;
 
@@ -87,7 +89,7 @@ export class VideoService {
   /** The video models a session can use, the person's choice first. */
   async models(session: ImageSessionFacts): Promise<ImageModelInfo[]> {
     const { enabled, videoEnabled } = this.deps.settings().imageGeneration;
-    if (!enabled || !videoEnabled) return [];
+    if (!enabled || videoEnabled === false) return [];
     const admin = await this.deps.isAdmin(session.userId);
     const all = (await this.deps.registry.listModels(session.userId)).filter((m) => (admin || !m.hidden) && m.capabilities.output === 'video' && !!m.capabilities.video);
     const first = (await this.deps.preferred(session.userId)) ?? this.deps.settings().models.defaults.video;
@@ -146,7 +148,8 @@ export class VideoService {
 
   /** Keeps to the limits; throws what the model should tell the person. */
   private async checkLimits(sessionId: string, userId: string | null): Promise<void> {
-    const { maxVideosPerTurn, maxVideosPerUserPerDay, maxVideoSpendPerUserPerDayUsd } = this.deps.settings().imageGeneration;
+    const { maxVideosPerUserPerDay, maxVideoSpendPerUserPerDayUsd } = this.deps.settings().imageGeneration;
+    const maxVideosPerTurn = this.deps.settings().imageGeneration.maxVideosPerTurn ?? DEFAULT_VIDEOS_PER_TURN;
     const since = await this.deps.turnStart(sessionId);
     const turn = this.turns.get(sessionId);
     const made = turn?.since === since ? turn.count : 0;
