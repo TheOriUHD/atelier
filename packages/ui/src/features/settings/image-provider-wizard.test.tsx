@@ -217,6 +217,32 @@ describe('testing', () => {
   });
 });
 
+describe('testing a video service', () => {
+  const clip = (modelId: string) => imageModel(modelId, { capabilities: { ...imageModel(modelId).capabilities, output: 'video', video: { durations: { kind: 'list', seconds: [4, 8] }, defaultSeconds: 4, firstFrame: true, lastFrame: false, audio: 'optional' } } });
+
+  it('lists its models and explains that there is no test clip, because a clip costs money and takes minutes', async () => {
+    setup();
+    backend.handlers['imageProviders.test'] = () => ({ status: ok, models: [clip('kling'), clip('wan')] });
+    await choose('OpenRouter video');
+    fireEvent.change(screen.getByPlaceholderText('Paste your API key'), { target: { value: 'k' } });
+    test();
+    expect(await screen.findByText(/There is no test clip/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Make a test image' })).toBeNull();
+    expect(callsTo('imageProviders.tryImage')).toEqual([]);
+  });
+
+  it('still offers a test image for the pictures of a service that has both', async () => {
+    setup();
+    backend.handlers['imageProviders.test'] = () => ({ status: ok, models: [imageModel('sdxl'), clip('kling')] });
+    await choose('ComfyUI');
+    test();
+    const section = await screen.findByRole('region', { name: 'Test image' });
+    expect(within(section).queryByRole('combobox', { name: 'Model' })).toBeNull();
+    expect(within(section).getByRole('button', { name: 'Make a test image' })).toBeTruthy();
+    expect(screen.queryByText(/There is no test clip/)).toBeNull();
+  });
+});
+
 describe('models on a server with other accounts', () => {
   it('lets an admin hide a model the test found before saving', async () => {
     setup();

@@ -108,3 +108,46 @@ describe('the default image model', () => {
     expect(callsTo('imageModels.list')).toEqual([]);
   });
 });
+
+describe('the default video model', () => {
+  const model = (modelId: string, output?: 'video') => ({ ref: `fal/${modelId}`, providerId: 'fal', modelId, displayName: modelId, hidden: false, capabilities: output ? { output } : {} });
+  const offered = (models: unknown[]) => ({ 'app.info': () => ({ imageGeneration: true, videoGeneration: true }), 'imageModels.list': () => models });
+
+  it('is chosen from the video models only, apart from the pictures’ own default', async () => {
+    renderPage(defaultUserPrefs(), offered([model('flux'), model('kling', 'video')]));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Default video model' }));
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Server default (kling)', 'kling']);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryAllByRole('option')).toHaveLength(0));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Default image model' }));
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Server default (flux)', 'flux']);
+  });
+
+  it('sets the person’s own preference', async () => {
+    renderPage(defaultUserPrefs(), offered([model('kling', 'video')]));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Default video model' }));
+    const option = await screen.findByRole('option', { name: 'kling' });
+    fireEvent.pointerDown(option, { pointerType: 'mouse' });
+    fireEvent.click(option);
+    await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['models', 'video'], value: 'fal/kling' }]));
+  });
+
+  it('is not there without video models, while videos are off, or on a server that cannot make them', async () => {
+    renderPage(defaultUserPrefs(), offered([model('flux')]));
+    await screen.findByRole('combobox', { name: 'Default image model' });
+    expect(screen.queryByRole('combobox', { name: 'Default video model' })).toBeNull();
+  });
+
+  it('goes while an admin has videos off', async () => {
+    renderPage(defaultUserPrefs(), { ...offered([model('kling', 'video'), model('flux')]), 'settings.get': () => snapshot({ imageGeneration: { enabled: true, maxImagesPerTurn: 8, videoEnabled: false } }) });
+    await screen.findByRole('combobox', { name: 'Default image model' });
+    expect(screen.queryByRole('combobox', { name: 'Default video model' })).toBeNull();
+  });
+
+  it('stays away on a server that can make pictures but not video', async () => {
+    renderPage(defaultUserPrefs(), { 'app.info': () => ({ imageGeneration: true }), 'imageModels.list': () => [model('flux')] });
+    await screen.findByRole('combobox', { name: 'Default image model' });
+    expect(screen.queryByRole('combobox', { name: 'Default video model' })).toBeNull();
+  });
+});
+

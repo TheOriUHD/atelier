@@ -367,6 +367,14 @@ export const SETTINGS_INDEX = [
     available: () => usageLimitsOffered(),
   },
   {
+    id: 'usage.videos',
+    page: 'usage',
+    label: 'Videos',
+    description: 'Videos each model made, how many seconds of video that is and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one.',
+    keywords: ['video generation', 'clips', 'seconds', 'cost', 'estimate', 'models'],
+    available: () => videoGenerationOffered(),
+  },
+  {
     id: 'usage.prices',
     page: 'usage',
     label: 'Prices',

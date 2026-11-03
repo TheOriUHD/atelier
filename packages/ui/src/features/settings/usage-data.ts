@@ -12,6 +12,9 @@ export const tokensOf = (r: Pick<UsageRow, 'input' | 'output' | 'cacheRead' | 'c
 
 /** Image rows count images and dollars: they have no tokens, and a local image with no price isn't a request missing one. */
 export const isImageRow = (r: Pick<UsageRow, 'images'>) => (r.images ?? 0) > 0;
+export const isVideoRow = (r: Pick<UsageRow, 'videos'>) => (r.videos ?? 0) > 0;
+/** Pictures and clips have no tokens: neither is a request to a text model. */
+export const isMediaRow = (r: Pick<UsageRow, 'images' | 'videos'>) => isImageRow(r) || isVideoRow(r);
 
 export interface UsageTotals {
   /** Requests to text models; images are counted apart. */
@@ -22,7 +25,10 @@ export interface UsageTotals {
   cacheWrite: number;
   tokens: number;
   images: number;
-  /** Of the priced requests and images. */
+  videos: number;
+  /** Seconds of video in all. */
+  videoSeconds: number;
+  /** Of the priced requests, images and videos. */
   cost: number;
   /** How much of `cost` comes from a price list rather than from the service. */
   estimated: number;
@@ -32,12 +38,14 @@ export interface UsageTotals {
 }
 
 export function totals(rows: readonly UsageRow[]): UsageTotals {
-  const t: UsageTotals = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0, images: 0, cost: 0, estimated: 0, priced: 0, unpriced: 0 };
+  const t: UsageTotals = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0, images: 0, videos: 0, videoSeconds: 0, cost: 0, estimated: 0, priced: 0, unpriced: 0 };
   for (const r of rows) {
     t.cost += r.costUsd ?? 0;
     t.estimated += r.estimatedUsd ?? 0;
-    if (isImageRow(r)) {
-      t.images += r.images!;
+    if (isMediaRow(r)) {
+      t.images += r.images ?? 0;
+      t.videos += r.videos ?? 0;
+      t.videoSeconds += r.videoSeconds ?? 0;
       t.priced += r.requests - r.unpriced;
       continue;
     }
@@ -109,7 +117,7 @@ export function byModel(rows: readonly UsageRow[]): ModelUsage[] {
   // Requests behind each model's average speed so far.
   const timed = new Map<string, number>();
   for (const r of rows) {
-    if (isImageRow(r)) continue;
+    if (isMediaRow(r)) continue;
     const ref = `${r.providerId}/${r.modelId}`;
     const m = models.get(ref) ?? { ref, providerId: r.providerId, modelId: r.modelId, requests: 0, tokens: 0, cost: null, unpriced: 0, tokensPerSecond: null };
     m.requests += r.requests;
@@ -150,6 +158,32 @@ export function byImageModel(rows: readonly UsageRow[]): ImageModelUsage[] {
     models.set(ref, m);
   }
   return [...models.values()].sort((a, b) => b.images - a.images);
+}
+
+export interface VideoModelUsage {
+  ref: string;
+  providerId: string;
+  modelId: string;
+  videos: number;
+  seconds: number;
+  cost: number | null;
+  estimated: number;
+}
+
+/** One entry per video model, most videos first. */
+export function byVideoModel(rows: readonly UsageRow[]): VideoModelUsage[] {
+  const models = new Map<string, VideoModelUsage>();
+  for (const r of rows) {
+    if (!isVideoRow(r)) continue;
+    const ref = `${r.providerId}/${r.modelId}`;
+    const m = models.get(ref) ?? { ref, providerId: r.providerId, modelId: r.modelId, videos: 0, seconds: 0, cost: null, estimated: 0 };
+    m.videos += r.videos!;
+    m.seconds += r.videoSeconds ?? 0;
+    m.estimated += r.estimatedUsd ?? 0;
+    if (r.costUsd !== null) m.cost = (m.cost ?? 0) + r.costUsd;
+    models.set(ref, m);
+  }
+  return [...models.values()].sort((a, b) => b.videos - a.videos);
 }
 
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });

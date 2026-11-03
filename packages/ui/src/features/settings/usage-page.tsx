@@ -25,7 +25,7 @@ import { settingEntry } from './search-index.ts';
 import { SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
 import { useSetting, type Setting } from './use-setting.ts';
-import { MODES, MODE_LABELS, byImageModel, byModel, formatTokens, formatUsd, isImageRow, modeShares, tokensByDay, totals, type ModeKey } from './usage-data.ts';
+import { MODES, MODE_LABELS, byImageModel, byModel, byVideoModel, formatTokens, formatUsd, isImageRow, isMediaRow, isVideoRow, modeShares, tokensByDay, totals, type ModeKey } from './usage-data.ts';
 
 const UsageChart = lazy(() => import('./usage-chart.tsx'));
 
@@ -78,9 +78,10 @@ export function UsagePage() {
     placeholderData: keepPreviousData,
     staleTime: 0,
   });
-  // Tokens and images have their own sections: an image row has no tokens to chart.
-  const withTokens = rows?.some((r) => !isImageRow(r)) ? rows : null;
+  // Tokens, images and videos have their own sections: a picture or a clip has no tokens to chart.
+  const withTokens = rows?.some((r) => !isMediaRow(r)) ? rows : null;
   const withImages = rows?.some(isImageRow) ? rows : null;
+  const withVideos = rows?.some(isVideoRow) ? rows : null;
 
   return (
     <div className={SERIES}>
@@ -107,6 +108,7 @@ export function UsagePage() {
       {withTokens && <DaysSection rows={withTokens} days={days} />}
       {withTokens && <ModelsSection rows={withTokens} />}
       {withImages && <ImagesSection rows={withImages} />}
+      {withVideos && <VideosSection rows={withVideos} />}
       {admin && <PricesSection />}
     </div>
   );
@@ -141,11 +143,12 @@ const plural = (n: number, one: string, many: string) => `${formatCount(n)} ${n 
 function Summary({ rows, days, admin }: { rows: UsageRow[]; days: number; admin: boolean }) {
   const t = totals(rows);
   const statement =
-    t.requests === 0 && t.images === 0
+    t.requests === 0 && t.images === 0 && t.videos === 0
       ? `No usage in the last ${days} days.`
       : `${conjunction.format([
           ...(t.requests > 0 ? [plural(t.requests, 'request', 'requests'), `${formatTokens(t.tokens)} tokens`] : []),
           ...(t.images > 0 ? [plural(t.images, 'image', 'images')] : []),
+          ...(t.videos > 0 ? [`${plural(t.videos, 'video', 'videos')} (${formatSeconds(t.videoSeconds)})`] : []),
           ...(t.priced > 0 ? [`${t.estimated > 0 ? 'about ' : ''}${formatUsd(t.cost)}`] : []),
         ])} in the last ${days} days.`;
   const parts = [
@@ -227,6 +230,53 @@ function ModelsSection({ rows }: { rows: UsageRow[] }) {
                 {m.cost === null ? '—' : formatUsd(m.cost)}
               </Cell>
               <Cell className="text-right tabular-nums">{m.tokensPerSecond === null ? '—' : `${Math.round(m.tokensPerSecond)} tokens/s`}</Cell>
+            </TableRow>
+          );
+        })}
+      </DataTable>
+    </SettingsSection>
+  );
+}
+
+/** "45 s", "2 min 5 s", "1 h 10 min": the length of video made. */
+export function formatSeconds(seconds: number): string {
+  const whole = Math.round(seconds);
+  if (whole < 60) return `${whole} s`;
+  if (whole < 3600) return `${Math.floor(whole / 60)} min${whole % 60 ? ` ${whole % 60} s` : ''}`;
+  return `${Math.floor(whole / 3600)} h${Math.floor((whole % 3600) / 60) ? ` ${Math.floor((whole % 3600) / 60)} min` : ''}`;
+}
+
+/** Videos by model, with how many seconds of video each made. */
+function VideosSection({ rows }: { rows: UsageRow[] }) {
+  const entry = settingEntry('usage.videos');
+  const names = useModelNames();
+  return (
+    <SettingsSection id="usage.videos" title={entry.label} description={entry.description}>
+      <DataTable
+        label={entry.label}
+        columns={[
+          { label: 'Model' },
+          { label: 'Videos', className: 'w-20 text-right' },
+          { label: 'Length', className: 'w-24 text-right' },
+          { label: 'Cost', className: 'w-36 text-right' },
+        ]}
+      >
+        {byVideoModel(rows).map((m) => {
+          const name = names(m.providerId, m.modelId);
+          return (
+            <TableRow key={m.ref}>
+              <Cell title={m.ref}>
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate text-fg">{name.model}</span>
+                  <span className="shrink-0 text-footnote text-fg-muted">{name.provider}</span>
+                </span>
+              </Cell>
+              <Cell className="text-right tabular-nums">{formatCount(m.videos)}</Cell>
+              <Cell className="text-right tabular-nums">{formatSeconds(m.seconds)}</Cell>
+              <Cell className="text-right tabular-nums">
+                {m.cost === null ? '—' : formatUsd(m.cost)}
+                {m.estimated > 0 && <span className="ml-1.5 text-footnote text-fg-muted">estimate</span>}
+              </Cell>
             </TableRow>
           );
         })}

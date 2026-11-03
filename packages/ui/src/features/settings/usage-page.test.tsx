@@ -7,8 +7,8 @@ import { setPath } from '../../lib/json-path.ts';
 import { keys } from '../../lib/queries.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { callsTo, model, resetBackend, snapshot, user } from './test-backend.ts';
-import { byImageModel, byModel, formatTokens, formatUsd, modeShares, tokensByDay, totals } from './usage-data.ts';
-import { UsagePage } from './usage-page.tsx';
+import { byImageModel, byModel, byVideoModel, formatTokens, formatUsd, modeShares, tokensByDay, totals } from './usage-data.ts';
+import { formatSeconds, UsagePage } from './usage-page.tsx';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('./test-backend.ts');
@@ -335,9 +335,43 @@ describe('images in usage', () => {
   });
 });
 
+describe('videos in usage', () => {
+  const clips = (extra: Partial<UsageRow>) => usage({ providerId: 'fal', modelId: 'kling', input: 0, output: 0, videos: 2, videoSeconds: 11, ...extra });
+  const VIDEO_MODELS = { 'imageModels.list': () => [{ ref: 'fal/kling', providerId: 'fal', modelId: 'kling', displayName: 'Kling 4.0' }], 'app.info': () => ({ imageGeneration: true, videoGeneration: true }) };
+
+  it('adds videos, their length and their cost to the statement, keeps them out of the tokens, and has a table of their own', async () => {
+    resetBackend({ ...settingsBackend(), ...VIDEO_MODELS, 'usage.summary': () => [...ROWS, clips({ costUsd: 1.5, unpriced: 0 })] });
+    await renderPage();
+    expect(await screen.findByText('6 requests, 10.7K tokens, 2 videos (11 s), and $1.54 in the last 30 days.')).toBeTruthy();
+    expect(within(screen.getByRole('table', { name: 'By model' })).queryByText('kling')).toBeNull();
+    await within(screen.getByRole('table', { name: 'Videos' })).findByText('Kling 4.0');
+    const row = within(screen.getByRole('table', { name: 'Videos' })).getByRole('row', { name: /Kling 4.0/ });
+    expect(row.textContent).toContain('11 s');
+    expect(row.textContent).toContain('$1.50');
+  });
+
+  it('marks an estimated cost, and shows only the videos when nothing else was used', async () => {
+    resetBackend({ ...settingsBackend(), ...VIDEO_MODELS, 'usage.summary': () => [clips({ costUsd: 1.5, unpriced: 0, estimatedUsd: 1.5 })] });
+    await renderPage();
+    expect(await screen.findByText('2 videos (11 s) and about $1.50 in the last 30 days.')).toBeTruthy();
+    expect(within(screen.getByRole('table', { name: 'Videos' })).getByText('estimate')).toBeTruthy();
+    expect(screen.queryByRole('table', { name: 'By model' })).toBeNull();
+    expect(screen.queryByRole('table', { name: 'Images' })).toBeNull();
+  });
+
+  it('counts them apart in the data, and writes a length in minutes and hours', () => {
+    const rows = [...ROWS, clips({ costUsd: 1.5, unpriced: 0, estimatedUsd: 1.5 }), clips({ day: day(1), videos: 1, videoSeconds: 8 })];
+    expect(totals(rows)).toMatchObject({ requests: 6, tokens: 10_700, images: 0, videos: 3, videoSeconds: 19, estimated: 1.5 });
+    expect(byModel(rows).map((m) => m.modelId)).not.toContain('kling');
+    expect(byVideoModel(rows)).toEqual([{ ref: 'fal/kling', providerId: 'fal', modelId: 'kling', videos: 3, seconds: 19, cost: 1.5, estimated: 1.5 }]);
+    expect(modeShares(rows)).toEqual(modeShares(ROWS));
+    expect([45, 125, 3600, 4200].map(formatSeconds)).toEqual(['45 s', '2 min 5 s', '1 h', '1 h 10 min']);
+  });
+});
+
 describe('usage data', () => {
   it('counts every token a request processed and the cost of the priced ones', () => {
-    expect(totals(ROWS)).toEqual({ requests: 6, input: 1500, output: 700, cacheRead: 8000, cacheWrite: 500, tokens: 10_700, images: 0, cost: expect.closeTo(0.043), estimated: 0, priced: 4, unpriced: 2 });
+    expect(totals(ROWS)).toEqual({ requests: 6, input: 1500, output: 700, cacheRead: 8000, cacheWrite: 500, tokens: 10_700, images: 0, videos: 0, videoSeconds: 0, cost: expect.closeTo(0.043), estimated: 0, priced: 4, unpriced: 2 });
   });
 
   it('lists every day of the period in local time, oldest first, quiet days at zero', () => {
