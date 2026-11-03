@@ -202,7 +202,6 @@ export const migrations: { name: string; statements: string[] }[] = [
     ]
   },
   {
-<<<<<<< HEAD
     "name": "20261102170814_audit_events",
     "statements": [
       "CREATE TABLE `audit_events` (\n\t`id` text PRIMARY KEY,\n\t`at` integer NOT NULL,\n\t`kind` text NOT NULL,\n\t`actor_id` text,\n\t`actor` text,\n\t`target` text,\n\t`summary` text NOT NULL,\n\t`detail` text,\n\t`ip` text\n);",
@@ -215,7 +214,9 @@ export const migrations: { name: string; statements: string[] }[] = [
     "name": "20261102170842_user_limits",
     "statements": [
       "ALTER TABLE `users` ADD `limits` text;"
-=======
+    ]
+  },
+  {
     "name": "20261102171947_video_generation",
     "statements": [
       "ALTER TABLE `generated_images` ADD `kind` text DEFAULT 'image' NOT NULL;",
@@ -224,7 +225,6 @@ export const migrations: { name: string; statements: string[] }[] = [
       "ALTER TABLE `generated_images` ADD `audio` integer;",
       "ALTER TABLE `usage_events` ADD `videos` integer DEFAULT 0 NOT NULL;",
       "ALTER TABLE `usage_events` ADD `video_seconds` real DEFAULT 0 NOT NULL;"
->>>>>>> ad4807b1 (feat(video): video model capabilities, container sniffing, guarded download, fit and VideoService)
     ]
   }
 ];

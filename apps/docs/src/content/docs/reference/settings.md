@@ -21,7 +21,7 @@ see are hidden in the app.
 | **Transcript width** | Maximum width of the transcript and composer columns. |
 | **Motion** | Reduce animation in streaming responses and other interface elements. |
 | **Default model** | New chats start with this model. “Server default” follows the one set for everyone. |
-| **Start with the model I used last** | The model you pick in a conversation is the one the next new conversation starts with. Turn it off to always start with the default model above. |
+| **Start with the model I used last** | The model you pick in a conversation is the one the next new conversation starts with. Turn it off to always start with the one chosen above. |
 | **Default image model** *(only where it works)* | What makes your images, unless you pick another in a conversation or name one when you ask. |
 | **Default video model** *(only where it works)* | What makes your videos, unless you name another when you ask. A model that makes video from a picture only needs one to start from. |
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
@@ -90,6 +90,7 @@ see are hidden in the app.
 | **Images** *(only where it works)* | Images each model made and what they cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
 | **Your limits** *(only where it works)* | What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats, Cowork tasks and Code sessions, including deleted ones. A cost limit counts only requests to models with a price. |
 | **Limits by person** *(admins only, only where it works)* | Everyone’s usage against their limits, with who is near or at one. Edit a person’s limits here or under Admin › Limits. |
+| **Videos** *(only where it works)* | Videos each model made, how many seconds of video that is and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
 | **Prices** *(admins only)* | Dollars per million tokens, per model, in place of the provider’s list price (Anthropic and OpenAI models without one here use it). A price counts for requests made after it is set. |
 
 ## Settings › Code

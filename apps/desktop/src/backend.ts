@@ -72,8 +72,11 @@ const backend = await createBackend({
  * The bytes a blob request needs: all of the file, or only the part its `Range` header names, because a player asks for a
  * video in pieces and the whole file (up to 512 MB) shouldn't cross to the window for each. `main.ts` answers with the same header.
  */
+/** The built-in backend has one person and checks nobody's access to a blob. */
+const LOCAL_PERSON = '';
+
 async function readBlob(sha256: string, range: string | undefined): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string; size: number } | undefined> {
-  const source = await backend.blobSource(sha256);
+  const source = await backend.blobSource(LOCAL_PERSON, sha256);
   if (!source) return undefined;
   const wanted = parseByteRange(range, source.size);
   if (wanted === 'unsatisfiable') return { bytes: new Uint8Array(), mime: source.mime, size: source.size };

@@ -102,11 +102,6 @@ export class BlobStore {
     }
   }
 
-  /** The blob's bytes in chunks, for copying it somewhere without reading it whole. */
-  stream(sha256: string): AsyncIterable<Uint8Array> {
-    return createReadStream(this.pathFor(sha256));
-  }
-
   async putText(text: string, mime = 'text/plain'): Promise<BlobInfo> {
     return this.put(new TextEncoder().encode(text), mime);
   }
