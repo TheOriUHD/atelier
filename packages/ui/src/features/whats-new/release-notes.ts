@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Film, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,49 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.4.0',
+    intro: 'Video generation, drawing over part of an image to change it, limits and an activity log for shared servers, and computer use on Linux.',
+    highlights: [
+      {
+        icon: Film,
+        title: 'Video generation',
+        body: 'Image providers can make video now: ComfyUI workflows, SwarmUI, fal, Replicate, OpenRouter, xAI, Black Forest Labs and Gemini. Ask for a clip in Chat, Code or Cowork and it plays in the conversation, can be saved to your folder, and is kept in Images with a filter for videos. None of these has run against a real service yet.',
+      },
+      {
+        icon: Images,
+        title: 'Change part of an image',
+        body: 'Brush over an area of a generated image, say what should change there, and only that area is redone. Generated images can also be used inside artifacts and visuals.',
+      },
+      {
+        icon: Gauge,
+        title: 'Limits for shared servers',
+        body: 'Admins can limit tokens, cost and requests per person, with exceptions for single people. People see their own usage against their limits, and a warning at 80%.',
+      },
+      {
+        icon: History,
+        title: 'An activity log',
+        body: 'Settings › Admin › Activity records who signed in, who changed accounts, providers, settings and limits, and when. It never records secrets, and it can be exported.',
+      },
+      {
+        icon: Monitor,
+        title: 'Computer use on Linux',
+        body: 'The assistant can use apps on a Linux desktop running X11: Full control and asking per app, with the same safeguards as on the Mac and Windows. Wayland sessions are limited to apps that run through XWayland.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'Stricter and kinder permissions',
+        body: 'Working outside the workspace folder now works on a server too, and one approval covers a folder in Ask mode. Hidden models can’t be used by name, a file is only readable by the account it belongs to, and web fetches can’t be redirected to your own network. Copy diagnostics in Settings › System makes bug reports easy without sending anything on its own.',
+      },
+    ],
+    also: [
+      'The model you pick in a conversation is the one the next one starts with (Settings › General turns this off).',
+      'Windows downloads are smaller: one installer for each type of processor.',
+      'Log out and Change setup no longer wait on slow file watchers.',
+      'Your data export includes images that only exist inside messages.',
+      'The settings close button no longer sits over Log out.',
+    ],
+  },
   {
     version: '0.3.1',
     intro: 'Fixes from the first day of 0.3.0.',
