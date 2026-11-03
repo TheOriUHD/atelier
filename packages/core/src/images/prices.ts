@@ -37,6 +37,34 @@ const LIST_PRICES: readonly (readonly [RegExp, ImagePrice])[] = [
   [/^black-forest-labs\/FLUX\.1-kontext-max/, { perMegapixel: 0.08 }],
 ];
 
+/**
+ * List prices for video, per second, read on the vendors' own pages on 2026-11-03 (xAI: docs.x.ai/developers/pricing;
+ * fal and Replicate: each model's page; Google: the pricing page, which says "approximately" for 720p). Services that
+ * report the cost of a call (OpenRouter, xAI) never use these. A price that depends on something the call doesn't
+ * give, such as a promotion, is left out.
+ */
+const VIDEO_PRICES: readonly (readonly [RegExp, ImagePrice])[] = [
+  [/^grok-imagine-video-1\.5-lite/, { perSecond: 0.02 }],
+  [/^grok-imagine-video-1\.5/, { perSecond: 0.08 }],
+  [/^grok-imagine-video/, { perSecond: 0.05 }],
+  [/^(?:kling\/v4\/|kwaivgi\/kling-v4\.0)/, { bySecond: { '720p': 0.157, '1080p': 0.235 } }],
+  [/^alibaba\/wan-3(?:\.0)?(?:\/|$)/, { bySecond: { '480p': 0.05, '720p': 0.1, '1080p': 0.2 } }],
+  [/^lightricks\/ltx-2\.5\/.*\/fast$/, { bySecond: { '720p': 0.09, '1080p': 0.13, '1440p': 0.19, '2160p': 0.3 } }],
+  [/^google\/gemini-omni-flash\/v1\.1\//, { bySecond: { '360p': 0.03, '720p': 0.1, '1080p': 0.15, '4k': 0.3 } }],
+  [/^gemini-omni/, { bySecond: { '720p': 0.1 } }],
+];
+
+export function listVideoPrice(modelId: string): ImagePrice | null {
+  return VIDEO_PRICES.find(([match]) => match.test(modelId))?.[1] ?? null;
+}
+
+/** What a clip of `seconds` costs under `price`, or null when the price doesn't cover this resolution. */
+export function videoCost(price: ImagePrice, seconds: number, resolution?: string): number | null {
+  const named = resolution ? Object.entries(price.bySecond ?? {}).find(([name]) => name.toLowerCase() === resolution.toLowerCase())?.[1] : undefined;
+  const perSecond = named ?? price.perSecond;
+  return perSecond === undefined ? null : Math.round(perSecond * seconds * 1e6) / 1e6;
+}
+
 export function listImagePrice(modelId: string): ImagePrice | null {
   return LIST_PRICES.find(([match]) => match.test(modelId))?.[1] ?? null;
 }

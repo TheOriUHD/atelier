@@ -17,6 +17,7 @@ import { toBase64 } from '../providers/util.ts';
 import { textOutput, type ToolContext, type ToolOutput } from '../tools/types.ts';
 import { checkImage, type DownloadedImage } from './download.ts';
 import { MaskError, normaliseMask } from './mask.ts';
+import { createProgressReporter, type ProgressReporter } from './progress.ts';
 import { fitParams, type SizeName } from './params.ts';
 import { imageCost, listImagePrice } from './prices.ts';
 import { ImageModelUnavailable, type ImageProviderRegistry, type ResolvedImageModel } from './registry.ts';
@@ -71,14 +72,6 @@ export interface ImageServiceDeps {
 /** With nothing from the server for this long, it isn't coming. */
 const IDLE_MS = 15 * 60_000;
 const TOTAL_MS = 60 * 60_000;
-const PROGRESS_EVERY_MS = 500;
-/** Steps seen before their pace says anything about how long the rest will take. */
-const ETA_AFTER_STEPS = 2;
-const PREVIEW_EVERY_MS = 1_000;
-const PREVIEW_SIDE = 512;
-const PREVIEW_BYTES = 200_000;
-const MAX_PREVIEW_CHARS = 16_000_000;
-const MAX_PREVIEW_PIXELS = 4_000_000;
 const RETRY_DELAYS_MS = [2_000, 6_000];
 const MAX_INPUT_SIDE = 2048;
 const MAX_INPUT_BYTES = 20 * 1024 * 1024;
@@ -101,7 +94,7 @@ function fileName(prompt: string, sha: string, mime: string): string {
 const seconds = (ms: number) => (ms < 10_000 ? (ms / 1000).toFixed(1) : String(Math.round(ms / 1000)));
 
 /** The ids of every image a conversation holds, attachments and generated alike, with their hashes. */
-function imagesIn(messages: readonly Message[]): Map<string, string> {
+export function imagesIn(messages: readonly Message[]): Map<string, string> {
   const found = new Map<string, string>();
   const add = (sha: string) => found.set(imageId(sha), sha);
   for (const m of messages) {
@@ -135,7 +128,8 @@ export class ImageService {
   async models(session: ImageSessionFacts): Promise<ImageModelInfo[]> {
     if (!this.deps.settings().imageGeneration.enabled) return [];
     const admin = await this.deps.isAdmin(session.userId);
-    const all = (await this.deps.registry.listModels(session.userId)).filter((m) => admin || !m.hidden);
+    // Video models share the providers and the model cache, and belong to GenerateVideo: GenerateImage would get a clip back.
+    const all = (await this.deps.registry.listModels(session.userId)).filter((m) => (admin || !m.hidden) && m.capabilities.output !== 'video');
     const first = session.imageModel ?? (await this.deps.preferred(session.userId)) ?? this.deps.settings().models.defaults.image;
     return [...all].sort((a, b) => Number(b.ref === first) - Number(a.ref === first));
   }
@@ -254,9 +248,10 @@ export class ImageService {
   async tryImage(draft: ImageProviderDraft, modelId: string | undefined): Promise<{ blob: string; mime: string; width: number; height: number; durationMs: number }> {
     const started = Date.now();
     const { adapter } = await this.deps.registry.draftAdapter(draft);
-    const models = await adapter.listModels(AbortSignal.timeout(20_000));
+    // A clip costs real money and takes minutes: the check above lists its models, which proves the key.
+    const models = (await adapter.listModels(AbortSignal.timeout(20_000))).filter((m) => m.capabilities.output !== 'video');
     const model = models.find((m) => m.modelId === modelId) ?? models[0];
-    if (!model) throw new Error(`${draft.name} has no models to try.`);
+    if (!model) throw new Error(`${draft.name} has no image models to try.`);
     const fit = fitParams(model.capabilities, { size: 'small' });
     const request: ImageRequest = {
       model: model.modelId,
@@ -320,45 +315,8 @@ export class ImageService {
     else this.underWay.delete(userId);
   }
 
-  /** Reports progress at a pace the connection and the page can take, and keeps previews small. */
-  private progressReporter(ctx: ToolContext, shape: Pick<ImageProgress, 'width' | 'height' | 'count'>) {
-    let sent = 0;
-    let previewSent = 0;
-    let preview: ImageProgress['preview'];
-    let current: ImageProgress = { phase: 'queued', ...shape };
-    // The first step seen: the time before it went to loading, so it's where the pace starts from.
-    let first: { step: number; at: number } | undefined;
-    /** Many servers report steps but no time; their pace tells it. */
-    const paced = (next: Partial<ImageProgress>): Partial<ImageProgress> => {
-      if (next.step === undefined || next.etaMs !== undefined) return next;
-      first ??= { step: next.step, at: Date.now() };
-      const done = next.step - first.step;
-      const steps = next.steps ?? current.steps;
-      return done >= ETA_AFTER_STEPS && steps ? { ...next, etaMs: ((Date.now() - first.at) / done) * Math.max(0, steps - next.step) } : next;
-    };
-    const send = (now: number) => {
-      sent = now;
-      ctx.emit({ type: 'tool_progress', messageId: ctx.messageId, callId: ctx.callId, progress: { ...current, ...(preview ? { preview } : {}) } });
-    };
-    return {
-      update(next: Partial<ImageProgress>, force = false) {
-        current = { ...current, ...paced(next) };
-        const now = Date.now();
-        if (force || now - sent >= PROGRESS_EVERY_MS) send(now);
-      },
-      preview(mime: string, data: string) {
-        const now = Date.now();
-        if (now - previewSent < PREVIEW_EVERY_MS) return;
-        previewSent = now;
-        const small = shrinkPreview(mime, data);
-        if (small) preview = small;
-        send(now);
-      },
-    };
-  }
-
   /** Runs one adapter stream, collecting finished images; retried as a whole when a hosted service has a hiccup. */
-  private async collect(model: ResolvedImageModel, request: ImageRequest, progress: ReturnType<ImageService['progressReporter']>, onUsage: (e: Extract<ImageEvent, { type: 'usage' }>) => void): Promise<{ images: Extract<ImageEvent, { type: 'image' }>[]; finish: Extract<ImageEvent, { type: 'finish' }> }> {
+  private async collect(model: ResolvedImageModel, request: ImageRequest, progress: ProgressReporter, onUsage: (e: Extract<ImageEvent, { type: 'usage' }>) => void): Promise<{ images: Extract<ImageEvent, { type: 'image' }>[]; finish: Extract<ImageEvent, { type: 'finish' }> }> {
     const images: Extract<ImageEvent, { type: 'image' }>[] = [];
     for await (const event of model.adapter.generate(request)) {
       switch (event.type) {
@@ -426,7 +384,7 @@ export class ImageService {
       const references = await Promise.all((input.reference_images ?? []).slice(0, fit.references).map((r) => this.inputImage(ctx.sessionId, r)));
       const mask = input.mask && fit.mask ? await this.maskImage(ctx.sessionId, input.mask, references[0]!) : undefined;
 
-      const progress = this.progressReporter(ctx, { ...(fit.width ? { width: fit.width } : {}), ...(fit.height ? { height: fit.height } : {}), count: fit.count });
+      const progress = createProgressReporter(ctx, { ...(fit.width ? { width: fit.width } : {}), ...(fit.height ? { height: fit.height } : {}), count: fit.count });
       progress.update({}, true);
 
       const release = await this.deps.registry.hold(model, ctx.signal, { onWait: (ahead) => progress.update({ phase: 'queued', ...(ahead !== null ? { ahead } : {}) }, true), owner: ctx.sessionId });
@@ -456,7 +414,7 @@ export class ImageService {
     }
   }
 
-  private async run(model: ResolvedImageModel, input: GenerateImageInput, fit: ReturnType<typeof fitParams>, references: ImageInput[], mask: ImageInput | undefined, ctx: ToolContext, progress: ReturnType<ImageService['progressReporter']>) {
+  private async run(model: ResolvedImageModel, input: GenerateImageInput, fit: ReturnType<typeof fitParams>, references: ImageInput[], mask: ImageInput | undefined, ctx: ToolContext, progress: ProgressReporter) {
     if (model.config.sharesGpuWith) {
       progress.update({ phase: 'freeing' }, true);
       await this.deps.registry.freeText(model.config, ctx.signal);
@@ -596,17 +554,6 @@ function perImageCost(settings: Settings, model: ResolvedImageModel, fit: Return
   }
   const usd = imageCost(price, fit.width, fit.height, fit.sizeClass);
   return usd === null ? null : { usd, estimated: true };
-}
-
-function shrinkPreview(mime: string, data: string): ImageProgress['preview'] {
-  if (data.length <= PREVIEW_BYTES) return { mime, data };
-  // Decoded on the backend's main thread, once a second, at a size a server chooses: a huge one is simply skipped.
-  if (data.length > MAX_PREVIEW_CHARS) return undefined;
-  const bytes = Buffer.from(data, 'base64');
-  const size = imageSize(bytes);
-  if (!size || size.width * size.height > MAX_PREVIEW_PIXELS) return undefined;
-  const fitted = fitImage(bytes, mime, PREVIEW_SIDE, PREVIEW_BYTES);
-  return fitted.ok ? { mime: fitted.image.mime, data: toBase64(fitted.image.bytes) } : undefined;
 }
 
 function failureText(model: ResolvedImageModel, error: MessageError | undefined): string {

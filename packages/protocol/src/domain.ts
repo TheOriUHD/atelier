@@ -622,5 +622,7 @@ export const AppInfo = z.object({
   auditLog: z.boolean().optional(),
   /** This backend keeps per-person usage limits (ARCHITECTURE §8); a newer app hides them on an older server. */
   usageLimits: z.boolean().optional(),
+  /** This backend can generate video too, and serves it in ranges. */
+  videoGeneration: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

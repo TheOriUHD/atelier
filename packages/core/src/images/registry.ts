@@ -56,8 +56,13 @@ function withOverrides(model: ListedImageModel, overrides: Record<string, ImageM
     ...model,
     displayName: o.displayName ?? model.displayName,
     ...(o.description ?? model.description ? { description: (o.description ?? model.description)! } : {}),
-    capabilities: { ...model.capabilities, ...(o.tuning ? { defaults: { ...model.capabilities.defaults, ...o.tuning } } : {}) },
-    source: o.displayName || o.tuning ? 'override' : model.source,
+    capabilities: {
+      ...model.capabilities,
+      ...(o.tuning ? { defaults: { ...model.capabilities.defaults, ...o.tuning } } : {}),
+      // A person's length and frame rate for a video model stand in for its own, so the list the model reads and the settings table agree.
+      ...(o.video && model.capabilities.video ? { video: { ...model.capabilities.video, ...(o.video.seconds ? { defaultSeconds: o.video.seconds } : {}), ...(o.video.fps ? { defaultFps: o.video.fps } : {}) } } : {}),
+    },
+    source: o.displayName || o.tuning || o.video ? 'override' : model.source,
     hidden: o.hidden ?? false,
     favorite: o.favorite ?? false,
     order: o.order ?? 0,

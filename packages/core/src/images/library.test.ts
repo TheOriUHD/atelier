@@ -53,4 +53,16 @@ describe('the image library', () => {
     await image(2, { hidden: true });
     expect(generatedImagesFor(db, 'ada', { limit: 10 })).toMatchObject({ totalBytes: 1000, items: [{ createdAt: 1 }] });
   });
+
+  it('lists clips with their length, in the same page as pictures, and filters by kind', async () => {
+    const { db, image } = await library();
+    await image(1);
+    await image(2, { kind: 'video', mime: 'video/mp4', mediaSeconds: 6, fps: 24, audio: true, width: 1280, height: 720 });
+    const all = generatedImagesFor(db, 'ada', { limit: 10 }).items;
+    expect(all.map((i) => i.kind)).toEqual(['video', undefined]);
+    expect(all[0]).toMatchObject({ id: expect.stringMatching(/^vid_[0-9a-f]{8}$/), seconds: 6, fps: 24, audio: true, mime: 'video/mp4' });
+    expect(all[1]!.id).toMatch(/^img_/);
+    expect(generatedImagesFor(db, 'ada', { limit: 10, kind: 'video' }).items).toHaveLength(1);
+    expect(generatedImagesFor(db, 'ada', { limit: 10, kind: 'image' }).items.map((i) => i.createdAt)).toEqual([1]);
+  });
 });

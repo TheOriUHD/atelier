@@ -116,7 +116,7 @@ export const SettingsSchema = z.object({
   models: z
     .object({
       defaults: z
-        .object({ chat: z.string(), work: z.string(), code: z.string(), small: z.string(), image: z.string() })
+        .object({ chat: z.string(), work: z.string(), code: z.string(), small: z.string(), image: z.string(), video: z.string() })
         .partial()
         .default({}),
       aliases: z.object({ opus: z.string(), sonnet: z.string(), haiku: z.string(), fable: z.string() }).partial().default({}),
@@ -157,8 +157,13 @@ export const SettingsSchema = z.object({
       /** Per person per day, on a server with several accounts; absent means no limit. */
       maxImagesPerUserPerDay: z.number().int().min(1).optional(),
       maxSpendPerUserPerDayUsd: z.number().positive().optional(),
+      /** Video generation (ARCHITECTURE §23): a clip costs far more than an image, so it has limits of its own. */
+      videoEnabled: z.boolean().default(true),
+      maxVideosPerTurn: z.number().int().min(1).max(20).default(2),
+      maxVideosPerUserPerDay: z.number().int().min(1).optional(),
+      maxVideoSpendPerUserPerDayUsd: z.number().positive().optional(),
     })
-    .default({ enabled: true, maxImagesPerTurn: 8 }),
+    .default({ enabled: true, maxImagesPerTurn: 8, videoEnabled: true, maxVideosPerTurn: 2 }),
   /** Per-person limits on text models for a shared server (ARCHITECTURE §8); none until an admin sets one. */
   limits: LimitsSettings.default({}),
   context: z

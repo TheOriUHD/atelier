@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { PersonalProviderId, ProviderId, ProviderStatus } from './models.ts';
 
 /** How a service is spoken to. A service that uses a known wire format is a preset, not a new type. */
-export const ImageProviderType = z.enum(['comfyui', 'a1111', 'swarmui', 'invokeai', 'openai-images', 'gemini', 'chat-images', 'responses-image', 'bfl', 'stability', 'fal', 'replicate', 'huggingface', 'ideogram', 'bedrock']);
+export const ImageProviderType = z.enum(['comfyui', 'a1111', 'swarmui', 'invokeai', 'openai-images', 'gemini', 'chat-images', 'responses-image', 'bfl', 'stability', 'fal', 'replicate', 'huggingface', 'ideogram', 'bedrock', 'openrouter-video', 'xai-video']);
 export type ImageProviderType = z.infer<typeof ImageProviderType>;
 
 export const ImageSize = z.object({ width: z.number().int().positive(), height: z.number().int().positive() });
@@ -37,7 +37,37 @@ export const ImageTuning = z.object({
 }).partial();
 export type ImageTuning = z.infer<typeof ImageTuning>;
 
+/** The lengths a video model makes: a list of whole seconds, or any length in a range. */
+export const VideoDurations = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('list'), seconds: z.array(z.number().positive()).min(1) }),
+  z.object({ kind: z.literal('range'), min: z.number().positive(), max: z.number().positive(), /** Lengths come in multiples of this, from `min`. */ step: z.number().positive().optional() }),
+]);
+export type VideoDurations = z.infer<typeof VideoDurations>;
+
+/** What a video model takes, beside what every model takes (`ImageCapabilities`; its `sizes` say the shapes and resolutions). */
+export const VideoCapabilities = z.object({
+  durations: VideoDurations,
+  /** The length used when the call names none. A person can change it per model. */
+  defaultSeconds: z.number().positive(),
+  /** Frame rates it takes; absent when it has one it doesn't let anyone change. */
+  fps: z.array(z.number().int().positive()).optional(),
+  defaultFps: z.number().int().positive().optional(),
+  /** Resolutions by name (`720p`), small to large. Absent when the shapes in `sizes` are all there is. */
+  resolutions: z.array(z.string()).optional(),
+  /** An image to start from. */
+  firstFrame: z.boolean(),
+  /** An image to end on; it needs a first frame. */
+  lastFrame: z.boolean(),
+  /** `always`: the sound can't be turned off, `optional`: it can, `none`: silent. */
+  audio: z.enum(['none', 'optional', 'always']),
+});
+export type VideoCapabilities = z.infer<typeof VideoCapabilities>;
+
 export const ImageCapabilities = z.object({
+  /** What the model makes. Absent means an image, so everything saved before video stays valid. */
+  output: z.enum(['image', 'video']).optional(),
+  /** Set when `output` is `video`. */
+  video: VideoCapabilities.optional(),
   /** `sd15`, `sdxl`, `sdxl-distilled`, `flux`, `flux2`, `z-image`, `hosted` and so on: which recipe a model needs. */
   family: z.string().max(40),
   /** Comma-separated tags or plain sentences. */
@@ -145,6 +175,8 @@ export const ImageModelOverride = z
     tuning: ImageTuning,
     /** Listed by hand, for a model the service doesn't report. */
     manual: z.boolean(),
+    /** For a video model: the length, frame rate and resolution used when a call names none. */
+    video: z.object({ seconds: z.number().positive().max(600), fps: z.number().int().positive().max(240), resolution: z.string().max(20) }).partial(),
   })
   .partial();
 export type ImageModelOverride = z.infer<typeof ImageModelOverride>;
@@ -171,6 +203,9 @@ export const ImagePrice = z.object({
   /** Dollars per image by `1024x1024` or by size name. */
   bySize: z.record(z.string(), z.number().nonnegative()).optional(),
   perMegapixel: z.number().nonnegative().optional(),
+  /** A video: dollars per second of video, flat or by resolution name. */
+  perSecond: z.number().nonnegative().optional(),
+  bySecond: z.record(z.string(), z.number().nonnegative()).optional(),
   /** Dollars per million tokens, for services that count those. */
   input: z.number().nonnegative().optional(),
   output: z.number().nonnegative().optional(),
@@ -195,6 +230,13 @@ export const GeneratedImageMeta = z.object({
   costUsd: z.number().nonnegative().optional(),
   /** The cost comes from a price list, not from the service. */
   costEstimated: z.boolean().optional(),
+  /** `video` for a clip: `mime` is then its container, and `width` and `height` its frame. Absent means an image. */
+  kind: z.enum(['image', 'video']).optional(),
+  /** A clip's length in seconds, as the file says. */
+  seconds: z.number().nonnegative().optional(),
+  fps: z.number().positive().optional(),
+  /** The clip has a sound track. */
+  audio: z.boolean().optional(),
 });
 export type GeneratedImageMeta = z.infer<typeof GeneratedImageMeta>;
 
@@ -208,6 +250,10 @@ export const ImageProgress = z.object({
   /** 0 to 1. */
   fraction: z.number().min(0).max(1).optional(),
   etaMs: z.number().nonnegative().optional(),
+  /** `video` for a clip: its frame gets a play shape, and the line says seconds. */
+  kind: z.enum(['image', 'video']).optional(),
+  /** The length asked for, for the line under a clip's frame. */
+  seconds: z.number().positive().optional(),
   /** The size it will be, so the frame has its shape from the start. */
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
@@ -232,6 +278,11 @@ export type GeneratedImage = z.infer<typeof GeneratedImage>;
 export const IMAGE_ID_PREFIX = 'img_';
 /** What the model calls an image: short enough to repeat, and only looked up among the images of its own session. */
 export const imageId = (sha256: string): string => `${IMAGE_ID_PREFIX}${sha256.slice(0, 8)}`;
+export const VIDEO_ID_PREFIX = 'vid_';
+/** What the model calls a clip, as `imageId` does an image: `SaveVideo` takes it. */
+export const videoId = (sha256: string): string => `${VIDEO_ID_PREFIX}${sha256.slice(0, 8)}`;
+/** Whether a stored file is a clip, by its type. */
+export const isVideoMime = (mime: string): boolean => mime === 'video/mp4' || mime === 'video/webm';
 
 export type ImagePresetGroup = 'local' | 'cloud' | 'aggregator' | 'custom';
 
@@ -281,6 +332,13 @@ export const IMAGE_PROVIDER_PRESETS: readonly ImagePreset[] = [
   { id: 'replicate', label: 'Replicate', type: 'replicate', group: 'aggregator', baseUrl: 'https://api.replicate.com', key: 'required', keyUrl: 'https://replicate.com/account/api-tokens', suggestedModels: ['black-forest-labs/flux-schnell', 'black-forest-labs/flux-1.1-pro'] },
   { id: 'together', label: 'Together AI', type: 'openai-images', group: 'aggregator', baseUrl: 'https://api.together.xyz', key: 'required', keyUrl: 'https://api.together.ai/settings/api-keys', suggestedModels: ['black-forest-labs/FLUX.1-schnell', 'black-forest-labs/FLUX.2-dev'] },
   { id: 'huggingface', label: 'Hugging Face', type: 'huggingface', group: 'aggregator', baseUrl: 'https://router.huggingface.co', key: 'required', keyUrl: 'https://huggingface.co/settings/tokens', suggestedModels: ['black-forest-labs/FLUX.1-dev'] },
+  // Video: the same wire formats where a service has one, so these are presets with a model list of their own.
+  { id: 'openrouter-video', label: 'OpenRouter video', type: 'openrouter-video', group: 'aggregator', baseUrl: 'https://openrouter.ai/api', key: 'required', keyUrl: 'https://openrouter.ai/keys', sharesKeyWith: 'openai-compatible', help: 'Veo, Kling, Wan, Seedance and others through one key. Its models are listed for you.' },
+  { id: 'xai-video', label: 'xAI video', type: 'xai-video', group: 'cloud', baseUrl: 'https://api.x.ai', key: 'required', keyUrl: 'https://console.x.ai' },
+  { id: 'fal-video', label: 'fal.ai video', type: 'fal', group: 'aggregator', baseUrl: 'https://queue.fal.run', key: 'required', keyUrl: 'https://fal.ai/dashboard/keys', help: 'Lists fal’s text-to-video and image-to-video models; type in any other video endpoint by its id.', suggestedModels: ['kling/v4/text-to-video', 'alibaba/wan-3.0/text-to-video'] },
+  { id: 'replicate-video', label: 'Replicate video', type: 'replicate', group: 'aggregator', baseUrl: 'https://api.replicate.com', key: 'required', keyUrl: 'https://replicate.com/account/api-tokens', help: 'Type in a video model as owner/name.', suggestedModels: ['google/veo-3.1', 'alibaba/wan-3'] },
+  { id: 'bfl-video', label: 'Black Forest Labs video', type: 'bfl', group: 'cloud', baseUrl: 'https://api.bfl.ai', key: 'required', keyUrl: 'https://dashboard.bfl.ai', suggestedModels: ['flux-3-video'] },
+  { id: 'gemini-video', label: 'Google Gemini video', type: 'gemini', group: 'cloud', baseUrl: 'https://generativelanguage.googleapis.com', key: 'required', keyUrl: 'https://aistudio.google.com/apikey', help: 'Gemini Omni makes the video in one request, so it can take a few minutes and has no length setting.', suggestedModels: ['gemini-omni-1.1-flash'] },
   { id: 'openai-compatible', label: 'OpenAI-compatible images', type: 'openai-images', group: 'custom', baseUrl: 'http://127.0.0.1:8000', key: 'optional', help: 'Any server with /v1/images/generations, such as LiteLLM.' },
 ];
 

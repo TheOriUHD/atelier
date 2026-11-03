@@ -288,7 +288,7 @@ export const contract = {
     'imageModels.list': { input: Empty, output: z.array(ImageModelInfo) },
     /** The person's generated images, newest first; `before` is the `createdAt` of the last one so far. */
     'generatedImages.list': {
-      input: z.object({ before: z.number().optional(), query: z.string().max(200).optional(), ref: z.string().optional(), limit: z.number().int().min(1).max(100).optional() }),
+      input: z.object({ before: z.number().optional(), query: z.string().max(200).optional(), ref: z.string().optional(), kind: z.enum(['image', 'video']).optional(), limit: z.number().int().min(1).max(100).optional() }),
       output: z.object({ items: z.array(GeneratedImage), next: z.number().nullable(), totalBytes: z.number() }),
     },
     /**

@@ -47,7 +47,21 @@ export interface ImageRequest {
   tuning: ImageTuning;
   loras: { name: string; weight: number }[];
   capabilities: ImageCapabilities;
+  /** Set when the model makes video; `count` is then 1 and the adapter reads what it needs from here. */
+  video?: VideoRequest;
   signal: AbortSignal;
+}
+
+/** What a clip is asked to be, already fitted to the model by `video-params.ts`: only values the model takes. */
+export interface VideoRequest {
+  seconds: number;
+  fps?: number;
+  /** The resolution's name (`720p`) for models that take names; the frame size is `width` and `height` or `aspectRatio` on the request. */
+  resolution?: string;
+  /** Sound wanted. Set only for models that can switch it. */
+  audio?: boolean;
+  firstFrame?: ImageInput;
+  lastFrame?: ImageInput;
 }
 
 export type ImageStopReason = 'done' | 'aborted' | 'refused' | 'error';
@@ -62,6 +76,8 @@ export type ImageEvent =
   | { type: 'preview'; mime: string; data: string }
   /** One finished image: its bytes, or a URL on another host for `download.ts` to fetch. */
   | { type: 'image'; bytes?: Uint8Array; url?: string; mime?: string; seed?: number; revisedPrompt?: string }
+  /** One finished clip: its bytes, or a URL on another host for `download.ts` to fetch. */
+  | { type: 'video'; bytes?: Uint8Array; url?: string; mime?: string; seed?: number }
   /** What the service said this cost or used. */
   | { type: 'usage'; costUsd?: number; input?: number; output?: number }
   | { type: 'finish'; reason: ImageStopReason; error?: MessageError };
