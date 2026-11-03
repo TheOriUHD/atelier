@@ -89,7 +89,7 @@ import { UsageLimits } from '../usage/limits.ts';
 import { sessionUsage, statsSummary, usageSummary } from '../usage/usage.ts';
 import { GitHub, GitHubError } from '../cloud/github.ts';
 import { Codespaces } from '../cloud/codespaces.ts';
-import { collectUnusedBlobs, conversationIds, deleteConversations, exportAll } from '../privacy/privacy.ts';
+import { collectUnusedBlobs, conversationIds, deleteConversations, exportStream } from '../privacy/privacy.ts';
 import { Checkpoints } from '../checkpoints/checkpoints.ts';
 import { ArtifactRepo } from '../artifacts/artifact-repo.ts';
 import { FileRepo } from '../files/file-repo.ts';
@@ -2117,7 +2117,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       ),
     'stats.summary': ({ mode, days, timezoneOffset }, ctx) => statsSummary(db, { userId: me(ctx).id, mode, days: days ?? null, timezoneOffset }),
     'privacy.export': async (_input, ctx) => {
-      const blob = await blobs.put(await exportAll(db, blobs, me(ctx).id), 'application/zip');
+      // Written to disk as it is made: a person's pictures and documents are not held in memory together.
+      const blob = await blobs.putStream(exportStream(db, blobs, me(ctx).id), 'application/zip');
       // The export holds everything the person has and nothing refers to it: only they may download it.
       blobAccess.grant(me(ctx).id, blob.sha256);
       return { sha256: blob.sha256, name: `${APP.dirName.replace(/^\./, '')}-export-${new Date().toISOString().slice(0, 10)}.zip` };

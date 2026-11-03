@@ -360,7 +360,7 @@ A project gives a set of chats the same instructions and files. See [Projects](/
   runs it.
 - **Settings › Privacy › Export your data › Export** builds a zip of your conversations (each as Markdown for its active
   branch, plus all of them with every version as `conversations.json`), your projects' names, descriptions and
-  instructions, every artifact version, your uploaded and project files, and your memory. Temporary chats are not in it.
+  instructions, every artifact version, your uploaded and project files, every picture and document your conversations hold (also those only inside messages, such as screenshots and generated images), and your memory. Temporary chats are not in it.
 - **Delete all…** removes every conversation (chats, Cowork tasks and Code sessions) with its messages, files and
   artifacts after you type `DELETE`. Projects stay, without their chats.
 

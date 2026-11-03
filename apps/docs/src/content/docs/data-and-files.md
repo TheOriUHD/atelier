@@ -212,6 +212,8 @@ The folder must be on a local disk. SQLite does not work reliably over network f
 | `projects.json` | Projects with their descriptions and instructions. |
 | `memory.json` | Your memory entries. |
 | `files/<id>-<name>` | Files you uploaded or that were generated for you. |
+| `attachments/<title>-<id>/<n>-<name>` | Every picture and document your conversations refer to, also those that exist only inside a message (pasted images, screenshots and images a tool returned, images the assistant made). `<n>` is the message's place in the conversation. A file already in `files/` is not stored twice. |
+| `attachments.json` | Which message each of those belongs to, and where it is in the zip. A file that is no longer stored, or that no longer fit (an archive holds at most about 60,000 files and 3.5 GB), is listed with the reason instead. |
 
 Temporary chats are never in an export. An export covers your account only and is a copy for you to keep or move, not a
 backup of the server: it does not hold settings, accounts, provider keys or other people's data.
