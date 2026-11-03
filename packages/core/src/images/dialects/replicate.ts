@@ -10,6 +10,7 @@ import { arr, isRecord, rec, str } from '../../providers/util.ts';
 import { ASPECT_DEFAULTS, lookUp, REPLICATE_MODELS } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
+import { replicateVideoCapabilities, replicateVideoInput, replicateVideoSchema, modelDescription, type ReplicateVideoSchema } from './replicate-video.ts';
 import { assertOwnHost, failure, failureOf, listedModel, noImage, refusal, soundsRefused, waitFor } from './hosted.ts';
 
 const POLL_MS = 1_500;
@@ -41,11 +42,11 @@ function outputUrls(output: unknown): string[] {
   return items.flatMap((item) => str(item) ?? str(rec(item).url) ?? []);
 }
 
-async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, pollMs: number): AsyncGenerator<ImageEvent> {
+async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: ImageRequest, pollMs: number, payload: Record<string, unknown>): AsyncGenerator<ImageEvent> {
   const res = await deps.fetch(`${instance.baseUrl}/v1/predictions`, {
     method: 'POST',
     headers: { ...headers(instance), prefer: `wait=${WAIT_SECONDS}`, 'cancel-after': CANCEL_AFTER },
-    body: JSON.stringify({ version: request.model, input: input(request) }),
+    body: JSON.stringify({ version: request.model, input: payload }),
     signal: request.signal,
   });
   if (!res.ok) {
@@ -65,6 +66,13 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
       const status = str(prediction.status);
       if (status === 'succeeded') {
         const links = outputUrls(prediction.output);
+        // A model that makes video answers with one address; more than one would be extra files, and one clip is what was asked for.
+        if (request.video) {
+          const clip = links[0];
+          yield clip ? { type: 'video', url: clip } : noImage(instance, 'its answer had no video');
+          if (clip) yield { type: 'finish', reason: 'done' };
+          return;
+        }
         for (const url of links) yield { type: 'image', url };
         yield links.length ? { type: 'finish', reason: 'done' } : noImage(instance);
         return;
@@ -96,12 +104,45 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
   }
 }
 
+/** Video models are listed up to this many, each needing a look at its schema. */
+const VIDEO_COLLECTIONS = ['text-to-video', 'image-to-video'];
+const VIDEO_LIMIT = 24;
+const VIDEO_CONCURRENCY = 6;
+/** A clip takes minutes. */
+const VIDEO_POLL_MS = 3_000;
+
 export function createReplicate(instance: ImageInstance, deps: ImageAdapterDeps, options: { pollMs?: number } = {}): ImageAdapter {
   const pollMs = options.pollMs ?? POLL_MS;
+  const videoPollMs = options.pollMs ?? VIDEO_POLL_MS;
+  const forVideo = instance.preset === 'replicate-video';
+  const schemas = new Map<string, ReplicateVideoSchema>();
+  /** A model's schema, from its own page of the API (it takes the key). */
+  const schemaOf = async (id: string, signal?: AbortSignal): Promise<{ schema: ReplicateVideoSchema | null; model: unknown }> => {
+    const model = await requestJson(deps, instance, `${instance.baseUrl}/v1/models/${id.split(':')[0]!.split('/').map(encodeURIComponent).join('/')}`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
+    const schema = replicateVideoSchema(model);
+    if (schema) schemas.set(id, schema);
+    return { schema, model };
+  };
+  const videoModel = async (id: string, source: ListedImageModel['source'], signal?: AbortSignal): Promise<ListedImageModel> => {
+    const { schema, model } = await schemaOf(id, signal);
+    const description = modelDescription(model);
+    return listedModel(instance, id, replicateVideoCapabilities(schema ?? { fields: {}, required: [] }), source, description ? { description } : {});
+  };
+  const videoModels = async (signal?: AbortSignal): Promise<ListedImageModel[]> => {
+    const seen = new Set(instance.models);
+    const found = await Promise.all(VIDEO_COLLECTIONS.map((slug) => requestJson(deps, instance, `${instance.baseUrl}/v1/collections/${slug}`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null)));
+    const ids = [...new Set(found.flatMap((collection) => arr(rec(collection).models).filter(isRecord).flatMap((m) => (str(m.owner) && str(m.name) ? [`${str(m.owner)}/${str(m.name)}`] : []))))].filter((id) => !seen.has(id)).slice(0, VIDEO_LIMIT);
+    const queue = [...instance.models.map((id) => [id, 'default'] as const), ...ids.map((id) => [id, 'detected'] as const)];
+    const listed: ListedImageModel[] = [];
+    // A few at a time: each is a call to Replicate, and the list is refreshed while a person waits.
+    for (let at = 0; at < queue.length; at += VIDEO_CONCURRENCY) listed.push(...(await Promise.all(queue.slice(at, at + VIDEO_CONCURRENCY).map(([id, source]) => videoModel(id, source, signal)))));
+    return listed;
+  };
   const listed = (id: string, source: ListedImageModel['source'], description?: string) => listedModel(instance, id, lookUp(REPLICATE_MODELS, id, ASPECT_DEFAULTS), source, description ? { description } : {});
   return {
     type: 'replicate',
     async listModels(signal) {
+      if (forVideo) return videoModels(signal);
       const typed = instance.models.map((id) => listed(id, 'default'));
       const collection = await requestJson(deps, instance, `${instance.baseUrl}/v1/collections/${COLLECTION}`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
       const seen = new Set(instance.models);
@@ -117,7 +158,14 @@ export function createReplicate(instance: ImageInstance, deps: ImageAdapterDeps,
       return probe(deps, instance, `${instance.baseUrl}/v1/account`, headers(instance), signal);
     },
     generate(request) {
-      return guardImages(request, instance, () => run(instance, deps, request, pollMs));
+      return guardImages(request, instance, async function* () {
+        let payload: Record<string, unknown>;
+        if (request.video) {
+          const schema = schemas.get(request.model) ?? (await schemaOf(request.model, request.signal)).schema ?? { fields: {}, required: [] };
+          payload = replicateVideoInput(schema, request);
+        } else payload = input(request);
+        yield* run(instance, deps, request, request.video ? videoPollMs : pollMs, payload);
+      });
     },
   };
 }

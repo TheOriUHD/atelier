@@ -46,7 +46,7 @@ describe('fal video schemas', () => {
   });
 
   it('sends a length as a string when the endpoint lists them as strings', () => {
-    const schema = { fields: { duration: { type: 'string', enum: ['auto', '4', '5'] } }, required: [] };
+    const schema = { fields: { duration: { type: 'string', enum: ['auto', '4', '5'] } }, required: [], duration: 'duration' };
     expect(falVideoBody(schema, videoRequest({ video: { seconds: 5 } })).duration).toBe('5');
     expect(falVideoCapabilities(schema).video!.durations).toEqual({ kind: 'list', seconds: [4, 5] });
   });

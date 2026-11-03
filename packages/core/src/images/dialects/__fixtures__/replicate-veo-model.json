@@ -1,0 +1,136 @@
+{
+ "owner": "google",
+ "name": "veo-3.1",
+ "description": "Veo 3.1 text and image to video.",
+ "latest_version": {
+  "id": "abc123",
+  "openapi_schema": {
+   "openapi": "3.0.2",
+   "components": {
+    "schemas": {
+     "Input": {
+      "type": "object",
+      "title": "Input",
+      "required": [
+       "prompt"
+      ],
+      "properties": {
+       "seed": {
+        "type": "integer",
+        "title": "Seed",
+        "x-order": 9,
+        "nullable": true,
+        "description": "Random seed. Omit for random generations"
+       },
+       "image": {
+        "type": "string",
+        "title": "Image",
+        "format": "uri",
+        "x-order": 3,
+        "nullable": true,
+        "description": "Input image to start generating from. Ideal images are 16:9 or 9:16 and 1280x720 or 720x1280, depending on the aspect ratio you choose."
+       },
+       "prompt": {
+        "type": "string",
+        "title": "Prompt",
+        "x-order": 0,
+        "description": "Text prompt for video generation"
+       },
+       "duration": {
+        "allOf": [
+         {
+          "$ref": "#/components/schemas/duration"
+         }
+        ],
+        "default": 8,
+        "title": "duration",
+        "x-order": 1
+       },
+       "last_frame": {
+        "type": "string",
+        "title": "Last Frame",
+        "format": "uri",
+        "x-order": 4,
+        "nullable": true,
+        "description": "Ending image for interpolation. When provided with an input image, creates a transition between the two images."
+       },
+       "resolution": {
+        "allOf": [
+         {
+          "$ref": "#/components/schemas/resolution"
+         }
+        ],
+        "default": "1080p",
+        "title": "resolution",
+        "x-order": 1
+       },
+       "aspect_ratio": {
+        "allOf": [
+         {
+          "$ref": "#/components/schemas/aspect_ratio"
+         }
+        ],
+        "default": "16:9",
+        "title": "aspect_ratio",
+        "x-order": 1
+       },
+       "generate_audio": {
+        "type": "boolean",
+        "title": "Generate Audio",
+        "default": true,
+        "x-order": 8,
+        "description": "Generate audio with the video"
+       },
+       "negative_prompt": {
+        "type": "string",
+        "title": "Negative Prompt",
+        "x-order": 6,
+        "nullable": true,
+        "description": "Description of what to exclude from the generated video"
+       },
+       "reference_images": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "format": "uri"
+        },
+        "title": "Reference Images",
+        "default": [],
+        "x-order": 5,
+        "description": "1 to 3 reference images for subject-consistent generation (reference-to-video, or R2V). Reference images only work with 16:9 aspect ratio and 8-second duration. Last frame is ignored if reference images are provided."
+       }
+      }
+     },
+     "duration": {
+      "enum": [
+       4,
+       6,
+       8
+      ],
+      "type": "integer",
+      "title": "duration",
+      "description": "An enumeration."
+     },
+     "resolution": {
+      "enum": [
+       "720p",
+       "1080p"
+      ],
+      "type": "string",
+      "title": "resolution",
+      "description": "An enumeration."
+     },
+     "aspect_ratio": {
+      "enum": [
+       "16:9",
+       "9:16"
+      ],
+      "type": "string",
+      "title": "aspect_ratio",
+      "description": "An enumeration."
+     }
+    }
+   }
+  }
+ }
+}
