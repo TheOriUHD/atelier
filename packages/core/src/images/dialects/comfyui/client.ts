@@ -31,9 +31,14 @@ const promptIds = (entries: unknown): string[] =>
     .sort((a, b) => a.order - b.order)
     .flatMap((e) => e.id ?? []);
 
-/** `{ images: [...] }` per output node, for what comes over the socket and what's in the history alike. */
+/**
+ * `{ images: [...] }` per output node, for what comes over the socket and what's in the history alike. A video node
+ * lists its file there too (`SaveVideo` and `SaveWEBM` with `animated: [true]`), and Video Helper Suite's combine node
+ * under `gifs`.
+ */
 export function outputImages(output: unknown): ComfyImage[] {
-  return arr(rec(output).images).flatMap((image) => {
+  const files = rec(output);
+  return [...arr(files.images), ...arr(files.gifs)].flatMap((image) => {
     const { filename, subfolder, type } = rec(image);
     return typeof filename === 'string' ? [{ filename, subfolder: str(subfolder) ?? '', type: str(type) ?? 'output' }] : [];
   });

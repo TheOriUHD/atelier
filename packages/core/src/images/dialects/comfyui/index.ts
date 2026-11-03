@@ -46,14 +46,17 @@ export function createComfyUi(instance: ImageInstance, deps: ImageAdapterDeps, t
   /** The graph for a request, with its input images already on the server. */
   async function plan(request: ImageRequest, seed: number): Promise<GraphPlan> {
     const { signal, model, references } = request;
-    const images = await Promise.all(references.map((image) => client.upload(image, signal)));
+    // A clip's first and last picture go up like any input image, and the graph names which loader takes which.
+    const video = request.video;
+    const images = await Promise.all((video ? [video.firstFrame].filter((f) => f !== undefined) : references).map((image) => client.upload(image, signal)));
+    const endImage = video?.lastFrame ? await client.upload(video.lastFrame, signal) : undefined;
     const workflowId = workflowIdOf(model);
     const workflow = workflowId === null ? undefined : instance.workflows.find((w) => w.id === workflowId);
     // An imported workflow may read its mask from the alpha channel, where transparent changes; our templates read red.
     const mask = request.mask ? await client.upload(workflow && maskChannel(workflow) === 'alpha' ? transparentChanges(request.mask) : request.mask, signal) : undefined;
     if (workflowId !== null) {
       if (!workflow) throw new Error(`${instance.name} has no workflow "${workflowId}" any more.`);
-      return applyWorkflow(workflow, request, seed, images, mask);
+      return applyWorkflow(workflow, request, seed, images, mask, endImage);
     }
     const info = await serverNodes(signal);
     const source = sourceOf(model, info);
@@ -96,7 +99,15 @@ export function createComfyUi(instance: ImageInstance, deps: ImageAdapterDeps, t
         yield { type: 'finish', reason: 'error', error: warned ? promptError(instance, { node_errors: submission.warnings }) : { code: 'provider_error', message: `${instance.name} finished without an image.`, retryable: false } };
         return;
       }
-      for (const image of images) yield { type: 'image', bytes: await client.view(image, signal), seed };
+      if (request.video) {
+        // A clip is the one MP4 or WebM the output node wrote; a node may also list a preview picture beside it.
+        const clip = images.find((image) => /\.(?:mp4|webm)$/i.test(image.filename));
+        if (!clip) {
+          yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: `${instance.name} finished, but its workflow wrote no MP4 or WebM video. In the workflow, save with SaveVideo, SaveWEBM or VHS Video Combine as mp4 or webm.`, retryable: false } };
+          return;
+        }
+        yield { type: 'video', bytes: await client.view(clip, signal), seed };
+      } else for (const image of images) yield { type: 'image', bytes: await client.view(image, signal), seed };
       yield { type: 'finish', reason: 'done' };
     } finally {
       socket?.close();

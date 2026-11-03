@@ -118,6 +118,10 @@ export const ImageWorkflow = z.object({
     count: ImageWorkflowInput.optional(),
     image: ImageWorkflowInput.optional(),
     mask: ImageWorkflowInput.optional(),
+    /** For a workflow that makes video: how many frames, how many a second, and the picture to end on. */
+    frames: ImageWorkflowInput.optional(),
+    fps: ImageWorkflowInput.optional(),
+    endImage: ImageWorkflowInput.optional(),
     /** The node whose images are the result. */
     output: z.string().max(40).optional(),
   }),

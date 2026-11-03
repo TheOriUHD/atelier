@@ -142,11 +142,11 @@ describe('mapWorkflow', () => {
   it('refuses a graph with no image at the end of it', () => {
     const { 9: _save, ...rest } = STOCK;
     expect(() => mapWorkflow(rest)).toThrow(WorkflowRefused);
-    expect(() => mapWorkflow(rest)).toThrow(/no SaveImage or PreviewImage/);
+    expect(() => mapWorkflow(rest)).toThrow(/no SaveImage, PreviewImage/);
   });
 
   it('refuses a save with no sampler behind it', () => {
-    expect(() => mapWorkflow({ 1: { class_type: 'LoadImage', inputs: { image: 'x' } }, 2: { class_type: 'SaveImage', inputs: { images: ['1', 0] } } })).toThrow(/no SaveImage or PreviewImage/);
+    expect(() => mapWorkflow({ 1: { class_type: 'LoadImage', inputs: { image: 'x' } }, 2: { class_type: 'SaveImage', inputs: { images: ['1', 0] } } })).toThrow(/no SaveImage, PreviewImage/);
   });
 
   it('refuses a graph whose prompt can\'t be found', () => {

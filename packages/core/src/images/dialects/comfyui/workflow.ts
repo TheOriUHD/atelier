@@ -10,6 +10,7 @@ import { arr, isRecord, num, rec, str, strings } from '../../../providers/util.t
 import type { ImageRequest } from '../../types.ts';
 import type { NodeInfo, ObjectInfo } from './discovery.ts';
 import type { Graph, GraphNode, GraphPlan, Link } from './templates.ts';
+import { hostedVideo } from '../video-common.ts';
 
 export const MAX_WORKFLOW_BYTES = 256 * 1024;
 
@@ -27,6 +28,12 @@ const linkId = (value: Link): string => String(value[0]);
 
 const SAMPLER = /KSampler(?!Select)|SamplerCustom/;
 const SAVES_IMAGE = /^(Save|Preview)Image/;
+/** The nodes that write a clip Atelier can keep: MP4 or WebM. Animated WebP and PNG are pictures, which it doesn't take as video. */
+const SAVES_VIDEO = /^(?:SaveVideo|SaveWEBM|VHS_VideoCombine)$/;
+/** Nodes that make a video's latent from words or a picture: they hold its size and its frame count (`length`). */
+const VIDEO_LATENT = /ToVideo$|^Empty.*LatentVideo$/;
+/** Where the frame rate lives. */
+const FPS_INPUT: Record<string, string> = { CreateVideo: 'fps', SaveWEBM: 'fps', VHS_VideoCombine: 'frame_rate' };
 const EMPTY_LATENT = /^Empty.*Latent/;
 /** Inputs that carry a model or an image, never the conditioning a prompt lives in. */
 const NOT_CONDITIONING = new Set(['clip', 'model', 'vae', 'control_net', 'image', 'pixels', 'latent', 'samples', 'style_model', 'clip_vision']);
@@ -71,7 +78,7 @@ function firstLiteral(graph: Graph, node: string, inputs: readonly string[]): Im
 }
 
 /** The text a conditioning link comes from. A zeroed-out conditioning has no text of its own. */
-function traceText(graph: Graph, link: unknown, seen = new Set<string>()): ImageWorkflowInput | null {
+function traceText(graph: Graph, link: unknown, want: 'positive' | 'negative', seen = new Set<string>()): ImageWorkflowInput | null {
   if (!isLink(link)) return null;
   const id = linkId(link);
   const node = graph[id];
@@ -79,9 +86,10 @@ function traceText(graph: Graph, link: unknown, seen = new Set<string>()): Image
   seen.add(id);
   const text = TEXT_INPUTS.map((name) => literal(graph, id, name)).find((found) => found && typeof inputsOf(graph, found.node)[found.input] === 'string');
   if (text) return text;
-  for (const [name, value] of Object.entries(node.inputs)) {
+  // A node that passes both conditionings on (the video nodes do) is followed through the input of the kind being traced.
+  for (const [name, value] of Object.entries(node.inputs).sort(([a], [b]) => Number(b === want) - Number(a === want))) {
     if (NOT_CONDITIONING.has(name)) continue;
-    const found = traceText(graph, value, seen);
+    const found = traceText(graph, value, want, seen);
     if (found) return found;
   }
   return null;
@@ -103,7 +111,7 @@ function firstPass(graph: Graph, last: string): { sampler: string; latent?: stri
     if (SAMPLER.test(node.class_type)) {
       sampler = current;
       current = linkedNode(graph, current, 'latent_image');
-    } else if (EMPTY_LATENT.test(node.class_type) || node.class_type === 'VAEEncode') return { sampler, latent: current };
+    } else if (EMPTY_LATENT.test(node.class_type) || VIDEO_LATENT.test(node.class_type) || node.class_type === 'VAEEncode') return { sampler, latent: current };
     else current = linkedNode(graph, current, 'samples') ?? linkedNode(graph, current, 'latent') ?? linkedNode(graph, current, 'latent_image');
   }
   return { sampler };
@@ -130,29 +138,43 @@ function samplerSettings(graph: Graph, sampler: string) {
 /** The node that makes the result: a save over a preview, and the one with the most sampling behind it. */
 function findOutput(graph: Graph): string | null {
   const score = (id: string) => ancestors(graph, id).filter((a) => SAMPLER.test(graph[a]!.class_type)).length * 2 + (graph[id]!.class_type.startsWith('Save') ? 1 : 0);
-  const outputs = Object.keys(graph).filter((id) => SAVES_IMAGE.test(graph[id]!.class_type) && ancestors(graph, id).some((a) => SAMPLER.test(graph[a]!.class_type)));
+  const outputs = Object.keys(graph).filter((id) => (SAVES_IMAGE.test(graph[id]!.class_type) || SAVES_VIDEO.test(graph[id]!.class_type)) && ancestors(graph, id).some((a) => SAMPLER.test(graph[a]!.class_type)));
   return outputs.sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+/** The `LoadImage` behind a node's input, through any scaling or cropping on the way. */
+function loaderBehind(graph: Graph, node: string, input: string): string | undefined {
+  const source = linkedNode(graph, node, input);
+  if (!source) return undefined;
+  return [source, ...ancestors(graph, source)].find((id) => graph[id]!.class_type === 'LoadImage');
 }
 
 /** What Atelier can set in a graph, found by following the links back from its output. Throws when there's no prompt. */
 export function mapWorkflow(graph: Graph): ImageWorkflow['map'] {
   const output = findOutput(graph);
-  if (!output) throw new WorkflowRefused("This workflow has no SaveImage or PreviewImage after a sampler, so there's no image to take from it.");
+  if (!output) throw new WorkflowRefused("This workflow has no SaveImage, PreviewImage, SaveVideo, SaveWEBM or VHS_VideoCombine after a sampler, so there's no result to take from it.");
   const upstream = ancestors(graph, output);
   const last = upstream.find((id) => SAMPLER.test(graph[id]!.class_type))!;
   const { sampler, latent } = firstPass(graph, last);
   const settings = samplerSettings(graph, sampler);
-  const prompt = traceText(graph, settings.positive);
+  const prompt = traceText(graph, settings.positive, 'positive');
   if (!prompt) throw new WorkflowRefused("Atelier couldn't find the prompt in this workflow: nothing with text leads to the sampler's positive input.");
-  const found = traceText(graph, settings.negative);
+  const found = traceText(graph, settings.negative, 'negative');
   const negative = found && (found.node !== prompt.node || found.input !== prompt.input) ? found : undefined;
-  const empty = latent && EMPTY_LATENT.test(graph[latent]!.class_type) ? latent : undefined;
-  const image = upstream.find((id) => graph[id]!.class_type === 'LoadImage');
+  const video = SAVES_VIDEO.test(graph[output]!.class_type);
+  const empty = latent && (EMPTY_LATENT.test(graph[latent]!.class_type) || VIDEO_LATENT.test(graph[latent]!.class_type)) ? latent : undefined;
+  // A video's first and last picture are two loaders: the one behind `start_image` is the start, the one behind `end_image` the end.
+  const end = video && empty ? loaderBehind(graph, empty, 'end_image') : undefined;
+  const start = video && empty ? loaderBehind(graph, empty, 'start_image') : undefined;
+  const image = start ?? upstream.find((id) => graph[id]!.class_type === 'LoadImage' && id !== end);
   const mask = upstream.find((id) => graph[id]!.class_type === 'LoadImageMask');
   const width = empty ? (literal(graph, empty, 'width') ?? undefined) : undefined;
   const height = empty ? (literal(graph, empty, 'height') ?? undefined) : undefined;
-  const count = empty ? (literal(graph, empty, 'batch_size') ?? undefined) : undefined;
-  const optional = { negative, seed: settings.seed, steps: settings.steps, guidance: settings.guidance, sampler: settings.sampler, scheduler: settings.scheduler, width, height, count, ...(image ? { image: { node: image, input: 'image' } } : {}), ...(mask ? { mask: { node: mask, input: 'image' } } : {}) };
+  const count = empty && !video ? (literal(graph, empty, 'batch_size') ?? undefined) : undefined;
+  const frames = video && empty ? (literal(graph, empty, 'length') ?? literal(graph, empty, 'frames') ?? undefined) : undefined;
+  const rateNode = video ? [output, ...upstream].find((id) => FPS_INPUT[graph[id]!.class_type]) : undefined;
+  const fps = rateNode ? (literal(graph, rateNode, FPS_INPUT[graph[rateNode]!.class_type]!) ?? undefined) : undefined;
+  const optional = { negative, seed: settings.seed, steps: settings.steps, guidance: settings.guidance, sampler: settings.sampler, scheduler: settings.scheduler, width, height, count, frames, fps, ...(image ? { image: { node: image, input: 'image' } } : {}), ...(end ? { endImage: { node: end, input: 'image' } } : {}), ...(mask ? { mask: { node: mask, input: 'image' } } : {}) };
   return { prompt, output, ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined)) };
 }
 
@@ -168,6 +190,7 @@ export function workflowCapabilities(workflow: ImageWorkflow, samplers: readonly
   const sampler = str(valueAt(graph, map.sampler));
   const scheduler = str(valueAt(graph, map.scheduler));
   const base = width && height ? Math.max(width, height) : 1024;
+  if (SAVES_VIDEO.test(str(rec(graph[map.output ?? '']).class_type) ?? '')) return videoWorkflowCapabilities(workflow, { width, height, steps, guidance });
   const sizes: ImageCapabilities['sizes'] = map.width && map.height ? { kind: 'free', min: 256, max: 2048, multiple: 16, base } : { kind: 'fixed', list: [{ width: width ?? 1024, height: height ?? 1024 }] };
   return {
     family: 'workflow',
@@ -194,8 +217,46 @@ export function maskChannel(workflow: ImageWorkflow): 'red' | 'alpha' {
   return place && rec(rec(workflow.graph[place.node]).inputs).channel === 'alpha' ? 'alpha' : 'red';
 }
 
+/** Longest clip a workflow is offered for: its own length is where it starts, and these are models trained on a few seconds. */
+const WORKFLOW_MAX_SECONDS = 10;
+
+/** A workflow that makes a clip as a model: its length and frame rate are what the graph holds. */
+function videoWorkflowCapabilities(workflow: ImageWorkflow, found: { width: number | undefined; height: number | undefined; steps: number | undefined; guidance: number | undefined }): ImageCapabilities {
+  const { map, graph } = workflow;
+  const frames = num(valueAt(graph, map.frames));
+  const fps = num(valueAt(graph, map.fps)) ?? 24;
+  const seconds = frames ? Math.min(WORKFLOW_MAX_SECONDS, Math.max(1, Math.round(frames / fps))) : 4;
+  const side = found.width && found.height ? Math.max(found.width, found.height) : 832;
+  return {
+    ...hostedVideo({
+      family: 'workflow-video',
+      ratios: [],
+      durations: { kind: 'range', min: 1, max: WORKFLOW_MAX_SECONDS, step: 1 },
+      defaultSeconds: seconds,
+      defaultFps: Math.round(fps),
+      firstFrame: !!map.image,
+      lastFrame: !!map.endImage,
+      // A graph with a picture loader would use the picture it was saved with: say a clip needs one rather than send that.
+      firstFrameRequired: !!map.image,
+      audio: 'none',
+      seed: !!map.seed,
+      negativePrompt: !!map.negative && (found.guidance === undefined || found.guidance > 1),
+    }),
+    sizes: map.width && map.height ? { kind: 'free', min: 256, max: 1920, multiple: 16, base: side } : { kind: 'fixed', list: [{ width: found.width ?? 832, height: found.height ?? 480 }] },
+    previews: true,
+    ...workflow.capabilities,
+  };
+}
+
+/** Frames for a length, in the counts each family makes: Wan and Hunyuan 4n+1, LTX-V 8n+1, Mochi 6n+1. */
+export function frameCount(classType: string | undefined, seconds: number, fps: number): number {
+  const wanted = Math.max(1, Math.round(seconds * fps));
+  const step = /Wan|Hunyuan/.test(classType ?? '') ? 4 : /LTXV/.test(classType ?? '') ? 8 : /Mochi/.test(classType ?? '') ? 6 : 1;
+  return step === 1 ? wanted : Math.max(1, Math.round((wanted - 1) / step)) * step + 1;
+}
+
 /** The workflow's graph with this request's values in it. The original stays as it was saved. */
-export function applyWorkflow(workflow: ImageWorkflow, request: ImageRequest, seed: number, images: readonly string[], mask: string | undefined): GraphPlan {
+export function applyWorkflow(workflow: ImageWorkflow, request: ImageRequest, seed: number, images: readonly string[], mask: string | undefined, endImage?: string): GraphPlan {
   const graph = structuredClone(workflow.graph) as Graph;
   const { map } = workflow;
   const put = (place: ImageWorkflowInput | undefined, value: unknown) => {
@@ -214,6 +275,12 @@ export function applyWorkflow(workflow: ImageWorkflow, request: ImageRequest, se
   put(map.count, request.count);
   put(map.image, images[0]);
   put(map.mask, mask);
+  put(map.endImage, endImage);
+  if (request.video) {
+    const fps = request.video.fps ?? num(valueAt(workflow.graph, map.fps)) ?? 24;
+    put(map.fps, fps);
+    put(map.frames, frameCount(map.frames ? graph[map.frames.node]?.class_type : undefined, request.video.seconds, fps));
+  }
   for (const node of Object.values(graph)) {
     // Its size is a second copy of the latent's, and the two have to agree.
     if (node.class_type === 'Flux2Scheduler') {

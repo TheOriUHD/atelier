@@ -1,0 +1,15 @@
+{
+  "1": { "class_type": "UNETLoader", "inputs": { "unet_name": "wan2.2_i2v_high_noise_14B_fp8.safetensors", "weight_dtype": "default" } },
+  "2": { "class_type": "CLIPLoader", "inputs": { "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default" } },
+  "3": { "class_type": "VAELoader", "inputs": { "vae_name": "wan_2.1_vae.safetensors" } },
+  "4": { "class_type": "CLIPTextEncode", "inputs": { "text": "a fox running through snow", "clip": ["2", 0] } },
+  "5": { "class_type": "CLIPTextEncode", "inputs": { "text": "blurry, static", "clip": ["2", 0] } },
+  "6": { "class_type": "LoadImage", "inputs": { "image": "start.png" } },
+  "7": { "class_type": "ImageScale", "inputs": { "image": ["6", 0], "upscale_method": "lanczos", "width": 832, "height": 480, "crop": "center" } },
+  "8": { "class_type": "LoadImage", "inputs": { "image": "end.png" } },
+  "9": { "class_type": "WanFirstLastFrameToVideo", "inputs": { "positive": ["4", 0], "negative": ["5", 0], "vae": ["3", 0], "width": 832, "height": 480, "length": 81, "batch_size": 1, "start_image": ["7", 0], "end_image": ["8", 0] } },
+  "10": { "class_type": "KSampler", "inputs": { "model": ["1", 0], "seed": 5, "steps": 20, "cfg": 6, "sampler_name": "uni_pc", "scheduler": "simple", "positive": ["9", 0], "negative": ["9", 1], "latent_image": ["9", 2], "denoise": 1 } },
+  "11": { "class_type": "VAEDecode", "inputs": { "samples": ["10", 0], "vae": ["3", 0] } },
+  "12": { "class_type": "CreateVideo", "inputs": { "images": ["11", 0], "fps": 16 } },
+  "13": { "class_type": "SaveVideo", "inputs": { "video": ["12", 0], "filename_prefix": "video/ComfyUI", "format": "auto", "codec": "auto" } }
+}
