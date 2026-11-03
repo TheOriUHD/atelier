@@ -1,3 +1,4 @@
+import { APP } from '@atelier/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browserName, copyDiagnostics, gatherDiagnostics, writeClipboard } from './copy-diagnostics.ts';
 import { clearLastError, recordError } from './last-error.ts';
@@ -72,7 +73,7 @@ describe('gathering diagnostics', () => {
     expect(input).toMatchObject({
       mode: 'web',
       log: null,
-      appVersion: '0.3.1',
+      appVersion: APP.version,
       serverVersion: '0.3.1',
       features: { providers: 2, imageProviders: 1, connectors: 3, computerUse: null },
       providerTypes: ['anthropic', 'ollama'],
