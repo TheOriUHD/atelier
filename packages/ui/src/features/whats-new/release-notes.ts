@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, Film, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, FileDiff, Film, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,18 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.4.2',
+    intro: 'Edits show where they are in the file.',
+    highlights: [
+      {
+        icon: FileDiff,
+        title: 'Line numbers and the whole file for every edit',
+        body: 'An edit in the conversation now shows the file’s line numbers and a few lines above and below the change. Show the whole file, in the corner of the diff, opens the whole file as it is now with that change in place, scrolled to it. Edits from before this version keep their old diff.',
+      },
+    ],
+    also: ['Permission cards show the lines around an edit too.'],
+  },
   {
     version: '0.4.1',
     intro: 'Atelier keeps its icon on Windows.',

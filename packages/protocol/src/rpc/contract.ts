@@ -442,6 +442,8 @@ export const contract = {
     'chat.respond': { input: z.object({ sessionId: z.string(), interactionId: z.string(), answer: z.union([PermissionAnswer, QuestionAnswer, ElicitationAnswer]) }), output: Ok },
     /** The file behind the permission card that is open, with its change in place, read now through the session's workspace. `not_waiting` once it was answered. */
     'chat.changePreview': { input: z.object({ sessionId: z.string(), interactionId: z.string() }), output: ChangePreview },
+    /** An Edit the session made (`callId`), put back in the file as it is now: the whole file with that change in place. `not_found` for any other call. */
+    'chat.editPreview': { input: z.object({ sessionId: z.string(), callId: z.string() }), output: ChangePreview },
     /**
      * `/btw`: a side chat beside a session, asking `question` at once when there is one. It sees the session's
      * conversation, only reads, and never enters the session or waits for it. Closed with `sessions.delete`.

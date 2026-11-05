@@ -86,7 +86,7 @@ import { createSkillTool } from '../tools/skill.ts';
 import { renderSkill, renderSkillList, type Skill } from '../extensions/skills.ts';
 import { renderCommand, type Command } from '../extensions/commands.ts';
 import { agentModel, agentPrompt, GENERAL_PURPOSE, type AgentDef } from '../extensions/agents.ts';
-import { CHANGE_TOOLS, changePreview, editPosition } from '../tools/code/change-preview.ts';
+import { CHANGE_TOOLS, changePreview, editPosition, editedPreview } from '../tools/code/change-preview.ts';
 import { withChangeReason } from '../tools/code/files.ts';
 import { createCodeTools } from '../tools/code/index.ts';
 import type { BackgroundCommands } from '../tools/code/bash.ts';
@@ -1531,6 +1531,23 @@ export class ChatService {
     // A sub-agent asks in its parent's session and shares its folder.
     const workspace = await this.deps.workspace?.(await this.requireSession(sessionId)).catch(() => null);
     return workspace ? changePreview(workspace.runner, { name: request.toolName, input: request.input }) : { state: 'unreadable', rows: [] };
+  }
+
+  /** An Edit this session made, in its file as it is now; null when `callId` isn't an Edit of this session's that went through. */
+  async editPreview(sessionId: string, callId: string): Promise<ChangePreview | null> {
+    const session = await this.requireSession(sessionId);
+    let call: ToolCallPart | undefined;
+    let result: ToolResultPart | undefined;
+    for (const message of await this.deps.repo.history(sessionId)) {
+      for (const part of message.parts) {
+        if (part.type === 'tool_call' && part.id === callId) call = part;
+        else if (part.type === 'tool_result' && part.callId === callId) result = part;
+      }
+    }
+    if (call?.name !== 'Edit' || !result || result.isError) return null;
+    // A sub-agent works in its parent's folder.
+    const workspace = await this.deps.workspace?.(session).catch(() => null);
+    return workspace ? editedPreview(workspace.runner, call.input, result.edit) : { state: 'unreadable', rows: [] };
   }
 
   /**

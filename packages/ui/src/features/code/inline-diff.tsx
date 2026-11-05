@@ -3,6 +3,7 @@
  * and highlighted code. Rows come from an Edit or Write call, or from `git diff` output (the Diff tab).
  */
 import { useState, type ReactNode } from 'react';
+import type { EditPlace } from '@atelier/protocol';
 import { cn } from '../../components/ui/index.ts';
 import { LineView, useHighlightedLines } from '../chat/code-block.tsx';
 import type { Line } from '../chat/highlighter.ts';
@@ -55,6 +56,22 @@ export function numberRows(rows: DiffRow[], start: number): DiffRow[] {
     if (row.kind === 'add') return { ...row, line: newLine++ };
     return row.kind === 'context' ? { ...row, line: newLine++, oldLine: oldLine++ } : row;
   });
+}
+
+/**
+ * An Edit's rows once it is known where it lands (`place`): whole lines (the text around old_string on its first and
+ * last line put back), the unchanged lines above and below, and the file's line numbers. Without a place, the strings
+ * alone; from a backend that only said the line, those numbered.
+ */
+export function placedEditRows(oldText: string, newText: string, place: EditPlace | undefined): DiffRow[] {
+  if (!place) return editRows(oldText, newText);
+  const [prefix, suffix, before] = [place.prefix ?? '', place.suffix ?? '', place.before ?? []];
+  const rows = [
+    ...before.map((text): DiffRow => ({ kind: 'context', text })),
+    ...editRows(prefix + oldText + suffix, prefix + newText + suffix),
+    ...(place.after ?? []).map((text): DiffRow => ({ kind: 'context', text })),
+  ];
+  return numberRows(rows, place.line - before.length);
 }
 
 /** A Write: every line of the new contents is added. */
@@ -199,13 +216,21 @@ export function InlineDiff({
   );
 }
 
-/** A diff in a bordered card. Long ones show their first `limit` rows until opened in full. */
-export function DiffCard({ rows, language, lineNumbers, limit }: { rows: DiffRow[]; language: string; lineNumbers?: boolean; limit?: number }) {
+/**
+ * A diff in a bordered card. Long ones show their first `limit` rows until opened in full. `action` sits in the top
+ * right corner while the card is hovered or has focus (always on a touch screen), as a code block's buttons do.
+ */
+export function DiffCard({ rows, language, lineNumbers, limit, action }: { rows: DiffRow[]; language: string; lineNumbers?: boolean; limit?: number; action?: ReactNode }) {
   const [all, setAll] = useState(false);
   const shown = all || !limit ? rows : rows.slice(0, limit);
   return (
-    <div className="overflow-hidden rounded-xl bg-code-background inset-ring inset-ring-line">
+    <div className="group/diff relative overflow-hidden rounded-xl bg-code-background inset-ring inset-ring-line">
       <InlineDiff rows={shown} language={language} lineNumbers={lineNumbers} />
+      {action && (
+        <div className="absolute top-1.5 right-1.5 rounded-md bg-code-background opacity-0 transition-opacity duration-(--at-duration-snap) ease-out group-focus-within/diff:opacity-100 group-hover/diff:opacity-100 [@media(hover:none)]:opacity-100">
+          {action}
+        </div>
+      )}
       {shown.length < rows.length && (
         <button
           type="button"

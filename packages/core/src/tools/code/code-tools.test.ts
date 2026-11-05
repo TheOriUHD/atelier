@@ -363,7 +363,7 @@ describe.skipIf(!built)('code tools', { timeout: 30_000 }, () => {
 
     it('finds an Edit’s line in a real file', async () => {
       write('card.py', 'a\nb\nc\nd\n');
-      await expect(editPosition(workspace.runner, { file_path: 'card.py', old_string: 'c', new_string: 'C' }, signal)).resolves.toEqual({ line: 3, matches: 1 });
+      await expect(editPosition(workspace.runner, { file_path: 'card.py', old_string: 'c', new_string: 'C' }, signal)).resolves.toEqual({ line: 3, matches: 1, prefix: '', suffix: '', before: ['a', 'b'], after: ['d'] });
     });
 
     it('has no line for a missing file, a binary one or one outside the workspace', async () => {

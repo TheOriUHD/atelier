@@ -4,6 +4,9 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **See where an edit landed:** an edit in Code and Cowork shows the file's real line numbers and the three lines above and below the change, with whole lines instead of the fragment the model replaced. **Show the whole file**, the button in the corner of the diff, opens the whole file as it is now with that change in place, scrolled to it, as a permission card already could. Later changes above it don't confuse it: the view finds the change where it is now, and says so when that part was changed again since. A Write opens what it wrote. Edits made before this version keep their old diff without numbers, and their whole-file view looks for the change by its text. It works in a browser, on SSH hosts and in folders a desktop lends.
+- **Permission cards show the lines around an edit too**, numbered, as the transcript does.
+
 ## [0.4.1] — 2026-11-03
 
 - **Atelier keeps its icon on Windows after an update:** an update deletes `Atelier.exe` before it writes the new one, and Windows could keep the blank page it saw in that moment for the taskbar button and the shortcuts. Atelier's windows now carry the icon themselves, and its shortcuts (desktop, Start menu and every taskbar pin, whatever the pin is called) take their icon from a copy in Atelier's own data folder, which no update touches. The first start of this version mends shortcuts that are already blank.

@@ -1,4 +1,4 @@
-import type { GeneratedImageMeta, ImagePart, Mode, PromptTier, RunEvent, TextPart } from '@atelier/protocol';
+import type { EditPlace, GeneratedImageMeta, ImagePart, Mode, PromptTier, RunEvent, TextPart } from '@atelier/protocol';
 import type { JsonSchema } from '../providers/types.ts';
 
 export interface ToolContext {
@@ -17,6 +17,8 @@ export interface ToolOutput {
   generated?: GeneratedImageMeta[];
   /** The image SaveImage wrote, for the transcript's thumbnail. */
   saved?: { blob: string; mime: string };
+  /** Where an Edit landed, for the transcript's line numbers. */
+  edit?: EditPlace;
 }
 
 /** What a built-in tool's description depends on: it is a pure function of these, so the tools JSON stays byte-stable. */

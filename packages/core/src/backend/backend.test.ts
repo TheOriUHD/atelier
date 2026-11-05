@@ -110,6 +110,15 @@ describe('the file behind a permission card', () => {
     await bob.call('account.changePassword', { current: temporaryPassword, next: 'bob-new-password' });
     expect(await code(bob.call('chat.changePreview', { sessionId: session.id, interactionId: 'nothing-open' }))).toBe('not_found');
   });
+
+  it('is there for an Edit only in a session the person may see', async () => {
+    const session = await client.call('sessions.create', { mode: 'code' });
+    expect(await code(client.call('chat.editPreview', { sessionId: session.id, callId: 'no-such-call' }))).toBe('not_found');
+    const { temporaryPassword } = await client.call('users.create', { username: 'carol', name: 'Carol', role: 'user' });
+    const carol = await signedIn('carol', temporaryPassword);
+    await carol.call('account.changePassword', { current: temporaryPassword, next: 'carol-new-password' });
+    expect(await code(carol.call('chat.editPreview', { sessionId: session.id, callId: 'no-such-call' }))).toBe('not_found');
+  });
 });
 
 describe('backend projects', () => {

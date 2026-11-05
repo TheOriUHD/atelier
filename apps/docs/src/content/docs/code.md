@@ -194,6 +194,8 @@ Reads and searches appear as one-line summaries, edits as inline diffs, commands
 | **Thinking** | The same, with the model's reasoning expanded. |
 | **Verbose** | Every call as its own card with its details expanded. |
 
+An edit's diff shows the file's line numbers and the three lines above and below the change. **Show the whole file**, the button in the diff's top right corner (shown on hover, always on a touch screen), opens the whole file as it is now with that change in place, scrolled to it. If the file changed after the edit, the view finds the change where it is now; if that part was changed again, or the file is gone, it says so and shows the change alone. A Write opens what it wrote. Edits made before 0.4.2 have no line numbers.
+
 The line at the bottom says what is happening (**Running a command…**, **Reading…**, **Writing…**, **Thinking…**) with the time since you sent your message, output tokens and the context size (`context 120k / 200k`). When a local model is slow it says why: **Loading the model**, **Reading the conversation**, or a place in the queue. **Connection interrupted. Retry 2 of 10** means a temporary provider failure is being retried. After a minute of silence it reads **No output for a minute, it may be writing a long call**, and later that the model may have stalled and **Stop** ends the turn. **Needs your input** marks a run that waits for you; click it to jump to the question.
 
 In the sidebar, a session's dot shows its state: idle, running, **Needs your attention** (waiting for you) or **Finished** (a turn finished while you were elsewhere).

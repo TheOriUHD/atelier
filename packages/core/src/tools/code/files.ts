@@ -2,7 +2,7 @@
  * Read, Write and Edit. Text is shown `cat -n` style and a directory as its entries; Edit writes with `expectSha256`
  * so a concurrent change is never clobbered. Write and Edit undo the tag escaping of what the model read (escape.ts).
  */
-import { RpcError, RunnerErrorCode } from '@atelier/protocol';
+import { RpcError, RunnerErrorCode, type EditPlace } from '@atelier/protocol';
 import { extractText } from '../../files/text-extract.ts';
 import { unescapeTags } from '../../prompts/escape.ts';
 import { imageSize } from '../../providers/image-size.ts';
@@ -124,16 +124,47 @@ function matchEdit(content: string, oldString: string, newString: string, replac
   return { from, to, count, note, at, updated };
 }
 
+/** A line as a place keeps it: without its carriage return, and cut off at Read's limit (a minified file has one line of megabytes). */
+const placeLine = (line: string, keep: 'start' | 'end' = 'start') => {
+  const text = line.endsWith('\r') ? line.slice(0, -1) : line;
+  if (text.length <= MAX_LINE_CHARS) return text;
+  return keep === 'start' ? `${text.slice(0, MAX_LINE_CHARS)}…` : `…${text.slice(-MAX_LINE_CHARS)}`;
+};
+
 /**
- * The file after an Edit call, with the 1-based line of the first match and how many there are; null where the tool
+ * Where `length` characters at `at` sit in `content` (ARCHITECTURE §8): the line they start on, the rest of the lines
+ * they start and end in, and up to SNIPPET_CONTEXT whole lines above and below.
+ */
+export function editPlace(content: string, at: number, length: number, matches: number): EditPlace {
+  const start = content.lastIndexOf('\n', at - 1) + 1;
+  const endAt = at + length;
+  const newline = content.indexOf('\n', endAt);
+  const end = newline === -1 ? content.length : newline;
+  let top = start;
+  for (let i = 0; i < SNIPPET_CONTEXT && top > 0; i++) top = top < 2 ? 0 : content.lastIndexOf('\n', top - 2) + 1;
+  const below = end < content.length ? content.slice(end + 1).split('\n', SNIPPET_CONTEXT + 1) : [];
+  // The empty piece after a final newline isn't a line of the file.
+  if (below.length <= SNIPPET_CONTEXT && below.at(-1) === '') below.pop();
+  return {
+    line: content.slice(0, at).split('\n').length,
+    matches,
+    prefix: placeLine(content.slice(start, at), 'end'),
+    suffix: placeLine(content.slice(endAt, end)),
+    before: top < start ? content.slice(top, start - 1).split('\n').map((l) => placeLine(l)) : [],
+    after: below.slice(0, SNIPPET_CONTEXT).map((l) => placeLine(l)),
+  };
+}
+
+/**
+ * The file after an Edit call, with where it lands (the first match, and how many there are); null where the tool
  * itself would refuse the call. The input is the model's, as Edit takes it: its tags are still escaped.
  */
-export function applyEdit(content: string, input: EditInput): { updated: string; line: number; matches: number } | null {
+export function applyEdit(content: string, input: EditInput): { updated: string; place: EditPlace } | null {
   const [oldString, newString] = [unescapeTags(input.old_string), unescapeTags(input.new_string)];
   if (oldString === '' || oldString === newString) return null;
-  const { count, at, updated } = matchEdit(content, oldString, newString, input.replace_all);
+  const { from, count, at, updated } = matchEdit(content, oldString, newString, input.replace_all);
   if (count === 0 || (count > 1 && !input.replace_all)) return null;
-  return { updated, line: content.slice(0, at).split('\n').length, matches: count };
+  return { updated, place: editPlace(content, at, from.length, count) };
 }
 
 /**
@@ -366,7 +397,7 @@ export function createFileTools(workspace: Workspace, blobs?: Pick<BlobStore, 'p
       const start = Math.max(changed - SNIPPET_CONTEXT, 1);
       const end = Math.min(changed + to.split('\n').length - 1 + SNIPPET_CONTEXT, lines.length);
       const what = count > 1 ? ` (${count} replacements; the first is shown)` : '';
-      return textOutput(`Edited ${file_path}${what}:${note}\n${numbered(lines.slice(start - 1, end), start)}`);
+      return { ...textOutput(`Edited ${file_path}${what}:${note}\n${numbered(lines.slice(start - 1, end), start)}`), edit: editPlace(content, at, from.length, count) };
     },
   };
 

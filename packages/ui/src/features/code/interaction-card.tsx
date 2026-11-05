@@ -29,7 +29,7 @@ import { describeError, errorCode, rpc } from '../../lib/rpc.ts';
 import { Markdown } from '../chat/markdown.tsx';
 import { ChangeView } from './change-view.tsx';
 import { CommandCode } from './command-code.tsx';
-import { DiffCard, editRows, numberRows, writeRows } from './inline-diff.tsx';
+import { DiffCard, placedEditRows, writeRows, type DiffRow } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
 import { planComments, revisionMessage, usePlanComments } from './plan-comments.ts';
 import { WorkspaceRoot, actionWords, asRecord, computerActions, str, summarize } from './tool-cards.tsx';
@@ -326,14 +326,13 @@ function permissionTitle(request: PermissionRequest, root: string | null): strin
   }
 }
 
-/** An Edit's or Write's change as the card shows it, numbered once the backend said where an Edit lands. */
-function fileChange(request: PermissionRequest): { path: string; rows: ReturnType<typeof editRows>; numbered: boolean } | null {
+/** An Edit's or Write's change as the card shows it, numbered (with the lines around it) once the backend said where an Edit lands. */
+function fileChange(request: PermissionRequest): { path: string; rows: DiffRow[]; numbered: boolean } | null {
   const input = asRecord(request.input);
   const path = str(input.file_path);
   if (request.toolName === 'Write') return { path, rows: writeRows(str(input.content)), numbered: true };
   if (request.toolName !== 'Edit') return null;
-  const rows = editRows(str(input.old_string), str(input.new_string));
-  return { path, rows: request.position ? numberRows(rows, request.position.line) : rows, numbered: !!request.position };
+  return { path, rows: placedEditRows(str(input.old_string), str(input.new_string), request.position), numbered: !!request.position };
 }
 
 /** What the call would do: the command, the change as a diff, or the call's own summary. */
@@ -470,7 +469,7 @@ function PermissionPrompt({ sessionId, interactionId, request, sending, respond 
       {request.reason && !/needs your approval\.?$/.test(request.reason) && <p className="text-footnote text-fg-muted">{request.reason}</p>}
       {!wholeFile && actions}
       {wholeFile && change && (
-        <ChangeView sessionId={sessionId} interactionId={interactionId} title={title} reason={reason} language={languageOf(change.path)} change={change.rows} onClose={() => setWholeFile(false)}>
+        <ChangeView source={{ sessionId, interactionId }} title={title} reason={reason} language={languageOf(change.path)} change={change.rows} onClose={() => setWholeFile(false)}>
           {actions}
         </ChangeView>
       )}

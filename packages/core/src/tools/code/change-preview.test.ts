@@ -1,8 +1,8 @@
 import { RpcError, RunnerErrorCode } from '@atelier/protocol';
 import { describe, expect, it } from 'vitest';
 import type { RunnerCalls } from '../../workspaces/workspace.ts';
-import { applyEdit, createFileTools, withChangeReason } from './files.ts';
-import { changePreview, changeRows, editPosition } from './change-preview.ts';
+import { applyEdit, createFileTools, editPlace, withChangeReason } from './files.ts';
+import { changePreview, changeRows, editPosition, editedPreview, unapplyEdit } from './change-preview.ts';
 import type { DescribeContext, Tool } from '../types.ts';
 import type { Workspace } from '../../workspaces/workspace.ts';
 
@@ -24,23 +24,29 @@ const FILE = 'one\ntwo\nthree\nfour\n';
 
 describe('where an Edit lands', () => {
   it('finds the line of its text, with the file as Edit reads it', () => {
-    expect(applyEdit(FILE, { file_path: 'a', old_string: 'three', new_string: '3' })).toEqual({ updated: 'one\ntwo\n3\nfour\n', line: 3, matches: 1 });
+    expect(applyEdit(FILE, { file_path: 'a', old_string: 'three', new_string: '3' })).toEqual({
+      updated: 'one\ntwo\n3\nfour\n',
+      place: { line: 3, matches: 1, prefix: '', suffix: '', before: ['one', 'two'], after: ['four'] },
+    });
   });
 
   it('takes the first match of a replace_all and says how many there are', () => {
-    expect(applyEdit('x\ny\nx\n', { file_path: 'a', old_string: 'x', new_string: 'z', replace_all: true })).toMatchObject({ line: 1, matches: 2 });
+    expect(applyEdit('x\ny\nx\n', { file_path: 'a', old_string: 'x', new_string: 'z', replace_all: true })?.place).toMatchObject({ line: 1, matches: 2 });
   });
 
   it('matches through CRLF line endings, as the tool does', () => {
-    expect(applyEdit('a\r\nb\r\nc\r\n', { file_path: 'a', old_string: 'b\nc', new_string: 'd' })).toEqual({ updated: 'a\r\nd\r\n', line: 2, matches: 1 });
+    expect(applyEdit('a\r\nb\r\nc\r\n', { file_path: 'a', old_string: 'b\nc', new_string: 'd' })).toEqual({
+      updated: 'a\r\nd\r\n',
+      place: { line: 2, matches: 1, prefix: '', suffix: '', before: ['a'], after: [] },
+    });
   });
 
   it('undoes the tag escaping of what the model read', () => {
-    expect(applyEdit('<env>\n', { file_path: 'a', old_string: '‹env>', new_string: 'x' })).toMatchObject({ line: 1 });
+    expect(applyEdit('<env>\n', { file_path: 'a', old_string: '‹env>', new_string: 'x' })?.place).toMatchObject({ line: 1 });
   });
 
   it('finds text sent with Read’s line prefixes, as the tool does', () => {
-    expect(applyEdit(FILE, { file_path: 'a', old_string: '     2\ttwo', new_string: '     2\tTWO' })).toMatchObject({ line: 2, updated: 'one\nTWO\nthree\nfour\n' });
+    expect(applyEdit(FILE, { file_path: 'a', old_string: '     2\ttwo', new_string: '     2\tTWO' })).toMatchObject({ place: { line: 2 }, updated: 'one\nTWO\nthree\nfour\n' });
   });
 
   it.each([
@@ -53,7 +59,7 @@ describe('where an Edit lands', () => {
   });
 
   it('reads the position through the runner', async () => {
-    await expect(editPosition(runnerWith(FILE), { file_path: 'a', old_string: 'four', new_string: '4' }, signal)).resolves.toEqual({ line: 4, matches: 1 });
+    await expect(editPosition(runnerWith(FILE), { file_path: 'a', old_string: 'four', new_string: '4' }, signal)).resolves.toEqual({ line: 4, matches: 1, prefix: '', suffix: '', before: ['one', 'two', 'three'], after: [] });
   });
 
   it.each([
@@ -172,6 +178,112 @@ describe('what the full view gets', () => {
 
   it('a call without a path can’t be shown', async () => {
     await expect(changePreview(runnerWith(FILE), { name: 'Edit', input: {} })).resolves.toEqual({ state: 'unreadable', rows: [] });
+  });
+});
+
+describe('the place an Edit keeps', () => {
+  const place = (content: string, text: string) => editPlace(content, content.indexOf(text), text.length, 1);
+
+  it('has the rest of the lines it starts and ends in, and up to three lines either side', () => {
+    const file = 'a\nb\nc\nd\n  x = foo(a) + 1\ne\nf\ng\nh\n';
+    expect(place(file, 'foo(a)')).toEqual({ line: 5, matches: 1, prefix: '  x = ', suffix: ' + 1', before: ['b', 'c', 'd'], after: ['e', 'f', 'g'] });
+  });
+
+  it('has fewer lines at the top and the end of a file, and none past a final newline', () => {
+    expect(place('one\ntwo\n', 'one')).toEqual({ line: 1, matches: 1, prefix: '', suffix: '', before: [], after: ['two'] });
+    expect(place('one\ntwo', 'two')).toEqual({ line: 2, matches: 1, prefix: '', suffix: '', before: ['one'], after: [] });
+  });
+
+  it('counts an empty first line above it', () => {
+    expect(place('\nx\n', 'x')).toMatchObject({ line: 2, before: [''] });
+  });
+
+  it('takes the whole next line when the text ends with a newline', () => {
+    expect(place('a\nb\nc\nd\n', 'b\n')).toEqual({ line: 2, matches: 1, prefix: '', suffix: 'c', before: ['a'], after: ['d'] });
+  });
+
+  it('keeps carriage returns out, and cuts off a line of megabytes', () => {
+    expect(place('a\r\nb x\r\nc\r\n', 'b')).toEqual({ line: 2, matches: 1, prefix: '', suffix: ' x', before: ['a'], after: ['c'] });
+    const long = `${'p'.repeat(3000)}X${'s'.repeat(3000)}`;
+    const { prefix, suffix } = place(long, 'X');
+    expect([prefix!.length, prefix!.startsWith('…'), suffix!.length, suffix!.endsWith('…')]).toEqual([2001, true, 2001, true]);
+  });
+
+  it('comes with the Edit’s result', async () => {
+    const tools = new Map(createFileTools({ runner: { call: async (method: string) => (method === 'fs.read' ? { content: FILE, binary: false, truncated: false, sha256: 'x' } : { created: false }), on: () => () => {} } } as unknown as Workspace).map((t) => [t.name, t]));
+    const ctx = { sessionId: 's', messageId: 'm', callId: 'c', signal, emit: () => {} };
+    const output = await tools.get('Edit')!.run({ file_path: 'a', old_string: 'three', new_string: '3' }, ctx);
+    expect(output.edit).toEqual({ line: 3, matches: 1, prefix: '', suffix: '', before: ['one', 'two'], after: ['four'] });
+  });
+});
+
+describe('an Edit put back in the file as it is now', () => {
+  const made = (content: string, input: { old_string: string; new_string: string; replace_all?: boolean }) => {
+    const change = applyEdit(content, { file_path: 'a', ...input })!;
+    return { after: change.updated, place: change.place, edit: { file_path: 'a', ...input } };
+  };
+
+  it('is the file before it', () => {
+    const { after, place, edit } = made(FILE, { old_string: 'three', new_string: '3' });
+    expect(unapplyEdit(after, edit, place)).toBe(FILE);
+  });
+
+  it('finds it where later changes moved it', () => {
+    const { after, place, edit } = made(FILE, { old_string: 'three', new_string: '3' });
+    expect(unapplyEdit(`zero\nzero\n${after}`, edit, place)).toBe(`zero\nzero\n${FILE}`);
+  });
+
+  it('picks the copy on a line that starts and ends as it did, then the one nearest its line', () => {
+    const file = 'x = 1\ny = 1\nz = 1\n';
+    const { after, place, edit } = made(file, { old_string: 'y = 1', new_string: 'y = 2' });
+    // A later line now reads the same as what the edit wrote: the one at the edit's line is undone.
+    expect(unapplyEdit(`${after}y = 2\n`, edit, place)).toBe(`${file}y = 2\n`);
+    // A line added above reads like what the edit wrote and is nearer its line, but doesn't start and end as it did.
+    const call = made('f(b(1))\nx\n', { old_string: 'b(1)', new_string: 'b(2)' });
+    expect(unapplyEdit(`b(2)\n${call.after}`, call.edit, call.place)).toBe('b(2)\nf(b(1))\nx\n');
+  });
+
+  it('undoes every copy of a replace_all that are all still there', () => {
+    const { after, place, edit } = made('x\ny\nx\n', { old_string: 'x', new_string: 'z', replace_all: true });
+    expect(unapplyEdit(after, edit, place)).toBe('x\ny\nx\n');
+  });
+
+  it('puts back text that was only removed, at the line it left', () => {
+    const { after, place, edit } = made('a\nline2\nb\n', { old_string: 'line2\n', new_string: '' });
+    expect(after).toBe('a\nb\n');
+    expect(unapplyEdit(after, edit, place)).toBe('a\nline2\nb\n');
+  });
+
+  it('works through CRLF line endings', () => {
+    const { after, place, edit } = made('a\r\nb\r\nc\r\n', { old_string: 'b\nc', new_string: 'd\ne' });
+    expect(unapplyEdit(after, edit, place)).toBe('a\r\nb\r\nc\r\n');
+  });
+
+  it('without a place (an Edit from before 0.4.2), takes the first copy of what it wrote', () => {
+    expect(unapplyEdit('one\n3\nfour\n', { file_path: 'a', old_string: 'three', new_string: '3' })).toBe('one\nthree\nfour\n');
+  });
+
+  it.each([
+    ['what it wrote is gone', 'one\nTHREE\n', { old_string: 'three', new_string: '3' }],
+    ['it only removed text and nothing says where', 'a\nb\n', { old_string: 'line2\n', new_string: '' }],
+  ])('can’t be told when %s', (_why, content, input) => {
+    expect(unapplyEdit(content, { file_path: 'a', ...input })).toBeNull();
+  });
+
+  it('shows the whole file with the change, or says why not', async () => {
+    const { after, place, edit } = made(FILE, { old_string: 'three', new_string: '3' });
+    const { state, rows } = await editedPreview(runnerWith(after), edit, place);
+    expect(state).toBe('ready');
+    expect(rows.map((r) => [r.kind, r.text])).toEqual([
+      ['context', 'one'],
+      ['context', 'two'],
+      ['remove', 'three'],
+      ['add', '3'],
+      ['context', 'four'],
+    ]);
+    await expect(editedPreview(runnerWith(ENOENT), edit, place)).resolves.toEqual({ state: 'missing', rows: [] });
+    await expect(editedPreview(runnerWith('one\nTHREE\n'), edit, place)).resolves.toEqual({ state: 'stale', rows: [] });
+    await expect(editedPreview(runnerWith(FILE), { file_path: 'a' }, place)).resolves.toEqual({ state: 'unreadable', rows: [] });
   });
 });
 

@@ -444,7 +444,7 @@ describe('permission prompts', () => {
 
     it('says where the change lands, read through the session’s workspace', async () => {
       const { chat, s, request } = await asked(onRunner(file));
-      expect(request.position).toEqual({ line: 2, matches: 1 });
+      expect(request.position).toEqual({ line: 2, matches: 1, prefix: '', suffix: '', before: ['one'], after: ['three'] });
       await done(chat, s.id);
     });
 
@@ -480,6 +480,23 @@ describe('permission prompts', () => {
       expect(await chat.changePreview('another', pending.id)).toBeNull();
       await done(chat, s.id);
       expect(await chat.changePreview(s.id, pending.id)).toBeNull();
+    });
+
+    it('keeps where a made Edit landed, and shows it later in its file as it is now', async () => {
+      const place = { line: 2, matches: 1, prefix: '', suffix: '', before: ['one'], after: ['three'] };
+      const made: Tool = { ...editTool, run: async () => ({ ...textOutput('edited'), edit: place }) };
+      const now = async (_method: string, params: { path: string }) => ({ content: 'zero\none\nTWO\nthree\n', binary: false, truncated: false, path: params.path });
+      const chat = service(editor, [made], undefined, {}, onRunner(now));
+      const s = await repo.create({ mode: 'code', userId: null, workspaceId: 'w1' });
+      await chat.send(s.id, [{ type: 'text', text: 'change it' }]);
+      await until(() => lastPending() !== null);
+      chat.respond(s.id, lastPending()!.id, { behavior: 'allow' });
+      await chat.settle(s.id);
+      const results = (await repo.history(s.id)).flatMap((m) => m.parts).filter((p) => p.type === 'tool_result');
+      expect(results).toMatchObject([{ callId: 'e1', edit: place }]);
+      // A line was added above since: the change is found where it is now.
+      expect(await chat.editPreview(s.id, 'e1')).toMatchObject({ state: 'ready', rows: [{ text: 'zero' }, { text: 'one' }, { kind: 'remove', text: 'two', line: 3 }, { kind: 'add', text: 'TWO', line: 3 }, { text: 'three' }] });
+      expect(await chat.editPreview(s.id, 'not-a-call')).toBeNull();
     });
 
     it('has nothing to show for a card that isn’t about a file', async () => {

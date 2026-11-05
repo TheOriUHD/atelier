@@ -2042,6 +2042,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (!preview) throw appError('not_waiting', 'This question was already answered or the response stopped.');
       return preview;
     },
+    'chat.editPreview': async ({ sessionId, callId }, ctx) => {
+      await sessionOrThrow(sessionId, ctx);
+      const preview = await chat.editPreview(sessionId, callId);
+      if (!preview) throw appError('not_found', 'That edit is not in this conversation.');
+      return preview;
+    },
     'sideChats.start': async ({ sessionId, question }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
       if ((await sessions.getRow(sessionId))?.parentSessionId) throw appError('unsupported', 'Side chats start from a main session.');

@@ -4,11 +4,11 @@
  * lends work like this computer's. None of it may stand in the way of the question: a file that can't be read costs
  * the numbers or the full view, never the card.
  */
-import { RpcError, RunnerErrorCode, type ChangePreview, type ChangeRow, type PermissionRequest } from '@atelier/protocol';
+import { RpcError, RunnerErrorCode, type ChangePreview, type ChangeRow, type EditPlace, type PermissionRequest } from '@atelier/protocol';
 import { unescapeTags } from '../../prompts/escape.ts';
 import { lineChanges } from '../../workspaces/line-diff.ts';
 import type { RunnerCalls } from '../../workspaces/workspace.ts';
-import { applyEdit, type EditInput } from './files.ts';
+import { applyEdit, editPlace, type EditInput } from './files.ts';
 
 /** The tools a card shows as a change to a file. */
 export const CHANGE_TOOLS = new Set(['Edit', 'Write']);
@@ -29,8 +29,7 @@ export async function editPosition(runner: RunnerCalls, input: unknown, signal: 
   if (!edit) return null;
   const file = await runner.call('fs.read', { path: edit.file_path }, { signal }).catch(() => null);
   if (!file || file.binary || file.truncated) return null;
-  const change = applyEdit(file.content, edit);
-  return change && { line: change.line, matches: change.matches };
+  return applyEdit(file.content, edit)?.place ?? null;
 }
 
 const clip = (text: string) => {
@@ -90,13 +89,15 @@ function foldUnchanged(rows: ChangeRow[], maxRows: number): ChangeRow[] {
   return out;
 }
 
+const missing = (error: unknown) => error instanceof RpcError && error.code === RunnerErrorCode.IO && error.data?.code === 'ENOENT';
+
 /** The file behind a card for an Edit or Write, as it is now. */
 export async function changePreview(runner: RunnerCalls, call: { name: string; input: unknown }, signal?: AbortSignal): Promise<ChangePreview> {
   const path = (call.input as { file_path?: unknown } | null)?.file_path;
   if (typeof path !== 'string') return { state: 'unreadable', rows: [] };
   const content = (call.input as { content?: unknown }).content;
   // Over 16 MiB comes back cut off, like everything the runner reads, and an Edit refuses it just the same.
-  const file = await runner.call('fs.read', { path }, signal ? { signal } : {}).catch((error: unknown) => (error instanceof RpcError && error.code === RunnerErrorCode.IO && error.data?.code === 'ENOENT' ? 'missing' : null));
+  const file = await runner.call('fs.read', { path }, signal ? { signal } : {}).catch((error: unknown) => (missing(error) ? 'missing' : null));
   if (file === 'missing') return call.name === 'Write' && typeof content === 'string' ? { state: 'new', rows: changeRows('', unescapeTags(content)) } : { state: 'unreadable', rows: [] };
   if (!file) return { state: 'unreadable', rows: [] };
   if (file.binary) return { state: 'binary', rows: [] };
@@ -105,4 +106,58 @@ export async function changePreview(runner: RunnerCalls, call: { name: string; i
   const edit = editInput(call.input);
   const change = edit && applyEdit(file.content, edit);
   return change ? { state: 'ready', rows: changeRows(file.content, change.updated) } : { state: 'stale', rows: [] };
+}
+
+/**
+ * The file as it was before `edit`, worked out from the file as it is now: what the edit wrote, found again and swapped
+ * back. Where it is in several places, the one on a line that still starts and ends as it did (`place`) and nearest the
+ * line it landed on wins; a `replace_all` whose copies are all still there is undone everywhere. Null when what it
+ * wrote isn't in the file any more (or, for one that only removed text, the line it left can't be told).
+ */
+export function unapplyEdit(content: string, edit: EditInput, place?: EditPlace): string | null {
+  const crlf = /^[^\n]*\r\n/.test(content);
+  const toFile = (text: string) => (crlf ? unescapeTags(text).replace(/\r?\n/g, '\r\n') : unescapeTags(text));
+  const [from, to] = [toFile(edit.old_string), toFile(edit.new_string)];
+  const candidates: number[] = [];
+  if (to) {
+    for (let i = content.indexOf(to); i !== -1; i = content.indexOf(to, i + to.length)) candidates.push(i);
+    if (edit.replace_all && place && place.matches > 1 && candidates.length === place.matches) return content.split(to).join(from);
+  } else if (place?.prefix !== undefined) {
+    // Only removed: the place is where the line it left starts with the same text, wherever that line is now.
+    for (let start = 0; start <= content.length; start = content.indexOf('\n', start) + 1 || content.length + 1) {
+      if (content.startsWith(place.prefix, start)) candidates.push(start + place.prefix.length);
+    }
+  }
+  const fits = (i: number) => {
+    if (place?.prefix === undefined) return true;
+    const here = editPlace(content, i, to.length, 1);
+    return here.prefix === place.prefix && here.suffix === place.suffix;
+  };
+  const fitting = candidates.filter(fits);
+  const pool = fitting.length > 0 || to === '' ? fitting : candidates;
+  if (!pool.length) return null;
+  // The candidates come in order, so each one's line is counted on from the one before.
+  let at = pool[0]!;
+  if (place) {
+    let [line, counted, distance] = [1, 0, Infinity];
+    for (const i of pool) {
+      for (let n = content.indexOf('\n', counted); n !== -1 && n < i; n = content.indexOf('\n', n + 1)) line++;
+      counted = i;
+      if (Math.abs(line - place.line) < distance) [at, distance] = [i, Math.abs(line - place.line)];
+    }
+  }
+  return content.slice(0, at) + from + content.slice(at + to.length);
+}
+
+/** An Edit already made, in its file as it is now (`chat.editPreview`): the whole file with that change in place. */
+export async function editedPreview(runner: RunnerCalls, input: unknown, place: EditPlace | undefined, signal?: AbortSignal): Promise<ChangePreview> {
+  const edit = editInput(input);
+  if (!edit) return { state: 'unreadable', rows: [] };
+  const file = await runner.call('fs.read', { path: edit.file_path }, signal ? { signal } : {}).catch((error: unknown) => (missing(error) ? 'missing' : null));
+  if (file === 'missing') return { state: 'missing', rows: [] };
+  if (!file) return { state: 'unreadable', rows: [] };
+  if (file.binary) return { state: 'binary', rows: [] };
+  if (file.truncated) return { state: 'tooLarge', rows: [] };
+  const before = unapplyEdit(file.content, edit, place);
+  return before === null ? { state: 'stale', rows: [] } : { state: 'ready', rows: changeRows(before, file.content) };
 }

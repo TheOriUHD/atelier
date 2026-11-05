@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { editRows, hunkPatch, numberRows, parseUnifiedDiff, writeRows } from './inline-diff.tsx';
+import { editRows, hunkPatch, numberRows, parseUnifiedDiff, placedEditRows, writeRows } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
 
 describe('numberRows', () => {
@@ -32,6 +32,38 @@ describe('editRows', () => {
       { kind: 'add', text: 'y' },
     ]);
     expect(editRows('gone', '')).toEqual([{ kind: 'remove', text: 'gone' }]);
+  });
+});
+
+describe('placedEditRows', () => {
+  it('shows whole lines with the file’s numbers and the lines around the change', () => {
+    const place = { line: 5, matches: 1, prefix: '  x = ', suffix: ' + 1', before: ['b', 'c', 'd'], after: ['e'] };
+    expect(placedEditRows('foo(a)', 'foo(b)', place)).toEqual([
+      { kind: 'context', text: 'b', line: 2, oldLine: 2 },
+      { kind: 'context', text: 'c', line: 3, oldLine: 3 },
+      { kind: 'context', text: 'd', line: 4, oldLine: 4 },
+      { kind: 'remove', text: '  x = foo(a) + 1', line: 5 },
+      { kind: 'add', text: '  x = foo(b) + 1', line: 5 },
+      { kind: 'context', text: 'e', line: 6, oldLine: 6 },
+    ]);
+  });
+
+  it('numbers the lines below by both sides once the change moved them', () => {
+    const rows = placedEditRows('b\n', '', { line: 2, matches: 1, prefix: '', suffix: 'c', before: ['a'], after: ['d'] });
+    expect(rows.map((r) => [r.kind, r.text, r.line, r.oldLine])).toEqual([
+      ['context', 'a', 1, 1],
+      ['remove', 'b', 2, undefined],
+      ['context', 'c', 2, 3],
+      ['context', 'd', 3, 4],
+    ]);
+  });
+
+  it('numbers the strings alone from a backend that only said the line, and leaves them unnumbered without one', () => {
+    expect(placedEditRows('a', 'b', { line: 7, matches: 1 })).toEqual([
+      { kind: 'remove', text: 'a', line: 7 },
+      { kind: 'add', text: 'b', line: 7 },
+    ]);
+    expect(placedEditRows('a', 'b', undefined)).toEqual(editRows('a', 'b'));
   });
 });
 

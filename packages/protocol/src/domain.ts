@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ImageProgress } from './images.ts';
-import { Message, MessageError, Part, Usage } from './messages.ts';
+import { EditPlace, Message, MessageError, Part, Usage } from './messages.ts';
 import { LimitWarning } from './limits.ts';
 import { Effort } from './models.ts';
 import { Mode, PermissionMode, SettingsLayer } from './settings.ts';
@@ -64,10 +64,10 @@ export const PermissionRequest = z.object({
   /** Set when a sub-agent asks: the task it was given (its session title). */
   agent: z.string().optional(),
   /**
-   * Where an Edit lands in the file as it stood when the person was asked: the 1-based line of the first match, and how
-   * many matches a `replace_all` changes. Left out when the file couldn't be read: the card then shows the diff unnumbered.
+   * Where an Edit lands in the file as it stood when the person was asked, with the lines around it. Left out when the
+   * file couldn't be read: the card then shows the diff unnumbered.
    */
-  position: z.object({ line: z.number().int().positive(), matches: z.number().int().positive() }).optional(),
+  position: EditPlace.optional(),
 });
 export type PermissionRequest = z.infer<typeof PermissionRequest>;
 
@@ -83,12 +83,13 @@ export const ChangeRow = z.object({
 export type ChangeRow = z.infer<typeof ChangeRow>;
 
 /**
- * The file behind a permission card, read when the person opens it. `ready`: `rows` is the file with the change in place.
- * `new`: the file doesn't exist yet and `rows` is what would be written. Otherwise there are no rows, and the state says
- * why: a binary file, one too large to read, one that couldn't be read, or an edit whose text isn't in the file now (`stale`).
+ * The file behind a permission card, or behind an Edit already made, read when the person opens it. `ready`: `rows` is
+ * the file with the change in place. `new`: the file doesn't exist yet and `rows` is what would be written. Otherwise
+ * there are no rows, and the state says why: a binary file, one too large to read, one that couldn't be read, an edit
+ * whose text isn't in the file now (`stale`: for a made one, it changed again since), or a file that is gone (`missing`).
  */
 export const ChangePreview = z.object({
-  state: z.enum(['ready', 'new', 'binary', 'tooLarge', 'unreadable', 'stale']),
+  state: z.enum(['ready', 'new', 'binary', 'tooLarge', 'unreadable', 'stale', 'missing']),
   rows: z.array(ChangeRow),
 });
 export type ChangePreview = z.infer<typeof ChangePreview>;

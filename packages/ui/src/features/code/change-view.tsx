@@ -1,7 +1,8 @@
 /**
- * ChangeView (design/components.md › Code and Work): a permission card's change in the whole file, over the app, scrolled
- * to the change. The file comes from `chat.changePreview`, read when it opens, so it works wherever the session's
- * folder is. The card stays mounted behind it and keeps its keys; `children` are its actions.
+ * ChangeView (design/components.md › Code and Work): a change in the whole file, over the app, scrolled to the change.
+ * The file is read when it opens (`chat.changePreview` for a permission card, `chat.editPreview` for an Edit already
+ * made), so it works wherever the session's folder is. A permission card stays mounted behind it and keeps its keys;
+ * `children` are its actions.
  */
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -14,12 +15,20 @@ import { rpc } from '../../lib/rpc.ts';
 import { InlineDiff, type DiffRow } from './inline-diff.tsx';
 
 const CHANGE_ONLY = 'so this is only the change.';
-const NOTES: Partial<Record<ChangePreview['state'], string>> = {
+type Notes = Partial<Record<ChangePreview['state'], string>>;
+/** For a change the person is asked about. */
+const PENDING_NOTES: Notes = {
   new: 'A new file.',
   binary: `This is a binary file, ${CHANGE_ONLY}`,
   tooLarge: `This file is too large to read, ${CHANGE_ONLY}`,
   unreadable: `This file can’t be read from here, ${CHANGE_ONLY}`,
   stale: `The text to replace isn’t in the file as it is now, ${CHANGE_ONLY}`,
+  missing: `This file isn’t there any more, ${CHANGE_ONLY}`,
+};
+/** For an Edit already made: the file is read as it is now, which may be after later changes. */
+const MADE_NOTES: Notes = {
+  ...PENDING_NOTES,
+  stale: `This part of the file changed again since, ${CHANGE_ONLY}`,
 };
 
 /** The file, brought to the change when it first shows: only here is it certain to be in the page, the dialog's portal comes a step later. */
@@ -35,9 +44,11 @@ function FileRows({ rows, language }: { rows: DiffRow[]; language: string }) {
   );
 }
 
+/** Where a ChangeView reads its file: a permission card's pending change, or an Edit the session made. */
+export type ChangeSource = { sessionId: string; interactionId: string } | { sessionId: string; callId: string };
+
 export function ChangeView({
-  sessionId,
-  interactionId,
+  source,
   title,
   reason,
   language,
@@ -45,28 +56,37 @@ export function ChangeView({
   onClose,
   children,
 }: {
-  sessionId: string;
-  interactionId: string;
+  /** Absent for a file the card already shows whole (a Write that was made). */
+  source?: ChangeSource;
   title: string;
   reason: string;
   language: string;
   /** What the card shows, for a file that can't be: the card's question stands either way. */
   change: DiffRow[];
   onClose(): void;
-  children: ReactNode;
+  /** A permission card's actions; their keys work in the view too. */
+  children?: ReactNode;
 }) {
   // Fresh each time it opens: the point is the file as it is now, and an answered card has nothing to keep.
-  const preview = useQuery({ queryKey: ['changePreview', sessionId, interactionId], queryFn: () => rpc().call('chat.changePreview', { sessionId, interactionId }), gcTime: 0, retry: false });
+  const preview = useQuery({
+    queryKey: ['changePreview', source],
+    queryFn: () => (source && 'callId' in source ? rpc().call('chat.editPreview', source) : rpc().call('chat.changePreview', source!)),
+    enabled: !!source,
+    gcTime: 0,
+    retry: false,
+  });
   const scroller = useRef<HTMLDivElement>(null);
+  const notes = source && 'callId' in source ? MADE_NOTES : PENDING_NOTES;
   const rows = preview.data?.rows.length ? preview.data.rows : change;
-  const note = preview.isError ? NOTES.unreadable : preview.data && NOTES[preview.data.state];
+  const note = preview.isError ? notes.unreadable : preview.data && notes[preview.data.state];
 
   return (
     <BaseDialog.Root open onOpenChange={(open) => !open && onClose()}>
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className={dialogBackdropClass} />
         <BaseDialog.Popup
-          data-ask-view
+          // A permission card's keys reach into the view; nothing else may answer it from here.
+          data-ask-view={children ? '' : undefined}
           // Focus on the code, never a button: arrow keys read on, and an Enter can't approve anything.
           initialFocus={scroller}
           className={cn(
@@ -86,7 +106,7 @@ export function ChangeView({
           {/* One scroller for both directions: a file's sideways scrollbar shouldn't wait at its last line. There from the start, as focus goes here on opening. */}
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
           <div ref={scroller} tabIndex={0} role="group" aria-label="The file with the change" className="min-h-0 flex-1 overflow-auto bg-code-background outline-none focus-visible:shadow-focus">
-            {preview.isPending ? (
+            {source && preview.isPending ? (
               <div className="flex h-full items-center justify-center text-fg-muted">
                 <Spinner label="Reading the file" />
               </div>
@@ -94,7 +114,7 @@ export function ChangeView({
               <FileRows rows={rows} language={language} />
             )}
           </div>
-          <div className="flex flex-col gap-3 border-t border-line px-4 py-3">{children}</div>
+          {children && <div className="flex flex-col gap-3 border-t border-line px-4 py-3">{children}</div>}
         </BaseDialog.Popup>
       </BaseDialog.Portal>
     </BaseDialog.Root>

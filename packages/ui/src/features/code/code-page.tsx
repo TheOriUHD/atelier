@@ -55,7 +55,7 @@ import { TerminalCommands, TerminalFolders, TerminalPane } from './terminal-pane
 import { RunInTerminal } from '../chat/run-in-terminal.ts';
 import { TodoWidget } from './todo-widget.tsx';
 import { FolderBadge } from './workspace-picker.tsx';
-import { CodeActivity, OpenWorkspaceFile, SessionTasks, WorkspaceRoot } from './tool-cards.tsx';
+import { CodeActivity, OpenWorkspaceFile, SessionTasks, TranscriptSession, WorkspaceRoot } from './tool-cards.tsx';
 import { canServePages, pageUrl } from './workspace-pages.ts';
 import { ContextButton } from './context-popover.tsx';
 import { formatTokenCount } from './live-context.ts';
@@ -312,6 +312,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   const fullscreen = docked && !sheet && layout.maximized !== null;
   return (
     <WorkspaceRoot.Provider value={workspace?.root ?? null}>
+      <TranscriptSession.Provider value={sessionId}>
       <OpenWorkspaceFile.Provider value={workspaceId ? openFile : null}>
         <SessionTasks.Provider value={sessionTasks}>
           <ArtifactPaneContext.Provider value={artifactCards}>
@@ -482,6 +483,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
           </ArtifactPaneContext.Provider>
         </SessionTasks.Provider>
       </OpenWorkspaceFile.Provider>
+    </TranscriptSession.Provider>
     </WorkspaceRoot.Provider>
   );
 }

@@ -458,7 +458,7 @@ async function executeToolCalls(
   const byName = new Map((opts.availableTools?.() ?? opts.tools).map((t) => [t.name, t]));
   const runOne = async (call: (typeof calls)[number]): Promise<ToolResultPart> => {
     const output = await invoke(call, byName.get(call.name), opts, messageId);
-    return { type: 'tool_result', callId: call.id, content: output.content, ...(output.isError ? { isError: true } : {}), ...(output.generated ? { generated: output.generated } : {}), ...(output.saved ? { saved: output.saved } : {}) };
+    return { type: 'tool_result', callId: call.id, content: output.content, ...(output.isError ? { isError: true } : {}), ...(output.generated ? { generated: output.generated } : {}), ...(output.saved ? { saved: output.saved } : {}), ...(output.edit ? { edit: output.edit } : {}) };
   };
   // Read-only and concurrent tools run together; anything else runs in order.
   const results: ToolResultPart[] = new Array(calls.length);

@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PLAN_MODE_OFF, type Message, type SessionSnapshot, type ToolCallPart } from '@atelier/protocol';
-import { resetBackend } from '../settings/test-backend.ts';
+import { callsTo, resetBackend } from '../settings/test-backend.ts';
 import type { TranscriptView } from '@atelier/protocol';
 import { TranscriptDetail } from '../chat/parts.tsx';
-import { ActivityList, CodeActivity, WorkspaceRoot, bashResult, summarize, type ToolStep } from './tool-cards.tsx';
+import { ActivityList, CodeActivity, TranscriptSession, WorkspaceRoot, bashResult, summarize, type ToolStep } from './tool-cards.tsx';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
@@ -162,6 +163,76 @@ describe('tool cards', () => {
     show(step('Edit', { file_path: '/repo/a.ts', old_string: 'a\nb', new_string: 'a\nc\nd' }, { result: result('Edited /repo/a.ts') }));
     expect(screen.getByRole('button', { name: /Edited a.ts/ }).textContent).toContain('2 lines added, 1 line removed');
     expect([...document.querySelectorAll('[data-kind]')].map((r) => r.getAttribute('data-kind'))).toEqual(['context', 'remove', 'add', 'add']);
+  });
+
+  describe('an edit that says where it landed', () => {
+    const place = { line: 41, matches: 1, prefix: '    ', suffix: ':', before: ['def run(token):', '    sections = load()'], after: ['        return sections[token[8:]]'] };
+    const made = (extra: Partial<NonNullable<ToolStep['result']>> = {}) =>
+      step('Edit', { file_path: '/repo/app.py', old_string: "if not image and token.startswith('section:')", new_string: "if token.startswith('section:')" }, { result: { ...result('Edited /repo/app.py')!, edit: place, ...extra } });
+    const numbers = () => [...document.querySelectorAll('[data-kind]')].map((r) => [r.getAttribute('data-kind'), r.textContent]);
+    const inSession = (s: ToolStep) =>
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <WorkspaceRoot.Provider value="/repo">
+            <TranscriptSession.Provider value="s1">
+              <ActivityList steps={[s]} />
+            </TranscriptSession.Provider>
+          </WorkspaceRoot.Provider>
+        </QueryClientProvider>,
+      );
+
+    it('shows whole lines with the file’s line numbers and the lines around them', () => {
+      show(made());
+      expect(numbers()).toEqual([
+        ['context', '39def run(token):'],
+        ['context', '40    sections = load()'],
+        ['remove', "41-    if not image and token.startswith('section:'):"],
+        ['add', "41+    if token.startswith('section:'):"],
+        ['context', '42        return sections[token[8:]]'],
+      ]);
+    });
+
+    it('says when a replace_all changed more places than it shows', () => {
+      show(made({ edit: { ...place, matches: 3 } }));
+      expect(screen.getByText('This changed 3 places. The first is shown, at line 41.')).toBeTruthy();
+    });
+
+    it('opens the whole file as it is now, read through its session', async () => {
+      resetBackend({ 'chat.editPreview': () => ({ state: 'ready', rows: [{ kind: 'context', text: 'import os', line: 1, oldLine: 1 }, { kind: 'remove', text: 'a', line: 2 }, { kind: 'add', text: 'b', line: 2 }] }) });
+      Element.prototype.scrollIntoView = () => {};
+      inSession(made());
+      fireEvent.click(screen.getByRole('button', { name: 'Show the whole file' }));
+      const view = await screen.findByRole('dialog', { name: 'Edited app.py' });
+      await waitFor(() => expect([...view.querySelectorAll('[data-kind]')].map((r) => r.lastElementChild!.textContent)).toEqual(['import os', 'a', 'b']));
+      expect(callsTo('chat.editPreview')).toEqual([{ sessionId: 's1', callId: 'call-Edit' }]);
+      // Nothing to answer here: the view has no actions of a permission card.
+      expect(view.hasAttribute('data-ask-view')).toBe(false);
+    });
+
+    it('says so when the change was changed again since, and shows the change itself', async () => {
+      resetBackend({ 'chat.editPreview': () => ({ state: 'stale', rows: [] }) });
+      Element.prototype.scrollIntoView = () => {};
+      inSession(made());
+      fireEvent.click(screen.getByRole('button', { name: 'Show the whole file' }));
+      const view = await screen.findByRole('dialog', { name: 'Edited app.py' });
+      await waitFor(() => expect(view.textContent).toContain('This part of the file changed again since, so this is only the change.'));
+      expect(view.querySelectorAll('[data-kind]')).toHaveLength(5);
+    });
+
+    it('offers no whole file for an edit that failed', () => {
+      inSession(step('Edit', { file_path: '/repo/app.py', old_string: 'a', new_string: 'b' }, { result: result('old_string was not found', true) }));
+      expect(screen.queryByRole('button', { name: 'Show the whole file' })).toBeNull();
+    });
+
+    it('opens a write as it was written, without asking the backend', async () => {
+      resetBackend({});
+      Element.prototype.scrollIntoView = () => {};
+      inSession(step('Write', { file_path: '/repo/notes.md', content: 'one\ntwo\n' }, { result: result('Created /repo/notes.md (2 lines).') }));
+      fireEvent.click(screen.getByRole('button', { name: 'Show the whole file' }));
+      const view = await screen.findByRole('dialog', { name: 'Created notes.md' });
+      expect(view.querySelectorAll('[data-kind="add"]')).toHaveLength(2);
+      expect(callsTo('chat.editPreview')).toEqual([]);
+    });
   });
 
   it('shows the start of a long write until opened in full', () => {

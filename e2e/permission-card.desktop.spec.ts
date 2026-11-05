@@ -40,8 +40,11 @@ test('desktop Code: a card says where an edit lands, takes a reason with a refus
     const card = page.getByRole('region', { name: 'Allow Atelier to edit big.py?' });
     await expect(card.locator('[data-kind="remove"]')).toContainText('300');
     await expect(card.locator('[data-kind="add"]').first()).toContainText('300');
-    await expect(card.locator('[data-kind="context"]')).toContainText('301');
-    await expect(card.locator('[data-kind="context"]')).toContainText('302');
+    // Three lines either side; below the change, old and new numbers differ.
+    await expect(card.locator('[data-kind="context"]')).toHaveCount(7);
+    await expect(card.locator('[data-kind="context"]').first()).toContainText('297');
+    await expect(card.locator('[data-kind="context"]').nth(3)).toContainText('301');
+    await expect(card.locator('[data-kind="context"]').nth(3)).toContainText('302');
 
     // R, type, Enter: the reason reaches the model as the person's words, and the turn goes on.
     await page.keyboard.press('r');
@@ -83,6 +86,47 @@ test('desktop Code: a card says where an edit lands, takes a reason with a refus
     await expect(view).toBeHidden();
     await expect(card).toBeHidden();
     await expect.poll(() => readFile(join(repo, 'big.py'), 'utf8')).toContain('LINE 300\nLINE 300b\nline 301');
+  } finally {
+    await app.close();
+    await rm(configDir, { recursive: true, force: true });
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test('desktop Code: a made edit keeps its line numbers and the lines around it, and opens the file as it is now', async () => {
+  test.setTimeout(120_000);
+  const configDir = await tempConfigDir();
+  const repo = await tempRepo({ 'big.py': FILE });
+  const app = await launchDesktop(configDir);
+  try {
+    const page = await app.firstWindow();
+    await setUpLocal(page);
+    await openFolder(app, page, repo);
+    const box = page.getByRole('textbox', { name: 'Message', exact: true });
+    await box.fill(call('Edit', { file_path: 'big.py', old_string: '300', new_string: '300 # checked' }));
+    await box.press('Enter');
+    await page.getByRole('region', { name: 'Allow Atelier to edit big.py?' }).getByRole('button', { name: 'Allow once' }).click();
+    await expect.poll(() => readFile(join(repo, 'big.py'), 'utf8')).toContain('line 300 # checked\n');
+
+    // The card: whole lines with the file's numbers, three lines either side.
+    await page.getByRole('button', { name: /Edited big\.py/ }).first().click();
+    await page.getByRole('group', { name: 'Steps' }).getByRole('button', { name: /Edited big\.py/ }).click();
+    const diff = page.locator('.group\\/diff').last();
+    await expect(diff.locator('[data-kind="remove"]')).toHaveText(/^300-line 300$/);
+    await expect(diff.locator('[data-kind="add"]')).toHaveText(/^300\+line 300 # checked$/);
+    await expect(diff.locator('[data-kind="context"]')).toHaveCount(6);
+    await expect(diff.locator('[data-kind="context"]').first()).toContainText('297');
+
+    // A line added above since: the view finds the change where it is now, in the whole file.
+    await writeFile(join(repo, 'big.py'), `new first line\n${await readFile(join(repo, 'big.py'), 'utf8')}`);
+    await diff.hover();
+    await diff.getByRole('button', { name: 'Show the whole file' }).click();
+    const view = page.getByRole('dialog', { name: 'Edited big.py' });
+    await expect(view.locator('[data-kind="context"]').first()).toContainText('new first line');
+    await expect(view.locator('[data-kind="remove"]')).toHaveText(/^301-line 300$/);
+    await expect(view.locator('[data-kind="remove"]')).toBeInViewport();
+    await page.keyboard.press('Escape');
+    await expect(view).toBeHidden();
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });

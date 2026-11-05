@@ -26,6 +26,26 @@ export const ToolCallPart = z.object({
   /** Set when the call spawned a subagent session. */
   childSessionId: z.string().optional(),
 });
+/**
+ * Where an Edit lands in its file, for a diff with the file's line numbers and a few lines around the change. `prefix`
+ * and `suffix` turn old_string and new_string into whole lines; with `replace_all` the rest describes the first match.
+ */
+export const EditPlace = z.object({
+  /** The 1-based line of the first match. */
+  line: z.number().int().positive(),
+  /** How many places the edit changes. */
+  matches: z.number().int().positive(),
+  /** The text before old_string on the line it starts on. Absent, like the three below, from a backend that predates them. */
+  prefix: z.string().optional(),
+  /** The text after old_string on the line it ends on. */
+  suffix: z.string().optional(),
+  /** Up to three unchanged lines above the change, nearest last. */
+  before: z.array(z.string()).optional(),
+  /** Up to three unchanged lines below it. */
+  after: z.array(z.string()).optional(),
+});
+export type EditPlace = z.infer<typeof EditPlace>;
+
 export const ToolResultPart = z.object({
   type: z.literal('tool_result'),
   callId: z.string(),
@@ -35,6 +55,8 @@ export const ToolResultPart = z.object({
   generated: z.array(GeneratedImageMeta).optional(),
   /** The image SaveImage wrote, for the transcript's thumbnail: it isn't sent to the model a second time. */
   saved: z.object({ blob: z.string(), mime: z.string() }).optional(),
+  /** Where an Edit landed, as the file stood then: the transcript's diff numbers its lines from it. */
+  edit: EditPlace.optional(),
 });
 /** A reply's quoted passage: at most this many characters, and this many passages to a message. */
 export const QUOTE_MAX_CHARS = 4_000;

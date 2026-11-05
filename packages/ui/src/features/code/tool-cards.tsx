@@ -3,16 +3,17 @@
  * edits as inline diffs, commands with their live output and exit status, sub-agents with their own transcript.
  */
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { Bot, Film, ListChecks, MessageSquare } from 'lucide-react';
+import { Bot, Film, ListChecks, Maximize2, MessageSquare } from 'lucide-react';
 import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolCallPart, type ToolResultPart } from '@atelier/protocol';
-import { Badge, DiffStat, Icon, ThinkingDots, cn } from '../../components/ui/index.ts';
+import { Badge, DiffStat, Icon, IconButton, ThinkingDots, cn } from '../../components/ui/index.ts';
 import { queuedLabel, useLiveSession, type LiveSessionState } from '../../lib/live-session.ts';
 import { blobUrl } from '../../lib/platform.ts';
 import { Markdown, OpenFilePath } from '../chat/markdown.tsx';
 import { Chevron, MessageError, ProviderStopped, Summary, ThinkingBlock, ThinkingText, TranscriptDetail, detailClass, elapsed, inputPreview, useNow } from '../chat/parts.tsx';
 import { LINE } from '../chat/rows.ts';
 import { isStreaming, stepView, toolResults, turnItems, type ActivityStepView } from '../chat/turns.ts';
-import { DiffCard, editRows, writeRows } from './inline-diff.tsx';
+import { ChangeView } from './change-view.tsx';
+import { DiffCard, editRows, placedEditRows, writeRows } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
 import { TodoList } from './todo-widget.tsx';
 import { OWN_CARD, activityLabel, failedCount, messageTargetKind } from './activity-summary.ts';
@@ -33,6 +34,9 @@ export { OpenFilePath as OpenWorkspaceFile } from '../chat/markdown.tsx';
 
 /** Whether Edit/Write diffs and command output start open: Code shows them, Work keeps each call to one line. */
 export const ToolCardsOpen = createContext(true);
+
+/** The session whose calls the cards show: an Edit's whole-file view reads the file through it. */
+export const TranscriptSession = createContext<string | null>(null);
 
 /**
  * The session's background commands, sub-agents and loops, and showing one in the Background tasks pane (Code; Cowork
@@ -700,17 +704,50 @@ function FileChangeCard({ step }: { step: ToolStep }) {
   );
 }
 
-/** An Edit's or Write's change as a diff, with the failure above it when it failed. */
+/**
+ * An Edit's or Write's change as a diff, with the failure above it when it failed. A made Edit carries where it landed:
+ * the file's line numbers and the lines around it. Show the whole file opens it over the app, an Edit's read as it is now.
+ */
 function FileChangeBody({ step }: { step: ToolStep }) {
+  const root = useContext(WorkspaceRoot);
+  const sessionId = useContext(TranscriptSession);
+  const [whole, setWhole] = useState(false);
   const input = asRecord(step.call.input);
   const path = str(input.file_path);
   const edit = step.call.name === 'Edit';
-  const rows = edit ? editRows(str(input.old_string), str(input.new_string)) : writeRows(str(input.content));
   const failed = !!step.result?.isError;
+  const place = edit && !failed ? step.result?.edit : undefined;
+  const rows = edit ? placedEditRows(str(input.old_string), str(input.new_string), place) : writeRows(str(input.content));
+  // A Write's card holds the whole file already; an Edit's file is read through its session.
+  const viewable = !!step.result && !failed && (!edit || !!sessionId);
+  const verb = edit ? 'Edited' : resultText(step.result).startsWith('Updated') ? 'Updated' : 'Created';
   return (
     <div className="flex flex-col gap-2">
       {failed && <pre className={cn(detailClass, 'text-danger-text')}>{resultText(step.result)}</pre>}
-      {rows.length > 0 && <DiffCard rows={rows} language={languageOf(path)} lineNumbers={!edit} limit={edit ? 40 : 12} />}
+      {rows.length > 0 && (
+        <DiffCard
+          rows={rows}
+          language={languageOf(path)}
+          lineNumbers={!edit || !!place}
+          limit={edit ? 40 : 12}
+          action={viewable && <IconButton icon={Maximize2} label="Show the whole file" size="sm" onClick={() => setWhole(true)} />}
+        />
+      )}
+      {place && place.matches > 1 && (
+        <p className="text-footnote text-fg-muted">
+          This changed {place.matches} places. The first is shown, at line {place.line}.
+        </p>
+      )}
+      {whole && (
+        <ChangeView
+          {...(edit && sessionId ? { source: { sessionId, callId: step.call.id } } : {})}
+          title={`${verb} ${displayPath(path, root)}`}
+          reason={str(input.reason)}
+          language={languageOf(path)}
+          change={rows}
+          onClose={() => setWhole(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1034,7 +1071,10 @@ export function SubagentTranscript({ sessionId, activity: Activity = CodeActivit
     streamingMessageId: live.streamingMessageId,
     toolOutput: live.toolOutput,
   };
-  return turnItems(live.messages).map((item) => {
+  // Its calls are in its own session.
+  return (
+    <TranscriptSession.Provider value={sessionId}>
+      {turnItems(live.messages).map((item) => {
     switch (item.kind) {
       case 'text':
         return <Markdown key={item.ref.key} text={item.ref.part.text} streaming={isStreaming(item.ref, live.streamingMessageId)} />;
@@ -1049,5 +1089,7 @@ export function SubagentTranscript({ sessionId, activity: Activity = CodeActivit
       default:
         return null;
     }
-  });
+      })}
+    </TranscriptSession.Provider>
+  );
 }
