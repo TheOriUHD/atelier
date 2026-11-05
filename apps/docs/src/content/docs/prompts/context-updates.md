@@ -31,6 +31,7 @@ Every note Atelier can send is below, verbatim. `{{name}}` is filled in when the
 | [`effort-exhaustive`](#effort-exhaustive) | Max, on a model whose own setting cannot express it (same cadence). |
 | [`effort-normal`](#effort-normal) | Back to the default (Medium) after a different level. |
 | [`effort-thorough`](#effort-thorough) | Extra, on a model whose own setting cannot express it (same cadence). |
+| [`folder-moved`](#folder-moved) | Code and Cowork: the person moved the session to another of their folders. Sent at once, as a note of its own; the system prompt is rebuilt for the next turn. |
 | [`git-snapshot`](#git-snapshot) | Code: the first turn in a git repository, with the branch, default branch, changed files and the last five commit subjects, labelled as repository data that does not update. |
 | [`image-models`](#image-models) | A session with GenerateImage: the first turn, and when the image models it can use, or their order, change. |
 | [`instructions-nested`](#instructions-nested) | Code and Cowork: the first file tool call in or under a folder that has its own instruction file. Rides on a tool result. |
@@ -132,6 +133,19 @@ Source: [`packages/core/prompts/notes/background-agent.md`](https://github.com/T
 The background sub-agent "{{title}}" {{outcome}}. The person has not seen what it returned, below: tell them what matters in it, and check any edits it reports before you call them done.
 
 {{result}}
+````
+
+### `folder-moved`
+
+Code and Cowork: the person moved the session to another of their folders. Sent at once, as a note of its own; the system prompt is rebuilt for the next turn.
+
+Source: [`packages/core/prompts/notes/folder-moved.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/notes/folder-moved.md)
+
+````text wrap
+The person moved this session to another folder. It now works in {{to}} (it was in {{from}}). From here on the file and command tools work in the new folder, and the system prompt describes it; paths earlier in this conversation are in the old folder. Nothing was copied: the files stay where they were.
+<!-- if:branch -->
+It is a git repository on branch {{branch}}, with {{changed}} changed files.
+<!-- endif -->
 ````
 
 ### `loop-tick`

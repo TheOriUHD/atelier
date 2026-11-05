@@ -265,6 +265,8 @@ export interface ChatServiceDeps {
   gitSnapshot?(session: SessionRow): Promise<GitSnapshot | null>;
   /** The workspace for a folder on the session's own computer or SSH host (trusting it); throws with a message for the person. */
   moveWorkspace?(session: SessionRow, path: string): Promise<{ id: string; root: string }>;
+  /** The folder the person moves a session to, and the one it leaves, checked (`WorkspaceManager.moveTarget`); throws with a message for the person. */
+  moveTarget?(session: SessionRow, workspaceId: string): Promise<{ from: { id: string; root: string }; to: { id: string; root: string } }>;
   /**
    * Lets the workspace's runner reach a path outside its folder, after the person (or Auto mode, or a rule) allowed the
    * call that works on it. The runner refuses every path outside its roots, whatever was approved.
@@ -517,6 +519,8 @@ export class ChatService {
   private outboxes = new Map<string, OutboxMessage[]>();
   /** A waiting message sent "now": the run it interrupted hands it the next turn when it has ended. */
   private interrupting = new Map<string, OutboxMessage>();
+  /** A folder the person moved a session to while a reply ran, by session: it moves when the run ends. */
+  private pendingMoves = new Map<string, string>();
   /** Auto mode's blocks per top-level session: in a row and in all (permissions/auto-mode.ts). */
   private autoBlocks = new Map<string, { row: number; total: number }>();
   /** Tool calls since each session's last TodoWrite (or nudge about it). */
@@ -825,6 +829,45 @@ export class ChatService {
     return lines.join('\n');
   }
 
+  /**
+   * The person moves a session to another of their folders (`sessions.move`): the conversation goes on there from the
+   * next turn. While a reply runs, the move waits for it to end (`pending`); asking for the folder it is in calls a
+   * waiting move off.
+   */
+  async moveTo(sessionId: string, workspaceId: string): Promise<{ pending: boolean }> {
+    const session = await this.requireSession(sessionId);
+    if (session.parentSessionId || !session.workspaceId || !this.deps.moveTarget) throw new Error('This session can’t change folder.');
+    if (workspaceId === session.workspaceId) {
+      this.pendingMoves.delete(sessionId);
+      return { pending: false };
+    }
+    await this.deps.moveTarget(session, workspaceId);
+    if (this.runs.has(sessionId)) {
+      this.pendingMoves.set(sessionId, workspaceId);
+      return { pending: true };
+    }
+    await this.applyMove(sessionId, workspaceId);
+    return { pending: false };
+  }
+
+  /**
+   * Moves the session and tells the model in a note the transcript shows as a line of its own. The frozen system prompt
+   * is rebuilt for the next turn, with the new folder and its instruction files.
+   */
+  private async applyMove(sessionId: string, workspaceId: string): Promise<void> {
+    const session = await this.requireSession(sessionId);
+    if (workspaceId === session.workspaceId) return;
+    const { from, to } = await this.deps.moveTarget!(session, workspaceId);
+    this.deps.sessionChanged(await this.deps.repo.update(sessionId, { workspaceId: to.id, systemSnapshot: null }));
+    const git = await this.deps.gitSnapshot?.(await this.requireSession(sessionId)).catch(() => null);
+    const text = renderNote(
+      'notes/folder-moved',
+      { to: escapeTags(to.root), from: escapeTags(from.root), branch: git ? escapeTags(git.branch) : '', changed: String(git?.changed ?? 0) },
+      this.deps.promptOverrides(),
+    );
+    await this.addContextMessage(sessionId, { type: 'context', text, notice: { kind: 'moved', from: { workspaceId: from.id, root: from.root }, to: { workspaceId: to.id, root: to.root } } });
+  }
+
   /** A codespace is being woken: the running sessions in its folder show it until it is up (or it failed to start). */
   async workspaceWaking(workspaceId: string, waking: boolean): Promise<void> {
     for (const sessionId of [...this.runs.keys()]) {
@@ -1097,6 +1140,16 @@ export class ChatService {
    */
   private afterRun(sessionId: string, stopped: boolean): void {
     if (this.closing || this.discarding.has(sessionId)) return;
+    // A move the person asked for while the reply ran comes first: whatever happens next happens in the new folder.
+    const move = this.pendingMoves.get(sessionId);
+    if (move) {
+      this.pendingMoves.delete(sessionId);
+      void this.applyMove(sessionId, move)
+        .catch((e: unknown) => this.addContextMessage(sessionId, `The person asked to move this session to another folder, but it couldn’t be done: ${escapeTags(e instanceof Error ? e.message : String(e))} It stays where it was.`))
+        .catch(() => undefined)
+        .finally(() => this.afterRun(sessionId, stopped));
+      return;
+    }
     // A message sent "now" interrupted this run: it opens the next turn, which carries on from what was done.
     const now = this.interrupting.get(sessionId);
     if (now) {

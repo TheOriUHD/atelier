@@ -32,6 +32,7 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - notes/effort-exhaustive
 - notes/effort-normal
 - notes/effort-thorough
+- notes/folder-moved
 - notes/git-snapshot
 - notes/image-models
 - notes/instructions-nested
@@ -716,6 +717,19 @@ File: packages/core/prompts/notes/effort-thorough.md
 
 ````text
 Effort is set to Extra: work thoroughly. Break the problem into steps, consider more than one approach, check each step and each factual claim, and look for edge cases and mistakes before you answer. Take the time it needs. You don't need to mention this note.
+````
+
+---
+
+## notes/folder-moved
+
+File: packages/core/prompts/notes/folder-moved.md
+
+````text
+The person moved this session to another folder. It now works in {{to}} (it was in {{from}}). From here on the file and command tools work in the new folder, and the system prompt describes it; paths earlier in this conversation are in the old folder. Nothing was copied: the files stay where they were.
+<!-- if:branch -->
+It is a git repository on branch {{branch}}, with {{changed}} changed files.
+<!-- endif -->
 ````
 
 ---

@@ -5,7 +5,7 @@ import { PLAN_MODE_OFF, type Message, type SessionSnapshot, type ToolCallPart } 
 import { callsTo, resetBackend } from '../settings/test-backend.ts';
 import type { TranscriptView } from '@atelier/protocol';
 import { TranscriptDetail } from '../chat/parts.tsx';
-import { ActivityList, CodeActivity, TranscriptSession, WorkspaceRoot, bashResult, summarize, type ToolStep } from './tool-cards.tsx';
+import { ActivityList, CodeActivity, MovedNotice, TranscriptSession, WorkspaceRoot, bashResult, summarize, type ToolStep } from './tool-cards.tsx';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
@@ -38,6 +38,19 @@ const show = (...steps: ToolStep[]) =>
       <ActivityList steps={steps} />
     </WorkspaceRoot.Provider>,
   );
+
+describe('a move to another folder in the transcript', () => {
+  it('names both folders as the folder list does, and by their last part once one is gone', async () => {
+    resetBackend({ 'workspaces.list': () => [{ id: 'w2', kind: 'local', name: 'api', root: '/work/api', host: null, deviceId: null, available: true, scratch: false, lastUsedAt: 0 }] });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MovedNotice notice={{ kind: 'moved', from: { workspaceId: 'gone', root: '/work/app' }, to: { workspaceId: 'w2', root: '/work/api' } }} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText(/^Moved from app to/).textContent).toBe('Moved from app to api'));
+    expect(screen.getByText(/^Moved from/).closest('[title]')!.getAttribute('title')).toBe('/work/app → /work/api');
+  });
+});
 
 describe('SaveImage', () => {
   const save = (extra: Partial<ToolStep> = {}) => step('SaveImage', { image: 'img_1', file_path: '/repo/public/hero.png' }, extra);

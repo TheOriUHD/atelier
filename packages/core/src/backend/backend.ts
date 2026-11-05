@@ -1107,6 +1107,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         }
       }
     },
+    moveTarget: async (session, workspaceId) => {
+      if (!session.workspaceId || !session.userId) throw new WorkspaceError('This session has no folder to move from.');
+      return workspaceManager.moveTarget(session.userId, session.workspaceId, workspaceId);
+    },
     moveWorkspace: async (session, path) => {
       if (!session.workspaceId || !session.userId) throw new WorkspaceError('This session has no folder to move from.');
       const target = await workspaceManager.openFrom(session.userId, session.workspaceId, path);
@@ -1893,6 +1897,16 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (projectId) emitToUser(userId, 'projects.changed', {});
       return created;
     },
+    'sessions.move': async ({ id, workspaceId }, ctx) => {
+      const session = await sessionOrThrow(id, ctx);
+      // A sub-agent works in its parent's folder.
+      if (!session.workspaceId || (await sessions.getRow(id))?.parentSessionId) throw appError('invalid_request', 'This session can’t change folder.');
+      try {
+        return await chat.moveTo(id, workspaceId);
+      } catch (e) {
+        throw e instanceof WorkspaceError ? appError('workspace_unavailable', e.message) : e;
+      }
+    },
     'sessions.update': async ({ id, title, pinned, model, effort, thinking, remoteControl, projectId, permissionMode, connectorsOff: off, research, imageModel, groupId, archived, unread }, ctx) => {
       const before = await sessionOrThrow(id, ctx);
       if (model) await refuseHiddenModel(model, me(ctx).id);
@@ -2100,7 +2114,14 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'checkpoints.rewind': async ({ sessionId, messageId, files, conversation }, ctx) => {
       const session = await sessionOrThrow(sessionId, ctx);
       if (chat.isRunning(sessionId)) throw appError('busy', 'Stop the response before rewinding.');
-      const restored = files && session.workspaceId ? await checkpointStore.rewind(await openWorkspace(ctx, session.workspaceId), sessionId, messageId) : [];
+      // Each file in its own folder: the session may have moved since.
+      const restored = files
+        ? await checkpointStore.rewind(sessionId, messageId, (id) => {
+            const folder = id ?? session.workspaceId;
+            if (!folder) throw appError('invalid_request', 'This session has no folder to restore files in.');
+            return openWorkspace(ctx, folder);
+          })
+        : [];
       if (conversation) await chat.rewindTo(sessionId, messageId);
       return { restored, snapshot: await chat.snapshot(sessionId) };
     },
@@ -2397,7 +2418,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (compare !== 'session') return gitDiff(ws, path, compare);
       if (!sessionId) throw appError('invalid_request', 'Say which session’s changes to show.');
       await sessionOrThrow(sessionId, ctx);
-      return sessionDiff(ws, await checkpointStore.firstVersions(sessionId), path);
+      return sessionDiff(ws, await checkpointStore.firstVersions(sessionId, ws.id), path);
     },
     'workspaces.grep': async ({ workspaceId, query }, ctx) => grepFiles(await openWorkspace(ctx, workspaceId), query),
     'git.branches': ({ workspaceId }, ctx) => gitOp(ctx, workspaceId, (ws) => git.branches(ws)),

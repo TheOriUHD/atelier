@@ -76,16 +76,78 @@ describe.skipIf(!built)('checkpoints', () => {
     writeFileSync(file('b.txt'), 'b0');
     await write(child.id, 'b.txt', 'b1');
 
+    // Kept by where they are, whatever path the tool was given.
     expect(await store.list(s.id)).toEqual([
-      { messageId: first, paths: ['a.txt', 'new.txt'] },
-      { messageId: second, paths: ['a.txt', 'b.txt'] },
+      { messageId: first, paths: [file('a.txt'), file('new.txt')] },
+      { messageId: second, paths: [file('a.txt'), file('b.txt')] },
     ]);
 
-    expect((await store.rewind(ws, s.id, second)).sort()).toEqual(['a.txt', 'b.txt']);
+    const here = async () => ws;
+    expect((await store.rewind(s.id, second, here)).sort()).toEqual([file('a.txt'), file('b.txt')]);
     expect([read('a.txt'), read('b.txt'), read('new.txt')]).toEqual(['three', 'b0', 'created']);
 
-    expect((await store.rewind(ws, s.id, first)).sort()).toEqual(['a.txt', 'b.txt', 'new.txt']);
+    expect((await store.rewind(s.id, first, here)).sort()).toEqual([file('a.txt'), file('b.txt'), file('new.txt')]);
     expect([read('a.txt'), read('new.txt')]).toEqual(['one', null]);
+  });
+
+  it('restores each file in its own folder after the session moved to another', async () => {
+    const other = realpathSync(mkdtempSync(join(tmpdir(), 'atelier-ckpt-other-')));
+    try {
+      const there = await manager.open('ada', (await manager.addLocal('ada', other)).id);
+      const s = await repo.create({ mode: 'code', userId: 'ada', workspaceId: ws.id });
+      writeFileSync(file('a.txt'), 'first folder');
+      writeFileSync(join(other, 'a.txt'), 'second folder');
+      const before = await turn(s.id, 'user');
+      await write(s.id, 'a.txt', 'changed in the first');
+      await turn(s.id, 'assistant');
+      // Moved: the same name in the other folder is another file.
+      await repo.update(s.id, { workspaceId: there.id });
+      await turn(s.id, 'user');
+      await store.capture(there, s.id, 'a.txt');
+      writeFileSync(join(other, 'a.txt'), 'changed in the second');
+
+      expect((await store.firstVersions(s.id, there.id)).map((f) => f.path)).toEqual([join(other, 'a.txt')]);
+      const opened: (string | null)[] = [];
+      const restored = await store.rewind(s.id, before, async (id) => {
+        opened.push(id);
+        return id === there.id ? there : ws;
+      });
+      expect(restored.sort()).toEqual([file('a.txt'), join(other, 'a.txt')].sort());
+      expect([read('a.txt'), readFileSync(join(other, 'a.txt'), 'utf8')]).toEqual(['first folder', 'second folder']);
+      expect(opened.sort()).toEqual([there.id, ws.id].sort());
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  it('restores nothing when one of the folders can’t be reached', async () => {
+    const s = await repo.create({ mode: 'code', userId: 'ada' });
+    writeFileSync(file('a.txt'), 'one');
+    const first = await turn(s.id, 'user');
+    await write(s.id, 'a.txt', 'two');
+    await expect(
+      store.rewind(s.id, first, async () => {
+        throw new Error('The computer is offline.');
+      }),
+    ).rejects.toThrow('offline');
+    expect(read('a.txt')).toBe('two');
+  });
+
+  it('restores a checkpoint from before folders were kept in the session’s folder', async () => {
+    const s = await repo.create({ mode: 'code', userId: 'ada' });
+    writeFileSync(file('old.txt'), 'changed');
+    const first = await turn(s.id, 'user');
+    const blob = await new BlobStore(db, join(dir, '.blobs')).put(Buffer.from('before'), 'application/octet-stream');
+    db.$client.prepare('INSERT INTO checkpoints (id, session_id, message_id, path, before_blob, created_at) VALUES (?, ?, ?, ?, ?, ?)').run('c1', s.id, first, 'old.txt', blob.sha256, Date.now());
+    const opened: (string | null)[] = [];
+    expect(
+      await store.rewind(s.id, first, async (id) => {
+        opened.push(id);
+        return ws;
+      }),
+    ).toEqual(['old.txt']);
+    expect([read('old.txt'), opened]).toEqual(['before', [null]]);
+    expect((await store.firstVersions(s.id, ws.id)).map((f) => f.path)).toEqual(['old.txt']);
   });
 
   it('diffs what the session changed since it began, files it created and removed included', async () => {
@@ -104,8 +166,8 @@ describe.skipIf(!built)('checkpoints', () => {
     await store.capture(ws, s.id, 'gone.txt');
     rmSync(file('gone.txt'));
 
-    const files = await store.firstVersions(s.id);
-    expect(files.map((f) => f.path)).toEqual(['a.txt', file('new.txt'), 'gone.txt']);
+    const files = await store.firstVersions(s.id, ws.id);
+    expect(files.map((f) => f.path)).toEqual([file('a.txt'), file('new.txt'), file('gone.txt')]);
     const { diff } = await sessionDiff(ws, files);
     expect(diff).toBe(
       [

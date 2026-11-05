@@ -79,6 +79,8 @@ export const Notice = z.discriminatedUnion('kind', [
   }),
   /** A command the person ran (`/compact`), shown as what they sent. It tells the model nothing. */
   z.object({ kind: z.literal('command'), command: z.string() }),
+  /** The person moved the session to another folder (`sessions.move`): the transcript shows it as a line of its own. */
+  z.object({ kind: z.literal('moved'), from: z.object({ workspaceId: z.string(), root: z.string() }), to: z.object({ workspaceId: z.string(), root: z.string() }) }),
   /** On a compaction summary: roughly how many tokens it replaced more than it takes ("saved 666.2k tokens"). */
   z.object({ kind: z.literal('compaction'), saved: z.number().int().nonnegative() }),
   /**

@@ -11,6 +11,8 @@ export interface ConfirmDialogProps {
   description?: ReactNode;
   /** Label of the destructive action (default "Delete"). */
   confirmLabel?: string;
+  /** `primary` for an action that destroys nothing, asked about because something else is going on. */
+  tone?: 'danger' | 'primary';
   cancelLabel?: string;
   /**
    * Runs the action. A returned promise keeps the dialog open with a spinner on the
@@ -20,7 +22,7 @@ export interface ConfirmDialogProps {
   className?: string;
 }
 
-/** Destructive confirmation (400 wide, pad 20). Focus starts on the confirm button. */
+/** Confirmation, destructive unless `tone` says otherwise (400 wide, pad 20). Focus starts on the confirm button. */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   description,
   confirmLabel = 'Delete',
   cancelLabel = 'Cancel',
+  tone = 'danger',
   onConfirm,
   className,
 }: ConfirmDialogProps) {
@@ -68,7 +71,7 @@ export function ConfirmDialog({
             <AlertDialog.Close disabled={pending} render={<Button variant="secondary" />}>
               {cancelLabel}
             </AlertDialog.Close>
-            <Button ref={confirmRef} variant="danger" loading={pending} onClick={() => void confirm()}>
+            <Button ref={confirmRef} variant={tone} loading={pending} onClick={() => void confirm()}>
               {confirmLabel}
             </Button>
           </div>

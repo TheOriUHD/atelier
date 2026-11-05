@@ -226,5 +226,11 @@ export const migrations: { name: string; statements: string[] }[] = [
       "ALTER TABLE `usage_events` ADD `videos` integer DEFAULT 0 NOT NULL;",
       "ALTER TABLE `usage_events` ADD `video_seconds` real DEFAULT 0 NOT NULL;"
     ]
+  },
+  {
+    "name": "20261105193140_checkpoint_folders",
+    "statements": [
+      "ALTER TABLE `checkpoints` ADD `workspace_id` text;"
+    ]
   }
 ];

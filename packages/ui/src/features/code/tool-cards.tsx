@@ -3,11 +3,12 @@
  * edits as inline diffs, commands with their live output and exit status, sub-agents with their own transcript.
  */
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { Bot, Film, ListChecks, Maximize2, MessageSquare } from 'lucide-react';
+import { Bot, Film, FolderInput, ListChecks, Maximize2, MessageSquare } from 'lucide-react';
 import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolCallPart, type ToolResultPart } from '@atelier/protocol';
 import { Badge, DiffStat, Icon, IconButton, ThinkingDots, cn } from '../../components/ui/index.ts';
 import { queuedLabel, useLiveSession, type LiveSessionState } from '../../lib/live-session.ts';
 import { blobUrl } from '../../lib/platform.ts';
+import { useWorkspaces } from '../../lib/queries.ts';
 import { Markdown, OpenFilePath } from '../chat/markdown.tsx';
 import { Chevron, MessageError, ProviderStopped, Summary, ThinkingBlock, ThinkingText, TranscriptDetail, detailClass, elapsed, inputPreview, useNow } from '../chat/parts.tsx';
 import { LINE } from '../chat/rows.ts';
@@ -15,6 +16,7 @@ import { isStreaming, stepView, toolResults, turnItems, type ActivityStepView } 
 import { ChangeView } from './change-view.tsx';
 import { DiffCard, editRows, placedEditRows, writeRows } from './inline-diff.tsx';
 import { displayPath, languageOf } from './paths.ts';
+import { workspaceLabel } from './workspaces.ts';
 import { TodoList } from './todo-widget.tsx';
 import { OWN_CARD, activityLabel, failedCount, messageTargetKind } from './activity-summary.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
@@ -977,6 +979,23 @@ export function AgentNotice({ notice }: { notice: Extract<Notice, { kind: 'agent
           View transcript
         </button>
       )}
+    </div>
+  );
+}
+
+/** The person moved the session to another folder (`sessions.move`): one line where it happened, the paths in its tooltip. */
+export function MovedNotice({ notice }: { notice: Extract<Notice, { kind: 'moved' }> }) {
+  const { data: workspaces = [] } = useWorkspaces();
+  const name = ({ workspaceId, root }: { workspaceId: string; root: string }) => {
+    const folder = workspaces.find((w) => w.id === workspaceId);
+    return folder ? workspaceLabel(folder) : (root.split(/[\\/]/).filter(Boolean).at(-1) ?? root);
+  };
+  return (
+    <div {...LINE} title={`${notice.from.root} → ${notice.to.root}`} className="flex min-h-6 items-center gap-1.5 text-footnote text-fg-muted">
+      <Icon icon={FolderInput} className="size-3.5 shrink-0" />
+      <span className="min-w-0 truncate">
+        Moved from {name(notice.from)} to <span className="text-fg-secondary">{name(notice.to)}</span>
+      </span>
     </div>
   );
 }

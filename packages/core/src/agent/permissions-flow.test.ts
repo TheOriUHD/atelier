@@ -1363,6 +1363,88 @@ describe('a session that moves to another folder', () => {
   });
 });
 
+describe('a session the person moves to another folder', () => {
+  const folders: Record<string, string> = { w1: '/work/app', w2: '/work/api' };
+  const deps = (extra: Partial<ChatServiceDeps> = {}): Partial<ChatServiceDeps> => ({
+    moveTarget: async (session, id) => {
+      if (!folders[id]) throw new Error('That folder is no longer in your list.');
+      return { from: { id: session.workspaceId!, root: folders[session.workspaceId!]! }, to: { id, root: folders[id]! } };
+    },
+    gitSnapshot: async () => ({ branch: 'main', defaultBranch: 'main', changed: 2, subjects: [] }),
+    ...extra,
+  });
+  const lastNote = async (id: string) => (await repo.history(id)).at(-1)!;
+
+  it('goes on in the new folder with its prompt rebuilt, and tells the model in a note the transcript shows', async () => {
+    const changed: string[] = [];
+    const chat = service(replier, null, undefined, {}, deps({ sessionChanged: (summary) => void changed.push(summary.workspaceId ?? '') }));
+    const s = await repo.create({ mode: 'code', userId: null, workspaceId: 'w1' });
+    await repo.update(s.id, { systemSnapshot: 'old-prompt' });
+
+    expect(await chat.moveTo(s.id, 'w2')).toEqual({ pending: false });
+    expect(await repo.getRow(s.id)).toMatchObject({ workspaceId: 'w2', systemSnapshot: null });
+    expect(changed).toEqual(['w2']);
+    const note = await lastNote(s.id);
+    expect(note).toMatchObject({ kind: 'context', parts: [{ type: 'context', notice: { kind: 'moved', from: { workspaceId: 'w1', root: '/work/app' }, to: { workspaceId: 'w2', root: '/work/api' } } }] });
+    const text = (note.parts[0] as { text: string }).text;
+    expect(text).toContain('It now works in /work/api (it was in /work/app).');
+    expect(text).toContain('on branch main, with 2 changed files');
+    // Its own folder isn't a move.
+    expect(await chat.moveTo(s.id, 'w2')).toEqual({ pending: false });
+    expect((await repo.history(s.id)).filter((m) => m.kind === 'context')).toHaveLength(1);
+  });
+
+  it('says why when it can’t move, and stays', async () => {
+    const chat = service(replier, null, undefined, {}, deps());
+    const s = await repo.create({ mode: 'code', userId: null, workspaceId: 'w1' });
+    await expect(chat.moveTo(s.id, 'gone')).rejects.toThrow('no longer in your list');
+    expect(await repo.getRow(s.id)).toMatchObject({ workspaceId: 'w1' });
+    const child = await repo.create({ mode: 'code', userId: null, workspaceId: 'w1', parentSessionId: s.id });
+    await expect(chat.moveTo(child.id, 'w2')).rejects.toThrow('can’t change folder');
+  });
+
+  it('waits for a reply to end, and a move back to its own folder calls it off', async () => {
+    const releases: (() => void)[] = [];
+    const held: ProviderAdapter = {
+      ...writer,
+      async *stream(req): AsyncIterable<StreamEvent> {
+        if (req.system.some((b) => b.text.includes('short title'))) {
+          yield { type: 'text', delta: 'Title' };
+          yield { type: 'finish', reason: 'end' };
+          return;
+        }
+        await new Promise<void>((r) => {
+          releases.push(r);
+          req.signal.addEventListener('abort', () => r(), { once: true });
+        });
+        yield { type: 'text', delta: 'done' };
+        yield { type: 'finish', reason: 'end' };
+      },
+    };
+    const chat = service(held, null, undefined, {}, deps());
+    const s = await repo.create({ mode: 'code', userId: null, workspaceId: 'w1' });
+
+    await chat.send(s.id, [{ type: 'text', text: 'go' }]);
+    expect(await chat.moveTo(s.id, 'w2')).toEqual({ pending: true });
+    expect(await chat.moveTo(s.id, 'w1')).toEqual({ pending: false });
+    await until(() => releases.length === 1);
+    releases[0]!();
+    await chat.settle(s.id);
+    expect(await repo.getRow(s.id)).toMatchObject({ workspaceId: 'w1' });
+
+    await chat.send(s.id, [{ type: 'text', text: 'again' }]);
+    expect(await chat.moveTo(s.id, 'w2')).toEqual({ pending: true });
+    expect(await repo.getRow(s.id)).toMatchObject({ workspaceId: 'w1' });
+    await until(() => releases.length === 2);
+    releases[1]!();
+    await chat.settle(s.id);
+    // The run's end applies it, a moment after the run settles: the folder, then the note.
+    for (let i = 0; i < 100 && (await lastNote(s.id)).kind !== 'context'; i++) await new Promise((r) => setTimeout(r, 10));
+    expect(await repo.getRow(s.id)).toMatchObject({ workspaceId: 'w2' });
+    expect((await lastNote(s.id)).parts[0]).toMatchObject({ notice: { kind: 'moved' } });
+  });
+});
+
 describe('the ChangeDirectory tool in a run', () => {
   it('asks the person, takes their answer with the folder, moves the session and goes on', async () => {
     const adapter: ProviderAdapter = {

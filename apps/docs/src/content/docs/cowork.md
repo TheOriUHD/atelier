@@ -72,7 +72,8 @@ A task has three parts:
   prompts appear in the same place.
 
 The conversation header shows a folder badge (**Offline** if the folder's computer is not reachable) and the title menu
-(**Pin**, **Rename**, **Delete**, and **Remote control** on a server account).
+(**Pin**, **Rename**, **Delete**, and **Remote control** on a server account). The folder badge is also a menu that moves
+the task to another of your folders on the same computer, as in [Code](/code/#folders).
 
 ### Output files and previews
 

@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openDatabase, type Db } from '../store/db.ts';
-import { users } from '../store/schema.ts';
+import { users, workspaces } from '../store/schema.ts';
 import { hostReader, renderInstructions } from '../instructions/instructions.ts';
 import { NodeWorkspaceFs } from '../fs/workspace-fs.ts';
 import { codeContext } from './code-context.ts';
@@ -61,6 +61,27 @@ describe.skipIf(!built)('WorkspaceManager', () => {
     expect((await manager.openFrom('ada', sibling.id, app)).id).toBe(from.id);
     await expect(manager.openFrom('ada', from.id, '../missing')).rejects.toBeInstanceOf(WorkspaceError);
     await expect(manager.openFrom('bob', from.id, '../api')).rejects.toThrow(/no folder to move from/);
+  });
+
+  it('lets the person move a session between their folders on the same computer only', async () => {
+    mkdirSync(join(dir, 'app'));
+    mkdirSync(join(dir, 'api'));
+    const app = await manager.addLocal('ada', join(dir, 'app'));
+    const api = await manager.addLocal('ada', join(dir, 'api'));
+    const row = (id: string, extra: Partial<typeof workspaces.$inferInsert>) =>
+      db.insert(workspaces).values({ id, userId: 'ada', kind: 'local', name: id, root: `/elsewhere/${id}`, createdAt: 0, lastUsedAt: 0, ...extra });
+    await row('on-a-host', { kind: 'ssh', host: 'build-box' });
+    await row('a-codespace', { kind: 'codespace', host: 'cs-1' });
+    await row('a-scratch', { scratch: true });
+
+    expect(await manager.moveTarget('ada', app.id, api.id)).toEqual({ from: app, to: api });
+    await expect(manager.moveTarget('ada', app.id, 'on-a-host')).rejects.toThrow('on another computer');
+    await expect(manager.moveTarget('ada', app.id, 'a-codespace')).rejects.toThrow('A codespace is one repository');
+    await expect(manager.moveTarget('ada', 'a-codespace', app.id)).rejects.toThrow('A codespace is one repository');
+    await expect(manager.moveTarget('ada', app.id, 'a-scratch')).rejects.toThrow('belongs to another session');
+    // Out of a folder Atelier made for this session, into one of the person's: that is what moving is for.
+    expect((await manager.moveTarget('ada', 'a-scratch', api.id)).to).toEqual(api);
+    await expect(manager.moveTarget('bob', app.id, api.id)).rejects.toThrow('no folder to move from');
   });
 
   it("tells the desktop about this computer's folders, however they were added, and lists them for it at start", async () => {

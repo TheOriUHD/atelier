@@ -121,6 +121,19 @@ describe('the file behind a permission card', () => {
   });
 });
 
+describe('moving a session to another folder', () => {
+  // The moves themselves are in permissions-flow.test.ts and the folder rules in workspace-manager.test.ts: this
+  // server runs no folders of its own.
+  it('is only for a session in a folder, that the person may see', async () => {
+    const chat = await client.call('sessions.create', { mode: 'chat' });
+    expect(await code(client.call('sessions.move', { id: chat.id, workspaceId: 'anywhere' }))).toBe('invalid_request');
+    const { temporaryPassword } = await client.call('users.create', { username: 'dan', name: 'Dan', role: 'user' });
+    const dan = await signedIn('dan', temporaryPassword);
+    await dan.call('account.changePassword', { current: temporaryPassword, next: 'dan-new-password' });
+    expect(await code(dan.call('sessions.move', { id: chat.id, workspaceId: 'anywhere' }))).toBe('not_found');
+  });
+});
+
 describe('backend projects', () => {
   it('announces project changes when chats join or leave a project, so chat counts stay current', async () => {
     const project = await client.call('projects.create', { name: 'Docs', description: '' });

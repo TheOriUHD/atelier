@@ -1,5 +1,6 @@
-import { basename } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 import { launchDesktop, setUpLocal } from './desktop-app.ts';
 import { call, sendWhenIdle, tempConfigDir, tempRepo, verboseTranscript } from './fixtures.ts';
 
@@ -50,6 +51,63 @@ test('desktop Code: the agent asks to move the session to another folder and the
     // Git Bash on Windows writes `C:\Users/me/x` for its working directory: either separator will do.
     const pattern = second.split(/[\\/]/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\\\/]');
     await expect(page.getByText(new RegExp(`^Tool result: ${pattern}`))).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
+/** Opens `path` from the composer's folder chip (named `chip` there now) and trusts it. */
+async function openFolder(app: ElectronApplication, page: Page, path: string, chip: string): Promise<void> {
+  await app.evaluate(({ dialog }, picked) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [picked] })) as typeof dialog.showOpenDialog;
+  }, path);
+  await page.getByRole('button', { name: chip, exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Open folder…' }).click();
+  await page.getByRole('button', { name: 'Trust workspace' }).click();
+  await expect(page.getByRole('button', { name: basename(path) })).toBeVisible();
+}
+
+test('desktop Code: the person moves the session from the header, and Rewind restores each file in its own folder', async () => {
+  test.setTimeout(120_000);
+  const configDir = await tempConfigDir();
+  const first = await tempRepo({ 'notes.md': 'first\n' });
+  const second = await tempRepo({ 'notes.md': 'second\n' });
+  const app = await launchDesktop(configDir);
+  try {
+    const page = await app.firstWindow();
+    await setUpLocal(page);
+    await page.getByRole('radio', { name: 'Code' }).click();
+    // Both are the person's folders; the session starts in the first.
+    await openFolder(app, page, second, 'No folder');
+    await openFolder(app, page, first, basename(second));
+    const box = page.getByRole('textbox', { name: 'Message', exact: true });
+    const edit = (old: string) => call('Edit', { file_path: 'notes.md', old_string: old, new_string: `${old}, edited` });
+    await box.fill(edit('first'));
+    await box.press('Enter');
+    await page.getByRole('region', { name: 'Allow Atelier to edit notes.md?' }).getByRole('button', { name: 'Allow once' }).click();
+    await expect.poll(() => readFile(join(first, 'notes.md'), 'utf8')).toBe('first, edited\n');
+    await expect(page.getByText(/^Tool result: Edited notes\.md/)).toBeVisible();
+
+    // The header's folder is a menu of the person's other folders here.
+    await page.getByRole('button', { name: `Folder: ${basename(first)}` }).click();
+    await page.getByRole('menuitem', { name: basename(second) }).click();
+    await expect(page.getByText(`Moved to ${basename(second)}`)).toBeVisible();
+    await expect(page.getByText(`Moved from ${basename(first)} to ${basename(second)}`)).toBeVisible();
+    await expect(page.getByRole('button', { name: `Folder: ${basename(second)}` })).toBeVisible();
+
+    // The same relative path is now the other folder's file.
+    await box.fill(edit('second'));
+    await sendWhenIdle(page);
+    await page.getByRole('region', { name: 'Allow Atelier to edit notes.md?' }).getByRole('button', { name: 'Allow once' }).click();
+    await expect.poll(() => readFile(join(second, 'notes.md'), 'utf8')).toBe('second, edited\n');
+    expect(await readFile(join(first, 'notes.md'), 'utf8')).toBe('first, edited\n');
+
+    // Back to before the first edit: each file is restored where it is, the first folder's too.
+    await page.getByRole('button', { name: 'Rewind to here' }).first().click();
+    await page.getByRole('dialog', { name: 'Rewind' }).getByRole('button', { name: 'Restore code', exact: true }).click();
+    await expect(page.getByText('Restored 2 files')).toBeVisible();
+    expect(await readFile(join(first, 'notes.md'), 'utf8')).toBe('first\n');
+    expect(await readFile(join(second, 'notes.md'), 'utf8')).toBe('second\n');
   } finally {
     await app.close();
   }

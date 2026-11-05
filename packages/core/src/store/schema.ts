@@ -287,8 +287,13 @@ export const checkpoints = sqliteTable(
       .references(() => sessions.id, { onDelete: 'cascade' }),
     /** The person's message that started the turn. */
     messageId: text('message_id').notNull(),
-    /** As the tool named it: absolute, or relative to the workspace root. */
+    /**
+     * Absolute, on the folder's machine. Rows from before 0.4.2 have no `workspaceId` and keep the path as the tool
+     * named it: absolute, or relative to the folder the session was in.
+     */
     path: text('path').notNull(),
+    /** The folder the file is in: a session can move to another folder, and each file is restored in its own. */
+    workspaceId: text('workspace_id'),
     /** The content before the turn changed it; null when the file didn't exist. */
     beforeBlob: text('before_blob'),
     createdAt: integer('created_at').notNull(),

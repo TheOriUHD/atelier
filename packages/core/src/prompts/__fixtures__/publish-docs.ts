@@ -222,6 +222,7 @@ export const NOTE_WHEN: Record<string, { group: string; when: string }> = {
   'background-agent': { group: 'Agents and sessions', when: 'Code and Cowork: a sub-agent started with run_in_background ended. Carries its task, how it ended and its result.' },
   'session-message': { group: 'Agents and sessions', when: 'Code and Cowork: another of the person’s sessions, the parent or a sub-agent sent a message.' },
   'loop-tick': { group: 'Agents and sessions', when: 'Code and Cowork: a /loop sends its prompt again.' },
+  'folder-moved': { group: 'Agents and sessions', when: 'Code and Cowork: the person moved the session to another of their folders. Sent at once, as a note of its own; the system prompt is rebuilt for the next turn.' },
   'side-chat': { group: 'Agents and sessions', when: 'Every request of a side chat (/btw): it was asked beside the main session, answers briefly and only reads.' },
 };
 

@@ -38,6 +38,8 @@ The second chip is the folder. It lists **No folder** first (where it applies), 
 
 When the folder you choose is inside a git repository, the session's folder is the repository's top level.
 
+**Moving a session to another folder.** The folder in a session's header is a menu: pick another of your folders on the same computer (or SSH host), or **Open folder…** / **Browse remote folder…** to add one, and the session moves there. The conversation goes on; the files, terminal, Diff pane and tools follow, the model is told in a note, and the transcript shows **Moved from app to api**. A toast offers **Undo**. While a reply runs, the move waits for it to end (**Moving to api** next to the folder, and **Stay in app** in the menu calls it off). If background commands or sub-agents are still running, you're asked first: they finish in the old folder. Nothing is copied. A codespace can't move (it is one repository), and a session doesn't move to another computer. The agent can also ask to move with the ChangeDirectory tool (see [Tools](#tools)).
+
 **Trust.** Adding a folder that isn't in your list yet (on this computer, an SSH host or a codespace) asks **Trust this workspace?**. Choose **Trust workspace** or **Cancel**. Trusting matters because a folder can bring its own permission rules and [hooks](/hooks-and-plugins/). A desktop app connected to a server lends its trusted folders to that server's sessions, which then run commands as you on that computer.
 
 The backend keeps the answer, so it holds for any client, a browser included. Until a folder is trusted, the backend ignores what the folder brings itself: the permission rules and hooks in its `.atelier/` and `.claude/` settings files, its instruction files, and its skills, commands and agents. A codespace is trusted one at a time, even for the same repository. A folder that isn't trusted yet shows **Not trusted** (on the folder chip and in **Settings › Folders**, which has a **Trust** button for it) and is asked about when a session is about to start in it. Hooks and rules apply from the next call after you trust a folder; a session that already started keeps the instructions it began with.
@@ -285,7 +287,7 @@ The sidebar's session menu has more **Open in** options for the whole folder; se
 
 <!-- screenshot: the Rewind dialog with a list of messages and the three Restore buttons -->
 
-How it works: before a turn first writes or edits a file, Atelier saves the file's content (sub-agent edits included). Rewinding writes those saved versions back.
+How it works: before a turn first writes or edits a file, Atelier saves the file's content (sub-agent edits included) and which folder it is in. Rewinding writes those saved versions back, each in its own folder, also after the session moved to another one; a folder that can't be reached (its computer is offline) stops the rewind before anything is restored. Files in another folder than the session's show with their full path.
 
 **What is not restored:**
 

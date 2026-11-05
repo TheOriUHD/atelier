@@ -27,7 +27,7 @@ import { CopyButton } from './copy-button.tsx';
 import { ReadAloudButton } from './read-aloud.tsx';
 import { modelSubtitle, useModelGroups } from './models.ts';
 import { MessageTime } from './message-time.tsx';
-import { AgentNotice, MessageNotice } from '../code/tool-cards.tsx';
+import { AgentNotice, MessageNotice, MovedNotice } from '../code/tool-cards.tsx';
 import { Outbox, type OutboxActions } from './outbox.tsx';
 import { groupTurns, isStreaming, stepView, toolResults, turnItems, type ActivityStepView, type PartRef } from './turns.ts';
 
@@ -222,6 +222,7 @@ const UserMessage = memo(function UserMessage({
   if (message.parts.every((p) => p.type === 'context')) {
     if (notice?.kind === 'agent') return <AgentNotice notice={notice} />;
     if (notice?.kind === 'message') return <MessageNotice notice={notice} />;
+    if (notice?.kind === 'moved') return <MovedNotice notice={notice} />;
     // A command the person ran (`/compact`): what they sent, as their own message.
     if (notice?.kind === 'command')
       return (

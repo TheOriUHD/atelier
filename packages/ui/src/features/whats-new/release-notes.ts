@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, FileDiff, Film, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, FileDiff, Film, FolderInput, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -20,15 +20,20 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.4.2',
-    intro: 'Edits show where they are in the file.',
+    intro: 'Edits show where they are in the file, and a session can move to another folder.',
     highlights: [
       {
         icon: FileDiff,
         title: 'Line numbers and the whole file for every edit',
         body: 'An edit in the conversation now shows the file’s line numbers and a few lines above and below the change. Show the whole file, in the corner of the diff, opens the whole file as it is now with that change in place, scrolled to it. Edits from before this version keep their old diff.',
       },
+      {
+        icon: FolderInput,
+        title: 'Move a session to another folder',
+        body: 'Click the folder in a Code or Cowork session’s header and pick another of your folders on the same computer, or open one. The conversation goes on there, the model is told, and Undo moves it back. A reply that is running finishes first.',
+      },
     ],
-    also: ['Permission cards show the lines around an edit too.'],
+    also: ['Permission cards show the lines around an edit too.', 'Rewind after a folder change restores each file in its own folder. It used to write the old folder’s files into the new one.'],
   },
   {
     version: '0.4.1',

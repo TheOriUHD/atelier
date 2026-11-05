@@ -382,6 +382,12 @@ export const contract = {
       }),
       output: SessionSummary,
     },
+    /**
+     * Moves a Code or Cowork session to another of the person's folders on the same computer; the conversation goes on
+     * there. While a reply runs it moves when the reply ends (`pending`); its own folder calls a waiting move off.
+     * `workspace_unavailable` with the reason when it can't move there.
+     */
+    'sessions.move': { input: z.object({ id: z.string(), workspaceId: z.string() }), output: z.object({ pending: z.boolean() }) },
     /** A copy of a session's conversation (the branch it is on) as a new session in the same folder. */
     'sessions.fork': { input: Id, output: SessionSummary },
     /** A chat continued as a Cowork task: the same conversation, in the chat's sandbox folder when it has one. */

@@ -207,6 +207,26 @@ export class WorkspaceManager {
   }
 
   /**
+   * Where the person may move a session that works in `fromId` (`sessions.move`): another of their folders on the same
+   * machine (this backend's, the same desktop's, or the same SSH host reached the same way), reachable now. Not a
+   * codespace, which is one repository, nor a folder Atelier made for another session. Both folders, checked.
+   */
+  async moveTarget(userId: string, fromId: string, toId: string): Promise<{ from: WorkspaceSummary; to: WorkspaceSummary }> {
+    const rows = await this.deps.db.select().from(workspaces).where(and(eq(workspaces.userId, userId), inArray(workspaces.id, [fromId, toId]))).all();
+    const from = rows.find((r) => r.id === fromId);
+    const to = rows.find((r) => r.id === toId);
+    if (!from) throw new WorkspaceError('This session has no folder to move from.');
+    if (!to) throw new WorkspaceError('That folder is no longer in your list.');
+    if (from.kind === 'codespace' || to.kind === 'codespace') throw new WorkspaceError('A codespace is one repository. Start a new session for another one.');
+    if (to.scratch) throw new WorkspaceError('That folder belongs to another session.');
+    if (from.kind !== to.kind || from.host !== to.host || from.deviceId !== to.deviceId) {
+      throw new WorkspaceError('That folder is on another computer. A session moves between folders on the same computer.');
+    }
+    if (!this.reachable(to)) throw new WorkspaceError(`${to.name} is on a device that isn't connected.`);
+    return { from: this.summary(from), to: this.summary(to) };
+  }
+
+  /**
    * Trusts a folder on an SSH host, reached from this machine or (on a server) from the person's desktop `deviceId`;
    * `~/` paths start in the host's home folder.
    */

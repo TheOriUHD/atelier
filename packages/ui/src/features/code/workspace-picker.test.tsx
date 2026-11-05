@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CodespaceSummary, DeviceSummary, WorkspaceSummary } from '@atelier/protocol';
-import { TooltipProvider } from '../../components/ui/index.ts';
+import type { BackgroundTask, CodespaceSummary, DeviceSummary, SessionSummary, WorkspaceSummary } from '@atelier/protocol';
+import { Toaster, TooltipProvider } from '../../components/ui/index.ts';
 import { callsTo, resetBackend } from '../settings/test-backend.ts';
 import { TrustWorkspaceHost } from '../workspaces/trust.tsx';
+import { SessionTasks } from './tool-cards.tsx';
 import { FolderBadge, WorkspaceChips, useEnvironment } from './workspace-picker.tsx';
 
 const openSettings = vi.fn();
@@ -465,6 +466,90 @@ describe('the chips on a desktop that lends itself to its server', () => {
 });
 
 describe('the folder badge of a session', () => {
+  const session = (extra: Partial<SessionSummary> = {}): SessionSummary => ({
+    id: 's1',
+    mode: 'code',
+    workspaceId: 'app',
+    permissionMode: null,
+    title: 'Fix login',
+    projectId: null,
+    model: null,
+    effort: null,
+    connectorsOff: [],
+    research: false,
+    status: 'idle',
+    pinnedAt: null,
+    createdAt: 0,
+    updatedAt: 0,
+    ...extra,
+  });
+  const folders = [ws('app', { lastUsedAt: 3 }), ws('api', { lastUsedAt: 2 }), ws('docs', { lastUsedAt: 1, available: false }), ws('box', { kind: 'ssh', host: 'devbox' }), ws('scratch-1', { scratch: true })];
+  const header = (s: SessionSummary, tasks: BackgroundTask[] = []) => (
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <TooltipProvider>
+        <SessionTasks.Provider value={{ tasks }}>
+          <FolderBadge workspace={folders.find((w) => w.id === s.workspaceId)!} session={s} />
+        </SessionTasks.Provider>
+        <Toaster />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+  const open = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /^Folder: app/ }));
+    return screen.findByRole('menu');
+  };
+
+  it('moves the session to another of the person’s folders on the same computer, and says so with Undo', async () => {
+    resetBackend({ 'workspaces.list': () => folders, 'sessions.move': () => ({ pending: false }) });
+    const { rerender } = render(header(session()));
+    const menu = await open();
+    await waitFor(() => expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['api', 'docsIts computer is offline']));
+    expect(within(menu).getByRole('menuitem', { name: /docs/ }).getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'api' }));
+    await waitFor(() => expect(callsTo('sessions.move')).toEqual([{ id: 's1', workspaceId: 'api' }]));
+
+    // The session moved (its summary says so): the window that asked shows it, with Undo moving it back.
+    rerender(header(session({ workspaceId: 'api' })));
+    expect(await screen.findByText('Moved to api')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(callsTo('sessions.move').at(-1)).toEqual({ id: 's1', workspaceId: 'app' }));
+  });
+
+  it('while a reply runs, says the move waits for it and offers to stay', async () => {
+    resetBackend({ 'workspaces.list': () => folders, 'sessions.move': () => ({ pending: true }) });
+    render(header(session({ status: 'running' })));
+    const menu = await open();
+    expect(within(menu).getByText('It moves when this reply ends.')).toBeTruthy();
+    fireEvent.click(await within(menu).findByRole('menuitem', { name: 'api' }));
+    expect(await screen.findByText('Moving to api')).toBeTruthy();
+    fireEvent.click(within(await open()).getByRole('menuitem', { name: 'Stay in app' }));
+    await waitFor(() => expect(callsTo('sessions.move').at(-1)).toEqual({ id: 's1', workspaceId: 'app' }));
+    expect(screen.queryByText('Moving to api')).toBeNull();
+  });
+
+  it('asks first while background tasks run in the folder it leaves', async () => {
+    resetBackend({ 'workspaces.list': () => folders, 'sessions.move': () => ({ pending: false }) });
+    const task = { id: 't1', kind: 'command', status: 'running' } as BackgroundTask;
+    render(header(session(), [task]));
+    fireEvent.click(await within(await open()).findByRole('menuitem', { name: 'api' }));
+    const dialog = await screen.findByRole('alertdialog', { name: 'Move while a background task runs?' });
+    expect(dialog.textContent).toContain('Commands keep running in app');
+    expect(callsTo('sessions.move')).toEqual([]);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move' }));
+    await waitFor(() => expect(callsTo('sessions.move')).toEqual([{ id: 's1', workspaceId: 'api' }]));
+  });
+
+  it('stays a plain chip for a codespace, which is one repository', () => {
+    resetBackend({ 'workspaces.list': () => [] });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <FolderBadge workspace={ws('site', { kind: 'codespace', host: 'cs-1' })} session={session({ workspaceId: 'site' })} />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole('button', { name: /^Folder:/ })).toBeNull();
+    expect(screen.getByText('site')).toBeTruthy();
+  });
+
   it('says when the folder is not trusted and its own settings are ignored', () => {
     const { rerender } = render(<FolderBadge workspace={ws('site', { kind: 'codespace', host: 'cs-1', trusted: false })} />);
     expect(screen.getByText('Not trusted').getAttribute('title')).toMatch(/ignored until you trust it/);

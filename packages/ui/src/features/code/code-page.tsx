@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { Navigate, useNavigate, useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { GitBranch, Rows3 } from 'lucide-react';
-import type { GitStatus, PermissionMode, TranscriptView, WorkspaceSummary } from '@atelier/protocol';
+import type { GitStatus, PermissionMode, SessionSummary, TranscriptView, WorkspaceSummary } from '@atelier/protocol';
 import { Icon, IconButton, Menu, MenuContent, MenuGroup, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner, cn, toast } from '../../components/ui/index.ts';
 import { draftKeys } from '../../lib/drafts.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
@@ -319,7 +319,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
             <RunInTerminal.Provider value={workspace?.available ? runInTerminal : null}>
             <div className="flex min-h-0 flex-1 flex-col">
               <SessionHeader session={session}>
-                {workspace && <WorkspaceInfo workspace={workspace} git={git} onShowChanges={() => openPane('diff')} />}
+                {workspace && <WorkspaceInfo session={session ?? undefined} workspace={workspace} git={git} onShowChanges={() => openPane('diff')} />}
                 <Menu>
                   <MenuTrigger render={<IconButton icon={Rows3} label={`Transcript view: ${TRANSCRIPT_VIEWS.find((v) => v.value === view)!.label}`} size="sm" className="app-no-drag ml-auto text-fg-secondary" />} />
                   <MenuContent className="w-56">
@@ -489,10 +489,10 @@ function CodeSession({ sessionId }: { sessionId: string }) {
 }
 
 /** design/components.md › WorkspaceHeader: the folder, whether its machine is online, the branch and what changed. */
-function WorkspaceInfo({ workspace, git, onShowChanges }: { workspace: WorkspaceSummary; git: GitStatus | undefined; onShowChanges(): void }) {
+function WorkspaceInfo({ session, workspace, git, onShowChanges }: { session: SessionSummary | undefined; workspace: WorkspaceSummary; git: GitStatus | undefined; onShowChanges(): void }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5 text-footnote text-fg-muted">
-      <FolderBadge workspace={workspace} />
+      <FolderBadge workspace={workspace} {...(session ? { session } : {})} />
       {git?.branch && (
         <span className="flex min-w-0 items-center gap-1 font-mono text-code">
           <Icon icon={GitBranch} className="size-3.5" />

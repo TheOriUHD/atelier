@@ -1,9 +1,10 @@
 /**
  * Checkpoints and Rewind (ARCHITECTURE §8). Before a turn first writes a file, its content is kept as a blob;
- * rewinding to one of the person's messages restores every file the turns since then changed. Changes made
- * by Bash are not tracked.
+ * rewinding to one of the person's messages restores every file the turns since then changed, each in the folder it is
+ * in, also after the session moved to another one. Changes made by Bash are not tracked.
  */
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { posix, win32 } from 'node:path';
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { SessionRepo } from '../sessions/session-repo.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import type { Db } from '../store/db.ts';
@@ -18,10 +19,12 @@ export class Checkpoints {
   constructor(private readonly deps: { db: Db; blobs: BlobStore; repo: SessionRepo }) {}
 
   /** Keeps `path`'s current content unless this turn already did. Sub-agent sessions count toward their root. */
-  async capture(ws: Workspace, sessionId: string, path: string): Promise<void> {
+  async capture(ws: Workspace, sessionId: string, named: string): Promise<void> {
     const root = await this.root(sessionId);
     const turn = await this.deps.repo.currentTurn(root);
     if (!turn) return;
+    // Where the file is, whatever folder the session is in when it is rewound.
+    const path = (ws.pathSep === '\\' ? win32 : posix).resolve(ws.root, named);
     const key = and(eq(checkpoints.sessionId, root), eq(checkpoints.messageId, turn), eq(checkpoints.path, path));
     if (await this.deps.db.select({ id: checkpoints.id }).from(checkpoints).where(key).get()) return;
 
@@ -34,15 +37,16 @@ export class Checkpoints {
     }
     await this.deps.db
       .insert(checkpoints)
-      .values({ id: newId(), sessionId: root, messageId: turn, path, beforeBlob, createdAt: Date.now() })
+      .values({ id: newId(), sessionId: root, messageId: turn, path, workspaceId: ws.id, beforeBlob, createdAt: Date.now() })
       .onConflictDoNothing();
   }
 
   /**
    * Restores the files changed from `messageId` (one of the person's messages on the active branch) onward to
-   * how they were before it, and returns their paths.
+   * how they were before it, each in its own folder (`open`; null for a row from before folders were kept, which is in
+   * the session's), and returns their paths.
    */
-  async rewind(ws: Workspace, sessionId: string, messageId: string): Promise<string[]> {
+  async rewind(sessionId: string, messageId: string, open: (workspaceId: string | null) => Promise<Workspace>): Promise<string[]> {
     const { messages } = await this.deps.repo.branch(sessionId);
     const from = messages.findIndex((m) => m.id === messageId);
     if (from < 0) throw new Error('That message is not in this conversation.');
@@ -53,8 +57,12 @@ export class Checkpoints {
       .where(and(eq(checkpoints.sessionId, sessionId), inArray(checkpoints.messageId, turns)))
       .orderBy(desc(checkpoints.createdAt))
       .all();
+    // Every folder first: one that can't be reached restores nothing, rather than half.
+    const folders = new Map<string | null, Workspace>();
+    for (const id of new Set(rows.map((r) => r.workspaceId))) folders.set(id, await open(id));
     // Newest first, so a file changed in several turns ends up as it was before the earliest.
     for (const row of rows) {
+      const ws = folders.get(row.workspaceId)!;
       if (row.beforeBlob) {
         const content = Buffer.from(await this.deps.blobs.read(row.beforeBlob)).toString('base64');
         await ws.runner.call('fs.write', { path: row.path, content, encoding: 'base64', mkdirp: true });
@@ -74,12 +82,18 @@ export class Checkpoints {
   }
 
   /**
-   * Every file the conversation's turns changed, in the order they were first changed, with how it was before that
-   * (null: it didn't exist): the Diff pane's "this session" compare.
+   * Every file the conversation's turns changed in `workspaceId`, in the order they were first changed, with how it was
+   * before that (null: it didn't exist): the Diff pane's "this session" compare. Rows from before folders were kept count
+   * as the folder's.
    */
-  async firstVersions(sessionId: string): Promise<{ path: string; before(): Promise<string | null> }[]> {
+  async firstVersions(sessionId: string, workspaceId: string): Promise<{ path: string; before(): Promise<string | null> }[]> {
     // Insertion order breaks ties between checkpoints of the same millisecond.
-    const rows = await this.deps.db.select().from(checkpoints).where(eq(checkpoints.sessionId, sessionId)).orderBy(checkpoints.createdAt, sql`rowid`).all();
+    const rows = await this.deps.db
+      .select()
+      .from(checkpoints)
+      .where(and(eq(checkpoints.sessionId, sessionId), or(eq(checkpoints.workspaceId, workspaceId), isNull(checkpoints.workspaceId))))
+      .orderBy(checkpoints.createdAt, sql`rowid`)
+      .all();
     const first = new Map<string, string | null>();
     for (const r of rows) if (!first.has(r.path)) first.set(r.path, r.beforeBlob);
     return [...first].map(([path, blob]) => ({

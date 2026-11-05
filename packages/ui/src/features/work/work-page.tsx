@@ -126,7 +126,7 @@ export function WorkPage() {
         {/* Narrow screens: the preview covers the column instead. */}
         <div className={cn('flex min-w-0 flex-1 flex-col', preview && 'mr-[calc(50%+16px)] max-md:invisible max-md:mr-0')}>
           <FileDropZone onFiles={(files) => void attachments.add(files)}>
-            <SessionHeader session={session}>{workspace && <FolderBadge workspace={workspace} />}</SessionHeader>
+            <SessionHeader session={session}>{workspace && <FolderBadge workspace={workspace} {...(session ? { session } : {})} />}</SessionHeader>
             <div className="flex min-h-0 flex-1">
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="relative min-h-0 flex-1">

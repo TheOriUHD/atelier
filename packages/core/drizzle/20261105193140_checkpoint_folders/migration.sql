@@ -1,0 +1,1 @@
+ALTER TABLE `checkpoints` ADD `workspace_id` text;

@@ -3,13 +3,14 @@
  * (this computer, a codespace, another computer of the person's, an SSH host), the folder there (or no folder), and
  * adding one.
  */
-import { useState } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cloud, FolderClosed, FolderDot, FolderPlus, Laptop, Monitor, Plug, Plus, Server, type LucideIcon } from 'lucide-react';
-import type { CodespaceSummary, SshConnectionView, WorkspaceSummary } from '@atelier/protocol';
+import { ChevronDown, Cloud, FolderClosed, FolderDot, FolderPlus, Laptop, Monitor, Plug, Plus, Server, Undo2, type LucideIcon } from 'lucide-react';
+import type { CodespaceSummary, SessionSummary, SshConnectionView, WorkspaceSummary } from '@atelier/protocol';
 import {
   Badge,
   Button,
+  ConfirmDialog,
   Icon,
   IconButton,
   Menu,
@@ -22,6 +23,8 @@ import {
   MenuSeparator,
   MenuSubmenu,
   MenuTrigger,
+  Spinner,
+  cn,
   toast,
 } from '../../components/ui/index.ts';
 import { lendSsh, useLending } from '../../lib/lending.ts';
@@ -35,6 +38,7 @@ import { SshConnectionDialog } from '../ssh/connection-dialog.tsx';
 import { sshName, useSshConnections } from '../ssh/use-ssh.ts';
 import { useDialog } from '../settings/use-dialog.ts';
 import { OpenRepoDialog } from './open-repo-dialog.tsx';
+import { SessionTasks } from './tool-cards.tsx';
 import { NO_FOLDER, environmentOf, initialChoice, initialWorkspace, recentWorkspaces, workspaceLabel, type Environment, type FolderChoice } from './workspaces.ts';
 
 export const NO_FOLDER_HINT = 'Open the desktop app to work in a folder on your computer, or use a codespace.';
@@ -191,13 +195,7 @@ export function WorkspaceChips({ environment, folders, value, noFolder, onEnviro
   const chooseRemote = (path: string) => {
     browse.onOpenChange(false);
     const picked = host!;
-    void run('ssh', async () => {
-      const known = workspaces.some((w) => w.kind === 'ssh' && w.host === picked && w.root === path && (!w.deviceId || w.deviceId === desktop?.device.id));
-      if (!known && !(await requestTrust(path, picked))) return null;
-      // Chosen on this computer: a server may reach the host from here.
-      await lendSsh(picked);
-      return rpc().call('workspaces.addSsh', { host: picked, path });
-    });
+    void run('ssh', () => addSshFolder(picked, path, workspaces));
   };
   /** A codespace's checkout is its folder; picking one that isn't yet makes it one, after "Trust this workspace?". */
   const pickCodespace = (picked: CodespaceSummary) => {
@@ -413,14 +411,30 @@ function SshHostItems({
   );
 }
 
-/** The session header's folder chip, with where it lives and an Offline badge. */
-export function FolderBadge({ workspace }: { workspace: WorkspaceSummary }) {
+const BADGE_CLASS = 'flex h-6 min-w-0 items-center gap-1 rounded-sm bg-badge-bg px-1.5 text-footnote text-fg-secondary';
+
+/**
+ * The session header's folder chip, with where it lives and an Offline badge. For a session that can move (anything but
+ * a codespace, which is one repository), the chip is a menu that moves it to another folder (`FolderMenu`).
+ */
+export function FolderBadge({ workspace, session }: { workspace: WorkspaceSummary; session?: SessionSummary }) {
+  const chip = (
+    <>
+      <Icon icon={FolderClosed} className="size-3.5" />
+      <span className="truncate">{workspaceLabel(workspace)}</span>
+    </>
+  );
   return (
     <>
-      <span title={workspace.root} className="flex h-6 min-w-0 items-center gap-1 rounded-sm bg-badge-bg px-1.5 text-footnote text-fg-secondary">
-        <Icon icon={FolderClosed} className="size-3.5" />
-        <span className="truncate">{workspaceLabel(workspace)}</span>
-      </span>
+      {session && !session.temporary && workspace.kind !== 'codespace' ? (
+        <FolderMenu session={session} workspace={workspace}>
+          {chip}
+        </FolderMenu>
+      ) : (
+        <span title={workspace.root} className={BADGE_CLASS}>
+          {chip}
+        </span>
+      )}
       <KindBadge workspace={workspace} />
       {workspace.trusted === false && (
         <Badge tone="warning" title="Its own settings, hooks and instruction files are ignored until you trust it (Settings › Folders).">
@@ -430,4 +444,187 @@ export function FolderBadge({ workspace }: { workspace: WorkspaceSummary }) {
       {!workspace.available && <Badge tone="warning">Offline</Badge>}
     </>
   );
+}
+
+/** Whether a session can move between two folders: the same kind, on the same computer or SSH host, reached the same way. */
+export const sameMachine = (a: WorkspaceSummary, b: WorkspaceSummary) => a.kind === b.kind && a.host === b.host && a.deviceId === b.deviceId;
+
+/**
+ * The folder chip of a session as a menu (design/components.md › WorkspaceHeader): moves the session to another of the
+ * person's folders on the same computer, or one opened there. The conversation goes on in the new folder; while a reply
+ * runs it moves when the reply ends ("Moving to …", with Stay here). Background tasks still running are said first. The
+ * window that moved it says so with Undo.
+ */
+function FolderMenu({ session, workspace, children }: { session: SessionSummary; workspace: WorkspaceSummary; children: ReactNode }) {
+  const qc = useQueryClient();
+  const { data: workspaces = [] } = useWorkspaces();
+  const running = useContext(SessionTasks)?.tasks.filter((t) => t.status === 'running').length ?? 0;
+  const connections = useSshConnections();
+  const browse = useDialog();
+  const [adding, setAdding] = useState(false);
+  const [waiting, setWaiting] = useState<WorkspaceSummary | null>(null);
+  const [confirming, setConfirming] = useState<WorkspaceSummary | null>(null);
+  /** The folder this window asked for: its arrival is announced here, with Undo. */
+  const asked = useRef<string | null>(null);
+  const previous = useRef(session.workspaceId);
+  const busy = session.status === 'running' || session.status === 'waiting';
+  const targets = recentWorkspaces(workspaces.filter((w) => w.id !== workspace.id && !w.scratch && sameMachine(w, workspace)));
+  // Adding a folder works where the composer's folder chip adds one: on this computer, or the SSH host from here.
+  const here = desktop ? envOf(workspace) : null;
+  const add = here === 'local' && workspace.kind === 'local' ? 'Open folder…' : here === 'ssh' ? 'Browse remote folder…' : null;
+
+  const move = async (to: WorkspaceSummary) => {
+    asked.current = to.id;
+    try {
+      const { pending } = await rpc().call('sessions.move', { id: session.id, workspaceId: to.id });
+      setWaiting(pending ? to : null);
+    } catch (e) {
+      asked.current = null;
+      toast.error(describeError(e).message);
+    }
+  };
+  const pick = (to: WorkspaceSummary) => (running ? setConfirming(to) : void move(to));
+  const stay = () => {
+    asked.current = null;
+    setWaiting(null);
+    void rpc().call('sessions.move', { id: session.id, workspaceId: workspace.id }).catch((e: unknown) => toast.error(describeError(e).message));
+  };
+  /** Adds a folder with the chip busy, then moves there. */
+  const addThenMove = async (added: () => Promise<WorkspaceSummary | null>) => {
+    setAdding(true);
+    try {
+      const folder = await added();
+      if (!folder) return;
+      // The header names the folder from the list: it has to be in it before the session moves.
+      await qc.invalidateQueries({ queryKey: keys.workspaces });
+      if (folder.id !== workspace.id) pick(folder);
+    } catch (e) {
+      toast.error(describeError(e).message);
+    } finally {
+      setAdding(false);
+    }
+  };
+  const openFolder = () =>
+    void addThenMove(async () => {
+      const path = await chooseLocalFolder();
+      return path ? rpc().call('workspaces.addLocal', { path }) : null;
+    });
+  const browseRemote = () => void lendSsh(workspace.host!).then(browse.show, (e: unknown) => toast.error(describeError(e).message));
+  const chooseRemote = (path: string) => {
+    browse.onOpenChange(false);
+    void addThenMove(() => addSshFolder(workspace.host!, path, workspaces));
+  };
+
+  // Moved, now or as the reply ended: the window that asked says so, with Undo (itself a move back).
+  useEffect(() => {
+    const from = previous.current;
+    previous.current = session.workspaceId;
+    if (from === session.workspaceId) return;
+    setWaiting(null);
+    if (!from || asked.current !== session.workspaceId) return;
+    asked.current = null;
+    const to = workspaces.find((w) => w.id === session.workspaceId);
+    toast(`Moved to ${to ? workspaceLabel(to) : 'another folder'}`, {
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          asked.current = from;
+          void rpc().call('sessions.move', { id: session.id, workspaceId: from }).catch((e: unknown) => toast.error(describeError(e).message));
+        },
+      },
+    });
+  }, [session.id, session.workspaceId, workspaces]);
+  // A move that waited for the reply and couldn't happen (its note in the conversation says why) stops showing.
+  useEffect(() => {
+    if (busy || !waiting) return;
+    const timer = setTimeout(() => setWaiting(null), 5000);
+    return () => clearTimeout(timer);
+  }, [busy, waiting]);
+
+  return (
+    <>
+      <Menu>
+        <MenuTrigger
+          render={<button type="button" title={workspace.root} aria-label={`Folder: ${workspaceLabel(workspace)}`} className={cn(BADGE_CLASS, 'app-no-drag outline-none focus-ring hover:bg-fill-ghost-hover hover:text-fg')} />}
+        >
+          {children}
+          {adding ? <Spinner size="sm" label="Adding the folder" /> : <Icon icon={ChevronDown} className="size-3 shrink-0" />}
+        </MenuTrigger>
+        <MenuContent className="w-72">
+          <MenuGroup>
+            <MenuLabel>Move this session to</MenuLabel>
+            {busy && <p className="px-2 pb-1 text-footnote text-fg-muted">It moves when this reply ends.</p>}
+            {targets.length ? (
+              targets.map((w) => (
+                <MenuItem
+                  key={w.id}
+                  icon={FolderClosed}
+                  disabled={!w.available}
+                  title={w.kind === 'ssh' ? workspaceLabel(w) : w.root}
+                  description={w.available ? undefined : 'Its computer is offline'}
+                  onClick={() => pick(w)}
+                >
+                  {workspaceLabel(w)}
+                  <KindBadge workspace={w} className="ml-1.5" />
+                </MenuItem>
+              ))
+            ) : (
+              <MenuItem disabled description={add ? undefined : 'Folders on this computer show here'}>
+                No other folders here
+              </MenuItem>
+            )}
+          </MenuGroup>
+          {add && (
+            <>
+              <MenuSeparator />
+              <MenuItem icon={FolderPlus} onClick={add === 'Open folder…' ? openFolder : browseRemote}>
+                {add}
+              </MenuItem>
+            </>
+          )}
+          {waiting && (
+            <>
+              <MenuSeparator />
+              <MenuItem icon={Undo2} onClick={stay}>
+                Stay in {workspaceLabel(workspace)}
+              </MenuItem>
+            </>
+          )}
+        </MenuContent>
+      </Menu>
+      {waiting && (
+        <Badge tone="accent" title="It moves when this reply ends">
+          Moving to {workspaceLabel(waiting)}
+        </Badge>
+      )}
+      <ConfirmDialog
+        open={!!confirming}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title={`Move while ${running === 1 ? 'a background task runs' : `${running} background tasks run`}?`}
+        description={`Commands keep running in ${workspaceLabel(workspace)}, and sub-agents finish their work there. The conversation goes on in ${confirming ? workspaceLabel(confirming) : 'the new folder'}.`}
+        confirmLabel="Move"
+        tone="primary"
+        onConfirm={() => move(confirming!)}
+      />
+      {desktop && workspace.kind === 'ssh' && workspace.host && (
+        <RemoteFolderDialog
+          key={`browse-${browse.key}`}
+          open={browse.open}
+          onOpenChange={browse.onOpenChange}
+          host={workspace.host}
+          {...(connections.find((c) => c.host === workspace.host)?.folder ? { start: connections.find((c) => c.host === workspace.host)!.folder! } : {})}
+          onSelect={chooseRemote}
+        />
+      )}
+    </>
+  );
+}
+
+/** A folder on an SSH host, picked in the remote folder browser: trusted first unless it is one of the person's already. */
+async function addSshFolder(host: string, path: string, workspaces: readonly WorkspaceSummary[]): Promise<WorkspaceSummary | null> {
+  const known = workspaces.some((w) => w.kind === 'ssh' && w.host === host && w.root === path && (!w.deviceId || w.deviceId === desktop?.device.id));
+  if (!known && !(await requestTrust(path, host))) return null;
+  // Chosen on this computer: a server may reach the host from here.
+  await lendSsh(host);
+  return rpc().call('workspaces.addSsh', { host, path });
 }
