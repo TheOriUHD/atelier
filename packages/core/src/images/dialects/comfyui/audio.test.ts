@@ -34,6 +34,8 @@ describe('ComfyUI sound models', () => {
   it('never takes a sound checkpoint for a picture model', () => {
     expect(detectFamily('stable-audio-open-1.0.safetensors', 'checkpoint')).toBeNull();
     expect(detectFamily('ace_step_v1_3.5b.safetensors', 'checkpoint')).toBeNull();
+    // A picture model whose name only has a sound model's letters in it stays a picture model.
+    expect(detectFamily('xiaoyue_anime_xl.safetensors', 'checkpoint')).toBe('sdxl');
     expect(discoverModels(instance, INFO).map((m) => m.modelId)).toEqual(['sd_xl_base_1.0.safetensors']);
   });
 

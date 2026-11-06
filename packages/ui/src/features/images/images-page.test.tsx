@@ -350,5 +350,15 @@ describe('sounds on the page', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Sounds' }));
     await waitFor(() => expect(callsTo('generatedImages.list').at(-1)).toMatchObject({ kind: 'audio' }));
   });
+
+  it('keeps the filter while one is on, so there is a way back to everything', async () => {
+    // Videos from a provider that's gone: no model makes them now, and the Images filter shows none of them.
+    renderPage(({ kind }) => ({ items: kind === 'image' ? [image(2)] : [clip(1), image(2)], next: null, totalBytes: 1 }));
+    await screen.findByRole('button', { name: 'Play video: Prompt 1' });
+    fireEvent.click(screen.getByRole('radio', { name: 'Images' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Play video/ })).toBeNull());
+    fireEvent.click(screen.getByRole('radio', { name: 'All' }));
+    expect(await screen.findByRole('button', { name: 'Play video: Prompt 1' })).toBeTruthy();
+  });
 });
 

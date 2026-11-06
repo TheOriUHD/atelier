@@ -101,11 +101,11 @@ export class UsageLimits {
     const rows = sql
       .prepare(
         `SELECT ts / ${DAY} AS day, SUM(input + output + cache_read + cache_write) AS tokens, COALESCE(SUM(cost_usd), 0) AS cost, COUNT(*) AS requests, COUNT(*) - COUNT(cost_usd) AS unpriced
-         FROM usage_events WHERE user_id = ? AND ts >= ? AND images = 0 GROUP BY day`,
+         FROM usage_events WHERE user_id = ? AND ts >= ? AND images = 0 AND videos = 0 AND audios = 0 GROUP BY day`,
       )
       .all(userId, dayStart(now) - (WINDOW_DAYS - 1) * DAY) as { day: number; tokens: number; cost: number; requests: number; unpriced: number }[];
     for (const r of rows) days.set(r.day * DAY, { tokens: r.tokens, cost: r.cost, requests: r.requests, unpriced: r.unpriced });
-    const recent = (sql.prepare('SELECT ts FROM usage_events WHERE user_id = ? AND ts >= ? AND images = 0 ORDER BY ts').all(userId, now - HOUR) as { ts: number }[]).map((r) => r.ts);
+    const recent = (sql.prepare('SELECT ts FROM usage_events WHERE user_id = ? AND ts >= ? AND images = 0 AND videos = 0 AND audios = 0 ORDER BY ts').all(userId, now - HOUR) as { ts: number }[]).map((r) => r.ts);
     counter = { days, recent, inflight: 0, warned: new Map() };
     this.counters.set(userId, counter);
     return counter;

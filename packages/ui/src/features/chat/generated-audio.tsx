@@ -192,7 +192,10 @@ export function SoundPlayer({ sound, size = 'md', onDetails }: PlayerProps) {
           wave.current?.style.setProperty('--at-played', '0');
           setSecond(0);
         }}
-        onError={() => setBroken(true)}
+        onError={() => {
+          setState('paused');
+          setBroken(true);
+        }}
       />
       <button
         type="button"

@@ -223,6 +223,8 @@ export class VideoService {
           if (finish.reason === 'refused') return textOutput(`${finish.error?.message ?? `${model.config.name} refused this.`} That is final: tell the person, and don't reword the prompt to get past it.`, true);
           return textOutput(finish.error?.message ?? `${model.config.name} made no video.`, true);
         }
+        // Made, and billed: it counts for the turn even if it can't be kept.
+        reserved = false;
         progress.update({ phase: 'finishing' }, true);
         const stored = await this.store(video, input, model, session, ctx, { fit, usage, started });
         progress.update({ images: [stored] }, true);

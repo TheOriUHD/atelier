@@ -90,7 +90,7 @@ export function ImagesPage() {
                 <Icon icon={Search} className="pointer-events-none absolute top-2 left-2.5 text-fg-muted" />
                 <TextField aria-label="Search by prompt" placeholder="Search by prompt" value={typed} onChange={(e) => setTyped(e.target.value)} className="pl-8" />
               </div>
-              {(hasVideos || hasSounds) && (
+              {(hasVideos || hasSounds || kind !== 'all') && (
                 <SegmentedControl<Kind>
                   aria-label="Show"
                   value={kind}

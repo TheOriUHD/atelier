@@ -49,7 +49,7 @@ export const DISCOVERY_NODES = [
 ] as const;
 
 /** A checkpoint that holds a sound model, by its name: never a picture model, whatever else the name says. */
-export const SOUND_CHECKPOINT = /stable[-_ ]?audio|ace[-_ ]?step|audioldm|musicgen|yue/i;
+export const SOUND_CHECKPOINT = /stable[-_ ]?audio|ace[-_ ]?step|audioldm/i;
 
 const inputSpec = (info: NodeInfo | undefined, input: string): unknown => {
   const inputs = rec(rec(info).input);

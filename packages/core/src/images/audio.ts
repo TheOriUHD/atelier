@@ -52,12 +52,18 @@ const MP3_KBPS_V1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256
 const MP3_KBPS_V2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
 const ADTS_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
 
-/** Where the audio starts after an ID3v2 tag, or 0. */
+/** Zero bytes some encoders leave after a tag, skipped up to this far. */
+const MAX_PADDING = 64 * 1024;
+
+/** Where the audio starts after an ID3v2 tag and any zero padding behind it, or 0. */
 function afterId3(bytes: Uint8Array): number {
   if (bytes.byteLength < 10 || ascii(bytes, 0, 3) !== 'ID3') return 0;
   // A syncsafe size: seven bits a byte. A footer adds ten more.
   const size = ((bytes[6]! & 0x7f) << 21) | ((bytes[7]! & 0x7f) << 14) | ((bytes[8]! & 0x7f) << 7) | (bytes[9]! & 0x7f);
-  return 10 + size + (bytes[5]! & 0x10 ? 10 : 0);
+  let at = 10 + size + (bytes[5]! & 0x10 ? 10 : 0);
+  const limit = Math.min(bytes.byteLength, at + MAX_PADDING);
+  while (at < limit && bytes[at] === 0) at++;
+  return at;
 }
 
 interface Mp3Frame {

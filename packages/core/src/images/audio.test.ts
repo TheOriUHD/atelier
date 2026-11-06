@@ -73,4 +73,13 @@ describe('sound files', () => {
     expect(sniffAudio(cut)).toBe('audio/flac');
     expect(audioFacts(cut).seconds).toBeUndefined();
   });
+
+  it('finds an MP3 whose first frame comes after zero padding behind its tag', () => {
+    const mp3 = fixture('tone-cbr.mp3');
+    const tagEnd = 10 + ((mp3[6]! & 0x7f) << 21 | (mp3[7]! & 0x7f) << 14 | (mp3[8]! & 0x7f) << 7 | (mp3[9]! & 0x7f));
+    const padded = new Uint8Array(mp3.byteLength + 300);
+    padded.set(mp3.subarray(0, tagEnd));
+    padded.set(mp3.subarray(tagEnd), tagEnd + 300);
+    expect(sniffAudio(padded)).toBe('audio/mpeg');
+  });
 });

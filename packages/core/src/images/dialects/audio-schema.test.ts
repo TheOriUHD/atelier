@@ -50,6 +50,12 @@ describe('sound models read from their schemas', () => {
     expect(audioBody(schema, audioRequest({ prompt: 'jazz', audio: { kind: 'music', seconds: 30.4, lyrics: 'la' }, seed: 2 }))).toEqual({ prompt: 'jazz', lyrics: 'la', duration: 30, seed: 2 });
   });
 
+  it("never takes a sound endpoint for speech because its words are called text", () => {
+    const schema = readAudioInputs({ properties: { text: { type: 'string' }, duration_seconds: { type: 'number', minimum: 0.5, maximum: 22 }, prompt_influence: { type: 'number' } } }, {})!;
+    expect(audioKinds(schema, { category: 'text-to-audio', id: 'fal-ai/elevenlabs/sound-effects/v2' })).toEqual(['sound']);
+    expect(audioBody(schema, audioRequest({ prompt: 'a door creaks', audio: { kind: 'sound', seconds: 3 } }))).toEqual({ text: 'a door creaks', duration_seconds: 3 });
+  });
+
   it('takes a length in milliseconds for what it is', () => {
     const schema = readAudioInputs({ properties: { prompt: { type: 'string' }, music_length_ms: { type: 'integer', minimum: 3000, maximum: 600000 } } }, {})!;
     expect(audioOf(audioCapabilities(schema, ['music'], 'x')).durations).toEqual({ kind: 'range', min: 3, max: 600 });

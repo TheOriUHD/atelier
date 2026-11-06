@@ -197,6 +197,13 @@ describe('AudioService', () => {
     await expect(t.service.generate({ kind: 'speech', text: 'x' }, t.ctx())).rejects.toThrow("isn't a sound file");
   });
 
+  it('counts a sound the provider made for the turn, even when it is not one Atelier keeps', async () => {
+    const t = setup({ settings: { maxAudioPerTurn: 1 }, run: () => done(new TextEncoder().encode('<html>oops</html>')) });
+    await expect(t.service.generate({ kind: 'speech', text: 'x' }, t.ctx())).rejects.toThrow("isn't a sound file");
+    const again = await t.service.generate({ kind: 'speech', text: 'y' }, t.ctx());
+    expect(text(again)).toContain('limit of 1 sound in one turn');
+  });
+
   it("passes a provider's refusal on as final", async () => {
     const t = setup({
       run: async function* () {

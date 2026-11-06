@@ -50,6 +50,16 @@ describe('seeding from usage events', () => {
     expect(status.rows.find((r) => r.key === 'tokensPer30Days')).toMatchObject({ used: 100 + 160 + 100 + 100 });
   });
 
+  it('leaves video and sound rows out of the text limits, as images', async () => {
+    const { counter, insert } = await setup({ requestsPerHour: 10, costUsdPerDay: 100 });
+    await insert('ada', at('2026-11-02T09:59:00Z'));
+    await insert('ada', at('2026-11-02T09:58:00Z'), { input: 0, output: 0, videos: 1, videoSeconds: 5, costUsd: 3 });
+    await insert('ada', at('2026-11-02T09:57:00Z'), { input: 0, output: 0, audios: 1, audioSeconds: 4, costUsd: 0.5 });
+    const status = await counter.status('ada');
+    expect(status.rows.find((r) => r.key === 'requestsPerHour')).toMatchObject({ used: 1 });
+    expect(status.rows.find((r) => r.key === 'costUsdPerDay')?.used ?? 0).toBe(0);
+  });
+
   it('is seeded without a request that is recorded first, then inserted (how the backend records)', async () => {
     const { counter, insert } = await setup({ tokensPerDay: 1000 });
     counter.record('ada', { tokens: 100, costUsd: null });

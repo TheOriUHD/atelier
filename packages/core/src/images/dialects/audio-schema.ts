@@ -60,7 +60,9 @@ export function readAudioInputs(input: Record<string, unknown>, schemas: Record<
 
 /** What an endpoint makes: its category says speech or sound, and the schema and its name tell music from effects. */
 export function audioKinds(schema: AudioInputSchema, hint: { category?: string | undefined; id: string }): AudioKind[] {
-  if (hint.category === 'text-to-speech' || (schema.text && (schema.voice || !schema.prompt))) return ['speech'];
+  if (hint.category === 'text-to-speech') return ['speech'];
+  // fal's sound effects take `text` and no voice: what the category says it is wins over how the words are called.
+  if (hint.category !== 'text-to-audio' && schema.text && (schema.voice || !schema.prompt)) return ['speech'];
   if (schema.lyrics || /music|song|lyria|ace-?step|cassette|sonauto|diffrhythm|yue|riffusion|mureka|sonilo|musicgen/i.test(hint.id)) return ['music'];
   if (/sfx|sound-?effect|foley|mmaudio|audioldm|sound/i.test(hint.id)) return ['sound'];
   return ['music', 'sound'];

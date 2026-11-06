@@ -283,6 +283,8 @@ export class AudioService {
           if (finish.reason === 'refused') return textOutput(`${finish.error?.message ?? `${model.config.name} refused this.`} That is final: tell the person, and don't reword the request to get past it.`, true);
           return textOutput(finish.error?.message ?? `${model.config.name} made no sound.`, true);
         }
+        // Made, and likely billed: it counts for the turn even if it can't be kept, so a model can't loop on a format Atelier refuses.
+        reserved = false;
         progress.update({ phase: 'finishing' }, true);
         const stored = await this.store(sound, input, model, session, ctx, { fit, usage, started });
         progress.update({ images: [stored] }, true);
@@ -298,7 +300,6 @@ export class AudioService {
           costEstimated: stored.costEstimated ?? false,
           durationMs: stored.durationMs ?? 0,
         });
-        reserved = false;
         return resultOutput(stored, model, fit, Date.now() - started);
       } finally {
         if (model.config.freeAfterRun) await model.adapter.free?.(AbortSignal.timeout(15_000)).catch(() => undefined);

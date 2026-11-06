@@ -144,10 +144,15 @@ describe('GeneratedAudio when done', () => {
     expect(screen.getByText('calm')).toBeTruthy();
   });
 
-  it('says so when the file is gone', () => {
+  it('says so when the file is gone, and stops following the playhead', async () => {
+    const frames = vi.spyOn(window, 'requestAnimationFrame');
     const { container } = show(done());
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Play', exact: true })));
     fireEvent.error(container.querySelector('audio')!);
     expect(screen.getByText('This sound is no longer available.')).toBeTruthy();
+    const after = frames.mock.calls.length;
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 60)));
+    expect(frames.mock.calls.length).toBe(after);
   });
 });
 
