@@ -12,10 +12,10 @@ app (macOS, Windows, Linux) or a web app you host yourself, on models you choose
 
 ### Is Atelier made by or affiliated with Anthropic, OpenAI or GitHub?
 
-No. Atelier is an independent project, not affiliated with or endorsed by Anthropic, OpenAI, GitHub or any other company.
-You can use Anthropic's models through the API by adding a key under **Anthropic**, like any other provider; OpenAI's and
-GitHub Copilot's models work likewise. "Claude" and "Claude Code" are trademarks of Anthropic. Atelier reads Claude Code's
-files where they already are (see
+No. Atelier is an independent project, not affiliated with or endorsed by Anthropic, OpenAI, GitHub, Mistral AI or any other
+company. You can use Anthropic's models through the API by adding a key under **Anthropic**, like any other provider;
+OpenAI's, Mistral's and GitHub Copilot's models work likewise. "Claude" and "Claude Code" are trademarks of Anthropic.
+Atelier reads Claude Code's files where they already are (see
 [Do my Claude Code skills, plugins and hooks work?](#do-my-claude-code-skills-plugins-and-hooks-work)); that is
 compatibility, not affiliation.
 
@@ -81,14 +81,15 @@ Never paste API keys, tokens or invite codes into an issue.
 ### Which models and providers can I use?
 
 Local servers (**Ollama**, **llama.cpp**, and **LM Studio**, vLLM or any other server with an OpenAI-compatible API),
-hosted APIs (**Anthropic**, **OpenAI**, **OpenRouter**, **OpenCode Zen**), and subscriptions you already have (**GitHub
-Copilot**, **ChatGPT Plan**, and **ChatGPT Chat**). You can connect several at once; the model picker groups
-models by provider. See [Providers](/providers/) and [Models](/models/).
+hosted APIs (**Anthropic**, **OpenAI**, **Mistral**, **OpenRouter**, **OpenCode Zen**), and subscriptions you already have
+(**GitHub Copilot**, **ChatGPT Plan**, **ChatGPT Chat** and **Mistral Vibe**). You can connect several at once; the model
+picker groups models by provider. See [Providers](/providers/) and [Models](/models/).
 
 ### Do I need an API key?
 
 Not for local models: Ollama and llama.cpp need none. A hosted API needs a key from that provider, and ChatGPT Plan and
-GitHub Copilot use a sign-in instead. Keys are stored encrypted, and only a masked ending is shown after you save one.
+GitHub Copilot use a sign-in instead. Mistral Vibe takes the key your Le Chat plan gives for Vibe. Keys are stored
+encrypted, and only a masked ending is shown after you save one.
 
 ### How much does Atelier cost?
 
@@ -101,11 +102,12 @@ It depends on where the model runs:
 
 - **A local model** costs your hardware and electricity.
 - **A hosted API** bills you per token. **Settings › Usage** shows tokens and cost by day, mode and model, using the
-  providers' published list prices for Anthropic and OpenAI models unless an admin sets a price under **Settings › Usage ›
-  Prices**; other models, and a ChatGPT plan, count tokens only. In Code, the context ring's popover shows the session's
-  cost.
-- **A ChatGPT or GitHub Copilot plan** uses the plan's allowance. For ChatGPT Plan, the Code context popover shows the
-  plan's own limit windows (for example a 5-hour and a weekly window) and when they reset.
+  providers' published list prices for Anthropic, OpenAI and Mistral models unless an admin sets a price under **Settings ›
+  Usage › Prices**; other models, and a ChatGPT or Mistral Vibe plan, count tokens only. The context ring's popover shows
+  the session's cost.
+- **A ChatGPT, GitHub Copilot or Mistral Vibe plan** uses the plan's allowance. For ChatGPT Plan, the context popover shows
+  the plan's own limit windows (for example a 5-hour and a weekly window) and when they reset; for Mistral Vibe, the
+  monthly allowance.
 - **OpenRouter's free models** cost nothing but are limited to 50 requests a day (1,000 once you have bought 10 credits).
 
 Higher effort levels use more tokens: Max is flagged as consuming about 3.5 times more, and Ultracode far more. See
@@ -125,6 +127,14 @@ Yes: **Add provider › GitHub Copilot** shows a code to enter at `github.com/lo
 appear. It needs a Copilot subscription, counts against its allowance, and is unofficial: GitHub documents Copilot's API for
 its own editors, so it can change. Atelier lists **Copilot Auto**, where Copilot's router picks the model; on Free and
 Student plans, whose model picker holds only Auto, it is listed first. See [Providers](/providers/).
+
+### Can I use my Mistral Vibe or Le Chat plan?
+
+Yes, a Le Chat Pro or Team plan: in Le Chat, open **Code › Vibe CLI** and create a key, then paste it under **Add provider ›
+Mistral Vibe**. Requests spend the plan's Vibe allowance; past it they wait for the next billing period unless
+pay-as-you-go is on in Mistral's console. Mistral has said such a key may be used in other apps, but only informally, so
+that can change. On a server everyone using the provider spends the admin's plan, and Mistral's terms don't allow passing a
+key to others, so add it only where that is allowed. See [Providers](/providers/#mistral-vibe).
 
 ### Can I run it fully offline?
 

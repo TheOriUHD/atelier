@@ -134,7 +134,7 @@ of reasoning a model has or for PDF support. Prices are set in **Settings › Us
 ## How Atelier learns what a model can do
 
 For each field, the first of these that has an answer wins: your **override**, then what the server **reports**, then Atelier's
-built-in **catalog** (for Anthropic and OpenAI ids, which do not describe themselves fully), then a **default**.
+built-in **catalog** (for Anthropic, OpenAI and Mistral ids, which do not describe themselves fully), then a **default**.
 
 | Provider | Context window | Max output | Tools | Vision and PDFs | Reasoning |
 |---|---|---|---|---|---|
@@ -145,6 +145,7 @@ built-in **catalog** (for Anthropic and OpenAI ids, which do not describe themse
 | OpenAI | The catalog by id (for example 1,050,000 for GPT-6 and GPT-5.5, 400,000 for GPT-5.2), else 128,000 | The catalog, else 16,384 | Native | The catalog | The catalog's levels, none for GPT-4.x and GPT-4o |
 | ChatGPT Plan | Your account's `context_window`, else the catalog, else 272,000 | The catalog's, else 128,000 | Native | Yes for images; PDFs where the catalog says so | The catalog's levels, else the ones your account lists |
 | GitHub Copilot | The model's window, capped by its prompt limit plus output | The model's output limit, else 16,384 | Native | The model's `vision` | The model's reported levels |
+| Mistral, Mistral Vibe | `/v1/models` `max_context_length`, else the catalog, else 32,768 | The catalog's, else 32,768, never more than the context | Native; prompted if the list says the model has no function calling | The list's `vision` or the catalog's; PDFs for models with vision | The catalog's levels or on/off switch; High only for a reasoning model the catalog doesn't know |
 | ChatGPT Chat | 128,000, fixed | 32,768 | Prompted | Yes | ChatGPT's own stops |
 | A model added by id, or one not yet discovered | 200,000 for Anthropic and OpenAI, else 32,768 | 32,000 for those, else 8,192 | Native | Vision for those two only | Effort for those two only |
 
@@ -223,8 +224,10 @@ Atelier writes its instructions to the model in two sizes:
 The tier is chosen automatically: Anthropic and OpenAI models, ChatGPT Plan, GitHub Copilot and ChatGPT Chat are **Full**.
 Anything else is **Full** only when its id matches a known strong family, and **Compact** otherwise:
 `deepseek-` v3, v4, r1, r2, chat or reasoner; `kimi-k2`; `qwen3` 235b, 480b, max or plus (and the coder variants);
-`glm-4.5` and later (not Air); `gpt-oss-120b`; `gemini-…-pro`; `grok-3` and later; `mistral-large`; `claude-…`. Routed ids such
-as `vendor/model` are matched by the part after the last slash. So `gpt-oss-20b` and mid-size Qwen3 models get **Compact**.
+`glm-4.5` and later (not Air); `gpt-oss-120b`; `gemini-…-pro`; `grok-3` and later; `mistral-large`; `mistral-medium`;
+`mistral-vibe-cli-latest` (the main Mistral Vibe model); `zai-glm-5` (GLM 5.3 on Mistral); `claude-…`. Routed ids such
+as `vendor/model` are matched by the part after the last slash. So `gpt-oss-20b` and mid-size Qwen3 models get **Compact**,
+and so do Mistral Small 4, Ministral 3, Codestral and Mistral Vibe Fast.
 
 Override it per model under **Prompt tier**: **Compact** for a model that struggles with the full prompt, **Full** for a capable
 local model that was given the compact one. The prompts are published verbatim in [Prompts](/prompts/).
@@ -235,8 +238,10 @@ local model that was given the compact one. The prompts are published verbatim i
   If a model can see but Atelier thinks it cannot (common with LM Studio and other servers that report nothing), set **Vision**
   to **Supported**.
 - Images are shrunk to what each provider takes (for example 4,096 pixels and 25 MB for Ollama and llama.cpp, 8,000 pixels
-  and 5 MB for Anthropic), and the oldest are left out beyond a provider's image count, with a note to the model.
-- **PDFs** go to the model as files when it supports them (for example Anthropic and OpenAI models, and ChatGPT Chat). For
+  and 5 MB for Anthropic, 10,000 pixels and 10 MB for Mistral), and the oldest are left out beyond a provider's image count
+  (8 a request for Mistral), with a note to the model.
+- **PDFs** go to the model as files when it supports them (for example Anthropic and OpenAI models, Mistral models that
+  take images, and ChatGPT Chat). For
   any other model Atelier extracts the text and puts it in the message, and a file type it cannot read becomes "[Attached
   file *name* (*type*) cannot be read by this model.]"
 
@@ -260,8 +265,8 @@ The warnings at Max and Ultracode are on [Effort](/effort/).
 
 A **Temperature** override applies only where the provider lets Atelier set it. Ollama, llama.cpp and OpenAI-compatible
 servers take it. Anthropic accepts it only on models 4.6 and older and only with thinking off. OpenAI accepts it only for known
-models that do not reason. ChatGPT Plan's backend sets sampling itself, so it is dropped, and so is **Max output**. ChatGPT Chat
-has no such control. Leave it empty unless you have a reason.
+models that do not reason. Mistral takes it up to 1.5, its maximum. ChatGPT Plan's backend sets sampling itself, so it is
+dropped, and so is **Max output**. ChatGPT Chat has no such control. Leave it empty unless you have a reason.
 
 ## When to override
 

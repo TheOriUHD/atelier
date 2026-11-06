@@ -1,9 +1,9 @@
 ---
 title: Providers
-description: Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, a ChatGPT plan, GitHub Copilot, OpenRouter or OpenCode Zen, and learn what each one needs, speaks and costs.
+description: Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, Mistral, a ChatGPT or Mistral Vibe plan, GitHub Copilot, OpenRouter or OpenCode Zen, and learn what each one needs, speaks and costs.
 ---
 
-A provider is where models come from: a server you run, a hosted API, or a subscription you sign in to. Admins add
+A provider is where models come from: a server you run, a hosted API, or a subscription you already have. Admins add
 providers in **Settings › Admin › Providers**; on **Run on this computer** you are the admin. Everyone else sees only the
 models the admin leaves visible, in the model picker (see [Models](/models/)).
 
@@ -18,7 +18,7 @@ server, use one of those to see it.
 1. Open **Settings › Admin › Providers**. Anything Atelier found on this machine is listed under **Detected on this
    machine** with a **Set up** button (see [Detection](#detection)).
 2. Choose **Add provider** and pick one of the choices below.
-3. Fill in the details, or follow the sign-in step for the subscription providers.
+3. Fill in the details, or follow the sign-in step for the sign-in providers.
 4. Optionally choose **Test connection**, then **Add provider**. Saving checks the connection again and lists the models.
 
 <!-- screenshot: the Add provider dialog listing all the choices -->
@@ -30,6 +30,8 @@ server, use one of those to see it.
 | **OpenAI-compatible** | Any server that speaks the chat completions API: LM Studio, vLLM, and so on. |
 | **Anthropic** | Anthropic's models through their API. Needs an API key; priced per token. |
 | **OpenAI** | OpenAI's GPT models through their API. Needs an API key; priced per token. |
+| **Mistral** | Mistral's models through its API. Needs an API key from Mistral's console; priced per token. |
+| **Mistral Vibe** | The models in your Le Chat Pro or Team plan. Paste the key you create for Vibe in Le Chat; uses the plan's Vibe allowance, no per-token cost. |
 | **ChatGPT Plan** | The models in your ChatGPT plan. Sign in with your account; no per-token cost. Unofficial. |
 | **GitHub Copilot** | The models in your Copilot plan. Sign in with a code from GitHub. Unofficial. |
 | **ChatGPT Chat** | Experimental. ChatGPT itself, driven through a signed-in browser window. Desktop app only. |
@@ -48,6 +50,7 @@ sets up for you.
 | OpenAI-compatible | Chat completions (`/v1/chat/completions`) | Optional | Either | No | Native, or prompted if the server's metadata lacks tools | `reasoning_effort` (low, medium, high) where the model advertises reasoning | If the server's metadata lists image input | Starts at 32,768 context and no vision unless the server says more |
 | Anthropic | Messages | Required | Hosted | No | Native | Adaptive effort (Low to Max), or thinking budgets on 4.5 and older | Yes, and PDFs | List prices built in |
 | OpenAI | Responses | Required | Hosted | No | Native | Per model: Low to Extra, Low to High, or none | Yes, for the models Atelier knows | List prices built in; a catalog supplies each model's limits |
+| Mistral, Mistral Vibe | Chat completions (`/v1/chat/completions`), Mistral's own variant | Required | Hosted | No | Native | Per model: levels, an on/off switch, or none | If the model takes images, and then PDFs too | Mistral: list prices built in. Mistral Vibe: uses your plan's Vibe allowance |
 | ChatGPT Plan | Responses, on ChatGPT's Codex backend | Sign-in | Hosted | No (browser on the desktop, device code on a server) | Native | The levels your account lists | Yes | Unofficial; uses your plan, no per-token price |
 | ChatGPT Chat | None: drives a signed-in chatgpt.com page in a hidden window | Sign-in | Hosted | Yes | Prompted, always | ChatGPT's own stops (Instant, Medium, High and, on higher plans, Extra High and Pro) | Images and PDFs | Experimental and fragile; one conversation slot |
 | GitHub Copilot | Chat completions, or Responses for models that only take it | Sign-in | Hosted | No (device code) | Native; models without tool calls are left out | The levels each model reports; **Copilot Auto** uses three tiers | If the model reports vision | Unofficial; uses your Copilot plan |
@@ -185,6 +188,69 @@ Unofficial. GitHub documents Copilot's API for its own editors, so it can change
 sends the editor identification headers Copilot's own plugin sends.
 :::
 
+## Mistral
+
+Mistral's models through its API, priced per token. **Mistral** and **Mistral Vibe** are the same adapter; they differ
+only in the key and in how use is paid.
+
+- **Base URL:** `https://api.mistral.ai`. For processing in the EU only, change it to `https://api.eu.mistral.ai`. Mistral
+  charges 1.1 times its prices there, and not every model or feature is offered there.
+- **Key:** required, from Mistral's console (console.mistral.ai/api-keys; the form's **Open Mistral’s console** button opens
+  it). Billing has to be on: Mistral's free plan has no API access.
+- **What Atelier asks:** `/v1/models` for the model list and health, `/v1/chat/completions` for replies. Mistral refuses
+  fields it doesn't know, so requests carry only Mistral's own.
+- **Models:** one entry per model. Mistral lists a model under each of its names (`mistral-small-latest` as well as
+  `mistral-small-2603`); Atelier folds them into the model. Retired models and models that can't chat are left out, and
+  context is the window Mistral's list gives. Atelier knows the names, output limits and reasoning of Mistral Large 4,
+  Mistral Medium 3.5, Mistral Small 4, Mistral Large 3, Ministral 3 14B, 8B and 3B, Codestral, GLM 5.3 and GLM 5.3 Flash
+  (hosted by Mistral), DeepSeek V4.1 Flash, Voxtral Small, and the Vibe models **Mistral Vibe** and **Mistral Vibe Fast**.
+  Mistral has deprecated Medium 3.5 (retiring on 30 April 2027) and Large 3. A model Atelier doesn't know still works with
+  what Mistral's list says about it; if it reasons, it gets High only.
+- **Effort:** levels on Large 4 (Low, Medium, High), GLM 5.3 and GLM 5.3 Flash (Low, High, Max); a **Thinking** switch on
+  Medium 3.5, Small 4 and the Vibe models. DeepSeek V4.1 Flash reasons by itself and is sent no setting. See
+  [Effort](/effort/).
+- **Thinking:** streamed and shown, and sent back with the reply on later turns, as Mistral asks.
+- **Tools:** native, or prompted for a model Mistral lists without function calling. Call ids from another provider, in a
+  conversation that switched to Mistral, are mapped to the nine-letter ids Mistral takes.
+- **Images and PDFs:** up to 8 images a request, 10 MB and 10,000 pixels a side each; more are left out with a note to the
+  model. Models that take images get PDFs as documents, which Mistral reads itself; other models get the PDF's text.
+- **Caching:** Mistral caches prompts on its own. Atelier sends the conversation's id as `prompt_cache_key`, so its requests
+  are more likely to reuse the cache.
+- **Sampling:** a temperature you set is sent, at most 1.5 (Mistral's maximum).
+- **Cost:** see [Cost](#cost).
+
+## Mistral Vibe
+
+The models in a Le Chat Pro or Team plan, through Mistral's API with the key the plan gives for Vibe. Use is counted
+against the plan's Vibe allowance instead of being priced per token. Everything else is as for [Mistral](#mistral).
+
+1. In Le Chat, open **Code › Vibe CLI** (chat.mistral.ai/code/extensions; the form's **Open Vibe keys in Le Chat** button
+   opens it) and create a key.
+2. **Add provider › Mistral Vibe**, paste the key, and **Add provider**.
+
+Atelier doesn't use Vibe's own sign-in: you create the key and paste it.
+
+- **Models:** the ones Mistral lists for the key, among them **Mistral Vibe** (`mistral-vibe-cli-latest`, Medium 3.5
+  underneath) and **Mistral Vibe Fast**.
+- **Past the allowance** requests wait for the next billing period, unless pay-as-you-go is on in Mistral's console; then
+  they are charged. A refused request ends the turn with "*Name* usage limit reached: … The plan's Vibe allowance starts
+  again at the next billing period, or turn on pay-as-you-go in Mistral's console."
+- **The allowance in the app** (admins only): the context ring's popover in Chat, Cowork and Code shows **Plan usage
+  limits · *plan*** with a **Monthly allowance** bar and when it resets, and "Pay-as-you-go is on: use past the allowance
+  is charged." when it is. From 90% a line above the message box warns ("You’ve used 93% of your Mistral Vibe monthly
+  allowance."); at 100% it reads "You’ve reached your Mistral Vibe monthly allowance.", or with pay-as-you-go "…: more is
+  charged as pay-as-you-go." The [Usage](/reference/tools/#usage) tool reports it to the model. Atelier reads it from
+  Mistral's billing API, the endpoint Vibe itself reads, which Mistral doesn't document, and keeps a reading for 30
+  seconds. Where the key may not read it, the popover says "Mistral doesn’t report this plan’s allowance to this key."
+- **On a server** everyone who can use the provider spends the admin's plan, and Mistral's terms don't allow passing a key
+  to others. Add it only where that is allowed.
+- **Cost:** no per-token price. An admin can still set one in **Settings › Usage**.
+
+:::caution
+Mistral has said a Vibe key may be used in other apps, but only informally (a staff answer, not its written terms), so
+that can change.
+:::
+
 ## OpenRouter
 
 **Add provider › OpenRouter** gives you two ways to supply a key:
@@ -228,7 +294,7 @@ Providers with a form (everything except the three sign-in providers) share thes
 | **Name** | What you see in lists and the picker. Renaming also renames the ID until you edit the ID yourself. |
 | **ID** | Lowercase letters, digits and dashes, starting with a letter or digit, at most 48. Models are referenced as `id/model-name` in defaults, aliases, prices and sessions, so it cannot be changed after the provider exists. A second provider with a taken ID gets `-2`, `-3`… |
 | **Base URL** | Must start with `http://` or `https://`. The backend makes the request, so `localhost` means the computer (or container) the backend runs on, not your browser's. |
-| **API key** | Required for Anthropic, OpenAI, OpenRouter and OpenCode Zen; optional for the rest. See [API keys and secrets](#api-keys-and-secrets). |
+| **API key** | Required for Anthropic, OpenAI, Mistral, Mistral Vibe, OpenRouter and OpenCode Zen; optional for the rest. See [API keys and secrets](#api-keys-and-secrets). |
 | **Custom headers** | Extra request headers, one name and value per row. Names cannot be empty, contain spaces, or repeat. |
 | **Memory budget** | Local servers only: **Available VRAM (GB)**. Used for Ollama only; see [Local models](/local-models/). |
 | **Requests at once** | 1 to 64, or empty for automatic. How many requests Atelier sends the server at the same time. |
@@ -300,7 +366,7 @@ On a server, "this machine" is the server, not the computer in front of you.
 
 ## Manage providers
 
-Each provider is a row with its name and type, its address (or the signed-in account for the subscription providers),
+Each provider is a row with its name and type, its address (or the signed-in account for the sign-in providers),
 latency, number of models, for local servers its request limit, and the key's last characters.
 
 - **Status dot:** Connected, Connected with warnings, Unreachable (with the error under the name), Not checked yet, or
@@ -334,16 +400,20 @@ address counts as local when it is a loopback, link-local or private-network IP 
 
 ## Cost
 
-- **Anthropic and OpenAI** models use the providers' published **list prices**, built in (including cache reads and writes, and
-  the long-prompt tier where one applies). Prices were taken from the providers' pages on 2026-10-15 and are updated by hand; a
-  model that is not in the table shows no cost rather than a guess.
+- **Anthropic, OpenAI and Mistral** models use the providers' published **list prices**, built in (including cache reads and
+  writes, and the long-prompt tier where one applies). Prices were taken from the providers' pages on 2026-10-15 (Mistral's on
+  2026-11-06) and are updated by hand; a model that is not in the table shows no cost rather than a guess.
+- **Mistral** prices cover the models listed under [Mistral](#mistral), under their dated and `-latest` names too. Writing
+  Mistral's cache costs nothing. The built-in prices are the global ones: on `api.eu.mistral.ai`, where Mistral charges 1.1 times
+  them, set your own.
 - **Your own prices** win. As an admin, open **Settings › Usage**, **Prices › Add price**: choose a model and enter dollars per
   million tokens for input, output, and optionally cache read and cache write ("As input" when empty). A price counts for requests
   made after you set it. This is the way to price OpenAI-compatible, OpenRouter, Copilot and local models.
-- **No price, no cost:** every other provider, including ChatGPT Plan, counts tokens only. A subscription's
+- **No price, no cost:** every other provider, including ChatGPT Plan and Mistral Vibe, counts tokens only. A subscription's
   allowance is the limit, not a price.
-- Where you see it: **Settings › Usage**, and in Code the context popover shows the session's cost for Anthropic, OpenAI and
-  OpenAI-compatible models that have a price, or the plan's usage windows for ChatGPT Plan.
+- Where you see it: **Settings › Usage**, and the context ring's popover shows the session's cost for Anthropic, OpenAI,
+  Mistral and OpenAI-compatible models that have a price, the plan's usage windows for ChatGPT Plan, or the monthly allowance
+  for Mistral Vibe.
 
 ## What is tested live
 
@@ -356,9 +426,11 @@ The project tests against real servers for only some providers:
 | llama.cpp | Recorded responses only. |
 | OpenAI | Recorded responses only. |
 | OpenAI-compatible, OpenRouter, OpenCode Zen, GitHub Copilot, ChatGPT Plan | Unit tests against recorded or hand-made responses; the optional live checks in the repository can target an OpenAI-compatible endpoint, but they are not part of the regular runs. Copilot Auto has not been tried on a Free or Student account. |
+| Mistral, Mistral Vibe | Unit tests against recorded or hand-made responses only; nothing has run against Mistral's service yet. With `MISTRAL_API_KEY` or `MISTRAL_VIBE_API_KEY` in `.env.local` (and optionally `ATELIER_LIVE_MISTRAL_MODEL`, `ATELIER_LIVE_MISTRAL_VIBE_MODEL`), the live checks stream text and thinking, read an image, call a tool with another provider's call id and, for Vibe, read the allowance. |
 | ChatGPT Chat | Driven against the real chatgpt.com page for formatting, continuing a chat, temporary chats, model and effort selection, and tool calls. A long Code session on it has not been run end to end. |
 
-ChatGPT's and Copilot's sign-ins are not documented by their owners as APIs. Treat both as able to break without notice.
+ChatGPT's and Copilot's sign-ins are not documented by their owners as APIs, and Mistral allows Vibe keys in other apps
+only informally. Treat all three as able to break without notice.
 
 ## Provider errors
 
@@ -369,7 +441,7 @@ Messages a conversation shows when a provider fails. *Name* is the provider's na
 | "*Name* rejected the credentials (401)…" | Key revoked or wrong. Replace it in **Settings › Admin › Providers › Edit**. |
 | "Model not found: …" | The provider does not know that model id. Check **Settings › Admin › Models**. |
 | "*Name* is busy or unavailable (503)…" | Overloaded or rate limited. Atelier retries on its own. |
-| "*Name* usage limit reached: …" | A billing, quota or plan limit ("insufficient quota", "usage limit reached", "weekly limit"). The turn ends at once instead of retrying. Rate limits that clear by themselves still retry. |
+| "*Name* usage limit reached: …" | A billing, quota or plan limit ("insufficient quota", "usage limit reached", "weekly limit"). The turn ends at once instead of retrying. Rate limits that clear by themselves still retry. For Mistral Vibe the message adds that the allowance starts again at the next billing period, or to turn on pay-as-you-go. |
 | "The conversation is too long for this model: …" | The provider refused the request as over its window. Atelier compacts and retries once; raise the model's context length if it is set too high. |
 | "Cannot reach *Name* at *host*" | The server is down or unreachable. Retried. |
 | "*Name* at *host* took too long to respond" / "…sent nothing for too long (no response for 15 minutes)" | A request that receives no bytes for 15 minutes ends. Retried. |

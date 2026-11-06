@@ -36,6 +36,10 @@ music, and plays it. On a paid service that's a real request, so it's a button y
 | **Kokoro-FastAPI**, **Speaches**, **LocalAI**, **KoboldCpp**, **Chatterbox**, **Ollama**, **vLLM-Omni** | Servers on your own computer that speak OpenAI's format. Their voices come from the server. Kokoro's voices can be mixed, like `af_bella+af_sky`. |
 | **OpenAI-compatible speech** | Any other server with `/v1/audio/speech`, such as LiteLLM. |
 
+If you've added OpenAI, Mistral or OpenRouter as a text provider, **Use the key from …** on **OpenAI speech**, **Mistral
+Voxtral** or **OpenRouter speech** saves pasting it again. For Voxtral that is a **Mistral** provider at `api.mistral.ai`;
+a Mistral Vibe key isn't offered.
+
 ### Music and sound effects
 
 | Service | Notes |

@@ -133,7 +133,7 @@ Every key is optional. This is the complete list with the default used when a ke
 
 | Key | Default | Notes |
 |---|---|---|
-| `providers` | `[]` | One object per provider: `id`, `type` (`ollama`, `llamacpp`, `anthropic`, `openai`, `openai-compatible`, `chatgpt`, `chatgpt-chat`, `copilot`), `name`, `baseUrl`, `apiKey` (usually `${secret:…}`), `headers`, `enabled` (`true`), and optional `parallelRequests` (1 to 64), `vramGiB`, `modelsAtOnce` (1 to 16) and, for ChatGPT Chat, `temporaryChat`. |
+| `providers` | `[]` | One object per provider: `id`, `type` (`ollama`, `llamacpp`, `anthropic`, `openai`, `openai-compatible`, `chatgpt`, `chatgpt-chat`, `copilot`, `mistral`, `mistral-vibe`), `name`, `baseUrl`, `apiKey` (usually `${secret:…}`), `headers`, `enabled` (`true`), and optional `parallelRequests` (1 to 64), `vramGiB`, `modelsAtOnce` (1 to 16) and, for ChatGPT Chat, `temporaryChat`. |
 | `models.defaults` | `{}` | `chat`, `work`, `code`, `small`: model references like `ollama/qwen3`. **Default model for everyone** is stored as `chat`; Cowork and Code follow it until a default of their own is set. |
 | `models.aliases` | `{}` | What `opus`, `sonnet`, `haiku` and `fable` stand for. |
 | `models.overrides` | `{}` | Per model: `hidden`, `displayName`, `favorite`, `order`, `contextLength`, `maxOutputTokens`, `temperature` (0 to 2), `toolCalling` (`native`, `prompted`, `none`), `vision`, `promptTier`, `manual`. |

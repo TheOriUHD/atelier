@@ -929,7 +929,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
           ...(usage?.plan ? { plan: usage.plan } : {}),
           ...(usage ? { windows: [{ minutes: null, name: 'Monthly allowance', usedPercent: usage.usedPercent, resetsAt: usage.resetsAt }] } : {}),
           ...(usage?.overage ? { notes: ['Pay-as-you-go is on: past the allowance, requests are charged instead of stopped.'] } : {}),
-          ...(!usage ? { notes: ['Mistral did not report this plan’s allowance for this key.'] } : {}),
+          ...(!usage ? { notes: ['Mistral doesn’t report this plan’s allowance to this key.'] } : {}),
         };
       }
       const row = await sessions.getRow(sessionId);

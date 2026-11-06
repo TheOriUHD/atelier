@@ -133,13 +133,13 @@
     <div class="wrap split">
       <div class="reveal">
         <h2>Any model, local or hosted.</h2>
-        <p class="lead">Point Atelier at a model on your own machine, add an API key, or sign in with a ChatGPT plan or GitHub Copilot, then pick the model in the composer. ChatGPT Chat, which drives a signed-in browser window, is an experimental option.</p>
+        <p class="lead">Point Atelier at a model on your own machine, add an API key, sign in with a ChatGPT plan or GitHub Copilot, or paste the Vibe key of a Le Chat plan, then pick the model in the composer. ChatGPT Chat, which drives a signed-in browser window, is an experimental option.</p>
         <ul class="ticks">
           <li><strong>Local servers are detected.</strong> Ollama, llama.cpp and LM Studio on their usual ports are offered as one-click suggestions.</li>
           <li><strong>Reasoning effort from Low to Max.</strong> Models with a setting of their own get it, the others are guided by a short note, and ChatGPT Chat uses ChatGPT’s own steps.</li>
           <li><strong>Small local models get per-model overrides</strong> for the tool calling they struggle with, and hosted ones show what a session cost.</li>
         </ul>
-        <p class="runs"><span class="label">Works with</span><span>Ollama</span><span>llama.cpp</span><span>LM Studio</span><span>Anthropic</span><span>OpenAI</span><span>GitHub Copilot</span><span>OpenRouter</span><span>OpenCode Zen</span><span>Any OpenAI-compatible endpoint</span><span>ChatGPT plan</span><span>ChatGPT Chat (experimental)</span></p>
+        <p class="runs"><span class="label">Works with</span><span>Ollama</span><span>llama.cpp</span><span>LM Studio</span><span>Anthropic</span><span>OpenAI</span><span>Mistral</span><span>GitHub Copilot</span><span>OpenRouter</span><span>OpenCode Zen</span><span>Any OpenAI-compatible endpoint</span><span>ChatGPT plan</span><span>Mistral Vibe</span><span>ChatGPT Chat (experimental)</span></p>
       </div>
       <div class="frame reveal">
         <img src="/img/providers-2496.webp" srcset="/img/providers-1280.webp 1280w, /img/providers-2496.webp 2496w" sizes="(min-width: 920px) 560px, calc(100vw - 48px)" width="2496" height="990" loading="lazy" alt="Atelier's provider settings: a local Ollama server detected and connected, with a button to add another provider.">
@@ -235,7 +235,7 @@
       <div class="reveal"><h2>Questions</h2></div>
       <div class="faq reveal">
         <details><summary>Is it free?</summary><p>For personal and other noncommercial use, yes; commercial use needs a license from the author. There is no paid tier and no account with us. You pay only for the hosted models you choose to use.</p></details>
-        <details><summary>Which models can I use?</summary><p>Local models through Ollama, llama.cpp or LM Studio, hosted ones through Anthropic or OpenAI keys, GitHub Copilot, OpenRouter, OpenCode Zen or any OpenAI-compatible endpoint, or a ChatGPT plan. ChatGPT Chat is an experimental extra: it drives a signed-in ChatGPT browser window, which OpenAI doesn’t officially support, so Atelier shows a warning first.</p></details>
+        <details><summary>Which models can I use?</summary><p>Local models through Ollama, llama.cpp or LM Studio, hosted ones through Anthropic, OpenAI or Mistral keys, GitHub Copilot, OpenRouter, OpenCode Zen or any OpenAI-compatible endpoint, or a ChatGPT or Mistral Vibe plan. ChatGPT Chat is an experimental extra: it drives a signed-in ChatGPT browser window, which OpenAI doesn’t officially support, so Atelier shows a warning first.</p></details>
         <details><summary>Does anything leave my machine?</summary><p>Requests go to the model providers and connectors you set up, to the search engines and pages web search and fetch reach, and the desktop app checks for new versions every five minutes. There is no telemetry and no Atelier cloud.</p></details>
         <details><summary>Can I bring my existing skills, plugins and hooks?</summary><p>Mostly. Atelier reads agent skills, commands, sub-agents and hooks where they already live, lists plugins you installed for other agents so you can switch them on or off, and can import MCP config. A few things differ, and the <a href="https://docs.atelierhq.dev/claude-code-compatibility/">compatibility page</a> lists them.</p></details>
         <details><summary>Can I see the prompts Atelier sends to the model?</summary><p>Yes, all of them. Every system prompt, note and tool description is published verbatim in the <a href="https://docs.atelierhq.dev/prompts/">documentation</a> and lives in the repository, where you can also override them.</p></details>

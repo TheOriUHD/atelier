@@ -160,6 +160,7 @@ plain-HTTP servers on your network, to avoid fetch's header timeouts) plus small
 | Anthropic | `anthropic.ts` | Messages API with adaptive thinking, prompt-cache breakpoints, and token counting for exact context numbers. |
 | OpenAI | `openai.ts` | The Responses API with `store: false`; encrypted reasoning items are replayed. |
 | OpenAI-compatible | `openai-compatible.ts` | Chat completions for LM Studio, OpenRouter, OpenCode Zen and others. OpenRouter and OpenCode Zen are *presets* (`protocol/src/provider-presets.ts`), not types of their own. |
+| Mistral, Mistral Vibe | `mistral.ts` | Mistral's own chat completions: only the fields it takes, nine-letter tool-call ids, thinking sent back with the reply. For Mistral Vibe also the plan's allowance, from Mistral's billing API. |
 | GitHub Copilot | `copilot.ts` | GitHub's device sign-in, then Copilot's chat or responses endpoints. Unofficial outside GitHub's own clients. |
 | ChatGPT Plan | `chatgpt.ts` | The Responses adapter behind the plan's own sign-in. Unofficial. |
 | ChatGPT Chat | `chatgpt-chat.ts` | Experimental, desktop only. Drives a ChatGPT page in a browser session the desktop app owns; tool calls are written as text. |

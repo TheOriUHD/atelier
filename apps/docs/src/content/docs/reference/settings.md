@@ -95,7 +95,7 @@ see are hidden in the app.
 | **Limits by person** *(admins only, only where it works)* | Everyone’s usage against their limits, with who is near or at one. Edit a person’s limits here or under Admin › Limits. |
 | **Videos** *(only where it works)* | Videos each model made, how many seconds of video that is and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
 | **Sounds** *(only where it works)* | Speech, music and sound effects each model made, how long they are in all, the characters read out and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
-| **Prices** *(admins only)* | Dollars per million tokens, per model, in place of the provider’s list price (Anthropic and OpenAI models without one here use it). A price counts for requests made after it is set. |
+| **Prices** *(admins only)* | Dollars per million tokens, per model, in place of the provider’s list price (Anthropic, OpenAI and Mistral models without one here use it). A price counts for requests made after it is set. |
 
 ## Settings › Code
 
@@ -176,7 +176,7 @@ Admins only.
 | Setting | What it does |
 |---|---|
 | **Detected on this machine** | Local servers on their default ports and API keys in the environment. |
-| **Add provider** | Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, GitHub Copilot, OpenRouter, a ChatGPT plan or any OpenAI-compatible endpoint. |
+| **Add provider** | Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, a ChatGPT or Mistral Vibe plan or any OpenAI-compatible endpoint. |
 
 ## Settings › Admin › Media
 

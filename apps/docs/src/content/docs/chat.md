@@ -135,7 +135,7 @@ and a file that failed to upload is left out of the message.
 | File | What the model gets |
 |---|---|
 | **Images** (PNG, JPEG, GIF, WebP) | The image, if the model can see. A model without vision gets only the note "An image was attached, but this model cannot view images.", and the tile shows a warning. |
-| **PDF** | The file itself, for models that take PDFs natively (the Anthropic and OpenAI models Atelier knows, and ChatGPT Chat). For every other model, the PDF's text layer, page by page. A scan with no text layer yields no text. |
+| **PDF** | The file itself, for models that take PDFs natively (the Anthropic and OpenAI models Atelier knows, Mistral models that take images, and ChatGPT Chat). For every other model, the PDF's text layer, page by page. A scan with no text layer yields no text. |
 | **Text and code** (`.txt`, `.md`, `.csv`, `.json`, `.html`, `.py`, `.svg` and similar) | The text, inside a document block with the file name. Text beyond 400,000 characters is cut off. |
 | **Anything else** (Word, Excel and PowerPoint files, archives, audio, video) | Nothing readable: the model is told "Attached file … cannot be read by this model." Put such files in a Cowork task's folder instead. |
 
@@ -146,7 +146,8 @@ Limits:
   image that is too large, and leaves out the oldest images (telling the model) when a request would hold too many.
   Anthropic, GitHub Copilot and OpenAI-compatible endpoints take images up to 8,000 pixels and 5 MB each, 100 per
   request and 24 MB in all (and 2,000 pixels each past 20); the OpenAI API takes 20 MB each, 500 per request and 40 MB in all;
-  Ollama and llama.cpp have no count limit and get images up to 4,096 pixels and 25 MB each.
+  Mistral and Mistral Vibe take 8 per request, up to 10,000 pixels and 10 MB each; Ollama and llama.cpp have no count limit
+  and get images up to 4,096 pixels and 25 MB each.
 - **ChatGPT Chat** (the experimental browser-session provider, desktop only) takes the last 10 files of a message, 20 MB
   each. See [ChatGPT](/chatgpt/).
 
@@ -340,11 +341,11 @@ line, **Compacted chat · saved 666.2k tokens**, that opens the summary. Everyth
   context window… Raise the model's context length (Settings › Admin › Models)".
 - Chat and Cowork have no `/compact`; only Code does.
 
-The ring at the right of the footer shows how full the window is. Hover it for the figures ("25K of 128K tokens used (20%)"). It turns amber from 75% and red above 90%.
+The ring at the right of the footer shows how full the window is. It turns amber from 75% and red above 90%. Click it for the figures ("25k / 128k (20%)") and your usage: the plan's own windows for the
+**ChatGPT Plan** provider ("5-hour limit", "Weekly limit") and the monthly allowance for **Mistral Vibe** (both for admins), the session's cost, today's
+and the last 7 days' for a hosted API (Anthropic, OpenAI, Mistral or an OpenAI-compatible endpoint), and tokens today and over 7 days for anything else.
 
-In Code the ring opens a popover with a breakdown of what fills the window, the tokens left until auto-compact, **Compact session**, and your usage: the plan's own windows for the
-**ChatGPT Plan** provider ("5-hour limit", "Weekly limit"), the session's cost, today's
-and the last 7 days' for a hosted API (Anthropic, OpenAI or an OpenAI-compatible endpoint), and tokens today and over 7 days for anything else. See [Code](/code/).
+In Code the popover also breaks down what fills the window, shows the tokens left until auto-compact, and has **Compact session**. See [Code](/code/).
 
 ## Projects
 

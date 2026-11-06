@@ -12,7 +12,7 @@ no cookies of their own.
 
 | Feature | What is contacted | What is sent | Can I turn it off |
 |---|---|---|---|
-| **Model providers** | The address of each provider you added: for example `api.anthropic.com`, `api.openai.com`, `openrouter.ai`, `opencode.ai`, `api.githubcopilot.com`, `chatgpt.com`, or your own Ollama, llama.cpp or LM Studio server | The system prompt, the conversation, tool definitions, **tool results** (file contents and command output the agent read), attachments, your memory and instructions, and your key or token in a header | Not adding a hosted provider. Local servers on your own network send nothing outside it. |
+| **Model providers** | The address of each provider you added: for example `api.anthropic.com`, `api.openai.com`, `api.mistral.ai`, `openrouter.ai`, `opencode.ai`, `api.githubcopilot.com`, `chatgpt.com`, or your own Ollama, llama.cpp or LM Studio server | The system prompt, the conversation, tool definitions, **tool results** (file contents and command output the agent read), attachments, your memory and instructions, and your key or token in a header | Not adding a hosted provider. Local servers on your own network send nothing outside it. |
 | **Small-model jobs** | The small model's provider (without one, the chat's own) | Titles, compaction summaries, memory updates and answers about fetched pages: the content of those conversations or pages | Choose the small model in **Settings › Admin › Models**; memory switches in **Settings › Memory** |
 | **Auto mode review** | The provider of the session's own model (the small model's for ChatGPT Chat) | Your last 10 messages, the arguments of the last 30 tool calls (plain lookups such as Read and Grep left out), and the call to judge. No tool results. | Use another permission mode |
 | Provider health and model lists | Each enabled provider | A request for its model list and status. No conversation. At start, when a provider is added or edited, on **Test connection**, and when you recalculate models in **Settings › Admin › Models**. | Disable or remove the provider |
@@ -27,6 +27,7 @@ no cookies of their own.
 | **GitHub** (Codespaces, Cloud) | `github.com`, `api.github.com`, and the GitHub tunnel used by `gh codespace ssh` | Your GitHub token; the commands and files of a codespace you work in | Do not connect GitHub in **Settings › Cloud** |
 | Skill and plugin installs | `api.github.com`, `codeload.github.com` | An unauthenticated request for the repository you named | Do not install from GitHub |
 | **Provider sign-ins** | ChatGPT Plan: `auth.openai.com`, `chatgpt.com`. GitHub Copilot: `github.com`, `api.github.com`. OpenRouter: `openrouter.ai`. Connectors with OAuth: the connector's own sign-in server | The sign-in exchange; for ChatGPT Plan also a usage request for the limits display | Do not sign in |
+| Mistral Vibe allowance | The provider's base URL (`api.mistral.ai`): `/v1/billing/budget` and `/v1/billing/subscription` | Your Vibe key, to read how much of the plan's allowance is used, its plan name and whether pay-as-you-go is on. While an admin has a conversation on a Mistral Vibe model open or opens the context ring's popover, and when the Usage tool runs; a reading is kept for 30 seconds. | Do not add Mistral Vibe |
 | ChatGPT Plan model list | `registry.npmjs.org`, besides `chatgpt.com` | A GET of the `@openai/codex` package's latest metadata, to learn the current Codex version the model list is asked with, at most every 6 hours. Nothing about you. | Do not use ChatGPT Plan |
 | **ChatGPT Chat** | `chatgpt.com`, in a hidden browser window | Your messages and attachments typed into the page, plus everything the chatgpt.com page itself loads | Do not use that provider. **Remove** it from **Settings › Admin › Providers** to clear its browser session |
 | Code Browser pane | The pages you open in it, and their icons | Ordinary page requests | Do not open pages in it |
@@ -45,6 +46,9 @@ That includes everything in a long conversation, again on each turn (providers m
 
 - A **local** provider (Ollama, llama.cpp, LM Studio) on this computer or your network sends nothing further.
 - **Anthropic** and **OpenAI** receive your API key in a header.
+- **Mistral** and **Mistral Vibe** receive your key in a header, and requests go only to the base URL (`api.mistral.ai`
+  unless you changed it). Atelier adds no identifying headers; the body's `prompt_cache_key` is the conversation's id in
+  Atelier, so Mistral's cache can keep one conversation's requests together.
 - **OpenRouter** requests carry `HTTP-Referer: https://atelierhq.dev` and `X-Title: Atelier` (also sent as `X-OpenRouter-Title`),
   naming the app.
 - **ChatGPT Plan** requests carry `originator: atelier`, `User-Agent: Atelier`, your ChatGPT account id, a session id and a
@@ -128,7 +132,8 @@ computer names and message text taken out. See [Troubleshooting](/troubleshootin
 
 With no chat running, the only things Atelier contacts by itself are the desktop update check above and the health and
 model-list requests to the providers you added (for ChatGPT Plan, also the version lookup and the usage request in the
-table). Opening the **Connect to a server** form scans your local network once.
+table; for Mistral Vibe, the allowance reading while an admin has a conversation on it open). Opening the **Connect to a
+server** form scans your local network once.
 
 ## The request log
 

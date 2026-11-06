@@ -296,7 +296,7 @@ What each answer does:
 - **ASK** brings up the usual prompt, with the line **Auto mode wants your OK:** and what you should decide. It is for an action that looks like what you want but your messages don't settle. It does not count against the agent.
 - **BLOCK** doesn't run the action. The agent reads **Auto mode blocked this action:** with the reason, plus an instruction to take a safer approach or tell you what it needs rather than reach the same result another way.
 
-With a **hosted model** (the providers **Anthropic**, **OpenAI**, **ChatGPT Plan** and **GitHub Copilot**) the reviewer reads "asked for" broadly: an action your request clearly leads to, such as pushing the branch you are working on or shipping what you asked to ship, counts as asked for. **Local models** (Ollama, llama.cpp, LM Studio) and every provider added as OpenAI-compatible, OpenRouter and OpenCode Zen included, keep the stricter reading, because small models judge less reliably.
+With a **hosted model** (the providers **Anthropic**, **OpenAI**, **Mistral**, **Mistral Vibe**, **ChatGPT Plan** and **GitHub Copilot**) the reviewer reads "asked for" broadly: an action your request clearly leads to, such as pushing the branch you are working on or shipping what you asked to ship, counts as asked for. **Local models** (Ollama, llama.cpp, LM Studio) and every provider added as OpenAI-compatible, OpenRouter and OpenCode Zen included, keep the stricter reading, because small models judge less reliably.
 
 ### Which model reviews
 

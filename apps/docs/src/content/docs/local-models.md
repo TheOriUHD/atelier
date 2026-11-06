@@ -261,8 +261,9 @@ pnpm eval --model ollama/<model> [--base-url <url>] [--suite core|behaviour|all]
 It starts a throwaway copy of the backend (the same code as the app) with HOME pointed at a temporary folder, so your own
 skills, plugins and instruction files do not change the results, runs each task in its own folder, and writes a Markdown and
 a JSON report to `packages/core/evals/reports/`. `--tier`, `--context` and `--tools` become the model's override; `--effort` sets the level.
-`llamacpp/…`, `anthropic/…`, `openai/…` and `openai-compatible/…` (with `--base-url`) work too. Keys come from the
-environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_COMPATIBLE_API_KEY`) and are never written down.
+`llamacpp/…`, `anthropic/…`, `openai/…`, `mistral/…`, `mistral-vibe/…` and `openai-compatible/…` (with `--base-url`) work
+too. Keys come from the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `MISTRAL_API_KEY`, `MISTRAL_VIBE_API_KEY`,
+`OPENAI_COMPATIBLE_API_KEY`) and are never written down.
 
 - **Core suite (7 tasks):** `edit-file`, `fix-failing-test`, `ask-clarifying-question`, `create-artifact`,
   `respect-permissions`, `use-skill`, `call-mcp-tool`.

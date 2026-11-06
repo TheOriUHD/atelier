@@ -14,7 +14,7 @@ models:
   changes as diffs, under the permission rules you choose. See [Code](/code/).
 
 It runs on the models you choose: a local server such as Ollama or llama.cpp, a hosted API with your own key, or a
-ChatGPT or GitHub Copilot plan you already pay for. No model comes with Atelier.
+ChatGPT, GitHub Copilot or Mistral Vibe plan you already pay for. No model comes with Atelier.
 
 There is one backend with two ways in. The **desktop app** (macOS, Windows and Linux) can run the backend inside itself
 or connect to a server. The **web app** is the same interface in a browser, served by an Atelier server you host
@@ -121,6 +121,8 @@ pick another. If Ollama runs but has no models, pull one (for example `ollama pu
 | **OpenAI-compatible** | A base URL (default `http://localhost:1234/v1`, LM Studio's) and a key if the server asks | LM Studio, vLLM or any server with an OpenAI-compatible API. |
 | **Anthropic** | An API key | Claude models through the Anthropic API. |
 | **OpenAI** | An API key | GPT models through the OpenAI API. |
+| **Mistral** | An API key from Mistral's console, with billing on | Mistral's models, priced per token. For EU-only processing, change the base URL to `https://api.eu.mistral.ai`. |
+| **Mistral Vibe** | A Le Chat Pro or Team plan and a key for Vibe | Create the key in Le Chat under **Code › Vibe CLI** and paste it; uses the plan's Vibe allowance instead of per-token billing. On a server, everyone using the provider spends the admin's plan. |
 | **ChatGPT Plan** | A ChatGPT plan; you sign in | Uses your plan's limits instead of per-token billing. Unofficial. Desktop on this computer: your browser opens. On a server: a one-time code to enter on OpenAI's page within 15 minutes, and everyone using the provider uses the admin's plan. |
 | **GitHub Copilot** | A Copilot plan; you sign in with GitHub | A code to enter at `github.com/login/device`; counts against the plan's allowance. Unofficial. |
 | **ChatGPT Chat** | A ChatGPT account | Experimental. ChatGPT itself, driven through a signed-in browser window. Desktop app on this computer only. |
@@ -222,9 +224,10 @@ box before your first message. See [Cowork](/cowork/).
   3.5 times more. In Code the last stop is **Ultracode**, where the model plans and has sub-agents investigate and check
   in parallel; an admin can switch it off. Models that can only turn thinking on or off get a **Thinking** switch in the
   same popover. See [Effort](/effort/).
-- The **context ring** shows how full the model's context window is. In Chat and Cowork, hover it; older messages are
-  summarized automatically before it fills. In Code, click it for what fills the window, **Compact session**, the
-  session's tokens and cost, and your usage (for a ChatGPT Plan, the plan's own limit windows).
+- The **context ring** shows how full the model's context window is. Click it for the figures and your usage: the cost
+  on a priced hosted API, for a ChatGPT Plan the plan's own limit windows, for Mistral Vibe its monthly allowance. In Chat
+  and Cowork older messages are summarized automatically before it fills; in Code the popover also shows what fills the
+  window, the session's tokens, and **Compact session**.
 
 ### Settings
 

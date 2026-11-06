@@ -6,7 +6,7 @@
 
 **A self-hosted AI workspace with Chat, Cowork and Code, on the models you choose.**
 
-Run it on your own machine with Ollama or llama.cpp, or use Anthropic, OpenAI, GitHub Copilot, a ChatGPT plan, OpenRouter or any OpenAI-compatible endpoint.<br>
+Run it on your own machine with Ollama or llama.cpp, or use Anthropic, OpenAI, Mistral, GitHub Copilot, a ChatGPT or Mistral Vibe plan, OpenRouter or any OpenAI-compatible endpoint.<br>
 One backend, two ways in: a desktop app and a web app you host yourself.
 
 <br>
@@ -70,7 +70,7 @@ It runs on the models *you* choose, keeps everything in a data folder you contro
 - **Reasoning effort**: Low to Max, changeable mid-conversation (a model with no setting of its own is guided by a short note; ChatGPT Chat takes the steps of ChatGPT's own picker). Models that can only think on or off get a **Thinking** switch.
 - **Editable history**: retry a reply or edit your message and the earlier versions stay, one click away.
 - **Long chats stay usable**: conversations are compacted automatically before they outgrow the context window, and the line it leaves opens the summary.
-- **Context meter**: how full the window is; in Code a popover breaks it down by category and shows what a ChatGPT plan has left or what a session cost on a hosted API.
+- **Context meter**: how full the window is; a popover shows what a ChatGPT or Mistral Vibe plan has left or what a session cost on a hosted API, and in Code breaks the window down by category.
 - **Projects**: chats that share instructions and files.
 
 </td>
@@ -273,7 +273,7 @@ In a split view, keys act in the session you are working in.
 - Hide or rename models, override the context length, and choose native or *prompted* tool calling for local models without a tool-capable chat template.
 - One default model for everyone's new sessions, each person's own pick, and a small model for titles, summaries and memory.
 - Tell Atelier your VRAM budget and it sizes each Ollama model's context window from the model's architecture and weights.
-- Costs use published list prices for Anthropic and OpenAI unless you set your own.
+- Costs use published list prices for Anthropic, OpenAI and Mistral unless you set your own.
 - Anything OpenAI-compatible (LM Studio, vLLM and the like) can be added as its own provider; OpenRouter and OpenCode Zen are one click.
 
 </td>
@@ -287,6 +287,8 @@ In a split view, keys act in the session you are working in.
 | **llama.cpp** | `llama-server` | ⚠️ recorded responses only |
 | **OpenAI** | the Responses API | ⚠️ recorded responses only |
 | **GitHub Copilot** | sign-in with a code, on every backend | ⚠️ recorded responses only |
+| **Mistral** | Mistral's chat completions API, with a key from Mistral's console | ⚠️ recorded responses only |
+| **Mistral Vibe** | the same API with the Vibe key of a Le Chat Pro or Team plan; the plan's monthly allowance shows in the context popover | ⚠️ recorded responses only; Mistral allows Vibe keys in other apps only informally |
 | **OpenRouter**, **OpenCode Zen** and other OpenAI-compatible endpoints | chat completions | ⚠️ recorded responses only |
 | **ChatGPT Plan** | sign-in as OpenAI's Codex does, desktop or web (device code); your plan's usage windows show in the context popover | ⚠️ unofficial: not documented by OpenAI as an API, so it can change or stop working |
 | **ChatGPT Chat** *(experimental, desktop only)* | a signed-in chatgpt.com browser window that Atelier drives: ChatGPT's own models and thinking levels, images and PDFs, tools through a prompt | ⚠️ unofficial and fragile: it follows ChatGPT's web page, and automated access may conflict with OpenAI's terms |
@@ -363,7 +365,7 @@ flowchart TB
 
     ui["<b>React UI</b><br/>packages/ui"]
     core["<b>createBackend()</b><br/>packages/core<br/>agent loop, tools, permissions,<br/>hooks, MCP, SQLite"]
-    models["<b>Model backends</b><br/>Ollama, llama.cpp, Anthropic, OpenAI,<br/>OpenAI-compatible, GitHub Copilot, ChatGPT plan"]
+    models["<b>Model backends</b><br/>Ollama, llama.cpp, Anthropic, OpenAI, Mistral,<br/>OpenAI-compatible, GitHub Copilot, ChatGPT plan"]
     runner["<b>Go runner</b><br/>files, search, shell, PTY<br/>runs where the folder lives:<br/>local, SSH host, codespace"]
 
     desktop --> ui

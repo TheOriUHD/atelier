@@ -106,9 +106,9 @@ why and not to find another way).
   sending secrets anywhere, force pushes and commands that discard uncommitted work, deleting your own pre-existing work,
   changing system locations, deploys and production changes, changing where pushes go, turning off a guard, and starting
   agents that run without review. It allows ordinary development work.
-- With a **hosted model** (Anthropic, OpenAI, ChatGPT Plan or GitHub Copilot) it reads "asked for" broadly: an action your
-  request clearly leads to counts. With any other provider (a local server, OpenRouter and other OpenAI-compatible APIs) it
-  keeps the stricter reading, because small models judge less reliably.
+- With a **hosted model** (Anthropic, OpenAI, Mistral, Mistral Vibe, ChatGPT Plan or GitHub Copilot) it reads "asked for"
+  broadly: an action your request clearly leads to counts. With any other provider (a local server, OpenRouter and other
+  OpenAI-compatible APIs) it keeps the stricter reading, because small models judge less reliably.
 - After **3 blocks in a row or 20 in a session**, or when the reviewer cannot answer (an error, a timeout, a reply it
   cannot read), you are asked instead. A **ChatGPT Chat** session can't review its own actions (it has one conversation slot), so
   the small model does, and with no other model the action asks you.
@@ -401,6 +401,8 @@ not a filter: a determined person or a model that follows instructions poorly ca
 - **ChatGPT Plan and ChatGPT Chat are unofficial.** Neither is an API OpenAI offers to other apps: Plan signs in the way
   OpenAI's Codex does and uses its endpoints; Chat drives a chatgpt.com browser session. They can break
   without notice, and your ChatGPT account and plan limits are the ones at stake.
+- **A Mistral Vibe key outside Vibe** is allowed by Mistral only informally, so that can change. On a server, everyone who
+  can use the provider spends the admin's plan.
 - **Unsigned Windows builds** on first install, and Windows and Linux builds being less exercised than macOS.
 - **Other people with access to the same server** beyond what [Accounts](/accounts/) describes: admins decide what every
   model is told, and the host's operator can read everything.

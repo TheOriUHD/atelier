@@ -81,15 +81,15 @@ The license above covers Atelier's own code. It does not change the terms of any
 
 Model providers, search engines, GitHub and the other services Atelier connects to are named because Atelier works
 with them. Their models and services are under their own terms, which apply to your use of them: your API key, your
-ChatGPT or GitHub Copilot plan, your account. Some integrations are unofficial (a ChatGPT plan, ChatGPT Chat, GitHub
-Copilot); the provider can change or restrict them, and Atelier cannot promise they keep working. See
-[Providers](/providers/) and [ChatGPT](/chatgpt/).
+ChatGPT, GitHub Copilot or Le Chat plan, your account. Some integrations are unofficial (a ChatGPT plan, ChatGPT Chat,
+GitHub Copilot), and Mistral allows a Mistral Vibe key in other apps only informally; the provider can change or restrict
+them, and Atelier cannot promise they keep working. See [Providers](/providers/) and [ChatGPT](/chatgpt/).
 
 ## Names and trademarks
 
 Atelier is an independent project, not affiliated with or endorsed by
-Anthropic, OpenAI, GitHub or any other provider or service it connects to. Claude is a trademark of Anthropic. Other
-product names belong to their owners and are used only to say what Atelier works with.
+Anthropic, OpenAI, GitHub, Mistral AI or any other provider or service it connects to. Claude is a trademark of Anthropic.
+Other product names belong to their owners and are used only to say what Atelier works with.
 
 The license grants copyright and patent licenses to the software and says it implies no other licenses.
 

@@ -411,7 +411,7 @@ export const SETTINGS_INDEX = [
     page: 'usage',
     label: 'Prices',
     description:
-      'Dollars per million tokens, per model, in place of the provider’s list price (Anthropic and OpenAI models without one here use it). A price counts for requests made after it is set.',
+      'Dollars per million tokens, per model, in place of the provider’s list price (Anthropic, OpenAI and Mistral models without one here use it). A price counts for requests made after it is set.',
     keywords: ['pricing', 'price table', 'cost', 'dollars', 'cache'],
     admin: true,
   },

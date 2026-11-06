@@ -117,7 +117,7 @@ oddly.
 | `ATELIER_CHATGPT_CALLBACK_PORT` | tests | Port of the short-lived listener on `127.0.0.1` that receives the ChatGPT Plan sign-in's return (default `1455`). Tests set `0` to pick a free port. |
 | `ATELIER_SEARCH_BASE` | tests | Replaces the search engines' addresses with a local fake, and turns result-page reading off. |
 | `ATELIER_LOOP_MIN_INTERVAL_MS` | tests | The shortest loop interval, instead of one minute. |
-| `ATELIER_LIVE_ANTHROPIC_MODEL`, `ATELIER_LIVE_OPENAI_MODEL`, `ATELIER_LIVE_OLLAMA_URL`, `ATELIER_LIVE_OLLAMA_MODEL`, `ATELIER_LIVE_LLAMACPP_URL`, `ATELIER_LIVE_COMPAT_URL`, `ATELIER_LIVE_COMPAT_KEY`, `ATELIER_LIVE_COMPAT_MODEL` | live provider tests | Which real model servers the opt-in provider tests talk to. The tests are skipped without them. |
+| `ATELIER_LIVE_ANTHROPIC_MODEL`, `ATELIER_LIVE_OPENAI_MODEL`, `ATELIER_LIVE_OLLAMA_URL`, `ATELIER_LIVE_OLLAMA_MODEL`, `ATELIER_LIVE_LLAMACPP_URL`, `ATELIER_LIVE_COMPAT_URL`, `ATELIER_LIVE_COMPAT_KEY`, `ATELIER_LIVE_COMPAT_MODEL`, `ATELIER_LIVE_MISTRAL_MODEL`, `ATELIER_LIVE_MISTRAL_VIBE_MODEL` | live provider tests | Which real model servers the opt-in provider tests talk to. The tests are skipped without them. |
 | `ATELIER_PROMPT_CORPUS` | prompt originality check | Folders to compare Atelier's prompts against. |
 | `ATELIER_UPDATE_KEY` | `deploy/cloudflare/publish.mjs` | Path of the Ed25519 update-signing private key (default `~/.atelier-release/update-signing.key`). See [Updates](/updates/#publishing-updates). |
 | `ATELIER_RELEASES_BUCKET` | `deploy/cloudflare/publish.mjs` | The R2 bucket name (default `atelier-releases`). |

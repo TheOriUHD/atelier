@@ -53,6 +53,7 @@ There is no per-person default level.
 | **Ollama** | A level for models that list levels (the gpt-oss family: low, medium, high). A model that only thinks on or off gets thinking on or off. A model without thinking gets nothing. |
 | **llama.cpp** | What the model's chat template reads: `enable_thinking` on or off, or a `reasoning_effort` of low, medium or high. Atelier reads which one from the server. |
 | **GitHub Copilot** | The **Auto** model uses the level to pick its routing profile: Low saves, Medium balances, High and above ask for the best. Other models get a reasoning effort as the OpenAI-compatible row. |
+| **Mistral**, **Mistral Vibe** | A `reasoning_effort` per model. Mistral Large 4 takes low, medium or high; Extra, Max and Ultracode ask for high. GLM 5.3 and GLM 5.3 Flash take low, high or max, and a level in between moves to the next lower one (Medium sends low, Extra high). Medium 3.5, Small 4 and the Vibe models only think on or off: every level sends `high`, and the **Thinking** switch off sends `none`. Models without reasoning, and DeepSeek V4.1 Flash, which reasons by itself, get nothing. A reasoning model Atelier doesn't know gets high. The thinking shows as it streams. |
 | **ChatGPT Chat** | ChatGPT's own stops, below. |
 
 The output limit of a reply also grows with the level: 32,000 tokens up to Medium, 64,000 at High, the model's own maximum at Extra and above (never more than the model allows). On Anthropic budget models the thinking budget comes out of it.
@@ -75,7 +76,7 @@ Low gets its note on every model, including those with a native Low, so Low is t
 
 ## The Thinking switch
 
-Some local models can only think on or off. For those (Ollama thinking models without levels, llama.cpp templates with `enable_thinking`) the popover has a **Thinking** switch marked **Recommended**:
+Some models can only think on or off. For those (Ollama thinking models without levels, llama.cpp templates with `enable_thinking`, and Mistral Medium 3.5, Small 4 and the Vibe models) the popover has a **Thinking** switch marked **Recommended**:
 
 - On by default. Off sends the model no thinking at all.
 - It hides from **Extra** upward, where thinking is always on.
@@ -145,6 +146,6 @@ Plan mode and the permission rules apply as usual: sub-agents ask you through th
 
 - Raise the level when the model's answer is wrong or shallow, not by default. Each step up costs time and tokens on every request, tool calls included.
 - A small local model gains less from Max than a large one. A larger context window, or a better model, helps more.
-- Max and Ultracode on a hosted API bill the extra tokens. On a **ChatGPT Plan** they count against the plan's limits.
+- Max and Ultracode on a hosted API bill the extra tokens. On a **ChatGPT Plan** or **Mistral Vibe** they count against the plan's limits.
 - Ultracode is for tasks worth a plan, a team of investigators and a review. For a one-line change it only adds cost.
 - On a model with a **Thinking** switch, turning thinking off is the biggest saving for easy requests.
