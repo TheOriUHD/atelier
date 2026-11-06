@@ -79,6 +79,38 @@ app.setName(APP.name);
 // A second copy hands over to the first (its `second-instance` shows the window) and goes at once: quitting the gentle
 // way would still run its start below, a second backend on the same data included.
 if (!app.requestSingleInstanceLock()) app.exit(0);
+
+/**
+ * Co-op invites (ARCHITECTURE §24): `atelier://join#v1.<room>.<secret>.<meta>` opens the join card. macOS hands the link
+ * over in `open-url`; Windows and Linux start a second copy with it in its arguments, which `second-instance` passes on.
+ * Only that shape goes through: the fragment is checked character by character before it becomes a route.
+ */
+const INVITE_LINK = /^atelier:\/\/join\/?#(v1\.[A-Za-z0-9_.-]{1,2000})$/;
+let waitingInvite: string | null = null;
+function openInvite(url: string): void {
+  const match = INVITE_LINK.exec(url.trim());
+  if (!match) return;
+  const route = `#/join/${match[1]}`;
+  const win = app.isReady() && registeredIpc ? atelierWindows()[0] : undefined;
+  if (!win) {
+    // Before the first window: it opens on the join card.
+    waitingInvite = route;
+    if (app.isReady() && registeredIpc) createWindow(route);
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+  void win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(route)}`).catch(() => undefined);
+}
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  openInvite(url);
+});
+for (const arg of process.argv) if (arg.startsWith('atelier://')) waitingInvite = INVITE_LINK.test(arg) ? `#/join/${INVITE_LINK.exec(arg)![1]}` : null;
+// The scheme is this app's (a development run registers the Electron binary with its script).
+if (app.isPackaged) app.setAsDefaultProtocolClient('atelier');
+else if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient('atelier', process.execPath, [normalize(process.argv[1])]);
 const mainLog = openMainLog(logsDir());
 logMain(`start ${APP.version} on ${process.platform} ${process.arch}`);
 process.on('unhandledRejection', (reason) => logMain(`unhandled rejection: ${describe(reason)}`));
@@ -144,6 +176,8 @@ const launchAtLogin = loginItem({
 
 /** Code sessions' "Keep computer awake". */
 const keepAwake = new KeepAwake(powerSaveBlocker);
+/** Co-op's rooms hold the blocker under this key, not a window's: no window has to be open for guests to work. */
+const COOP_KEEP_AWAKE = -1;
 
 /** The Browser pane's pages talk to the window showing them. */
 const browserEvents: BrowserEvents = {
@@ -304,6 +338,9 @@ function startBackend(): void {
     } else if (m.kind === 'blob') {
       blobWaiters.get(m.id)?.(m);
       blobWaiters.delete(m.id);
+    } else if (m.kind === 'coop-awake') {
+      // Guests work on this computer: it stays awake while a co-op room is open (the display may still sleep).
+      keepAwake.set(COOP_KEEP_AWAKE, m.sessionIds);
     } else if (m.kind === 'trusted') {
       // Only the built-in backend's own folders (a server's sessions never add to this computer's list this way).
       if (connection?.mode === 'local') void trustFolder(m.root).catch((e: unknown) => console.warn('Could not trust a folder:', e));
@@ -1048,7 +1085,9 @@ async function startApp(): Promise<void> {
   setInterval(() => void updates.checkAutomatically(), CHECK_EVERY_MS);
   startBackend();
   registerIpc();
-  createWindow();
+  // A co-op invite that started the app opens its join card.
+  createWindow(waitingInvite ?? '');
+  waitingInvite = null;
   // After the window: a slow disk mustn't hold up the start.
   setTimeout(() => void repairOwnShortcuts().catch((e: unknown) => logMain(`shortcut check failed: ${describe(e)}`)), 3000);
   app.on('activate', () => {
@@ -1057,8 +1096,13 @@ async function startApp(): Promise<void> {
 }
 
 /** Opening Atelier again shows its window: restored, shown if it never was, or made again if there is none. */
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
   logMain('opened again');
+  const invite = argv.find((arg) => arg.startsWith('atelier://'));
+  if (invite) {
+    openInvite(invite);
+    return;
+  }
   const win = atelierWindows()[0];
   if (!win) {
     if (app.isReady() && registeredIpc) createWindow();

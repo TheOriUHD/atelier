@@ -15,6 +15,10 @@ nodeGypRebuild: false
 # Writes electron-updater's files (latest.yml, latest-mac.yml, latest-linux*.yml) for every build, always named
 # "latest": the stable or beta channel is a path on the person's Atelier server (/updates/<channel>), which the
 # app sets at runtime (src/updater.ts), so this URL is never used.
+# Co-op invites open in the app (atelier://join#…, ARCHITECTURE §24).
+protocols:
+  - name: Atelier
+    schemes: [atelier]
 publish:
   provider: generic
   url: https://updates.invalid
