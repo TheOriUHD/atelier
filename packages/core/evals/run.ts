@@ -32,8 +32,10 @@ const DEFAULT_URLS: Partial<Record<ProviderType, string>> = {
   llamacpp: 'http://localhost:8080',
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com',
+  mistral: 'https://api.mistral.ai',
+  'mistral-vibe': 'https://api.mistral.ai',
 };
-const KEY_ENV: Partial<Record<ProviderType, string>> = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', 'openai-compatible': 'OPENAI_COMPATIBLE_API_KEY' };
+const KEY_ENV: Partial<Record<ProviderType, string>> = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', 'openai-compatible': 'OPENAI_COMPATIBLE_API_KEY', mistral: 'MISTRAL_API_KEY', 'mistral-vibe': 'MISTRAL_VIBE_API_KEY' };
 
 const { values } = parseArgs({
   options: {

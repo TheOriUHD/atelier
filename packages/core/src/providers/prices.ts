@@ -5,7 +5,7 @@
  * List prices as published on the providers' pricing pages on 2026-10-15 (docs.claude.com pricing, OpenAI API pricing).
  * They change: that is why a person's own price overrides, and why a model that isn't here shows no cost instead of a
  * guess. Cache writes are the 5-minute rate. The ChatGPT subscription has no per-token price (the plan's limits are
- * what it spends).
+ * what it spends), and neither has a Mistral Vibe key.
  */
 import type { Price, ProviderType } from '@atelier/protocol';
 
@@ -65,6 +65,49 @@ const OPENAI: Record<string, Price> = {
   'gpt-5-pro': p(15, 120),
 };
 
+/**
+ * Mistral, by model id (dated forms and `-latest` names resolve through `mistralPrice`). From docs.mistral.ai's pricing
+ * page on 2026-11-06. Cached input costs a tenth of input; Mistral charges nothing to write the cache.
+ */
+const MISTRAL: Record<string, Price> = {
+  'mistral-large-4': p(0.7, 2.1, 0.07),
+  'mistral-medium-3-5': p(1.5, 7.5, 0.15),
+  'mistral-medium-2604': p(1.5, 7.5, 0.15),
+  'mistral-small-2603': p(0.15, 0.6, 0.015),
+  'mistral-large-2512': p(0.5, 1.5, 0.05),
+  'ministral-14b-2512': p(0.2, 0.2, 0.02),
+  'ministral-8b-2512': p(0.15, 0.15, 0.015),
+  'ministral-3b-2512': p(0.1, 0.1, 0.01),
+  'codestral-2508': p(0.3, 0.9, 0.03),
+  'zai-glm-5-3': p(1.4, 4.4, 0.14),
+  'zai-glm-5-3-flash': p(0.15, 0.5, 0.03),
+  'deepseek-v4-1-flash': p(0.3, 1.2, 0.007),
+  'voxtral-small-2507': p(0.1, 0.4, 0.01),
+};
+
+/** The `-latest` names Mistral points at a model, as of the date above. */
+const MISTRAL_ALIASES: Record<string, string> = {
+  'mistral-large-latest': 'mistral-large-2512',
+  'mistral-medium-latest': 'mistral-medium-3-5',
+  'mistral-medium-3': 'mistral-medium-3-5',
+  'mistral-small-latest': 'mistral-small-2603',
+  'ministral-14b-latest': 'ministral-14b-2512',
+  'ministral-8b-latest': 'ministral-8b-2512',
+  'ministral-3b-latest': 'ministral-3b-2512',
+  'codestral-latest': 'codestral-2508',
+  'zai-glm-5': 'zai-glm-5-3',
+  'zai-glm-latest': 'zai-glm-5-3',
+  'voxtral-small-latest': 'voxtral-small-2507',
+};
+
+function mistralPrice(id: string): Price | null {
+  const name = MISTRAL_ALIASES[id] ?? id;
+  if (MISTRAL[name]) return MISTRAL[name];
+  // A numbered or dated form of a listed model (`mistral-large-4-0`, `deepseek-v4-1-flash-1017`).
+  const key = Object.keys(MISTRAL).filter((k) => name.startsWith(`${k}-`)).sort((a, b) => b.length - a.length)[0];
+  return key ? MISTRAL[key]! : null;
+}
+
 /** A model id as the tables spell it: lower case, dots as dashes for Claude, a trailing date (`-20251001`) dropped. */
 const normalize = (id: string) => id.toLowerCase().replace(/-\d{8}$/, '');
 
@@ -72,6 +115,8 @@ const normalize = (id: string) => id.toLowerCase().replace(/-\d{8}$/, '');
 export function listPrice(type: ProviderType, modelId: string): Price | null {
   if (type === 'anthropic') return ANTHROPIC[normalize(modelId).replaceAll('.', '-')] ?? null;
   if (type === 'openai') return OPENAI[normalize(modelId)] ?? null;
+  // A Vibe key spends its plan's allowance: no per-token price, unless an admin sets one.
+  if (type === 'mistral') return mistralPrice(modelId.toLowerCase());
   return null;
 }
 

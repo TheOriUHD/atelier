@@ -252,6 +252,7 @@ export const AUDIT_RULES = {
   'providers.save': providerDraft('text'),
   'providers.remove': providerRemoval('text'),
   'providers.status': skip('reads only'),
+  'providers.planUsage': skip('reads only'),
   'providers.detect': skip('looks for servers; stores nothing'),
   'providers.test': skip('a trial request; stores nothing'),
   'providers.refresh': skip('asks the providers again; stores nothing'),

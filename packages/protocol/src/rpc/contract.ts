@@ -42,7 +42,7 @@ import { LimitsStatus, PersonLimits, UserLimits } from '../limits.ts';
 import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
-import { Effort, ModelInfo, ProviderStatus, ProviderType } from '../models.ts';
+import { Effort, ModelInfo, PlanUsage, ProviderStatus, ProviderType } from '../models.ts';
 import { AudioKind, DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
@@ -255,6 +255,8 @@ export const contract = {
      * returns the code to enter at `verificationUri`; the backend polls GitHub and the result shows in `status`.
      */
     'copilot.status': { input: Empty, output: CopilotStatus },
+    /** A subscription provider's allowance as it reports it (Mistral Vibe); null where it doesn't. Read on demand. */
+    'providers.planUsage': { input: z.object({ id: z.string() }), output: PlanUsage.nullable() },
     'copilot.signIn': { input: Empty, output: z.object({ userCode: z.string(), verificationUri: z.string(), expiresAt: z.number() }) },
     'copilot.cancel': { input: Empty, output: Ok },
     'copilot.signOut': { input: Empty, output: Ok },
@@ -825,6 +827,7 @@ export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNam
   'chatgpt.cancel',
   'chatgpt.signOut',
   'copilot.status',
+  'providers.planUsage',
   'copilot.signIn',
   'copilot.cancel',
   'copilot.signOut',

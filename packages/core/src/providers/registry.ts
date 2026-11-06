@@ -34,7 +34,7 @@ import { detectLocalServers } from './local-servers.ts';
 import { personalKeyId, type PersonalAccess, type PersonalRow } from './personal.ts';
 import { withPromptedTools } from './prompted-tools.ts';
 import { defaultLimits, RequestScheduler, serverName, type ServerLimits } from './scheduler.ts';
-import type { AdapterDeps, HealthResult, ProviderAdapter, ProviderInstance } from './types.ts';
+import type { AdapterDeps, HealthResult, PlanUsage, ProviderAdapter, ProviderInstance } from './types.ts';
 
 export type AdapterFactory = (instance: ProviderInstance, deps: AdapterDeps) => ProviderAdapter;
 type DiscoveredModel = Omit<ModelInfo, 'hidden' | 'favorite' | 'order'>;
@@ -58,6 +58,8 @@ export interface RegistryDeps {
 
 /** A health check that gets no answer this soon says so: the server is down or unreachable. */
 const HEALTH_TIMEOUT_MS = 6_000;
+/** How long a subscription's allowance reading is shown before it is asked for again. */
+const PLAN_USAGE_TTL_MS = 30_000;
 /** Listing models may ask the server about each one in turn. */
 const DISCOVERY_TIMEOUT_MS = 15_000;
 
@@ -80,6 +82,7 @@ const deviceLabel = (row: PersonalRow): string => row.deviceName ?? 'a removed c
  */
 export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]]; models: [ModelInfo[]]; personalModels: [string] }> implements ModelResolver {
   private adapters = new Map<string, { key: string; adapter: ProviderAdapter }>();
+  private plans = new Map<string, { at: number; usage: PlanUsage | null }>();
   /** Provider configs as last probed, to notice edits made outside save/remove (e.g. a hand-edited settings.json). */
   private known = new Map<string, string>();
   private overridesKey = '';
@@ -366,6 +369,21 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
   async rawKey(id: string): Promise<string | undefined> {
     const config = this.providers.find((p) => p.id === id);
     return config ? (await this.instance(config)).apiKey : undefined;
+  }
+
+  /**
+   * A subscription provider's allowance as it reports it (Mistral Vibe), null where it doesn't. Read for the context
+   * popover and the Usage tool, so a reading is kept for half a minute rather than asked for on every look.
+   */
+  async planUsage(id: string): Promise<PlanUsage | null> {
+    const config = this.providers.find((p) => p.id === id);
+    if (!config?.enabled) return null;
+    const kept = this.plans.get(id);
+    if (kept && Date.now() - kept.at < PLAN_USAGE_TTL_MS) return kept.usage;
+    const adapter = await this.adapterFor(config);
+    const usage = (await adapter.planUsage?.(AbortSignal.timeout(10_000)).catch(() => null)) ?? null;
+    this.plans.set(id, { at: Date.now(), usage });
+    return usage;
   }
 
   /** Makes a local text server unload its models, so an image job has the GPU. A text request loads them again. */

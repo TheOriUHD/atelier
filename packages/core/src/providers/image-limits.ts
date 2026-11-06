@@ -154,6 +154,7 @@ export function withImageLimits(
     },
     ...(adapter.countTokens ? { countTokens: async (request: Parameters<NonNullable<ProviderAdapter['countTokens']>>[0]) => adapter.countTokens!(await fit(request)) } : {}),
     ...(adapter.serverLimits ? { serverLimits: (signal?: AbortSignal) => adapter.serverLimits!(signal) } : {}),
+    ...(adapter.planUsage ? { planUsage: (signal?: AbortSignal) => adapter.planUsage!(signal) } : {}),
   };
   return wrapped;
 }

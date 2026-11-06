@@ -3,6 +3,7 @@ import { createChatGptAdapter } from './chatgpt.ts';
 import { createCopilotAdapter } from './copilot.ts';
 import { createAnthropicAdapter } from './anthropic.ts';
 import { createLlamaCppAdapter } from './llamacpp.ts';
+import { createMistralAdapter } from './mistral.ts';
 import { createOllamaAdapter } from './ollama.ts';
 import { createOpenAICompatibleAdapter } from './openai-compatible.ts';
 import { createOpenAIAdapter } from './openai.ts';
@@ -28,6 +29,9 @@ function createBare(instance: ProviderInstance, deps: AdapterDeps): ProviderAdap
       return createChatGptAdapter(instance, deps);
     case 'copilot':
       return createCopilotAdapter(instance, deps);
+    case 'mistral':
+    case 'mistral-vibe':
+      return createMistralAdapter(instance, deps);
   }
 }
 

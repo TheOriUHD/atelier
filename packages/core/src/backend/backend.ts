@@ -907,7 +907,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const usageSource = {
     offered: (ref: string) => {
       const type = providerType(ref);
-      return type === 'chatgpt' || type === 'anthropic' || type === 'openai' || type === 'openai-compatible' || !!settings.effective.pricing[ref];
+      return type === 'chatgpt' || type === 'mistral-vibe' || type === 'anthropic' || type === 'openai' || type === 'openai-compatible' || type === 'mistral' || !!settings.effective.pricing[ref];
     },
     report: async (sessionId: string, ref: string) => {
       const type = providerType(ref);
@@ -920,6 +920,17 @@ export async function createBackend(platform: Platform): Promise<Backend> {
           .filter((w): w is NonNullable<typeof w> => !!w && (w.windowMinutes === null || w.windowMinutes > 0) && (!pro || w.windowMinutes === 10_080))
           .map((w) => ({ minutes: w.windowMinutes, usedPercent: w.usedPercent, resetsAt: w.resetsAt }));
         return { provider: PROVIDER_LABELS.chatgpt, ...(status.plan ? { plan: chatGptPlanLabel(status.plan) } : {}), windows };
+      }
+      if (type === 'mistral-vibe') {
+        const id = parseModelRef(ref)!.providerId;
+        const usage = await registry.planUsage(id);
+        return {
+          provider: PROVIDER_LABELS['mistral-vibe'],
+          ...(usage?.plan ? { plan: usage.plan } : {}),
+          ...(usage ? { windows: [{ minutes: null, name: 'Monthly allowance', usedPercent: usage.usedPercent, resetsAt: usage.resetsAt }] } : {}),
+          ...(usage?.overage ? { notes: ['Pay-as-you-go is on: past the allowance, requests are charged instead of stopped.'] } : {}),
+          ...(!usage ? { notes: ['Mistral did not report this plan’s allowance for this key.'] } : {}),
+        };
       }
       const row = await sessions.getRow(sessionId);
       const offset = new Date().getTimezoneOffset();
@@ -1765,7 +1776,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'providers.detect': () => registry.detect(),
     'providers.test': (draft) => registry.test(draft),
     'providers.save': async (draft) => {
-      if (!draft.apiKey && !draft.apiKeyFromEnv && (draft.type === 'anthropic' || draft.type === 'openai')) {
+      if (!draft.apiKey && !draft.apiKeyFromEnv && (draft.type === 'anthropic' || draft.type === 'openai' || draft.type === 'mistral' || draft.type === 'mistral-vibe')) {
         const existing = settings.effective.providers.find((p) => p.id === draft.id);
         if (!existing?.apiKey) throw appError('missing_key', `${draft.name} needs an API key.`);
       }
@@ -2315,6 +2326,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     // GitHub Copilot: the device flow polls in the backend (providers/copilot-auth.ts).
+    'providers.planUsage': ({ id }) => registry.planUsage(id),
     'copilot.status': () => copilot.status(),
     'copilot.signIn': async () => {
       try {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const ProviderType = z.enum(['ollama', 'llamacpp', 'anthropic', 'openai', 'openai-compatible', 'chatgpt', 'chatgpt-chat', 'copilot']);
+export const ProviderType = z.enum(['ollama', 'llamacpp', 'anthropic', 'openai', 'openai-compatible', 'chatgpt', 'chatgpt-chat', 'copilot', 'mistral', 'mistral-vibe']);
 export type ProviderType = z.infer<typeof ProviderType>;
 
 export const PROVIDER_LABELS: Record<ProviderType, string> = {
@@ -12,6 +12,8 @@ export const PROVIDER_LABELS: Record<ProviderType, string> = {
   chatgpt: 'ChatGPT Plan',
   'chatgpt-chat': 'ChatGPT Chat',
   copilot: 'GitHub Copilot',
+  mistral: 'Mistral',
+  'mistral-vibe': 'Mistral Vibe',
 };
 
 export function chatGptPlanLabel(plan: string): string {
@@ -32,6 +34,8 @@ export const DEFAULT_BASE_URLS: Record<ProviderType, string> = {
   chatgpt: 'https://chatgpt.com/backend-api/codex',
   'chatgpt-chat': 'https://chatgpt.com',
   copilot: 'https://api.githubcopilot.com',
+  mistral: 'https://api.mistral.ai',
+  'mistral-vibe': 'https://api.mistral.ai',
 };
 
 /** Provider ids never contain "/", so a model ref splits unambiguously on the first slash. */
@@ -130,6 +134,19 @@ export const ModelInfo = z.object({
   available: z.boolean().optional(),
 });
 export type ModelInfo = z.infer<typeof ModelInfo>;
+
+/**
+ * A subscription's allowance as its provider reports it (Mistral Vibe's monthly allowance): the share used, which goes
+ * past 100 when usage beyond it is charged, and when it starts again.
+ */
+export const PlanUsage = z.object({
+  usedPercent: z.number().nonnegative(),
+  resetsAt: z.number().nullable(),
+  plan: z.string().optional(),
+  /** Usage past the allowance is charged (Mistral's pay-as-you-go) instead of waiting for the next period. */
+  overage: z.boolean().optional(),
+});
+export type PlanUsage = z.infer<typeof PlanUsage>;
 
 export const ProviderStatus = z.object({
   providerId: z.string(),

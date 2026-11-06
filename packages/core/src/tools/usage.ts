@@ -11,7 +11,9 @@ export interface UsageReport {
   /** A subscription's plan ("Pro 200"). */
   plan?: string;
   /** A subscription's windows as the provider last reported them; `resetsAt` in ms. */
-  windows?: { minutes: number | null; usedPercent: number; resetsAt: number | null }[];
+  windows?: { minutes: number | null; usedPercent: number; resetsAt: number | null; name?: string }[];
+  /** Lines said after the figures (Mistral Vibe's pay-as-you-go). */
+  notes?: string[];
   /** A priced API's spend in US dollars; null where nothing was priced. `unpriced`: some requests have no price. */
   cost?: { session: number | null; today: number | null; week: number | null; unpriced: boolean };
 }
@@ -56,7 +58,7 @@ export function formatUsage(report: UsageReport, now: number): string {
       lines.push(`${head}, usage limits as last reported:`);
       for (const w of report.windows) {
         const left = w.resetsAt === null ? '' : `, resets in ${untilReset(w.resetsAt - now)} (${new Date(w.resetsAt).toISOString().replace(/\.\d{3}Z$/, 'Z')})`;
-        lines.push(`- ${windowName(w.minutes)}: ${Math.round(w.usedPercent)}% used${left}`);
+        lines.push(`- ${w.name ?? windowName(w.minutes)}: ${Math.round(w.usedPercent)}% used${left}`);
       }
     }
   }
@@ -65,6 +67,7 @@ export function formatUsage(report: UsageReport, now: number): string {
     lines.push(`${head}, cost in US dollars: this session ${dollars(session)}, today ${dollars(today)}, last 7 days ${dollars(week)}.`);
     if (unpriced) lines.push('Some requests have no known price and are not counted.');
   }
+  if (report.notes?.length) lines.push(...report.notes.map((n) => (lines.length ? n : `${head}: ${n}`)));
   return lines.join('\n') || `${head}: nothing to report.`;
 }
 

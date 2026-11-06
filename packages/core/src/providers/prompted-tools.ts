@@ -286,5 +286,6 @@ export function withPromptedTools(adapter: ProviderAdapter): ProviderAdapter {
   };
   const count = adapter.countTokens?.bind(adapter);
   if (count) wrapped.countTokens = (request) => count(promptedRequest(request));
+  if (adapter.planUsage) wrapped.planUsage = (signal) => adapter.planUsage!(signal);
   return wrapped;
 }

@@ -6,6 +6,8 @@
  *   ATELIER_LIVE_OLLAMA_URL        [ATELIER_LIVE_OLLAMA_MODEL, else the first listed]
  *   ATELIER_LIVE_LLAMACPP_URL
  *   ATELIER_LIVE_COMPAT_URL [ATELIER_LIVE_COMPAT_KEY] [ATELIER_LIVE_COMPAT_MODEL]
+ *   MISTRAL_API_KEY       [ATELIER_LIVE_MISTRAL_MODEL=mistral-small-2603]
+ *   MISTRAL_VIBE_API_KEY  [ATELIER_LIVE_MISTRAL_VIBE_MODEL=mistral-vibe-cli-latest] (a Vibe key: spends the plan's allowance)
  * Keys are only passed to the adapters; nothing here prints them.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -103,10 +105,14 @@ const targets: Target[] = [
   { name: 'Ollama', type: 'ollama', url: env('ATELIER_LIVE_OLLAMA_URL'), model: env('ATELIER_LIVE_OLLAMA_MODEL'), thinking: false, vision: false },
   { name: 'llama.cpp', type: 'llamacpp', url: env('ATELIER_LIVE_LLAMACPP_URL'), thinking: false, vision: false },
   { name: 'OpenAI-compatible', type: 'openai-compatible', url: env('ATELIER_LIVE_COMPAT_URL'), key: env('ATELIER_LIVE_COMPAT_KEY'), model: env('ATELIER_LIVE_COMPAT_MODEL'), thinking: false, vision: false },
+  { name: 'Mistral', type: 'mistral', url: 'https://api.mistral.ai', key: env('MISTRAL_API_KEY'), model: env('ATELIER_LIVE_MISTRAL_MODEL') ?? 'mistral-small-2603', thinking: true, vision: true },
+  { name: 'Mistral Vibe', type: 'mistral-vibe', url: 'https://api.mistral.ai', key: env('MISTRAL_VIBE_API_KEY'), model: env('ATELIER_LIVE_MISTRAL_VIBE_MODEL') ?? 'mistral-vibe-cli-latest', thinking: true, vision: true },
 ];
 
+const HOSTED: ProviderType[] = ['anthropic', 'openai', 'mistral', 'mistral-vibe'];
+
 for (const t of targets) {
-  const configured = t.type === 'anthropic' || t.type === 'openai' ? !!t.key : !!t.url;
+  const configured = HOSTED.includes(t.type) ? !!t.key : !!t.url;
   describe.skipIf(!configured)(`live: ${t.name}`, { timeout: 120_000 }, () => {
     // Created lazily: skipped suites are still collected.
     let created: ProviderAdapter | undefined;
@@ -136,6 +142,32 @@ for (const t of targets) {
         { type: 'text', text: 'What single color is this image? Answer with one word.' },
       ]);
       expect(text.toLowerCase()).toContain('red');
+    }));
+
+    // Mistral's own rules: nine-letter call ids, a tool message for every call, the tool's name with its result.
+    it.skipIf(t.type !== 'mistral' && t.type !== 'mistral-vibe')('calls a tool and answers from its result, with a call id from another provider', live_(async () => {
+      const tool = { name: 'lookup_capital', description: 'The capital of a country.', inputSchema: { type: 'object', properties: { country: { type: 'string' } }, required: ['country'] } };
+      const ask = userMessage([{ type: 'text', text: 'Use lookup_capital to find the capital of France, then answer with just the city.' }]);
+      const first: StreamEvent[] = [];
+      for await (const ev of live().stream({ model: await model(), system: [{ text: 'You are a terse test assistant.' }], messages: [ask], tools: [tool], maxOutputTokens: 1024, signal: AbortSignal.timeout(90_000) })) first.push(ev);
+      const end = first.find((e) => e.type === 'tool_call_end');
+      expect(end?.type).toBe('tool_call_end');
+      // As if another provider had made the call: Mistral only takes nine-letter ids, which the adapter maps.
+      const callId = 'toolu_01AbCdEfGhIjKlMnOpQrStUv';
+      const assistant: Message = { ...ask, id: 'a', role: 'assistant', parts: [{ type: 'tool_call', id: callId, name: tool.name, input: { country: 'France' } }] };
+      const result: Message = { ...ask, id: 't', parts: [{ type: 'tool_result', callId, content: [{ type: 'text', text: 'Paris' }] }] };
+      const text: string[] = [];
+      for await (const ev of live().stream({ model: await model(), system: [{ text: 'You are a terse test assistant.' }], messages: [ask, assistant, result], tools: [tool], maxOutputTokens: 1024, signal: AbortSignal.timeout(90_000) })) {
+        if (ev.type === 'text') text.push(ev.delta);
+        if (ev.type === 'finish' && ev.error) throw new Error(`${ev.error.code}: ${ev.error.message}`);
+      }
+      expect(text.join('')).toContain('Paris');
+    }));
+
+    it.skipIf(t.type !== 'mistral-vibe')('reads the plan’s allowance', live_(async () => {
+      const usage = await live().planUsage!();
+      // Null when the key may not read the workspace's usage; a reading has a share used.
+      if (usage) expect(usage.usedPercent).toBeGreaterThanOrEqual(0);
     }));
   });
 }

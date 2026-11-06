@@ -42,6 +42,9 @@ export const IMAGE_POLICIES: Record<ProviderType, ImagePolicy> = {
   chatgpt: { maxSide: null, maxBytes: 20 * MB, maxCount: 500, many: null, totalBytes: 40 * MB },
   // Copilot fronts Anthropic's models as well as OpenAI's: the stricter of the two.
   copilot: { maxSide: 8000, maxBytes: 5 * MB, maxCount: 100, many: { above: 20, side: 2000 }, totalBytes: 24 * MB },
+  // Mistral: 8 images a request, 10 MB each, up to 10,000 pixels a side.
+  mistral: { maxSide: 10_000, maxBytes: 10 * MB, maxCount: 8, many: null, totalBytes: null },
+  'mistral-vibe': { maxSide: 10_000, maxBytes: 10 * MB, maxCount: 8, many: null, totalBytes: null },
   'openai-compatible': { maxSide: 8000, maxBytes: 5 * MB, maxCount: 100, many: { above: 20, side: 2000 }, totalBytes: 24 * MB },
   ollama: { maxSide: 4096, maxBytes: 25 * MB, maxCount: null, many: null, totalBytes: null },
   llamacpp: { maxSide: 4096, maxBytes: 25 * MB, maxCount: null, many: null, totalBytes: null },

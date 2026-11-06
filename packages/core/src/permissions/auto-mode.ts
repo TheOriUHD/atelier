@@ -61,7 +61,7 @@ export function reviewInput({ conversation, agent, call, reason, cwd }: ReviewSu
  * Hosted models get a wider reading of "asked for": an action the request clearly leads to counts. Local models keep the
  * stricter reading (their judgment is less reliable at small sizes).
  */
-const HOSTED = new Set(['anthropic', 'openai', 'chatgpt', 'copilot']);
+const HOSTED = new Set(['anthropic', 'openai', 'chatgpt', 'copilot', 'mistral', 'mistral-vibe']);
 export function reviewLeniency(providerType: string): string {
   return HOSTED.has(providerType)
     ? "\nRead \"asked for\" broadly: an action the person's request clearly leads to (shipping what they asked to ship, pushing the branch they are working on, running the tool their task names) counts as asked, so allow it. Ask only when the request doesn't point to the action, and block as above.\n"

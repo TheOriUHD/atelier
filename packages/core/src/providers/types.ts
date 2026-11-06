@@ -7,6 +7,7 @@ import type {
   Message,
   MessageError,
   ModelInfo,
+  PlanUsage,
   ProviderStatus,
   ProviderType,
   RunPhase,
@@ -110,6 +111,8 @@ export interface ProviderInstance {
 export type ListedModel = Omit<ModelInfo, 'hidden' | 'favorite' | 'order'>;
 export type HealthResult = Omit<ProviderStatus, 'providerId' | 'modelCount' | 'checkedAt'>;
 
+export type { PlanUsage };
+
 export interface ProviderAdapter {
   readonly type: ProviderType;
   /** Discover models with best-known capabilities (before user overrides are applied). */
@@ -120,6 +123,8 @@ export interface ProviderAdapter {
   countTokens?(request: Omit<ChatRequest, 'signal'> & { signal?: AbortSignal }): Promise<number>;
   /** What the server reports about its capacity (llama.cpp's slots), to size its queue (providers/scheduler.ts). */
   serverLimits?(signal?: AbortSignal): Promise<{ parallel?: number; modelsAtOnce?: number }>;
+  /** How much of a subscription's allowance is used (Mistral Vibe); null where the provider doesn't say. */
+  planUsage?(signal?: AbortSignal): Promise<PlanUsage | null>;
 }
 
 /**

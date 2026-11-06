@@ -178,7 +178,7 @@ interface PendingCall {
 }
 
 /** Accumulates tool-call deltas by `index`, emitting start once the name is known. */
-class ToolCallMerger {
+export class ToolCallMerger {
   private readonly calls = new Map<number, PendingCall>();
 
   get size(): number {

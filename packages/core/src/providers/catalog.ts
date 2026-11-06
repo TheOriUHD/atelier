@@ -137,6 +137,9 @@ const FRONTIER = [
   /^gemini-[\d.]+-pro/,
   /^grok-[3-9]/,
   /^mistral-large/,
+  /^mistral-medium/,
+  /^mistral-vibe-cli-latest/,
+  /^zai-glm-5/,
   /^claude-/,
 ];
 
