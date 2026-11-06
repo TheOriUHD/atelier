@@ -101,3 +101,27 @@ describe('the warning near a limit', () => {
     expect(callsTo('chatgpt.status').length).toBe(2);
   });
 });
+
+describe('Mistral Vibe’s monthly allowance', () => {
+  it('warns from 90% of it, and says when pay-as-you-go takes over', async () => {
+    backend.handlers['account.get'] = () => user({ role: 'admin' });
+    backend.handlers['providers.planUsage'] = () => ({ usedPercent: 93.4, resetsAt: NOW + 5 * 86_400_000, plan: 'Le Chat Pro' });
+    show(<PlanLimitWarning provider="mistral-vibe" providerId="vibe" busy={false} />);
+    expect((await screen.findByRole('status')).textContent).toMatch(/^You’ve used 93% of your Mistral Vibe monthly allowance\./);
+    expect(callsTo('providers.planUsage')).toEqual([{ id: 'vibe' }]);
+    expect(callsTo('chatgpt.status')).toEqual([]);
+    cleanup();
+
+    backend.handlers['providers.planUsage'] = () => ({ usedPercent: 120, resetsAt: null, overage: true });
+    show(<PlanLimitWarning provider="mistral-vibe" providerId="vibe-2" busy={false} />);
+    expect((await screen.findByRole('status')).textContent).toBe('You’ve used your Mistral Vibe monthly allowance: more is charged as pay-as-you-go.');
+  });
+
+  it('says nothing where Mistral doesn’t report it', async () => {
+    backend.handlers['account.get'] = () => user({ role: 'admin' });
+    backend.handlers['providers.planUsage'] = () => null;
+    show(<PlanLimitWarning provider="mistral-vibe" providerId="vibe" busy={false} />);
+    await waitFor(() => expect(callsTo('providers.planUsage').length).toBe(1));
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});

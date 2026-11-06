@@ -386,7 +386,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                     </div>
                     <div className="pr-6 pb-5 pl-8 max-md:px-4">
                       <TodoWidget todos={live.todos} running={busy} />
-                      <PlanLimitWarning provider={providerType} busy={busy} />
+                      <PlanLimitWarning provider={providerType} providerId={model?.providerId} busy={busy} />
                       <UsageLimitWarning warning={live.limitWarning} />
                       <Composer
                         ref={composer}
@@ -433,7 +433,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                               sessionId={sessionId}
                               thinking={session?.thinking}
                             />
-                            <ContextButton sessionId={sessionId} busy={busy} provider={providerType} />
+                            <ContextButton sessionId={sessionId} busy={busy} provider={providerType} providerId={model?.providerId} />
                           </>
                         }
                       />

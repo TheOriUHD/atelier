@@ -143,7 +143,7 @@ export function HomePage() {
             }
             footerEnd={
               <>
-                {model && <NewSessionContextButton limit={model.contextLength} provider={providerType} />}
+                {model && <NewSessionContextButton limit={model.contextLength} provider={providerType} providerId={model.providerId} />}
                 <ModelPicker
                   open={pickingModel}
                   onOpenChange={setPickingModel}

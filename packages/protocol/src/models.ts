@@ -38,6 +38,10 @@ export const DEFAULT_BASE_URLS: Record<ProviderType, string> = {
   'mistral-vibe': 'https://api.mistral.ai',
 };
 
+/** Where a Mistral key is made: the console for one paid per token, Le Chat's Code › Vibe CLI for a plan's Vibe key. */
+export const MISTRAL_KEY_URL = 'https://console.mistral.ai/api-keys';
+export const MISTRAL_VIBE_KEY_URL = 'https://chat.mistral.ai/code/extensions';
+
 /** Provider ids never contain "/", so a model ref splits unambiguously on the first slash. */
 export const ProviderId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,47}$/, 'lowercase letters, digits and dashes');
 

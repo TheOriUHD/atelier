@@ -739,7 +739,7 @@ export const SETTINGS_INDEX = [
     id: 'providers.add',
     page: 'providers',
     label: 'Add provider',
-    description: 'Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, GitHub Copilot, OpenRouter, a ChatGPT plan or any OpenAI-compatible endpoint.',
+    description: 'Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, a ChatGPT or Mistral Vibe plan or any OpenAI-compatible endpoint.',
     keywords: [
       'connect',
       'api key',
@@ -749,6 +749,9 @@ export const SETTINGS_INDEX = [
       'llama.cpp',
       'anthropic',
       'openai',
+      'mistral',
+      'vibe',
+      'le chat',
       'openrouter',
       'vllm',
     ],

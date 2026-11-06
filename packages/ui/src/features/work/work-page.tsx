@@ -159,7 +159,7 @@ export function WorkPage() {
               }} />
                 </div>
                 <div className="pr-6 pb-5 pl-8 max-md:px-4">
-                  <PlanLimitWarning provider={providerType} busy={busy} />
+                  <PlanLimitWarning provider={providerType} providerId={model?.providerId} busy={busy} />
                   <UsageLimitWarning warning={live.limitWarning} />
                   <Composer
                     ref={composer}
@@ -188,7 +188,7 @@ export function WorkPage() {
                     onStop={sending.stop}
                     footerEnd={
                       <>
-                        <ContextButton sessionId={sessionId} busy={busy} provider={providerType} simple />
+                        <ContextButton sessionId={sessionId} busy={busy} provider={providerType} providerId={model?.providerId} simple />
                         <ModelPicker
                           open={pickingModel}
                           onOpenChange={setPickingModel}

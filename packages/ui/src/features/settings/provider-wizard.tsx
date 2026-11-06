@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, CircleAlert, CircleCheck, Cloud, Plus, Server, X } from 'lucide-react';
+import { ChevronRight, CircleAlert, CircleCheck, Cloud, ExternalLink, Plus, Server, X } from 'lucide-react';
 import {
+  MISTRAL_KEY_URL,
+  MISTRAL_VIBE_KEY_URL,
   PROVIDER_LABELS,
   PROVIDER_PRESETS,
   type DetectedProvider,
@@ -24,6 +26,7 @@ import {
   toast,
 } from '../../components/ui/index.ts';
 import { keys, useSettings } from '../../lib/queries.ts';
+import { openExternal } from '../../lib/platform.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import {
   PROVIDER_DESCRIPTIONS,
@@ -46,8 +49,8 @@ import { OpenRouterConnect, useOpenRouterStatus } from './openrouter-connect.tsx
 import { detectKey, useSecrets } from './provider-queries.ts';
 import { SecretField } from './secret-field.tsx';
 
-const TYPES: ProviderType[] = ['ollama', 'llamacpp', 'openai-compatible', 'anthropic', 'openai'];
-const HOSTED = new Set<ProviderType>(['anthropic', 'openai', 'chatgpt', 'copilot']);
+const TYPES: ProviderType[] = ['ollama', 'llamacpp', 'openai-compatible', 'anthropic', 'openai', 'mistral', 'mistral-vibe'];
+const HOSTED = new Set<ProviderType>(['anthropic', 'openai', 'chatgpt', 'copilot', 'mistral', 'mistral-vibe']);
 
 export interface WizardRequest {
   /** Edit this provider instead of adding one. */
@@ -223,6 +226,7 @@ export function ProviderWizard({ open, onOpenChange, existing, detected, onSaved
             }}
           >
             <div className="flex flex-col gap-4">
+              {(form.type === 'mistral' || form.type === 'mistral-vibe') && <MistralIntro type={form.type} />}
               {form.preset && (
                 <PresetIntro
                   form={form}
@@ -386,6 +390,23 @@ function PresetIntro({
         nothing but are limited to 50 requests a day (1,000 once you’ve bought at least 10 credits).
       </p>
       <OpenRouterConnect draft={draft} onInvalid={onInvalid} onConnected={onConnected} />
+    </div>
+  );
+}
+
+/** Where each kind of Mistral key comes from, and what a Vibe key spends. */
+function MistralIntro({ type }: { type: 'mistral' | 'mistral-vibe' }) {
+  const vibe = type === 'mistral-vibe';
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <p className="text-body text-fg-secondary">
+        {vibe
+          ? 'Uses the Vibe allowance of your Le Chat Pro or Team plan instead of paying per token. In Le Chat, open Code › Vibe CLI, create a key and paste it below. Past the allowance, requests wait for the next month unless pay-as-you-go is on in Mistral’s console. On a server, everyone who can use this provider spends your plan.'
+          : 'Needs a key from Mistral’s console, with billing on: Mistral’s free plan has no API access. Requests are priced per token. For EU-only processing, change the base URL to https://api.eu.mistral.ai.'}
+      </p>
+      <Button size="sm" trailingIcon={ExternalLink} onClick={() => openExternal(vibe ? MISTRAL_VIBE_KEY_URL : MISTRAL_KEY_URL)}>
+        {vibe ? 'Open Vibe keys in Le Chat' : 'Open Mistral’s console'}
+      </Button>
     </div>
   );
 }

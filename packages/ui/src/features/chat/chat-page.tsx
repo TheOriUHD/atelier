@@ -102,7 +102,7 @@ export function ChatPage() {
               }} />
           </div>
           <div className="pr-6 pb-2 pl-8 max-md:px-4">
-            <PlanLimitWarning provider={providerType} busy={streaming} />
+            <PlanLimitWarning provider={providerType} providerId={model?.providerId} busy={streaming} />
             <UsageLimitWarning warning={live.limitWarning} />
             <Composer
               ref={composer}
@@ -133,7 +133,7 @@ export function ChatPage() {
               footerCenter={temporary ? 'Deleted when you leave · AI can make mistakes.' : 'AI can make mistakes.'}
               footerEnd={
                 <>
-                  <ContextButton sessionId={sessionId} busy={streaming} provider={providerType} simple />
+                  <ContextButton sessionId={sessionId} busy={streaming} provider={providerType} providerId={model?.providerId} simple />
                   <ModelPicker
                     open={pickingModel}
                     onOpenChange={setPickingModel}

@@ -51,6 +51,7 @@ export const keys = {
   searchStatus: ['search', 'status'] as const,
   /** The ChatGPT subscription's sign-in (a browser on the desktop, a device code on a server). */
   chatgpt: ['chatgpt'] as const,
+  planUsage: (providerId: string) => ['plan-usage', providerId] as const,
   copilot: ['copilot'] as const,
   /** Connecting OpenRouter in the browser. */
   openrouter: ['openrouter'] as const,

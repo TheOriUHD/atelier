@@ -1,20 +1,20 @@
 /**
- * A line above the message box once a ChatGPT subscription's limit is nearly used up (every mode); the limits
- * themselves are in the context ring's popover. Only admins can read them.
+ * A line above the message box once a subscription's limit is nearly used up (a ChatGPT window, Mistral Vibe's monthly
+ * allowance; every mode); the limits themselves are in the context ring's popover. Only admins can read them.
  */
 import { useEffect, useRef, useState } from 'react';
 import { TriangleAlert, X } from 'lucide-react';
 import type { ProviderType } from '@atelier/protocol';
 import { Icon, IconButton, cn } from '../../components/ui/index.ts';
 import { useAccount } from '../../lib/queries.ts';
-import { resetsText, useExactResets, usePlanWindows, windowName } from '../code/context-popover.tsx';
+import { reportsPlanLimits, resetsText, useExactResets, usePlanWindows } from '../code/context-popover.tsx';
 
 /** From this share of a window on, the line above the message box warns. */
 export const NEAR_LIMIT = 90;
 
 function useShown(provider: ProviderType | null): boolean {
   const { account } = useAccount();
-  return provider === 'chatgpt' && account?.role === 'admin';
+  return reportsPlanLimits(provider) && account?.role === 'admin';
 }
 
 const DISMISSED_KEY = 'atelier.planWarningDismissed';
@@ -32,12 +32,12 @@ function readDismissed(): string | null {
  * on; dismissed, it stays away until that window resets. `busy`: the session's run, after which ChatGPT has reported
  * the limits again.
  */
-export function PlanLimitWarning({ provider, busy, className }: { provider: ProviderType | null; busy: boolean; className?: string }) {
-  return useShown(provider) ? <NearLimit busy={busy} className={className} /> : null;
+export function PlanLimitWarning({ provider, providerId, busy, className }: { provider: ProviderType | null; providerId?: string | undefined; busy: boolean; className?: string }) {
+  return useShown(provider) ? <NearLimit provider={provider} providerId={providerId} busy={busy} className={className} /> : null;
 }
 
-function NearLimit({ busy, className }: { busy: boolean; className?: string }) {
-  const { status, windows, now } = usePlanWindows();
+function NearLimit({ provider, providerId, busy, className }: { provider: ProviderType | null; providerId: string | undefined; busy: boolean; className?: string }) {
+  const { status, windows, now, service, overage } = usePlanWindows(provider, providerId);
   const { refetch } = status;
   const [exact] = useExactResets();
   const [dismissed, setDismissed] = useState(readDismissed);
@@ -48,10 +48,10 @@ function NearLimit({ busy, className }: { busy: boolean; className?: string }) {
   }, [busy, refetch]);
   const near = windows.filter((w) => w.usedPercent >= NEAR_LIMIT).sort((a, b) => b.usedPercent - a.usedPercent)[0];
   if (!near) return null;
-  const key = `${near.windowMinutes}:${near.resetsAt}`;
+  const key = `${near.key}:${near.resetsAt}`;
   if (dismissed === key) return null;
   const pct = Math.min(100, Math.round(near.usedPercent));
-  const limit = windowName(near.windowMinutes).toLowerCase();
+  const limit = near.name.toLowerCase();
   const resets = resetsText(near.resetsAt, now, exact);
   const dismiss = () => {
     setDismissed(key);
@@ -72,7 +72,7 @@ function NearLimit({ busy, className }: { busy: boolean; className?: string }) {
     >
       <Icon icon={TriangleAlert} className="shrink-0" />
       <span className="min-w-0 flex-1">
-        {pct >= 100 ? `You’ve reached your ChatGPT ${limit}.` : `You’ve used ${pct}% of your ChatGPT ${limit}.`}
+        {pct >= 100 ? (overage ? `You’ve used your ${service} ${limit}: more is charged as pay-as-you-go.` : `You’ve reached your ${service} ${limit}.`) : `You’ve used ${pct}% of your ${service} ${limit}.`}
         {resets && ` ${resets}.`}
       </span>
       <IconButton icon={X} label="Dismiss" size="xs" className="text-current" onClick={dismiss} />

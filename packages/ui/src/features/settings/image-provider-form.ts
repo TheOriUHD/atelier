@@ -146,7 +146,7 @@ export function detectedDraft(server: DetectedImageServer, taken: ReadonlySet<st
   return toImageDraft(newImageProviderForm(presetFor({ preset: server.preset, type: server.type }), taken, { name: server.label, baseUrl: server.baseUrl }));
 }
 
-const HOSTED: ReadonlySet<ProviderType> = new Set<ProviderType>(['anthropic', 'openai', 'chatgpt', 'chatgpt-chat', 'copilot']);
+const HOSTED: ReadonlySet<ProviderType> = new Set<ProviderType>(['anthropic', 'openai', 'chatgpt', 'chatgpt-chat', 'copilot', 'mistral', 'mistral-vibe']);
 
 function hostOf(url: string): string | null {
   try {

@@ -98,7 +98,7 @@ export function detectedWhere(d: DetectedProvider): string {
 }
 
 function TypeTile({ type, children }: { type: ProviderConfig['type']; children?: ReactNode }) {
-  return <ItemTile icon={type === 'anthropic' || type === 'openai' || type === 'chatgpt' || type === 'copilot' ? Cloud : Server}>{children}</ItemTile>;
+  return <ItemTile icon={type === 'anthropic' || type === 'openai' || type === 'chatgpt' || type === 'copilot' || type === 'mistral' || type === 'mistral-vibe' ? Cloud : Server}>{children}</ItemTile>;
 }
 
 type Health = { tone: 'success' | 'warning' | 'danger' | 'muted'; label: string };

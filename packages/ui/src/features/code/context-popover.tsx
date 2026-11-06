@@ -56,7 +56,7 @@ export function useOpenUsage(close: () => void) {
  * hosted API shows what the session cost. `simple` (Chat and Cowork): the window is one plain bar, with no breakdown
  * and no Compact session (they summarize older messages on their own).
  */
-export function ContextButton({ sessionId, busy, provider = null, simple = false }: { sessionId: string; busy: boolean; provider?: ProviderType | null; simple?: boolean }) {
+export function ContextButton({ sessionId, busy, provider = null, providerId, simple = false }: { sessionId: string; busy: boolean; provider?: ProviderType | null; providerId?: string | undefined; simple?: boolean }) {
   const [open, setOpen] = useState(false);
   const openUsage = useOpenUsage(() => setOpen(false));
   const live = useThrottledLive(sessionId, liveContext, 150);
@@ -84,6 +84,7 @@ export function ContextButton({ sessionId, busy, provider = null, simple = false
         context={context}
         usage={breakdown.data?.usage}
         provider={provider}
+        providerId={providerId}
         simple={simple}
         busy={busy}
         onCompact={() => {
@@ -97,7 +98,7 @@ export function ContextButton({ sessionId, busy, provider = null, simple = false
 }
 
 /** A new Code session's ring, before the session exists: nothing in the model's window yet, and the person's usage. */
-export function NewSessionContextButton({ limit, provider = null }: { limit: number; provider?: ProviderType | null }) {
+export function NewSessionContextButton({ limit, provider = null, providerId }: { limit: number; provider?: ProviderType | null; providerId?: string | undefined }) {
   const [open, setOpen] = useState(false);
   const openUsage = useOpenUsage(() => setOpen(false));
   const titleId = useId();
@@ -109,7 +110,7 @@ export function NewSessionContextButton({ limit, provider = null }: { limit: num
       <PopoverContent side="top" align="end" sideOffset={8} aria-labelledby={titleId} className={POPOVER_CLASS}>
         <WindowHeading titleId={titleId} used={0} limit={limit} />
         <PlainBar fraction={0} />
-        <UsageSection provider={provider} sessionCost={null} onOpenUsage={openUsage} />
+        <UsageSection provider={provider} providerId={providerId} sessionCost={null} onOpenUsage={openUsage} />
       </PopoverContent>
     </Popover>
   );
@@ -119,6 +120,7 @@ function ContextPopover({
   context,
   usage,
   provider,
+  providerId,
   simple,
   busy,
   onCompact,
@@ -127,6 +129,7 @@ function ContextPopover({
   context: ContextUsage;
   usage: SessionUsage | undefined;
   provider: ProviderType | null;
+  providerId: string | undefined;
   simple: boolean;
   busy: boolean;
   onCompact(): void;
@@ -144,7 +147,7 @@ function ContextPopover({
         <WindowHeading titleId={titleId} used={context.used} limit={context.limit} />
         <PlainBar fraction={context.used / context.limit} />
         <p className="text-body text-fg-secondary">Older messages are summarized automatically when it fills up.</p>
-        <UsageSection provider={provider} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
+        <UsageSection provider={provider} providerId={providerId} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
       </PopoverContent>
     );
   return (
@@ -203,7 +206,7 @@ function ContextPopover({
           Compact session
         </Button>
       </div>
-      <UsageSection provider={provider} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
+      <UsageSection provider={provider} providerId={providerId} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
     </PopoverContent>
   );
 }
@@ -314,12 +317,13 @@ export function useExactResets(): [boolean, () => void] {
 export const barTone = (percent: number) => (percent >= 90 ? 'bg-danger' : percent >= 75 ? 'bg-warning' : 'bg-interactive');
 
 /**
- * Below the context window, the plan usage limits: for a ChatGPT subscription the plan's own
- * windows (what ChatGPT reports with each reply), for a hosted API what it cost, and otherwise the person's token use.
+ * Below the context window, the plan usage limits: for a ChatGPT subscription the plan's own windows (what ChatGPT
+ * reports with each reply), for Mistral Vibe its monthly allowance, for a hosted API what it cost, and otherwise the
+ * person's token use.
  */
-function UsageSection({ provider, sessionCost, onOpenUsage }: { provider: ProviderType | null; sessionCost: number | null; onOpenUsage(): void }) {
-  if (provider === 'chatgpt') return <PlanLimits onOpenUsage={onOpenUsage} />;
-  const hosted = provider === 'anthropic' || provider === 'openai' || provider === 'openai-compatible';
+function UsageSection({ provider, providerId, sessionCost, onOpenUsage }: { provider: ProviderType | null; providerId: string | undefined; sessionCost: number | null; onOpenUsage(): void }) {
+  if (reportsPlanLimits(provider)) return <PlanLimits onOpenUsage={onOpenUsage} provider={provider} providerId={providerId} />;
+  const hosted = provider === 'anthropic' || provider === 'openai' || provider === 'openai-compatible' || provider === 'mistral';
   return <YourUsage onOpenUsage={onOpenUsage} cost={hosted ? { session: sessionCost } : null} />;
 }
 
@@ -334,24 +338,65 @@ function SectionHeading({ id, children, onOpenUsage }: { id: string; children: s
   );
 }
 
+/** One of a subscription's limits: how much of it is used and when it starts again. */
+export interface PlanWindow {
+  key: string;
+  /** "5-hour limit", "Monthly allowance". */
+  name: string;
+  usedPercent: number;
+  resetsAt: number | null;
+}
+
+/** The subscription providers that report their limits. */
+export const reportsPlanLimits = (provider: ProviderType | null): boolean => provider === 'chatgpt' || provider === 'mistral-vibe';
+
 /**
- * The ChatGPT subscription's usage windows as ChatGPT last reported them (with each reply): Pro plans show only the
- * weekly one. `now` is when they were read, for "Resets in …". Admins only: anyone else gets none.
+ * A subscription's limits. ChatGPT's windows as ChatGPT last reported them (with each reply), Pro plans showing only the
+ * weekly one; Mistral Vibe's monthly allowance as Mistral's billing API says, for the provider `providerId`. `now` is
+ * when they were read, for "Resets in …". Admins only: anyone else gets none.
  */
-export function usePlanWindows() {
-  const status = useQuery({ queryKey: keys.chatgpt, queryFn: () => rpc().call('chatgpt.status', {}), staleTime: 0 });
-  const rawPlan = status.data?.plan?.toLowerCase();
+export function usePlanWindows(provider: ProviderType | null = 'chatgpt', providerId?: string) {
+  const vibe = provider === 'mistral-vibe';
+  const chatgpt = useQuery({ queryKey: keys.chatgpt, queryFn: () => rpc().call('chatgpt.status', {}), staleTime: 0, enabled: !vibe });
+  const allowance = useQuery({
+    queryKey: keys.planUsage(providerId ?? ''),
+    queryFn: () => rpc().call('providers.planUsage', { id: providerId! }),
+    staleTime: 0,
+    enabled: vibe && !!providerId,
+  });
+  if (vibe) {
+    const usage = allowance.data ?? null;
+    const windows: PlanWindow[] = usage ? [{ key: 'month', name: 'Monthly allowance', usedPercent: usage.usedPercent, resetsAt: usage.resetsAt }] : [];
+    return {
+      status: allowance,
+      windows,
+      plan: usage?.plan ?? null,
+      service: 'Mistral Vibe',
+      overage: !!usage?.overage,
+      empty: 'Mistral doesn’t report this plan’s allowance to this key.',
+      now: allowance.dataUpdatedAt || 0,
+    };
+  }
+  const rawPlan = chatgpt.data?.plan?.toLowerCase();
   const pro = !!rawPlan?.startsWith('pro');
-  const windows = [status.data?.limits?.primary, status.data?.limits?.secondary].filter(
-    (w): w is NonNullable<typeof w> => !!w && (w.windowMinutes === null || w.windowMinutes > 0) && (!pro || w.windowMinutes === 10_080),
-  );
-  return { status, windows, plan: rawPlan ? chatGptPlanLabel(rawPlan) : null, now: status.dataUpdatedAt || 0 };
+  const windows: PlanWindow[] = [chatgpt.data?.limits?.primary, chatgpt.data?.limits?.secondary]
+    .filter((w): w is NonNullable<typeof w> => !!w && (w.windowMinutes === null || w.windowMinutes > 0) && (!pro || w.windowMinutes === 10_080))
+    .map((w) => ({ key: String(w.windowMinutes ?? 'window'), name: windowName(w.windowMinutes), usedPercent: w.usedPercent, resetsAt: w.resetsAt }));
+  return {
+    status: chatgpt,
+    windows,
+    plan: rawPlan ? chatGptPlanLabel(rawPlan) : null,
+    service: 'ChatGPT',
+    overage: false,
+    empty: 'ChatGPT reports your usage with each reply: it shows after the next message.',
+    now: chatgpt.dataUpdatedAt || 0,
+  };
 }
 
 /** The subscription's usage windows: how much of each is used and when it resets. `divided` draws the rule above it (in the context popover). */
-export function PlanLimits({ onOpenUsage, divided = true }: { onOpenUsage(): void; divided?: boolean }) {
+export function PlanLimits({ onOpenUsage, divided = true, provider = 'chatgpt', providerId }: { onOpenUsage(): void; divided?: boolean; provider?: ProviderType | null; providerId?: string | undefined }) {
   const titleId = useId();
-  const { status, windows, plan, now } = usePlanWindows();
+  const { status, windows, plan, now, empty, overage } = usePlanWindows(provider, providerId);
   const [exact, toggleExact] = useExactResets();
   return (
     <section aria-labelledby={titleId} className={cn('flex flex-col gap-2.5', divided && 'border-t border-line pt-3')}>
@@ -359,15 +404,15 @@ export function PlanLimits({ onOpenUsage, divided = true }: { onOpenUsage(): voi
         {plan ? `Plan usage limits · ${plan}` : 'Plan usage limits'}
       </SectionHeading>
       {windows.length === 0 ? (
-        <p className="text-body text-fg-muted">{status.isPending ? 'Loading…' : 'ChatGPT reports your usage with each reply: it shows after the next message.'}</p>
+        <p className="text-body text-fg-muted">{status.isPending && status.fetchStatus !== 'idle' ? 'Loading…' : empty}</p>
       ) : (
         windows.map((w) => {
           const pct = Math.min(100, Math.max(0, Math.round(w.usedPercent)));
           const resets = resetsText(w.resetsAt, now, exact);
           return (
-            <div key={w.windowMinutes ?? 'window'} className="flex flex-col gap-1">
+            <div key={w.key} className="flex flex-col gap-1">
               <div className="flex items-baseline justify-between gap-3 text-body">
-                <span className="text-fg">{windowName(w.windowMinutes)}</span>
+                <span className="text-fg">{w.name}</span>
                 <span className="flex items-baseline gap-3 tabular-nums">
                   {/* A window more than a day out names its time either way: nothing to switch. */}
                   {resets === resetsText(w.resetsAt, now, !exact) ? (
@@ -382,13 +427,14 @@ export function PlanLimits({ onOpenUsage, divided = true }: { onOpenUsage(): voi
                   <span className="w-9 text-right text-fg-secondary">{pct}%</span>
                 </span>
               </div>
-              <div role="progressbar" aria-label={windowName(w.windowMinutes)} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-1.5 overflow-hidden rounded-full bg-fill-control">
+              <div role="progressbar" aria-label={w.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-1.5 overflow-hidden rounded-full bg-fill-control">
                 <span className={cn('block h-full rounded-full', barTone(pct))} style={{ width: `${pct}%` }} />
               </div>
             </div>
           );
         })
       )}
+      {overage && windows.length > 0 && <p className="text-footnote text-fg-muted">Pay-as-you-go is on: use past the allowance is charged.</p>}
     </section>
   );
 }

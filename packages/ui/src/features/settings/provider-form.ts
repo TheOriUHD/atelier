@@ -45,11 +45,13 @@ export const PROVIDER_DESCRIPTIONS: Record<ProviderType, string> = {
   chatgpt: 'The models in your ChatGPT plan, signed in with your account.',
   'chatgpt-chat': 'Experimental: use ChatGPT itself through a private browser session.',
   copilot: 'The models in your GitHub Copilot plan, signed in with GitHub.',
+  mistral: 'Mistral’s models through its API, priced per token.',
+  'mistral-vibe': 'The models in your Le Chat Pro or Team plan, with your Vibe key.',
 };
 
 /** Hosted APIs reject requests without a key; local servers usually don't need one. */
 export function keyRequired(type: ProviderType): boolean {
-  return type === 'anthropic' || type === 'openai';
+  return type === 'anthropic' || type === 'openai' || type === 'mistral' || type === 'mistral-vibe';
 }
 
 /** What the form adds or edits: the preset's name, else the type's. */

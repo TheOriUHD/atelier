@@ -136,7 +136,7 @@ export function FolderHome({ mode: sessionMode, children }: { mode: 'work' | 'co
                   onModelChange={setModelRef}
                   onEffortChange={setEffort}
                 />
-                {model && <NewSessionContextButton limit={model.contextLength} provider={providerType} />}
+                {model && <NewSessionContextButton limit={model.contextLength} provider={providerType} providerId={model.providerId} />}
               </>
             }
           />

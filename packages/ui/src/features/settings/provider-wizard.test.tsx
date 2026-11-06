@@ -59,3 +59,35 @@ describe('ChatGPT Chat in the provider list', () => {
     expect(screen.queryByText('ChatGPT Chat')).toBeNull();
   });
 });
+
+describe('Mistral in the provider list', () => {
+  function choose(label: string) {
+    resetBackend({
+      'settings.get': () => snapshot({ providers: [] }),
+      'secrets.list': () => [],
+      'chatgpt.status': () => ({ available: false, signedIn: false, signingIn: false }),
+      'chatgptChat.status': () => ({ available: false, signedIn: false }),
+      'providers.save': (draft: ProviderConfig) => draft,
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TooltipProvider><ProviderWizard open onOpenChange={() => {}} /></TooltipProvider></QueryClientProvider>);
+    return screen.findByText(label).then((choice) => fireEvent.click(choice));
+  }
+
+  it('adds a Mistral Vibe key: says what it spends and where the key is made, and needs one', async () => {
+    await choose('Mistral Vibe');
+    expect(screen.getByText(/Vibe allowance of your Le Chat Pro or Team plan/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open Vibe keys in Le Chat' })).toBeTruthy();
+    expect((screen.getByRole('textbox', { name: 'Base URL' }) as HTMLInputElement).value).toBe('https://api.mistral.ai');
+    fireEvent.click(screen.getByRole('button', { name: 'Add provider' }));
+    expect(await screen.findByText('Mistral Vibe needs an API key.')).toBeTruthy();
+    expect(callsTo('providers.save')).toEqual([]);
+  });
+
+  it('adds Mistral with a console key', async () => {
+    await choose('Mistral');
+    expect(screen.getByText(/key from Mistral’s console/)).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('Paste your API key'), { target: { value: 'mk-test' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add provider' }));
+    await waitFor(() => expect(callsTo('providers.save')[0]).toMatchObject({ type: 'mistral', id: 'mistral', baseUrl: 'https://api.mistral.ai', apiKey: 'mk-test' }));
+  });
+});

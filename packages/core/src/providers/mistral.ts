@@ -23,10 +23,6 @@ import { parseSSE } from './sse.ts';
 import type { AdapterDeps, ChatRequest, ListedModel, PlanUsage, ProviderAdapter, ProviderInstance, StreamEvent } from './types.ts';
 import { apiUrl, arr, dataUrl, documentAsText, isRecord, num, rec, str, textOf } from './util.ts';
 
-/** Where a person makes each kind of key. */
-export const MISTRAL_KEY_URL = 'https://console.mistral.ai/api-keys';
-export const MISTRAL_VIBE_KEY_URL = 'https://chat.mistral.ai/code/extensions';
-
 /** How a model takes `reasoning_effort`: not at all, `none` or `high` (an on/off switch), or a set of levels. */
 type Reasoning = { kind: 'none' } | { kind: 'toggle' } | { kind: 'levels'; levels: string[] };
 
