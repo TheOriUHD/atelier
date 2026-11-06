@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-11-06
+
 - **The conversation keeps its earlier messages through quick compactions:** when a session compacted twice in quick succession (a small context window and large tool results), the window could lose everything before its newest reply, the **Compacted session** lines included, until the conversation was opened again. The window now reloads the conversation once more when a second compaction lands while it is still loading after the first.
 
 ## [0.4.2] — 2026-11-06

@@ -9,7 +9,7 @@ export const APP = {
   scheme: 'atelier',
   /** Web session cookie name. */
   cookie: 'atelier_session',
-  version: '0.4.2',
+  version: '0.4.3',
   /** Who holds the copyright (LICENSE's required notice), shown under the version in Settings › System. */
   author: { name: 'TheOriUHD', url: 'https://github.com/TheOriUHD', since: 2026 },
   /** Where the desktop builds are published. */
