@@ -19,6 +19,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.4.3',
+    intro: 'A fix for conversations that compact often.',
+    highlights: [
+      {
+        icon: MessagesSquare,
+        title: 'Earlier messages stay through quick compactions',
+        body: 'When a session compacted twice in quick succession, as it can with a small context window and large tool results, the conversation could lose everything before its newest reply, the Compacted session lines included, until it was opened again. It now keeps them.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.4.2',
     intro: 'Assistants can speak, make music and sound effects. Mistral joins the providers, Vibe plan included. Edits show where they are in the file, and a session can move to another folder.',
     highlights: [
