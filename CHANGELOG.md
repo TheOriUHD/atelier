@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **GLM and DeepSeek through Mistral show their replies:** these models, which Mistral hosts for their makers, can send their reasoning the way OpenAI-style servers do, and Atelier's Mistral provider only read Mistral's own format. A reply could then show nothing at all while the model worked until its output limit. Atelier now reads every common form, and no longer sends their earlier reasoning back as Mistral's thinking.
+- **A reply cut off with nothing written stops instead of trying again:** when a model used its whole output limit without writing anything, Atelier asked it to continue, which sent the same request again. It now tries once more and then stops with an error that suggests a lower effort or another model.
 ## [0.4.3] — 2026-11-06
 
 - **The conversation keeps its earlier messages through quick compactions:** when a session compacted twice in quick succession (a small context window and large tool results), the window could lose everything before its newest reply, the **Compacted session** lines included, until the conversation was opened again. The window now reloads the conversation once more when a second compaction lands while it is still loading after the first.

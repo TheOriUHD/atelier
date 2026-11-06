@@ -134,7 +134,8 @@ describe('a turn that starts over a limit', () => {
     expect(requests).toEqual([]);
     const reply = await lastAssistant(s.id);
     expect(reply).toMatchObject({ stopReason: 'error', parts: [], error: { code: 'limit_reached', retryable: false } });
-    expect(reply.error?.message).toMatch(/^You’ve reached your limit of 500 tokens \(tokens per day\)\. It lets requests through again at 00:00 UTC \(in about \d+ hours?\)\. Ask an admin \(Grace\) if you need more before then\.$/);
+    // Within the last hour before midnight UTC the reset is minutes away, not hours.
+    expect(reply.error?.message).toMatch(/^You’ve reached your limit of 500 tokens \(tokens per day\)\. It lets requests through again at 00:00 UTC \(in (?:about \d+ hours?|\d+ minutes?)\)\. Ask an admin \(Grace\) if you need more before then\.$/);
     expect((await repo.get(s.id))?.status).toBe('error');
   });
 
