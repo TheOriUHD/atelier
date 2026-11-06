@@ -1,0 +1,34 @@
+# Atelier's co-op relay: a Worker with one Durable Object per room (README.md).
+#   cd deploy/coop && npx wrangler login && npx wrangler deploy
+# Deploy from a checkout of the whole repository: the Worker bundles packages/core/src/coop/relay-protocol.ts.
+name = "atelier-coop"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+# Only on its own domain.
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "coop.atelierhq.dev", custom_domain = true }]
+
+# Request logs would keep URLs, and a host's WebSocket URL carries its room's host token.
+[observability]
+enabled = false
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# Per address, in each Cloudflare location (approximate): join attempts and rooms made per minute. The namespace ids
+# must be unique in the account.
+[[ratelimits]]
+name = "JOIN_LIMITER"
+namespace_id = "4201"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "CREATE_LIMITER"
+namespace_id = "4202"
+simple = { limit = 10, period = 60 }
