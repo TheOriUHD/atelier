@@ -485,6 +485,11 @@ export const usageEvents = sqliteTable(
     audioChars: integer('audio_chars').notNull().default(0),
     /** The cost comes from a price list, not from the service. These rows outlive `generated_images`, so they say so themselves. */
     costEstimated: integer('cost_estimated', { mode: 'boolean' }).notNull().default(false),
+    /**
+     * Co-op: the participant the request was for when someone else pays for it (a guest answered with the host's
+     * models), so the host's caps per guest and the Usage page can tell them apart; null otherwise.
+     */
+    participant: text('participant'),
   },
   (t) => [index('usage_ts').on(t.ts)],
 );

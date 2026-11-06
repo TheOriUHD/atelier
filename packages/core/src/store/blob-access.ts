@@ -51,28 +51,34 @@ export class BlobAccess {
     return ok;
   }
 
-  /** Cheapest checks first; the messages (every part of every message of the account's sessions) last. */
+  /** A person was removed from a co-op session (or it ended): what they could read there they no longer may. */
+  forget(userId: string): void {
+    for (const key of this.answers.keys()) if (key.startsWith(`${userId}\0`)) this.answers.delete(key);
+  }
+
+  /**
+   * Cheapest checks first; the messages (every part of every message of the account's sessions) last. The account's
+   * sessions are its own, and the co-op sessions it takes part in (coop/participants.ts) with their sub-agents.
+   */
   private lookup(userId: string, sha: string): boolean {
     const db = this.db.$client;
-    const has = (sql: string, ...params: string[]) => db.prepare(sql).get(...params) !== undefined;
+    const values: Record<string, string> = { u: userId, sha, quoted: `"blob":"${sha}"` };
+    // Only the parameters a statement names: SQLite refuses others.
+    const has = (sql: string) => db.prepare(sql).get(Object.fromEntries(Object.entries(values).filter(([k]) => sql.includes(`@${k}`)))) !== undefined;
     // Avatars are shown to everyone in the app.
-    if (has(`SELECT 1 FROM users WHERE avatar_blob = ? LIMIT 1`, sha)) return true;
-    const mine = `(SELECT id FROM sessions WHERE user_id = ?)`;
+    if (has(`SELECT 1 FROM users WHERE avatar_blob = @sha LIMIT 1`)) return true;
+    const mine = `(SELECT id FROM sessions WHERE user_id = @u
+      UNION SELECT session_id FROM session_participants WHERE user_id = @u AND left_at IS NULL
+      UNION SELECT s.id FROM sessions s JOIN session_participants p ON s.parent_session_id = p.session_id WHERE p.user_id = @u AND p.left_at IS NULL)`;
     return (
       // Uploads and generated images, by their owner, in their sessions, or in their projects.
-      has(
-        `SELECT 1 FROM files WHERE blob = ? AND (user_id = ? OR session_id IN ${mine} OR project_id IN (SELECT id FROM projects WHERE user_id = ?)) LIMIT 1`,
-        sha,
-        userId,
-        userId,
-        userId,
-      ) ||
-      has(`SELECT 1 FROM generated_images WHERE blob = ? AND (user_id = ? OR session_id IN ${mine}) LIMIT 1`, sha, userId, userId) ||
-      has(`SELECT 1 FROM sessions WHERE user_id = ? AND (system_snapshot = ? OR tools_snapshot = ?) LIMIT 1`, userId, sha, sha) ||
-      has(`SELECT 1 FROM checkpoints WHERE before_blob = ? AND session_id IN ${mine} LIMIT 1`, sha, userId) ||
+      has(`SELECT 1 FROM files WHERE blob = @sha AND (user_id = @u OR session_id IN ${mine} OR project_id IN (SELECT id FROM projects WHERE user_id = @u)) LIMIT 1`) ||
+      has(`SELECT 1 FROM generated_images WHERE blob = @sha AND (user_id = @u OR session_id IN ${mine}) LIMIT 1`) ||
+      has(`SELECT 1 FROM sessions WHERE user_id = @u AND (system_snapshot = @sha OR tools_snapshot = @sha) LIMIT 1`) ||
+      has(`SELECT 1 FROM checkpoints WHERE before_blob = @sha AND session_id IN ${mine} LIMIT 1`) ||
       // Images and documents in messages, tool results and generated images: every one is a `"blob":"<sha>"` member. The
       // quotes matter: text a person typed is JSON-escaped (`\"blob\":\"…`), so writing a hash in a message grants nothing.
-      has(`SELECT 1 FROM messages WHERE session_id IN ${mine} AND instr(parts, ?) > 0 LIMIT 1`, userId, `"blob":"${sha}"`)
+      has(`SELECT 1 FROM messages WHERE session_id IN ${mine} AND instr(parts, @quoted) > 0 LIMIT 1`)
     );
   }
 }

@@ -62,4 +62,5 @@ CREATE TABLE `session_participants` (
 );
 --> statement-breakpoint
 ALTER TABLE `messages` ADD `author` text;--> statement-breakpoint
+ALTER TABLE `usage_events` ADD `participant` text;--> statement-breakpoint
 CREATE INDEX `session_participants_user` ON `session_participants` (`user_id`);

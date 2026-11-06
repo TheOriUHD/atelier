@@ -242,13 +242,14 @@ export const migrations: { name: string; statements: string[] }[] = [
     ]
   },
   {
-    "name": "20261106231633_coop",
+    "name": "20261106231853_coop",
     "statements": [
       "CREATE TABLE `coop_memberships` (\n\t`id` text PRIMARY KEY,\n\t`user_id` text NOT NULL,\n\t`relay_url` text NOT NULL,\n\t`room_id` text NOT NULL,\n\t`psk_secret` text NOT NULL,\n\t`host_key` text,\n\t`host_name` text NOT NULL,\n\t`host_session_id` text,\n\t`title` text NOT NULL,\n\t`mode` text NOT NULL,\n\t`copy_session_id` text,\n\t`joined_at` integer NOT NULL,\n\t`ended_at` integer,\n\tCONSTRAINT `fk_coop_memberships_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE\n);",
       "CREATE TABLE `coop_rooms` (\n\t`session_id` text PRIMARY KEY,\n\t`relay_url` text,\n\t`room_id` text,\n\t`host_token_secret` text,\n\t`invite_secret` text,\n\t`invite_expires_at` integer,\n\t`settings` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`ended_at` integer,\n\tCONSTRAINT `fk_coop_rooms_session_id_sessions_id_fk` FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON DELETE CASCADE\n);",
       "CREATE TABLE `session_lanes` (\n\t`session_id` text NOT NULL,\n\t`lane` text NOT NULL,\n\t`system_snapshot` text,\n\t`tools_snapshot` text,\n\t`updated_at` integer NOT NULL,\n\tCONSTRAINT `session_lanes_pk` PRIMARY KEY(`session_id`, `lane`),\n\tCONSTRAINT `fk_session_lanes_session_id_sessions_id_fk` FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON DELETE CASCADE\n);",
       "CREATE TABLE `session_participants` (\n\t`session_id` text NOT NULL,\n\t`id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`user_id` text,\n\t`peer_key` text,\n\t`name` text NOT NULL,\n\t`avatar` text,\n\t`role` text NOT NULL,\n\t`models` text DEFAULT 'host' NOT NULL,\n\t`model` text,\n\t`trusted` integer DEFAULT false NOT NULL,\n\t`pinned_at` integer,\n\t`group_id` text,\n\t`archived_at` integer,\n\t`finished_unseen_at` integer,\n\t`joined_at` integer NOT NULL,\n\t`left_at` integer,\n\tCONSTRAINT `session_participants_pk` PRIMARY KEY(`session_id`, `id`),\n\tCONSTRAINT `fk_session_participants_session_id_sessions_id_fk` FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON DELETE CASCADE,\n\tCONSTRAINT `fk_session_participants_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE\n);",
       "ALTER TABLE `messages` ADD `author` text;",
+      "ALTER TABLE `usage_events` ADD `participant` text;",
       "CREATE INDEX `session_participants_user` ON `session_participants` (`user_id`);"
     ]
   }

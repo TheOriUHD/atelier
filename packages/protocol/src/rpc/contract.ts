@@ -43,6 +43,7 @@ import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, PlanUsage, ProviderStatus, ProviderType } from '../models.ts';
+import { CoopSettings, CoopState, ModelsChoice } from '../coop.ts';
 import { AudioKind, DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
@@ -424,7 +425,7 @@ export const contract = {
      * Sends a message while the agent works: it is shown as waiting, joins the conversation at the agent's next step,
      * and can be taken back (`chat.unqueue`) or sent at once (`chat.sendNow`). When no run is going it is a plain send.
      */
-    'chat.queue': { input: z.object({ sessionId: z.string(), parts: z.array(Part).min(1) }), output: z.object({ id: z.string(), queued: z.boolean() }) },
+    'chat.queue': { input: z.object({ sessionId: z.string(), parts: z.array(Part).min(1), joinTurn: z.boolean().optional() }), output: z.object({ id: z.string(), queued: z.boolean() }) },
     /** Takes a waiting message back; its parts, or none when the agent already took it. */
     'chat.unqueue': { input: z.object({ sessionId: z.string(), id: z.string() }), output: z.object({ parts: z.array(Part) }) },
     /** Interrupts the agent's current step and sends this waiting message now; the agent carries on from there. */
@@ -458,6 +459,29 @@ export const contract = {
      * `/btw`: a side chat beside a session, asking `question` at once when there is one. It sees the session's
      * conversation, only reads, and never enters the session or waits for it. Closed with `sessions.delete`.
      */
+    /**
+     * Co-op (ARCHITECTURE §24): people working in one session. The host turns it on (`coop.start`): on a server they
+     * add teammates (`coop.add`, from `coop.directory`); a desktop opens a room on the relay and makes an invite link
+     * (`coop.invite`), and lets in whoever knocks (`coop.admit`). Each participant chooses whose models answer them
+     * (`coop.models`). On a guest's desktop, `coop.join` takes an invite and adds the session to its sidebar.
+     */
+    'coop.state': { input: z.object({ sessionId: z.string() }), output: CoopState.nullable() },
+    'coop.start': { input: z.object({ sessionId: z.string() }), output: CoopState },
+    'coop.invite': { input: z.object({ sessionId: z.string() }), output: z.object({ url: z.string(), expiresAt: z.number() }) },
+    'coop.directory': { input: Empty, output: z.array(z.object({ userId: z.string(), name: z.string(), avatar: z.string().nullable() })) },
+    'coop.add': { input: z.object({ sessionId: z.string(), userIds: z.array(z.string()).min(1).max(3), role: z.enum(['editor', 'viewer']) }), output: CoopState },
+    'coop.admit': { input: z.object({ sessionId: z.string(), knockId: z.string(), allow: z.boolean() }), output: Ok },
+    'coop.settings': { input: z.object({ sessionId: z.string(), settings: CoopSettings.partial() }), output: CoopState },
+    'coop.participant': { input: z.object({ sessionId: z.string(), participantId: z.string(), role: z.enum(['editor', 'viewer']).optional(), trusted: z.boolean().optional() }), output: CoopState },
+    'coop.remove': { input: z.object({ sessionId: z.string(), participantId: z.string() }), output: Ok },
+    'coop.models': { input: z.object({ sessionId: z.string(), models: ModelsChoice, model: z.string().nullable() }), output: CoopState },
+    'coop.typing': { input: z.object({ sessionId: z.string() }), output: Ok },
+    'coop.leave': { input: z.object({ sessionId: z.string() }), output: Ok },
+    'coop.end': { input: z.object({ sessionId: z.string() }), output: Ok },
+    'coop.join': {
+      input: z.object({ invite: z.string().max(2000), models: ModelsChoice.default('host') }),
+      output: z.object({ sessionId: z.string(), waiting: z.boolean() }),
+    },
     'sideChats.start': { input: z.object({ sessionId: z.string(), question: z.string().max(100_000).optional() }), output: SessionSummary },
     /** A session's side chats, oldest first. */
     'sideChats.list': { input: z.object({ sessionId: z.string() }), output: z.array(SessionSummary) },

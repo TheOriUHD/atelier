@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "df43ed9c-81b3-4279-a598-f5e641d144be",
+  "id": "277d4348-29b8-4497-9e09-36ddec75841b",
   "prevIds": [
     "b4c49b44-0d8c-4a18-8ef0-ae4d947036d8"
   ],
@@ -2961,6 +2961,16 @@
       "default": "false",
       "generated": null,
       "name": "cost_estimated",
+      "entityType": "columns",
+      "table": "usage_events"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participant",
       "entityType": "columns",
       "table": "usage_events"
     },
