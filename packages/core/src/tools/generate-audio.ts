@@ -72,6 +72,8 @@ export function createGenerateAudioTool(deps: GenerateAudioDeps): Tool<GenerateA
         text: { type: 'string', minLength: 1, maxLength: 40_000 },
         voice: { type: 'string' },
         prompt: { type: 'string', minLength: 1, maxLength: 4000 },
+        // Background music is the usual ask, and it has no vocals.
+        instrumental: { type: 'boolean' },
         seconds: { type: 'number' },
         model: { type: 'string' },
       },

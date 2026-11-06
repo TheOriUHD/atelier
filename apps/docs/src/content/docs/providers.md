@@ -90,7 +90,7 @@ Use this for LM Studio, vLLM, a gateway, or any server that offers `/v1/chat/com
   `/v1`; Atelier never doubles the version segment.
 - **Key:** optional; sent as `Authorization: Bearer …`.
 - **Models:** from `/v1/models`. Ids that look like embedding, speech (`whisper`, `tts`), transcription, DALL-E, moderation
-  or reranking models are left out. Image and video models have providers of their own: see [Image generation](/image-generation/) and [Video generation](/video-generation/).
+  or reranking models are left out. Image, video and audio models have providers of their own: see [Image generation](/image-generation/), [Video generation](/video-generation/) and [Audio generation](/audio-generation/).
 - **What Atelier reads from the model list** when the server provides it: `context_length`, `max_model_len`,
   `context_window`, `max_context_length` or `top_provider.context_length`; image input; the supported parameters (`tools`,
   `reasoning`). A plain server such as LM Studio usually reports none of these, so a model starts at a **32,768** token

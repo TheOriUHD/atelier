@@ -90,7 +90,7 @@ Sound models you can use with GenerateAudio, and what each makes:
 - eleven/music_v2_5 (Eleven Music): music; 3 to 600 seconds, usually 30; sings lyrics, or instrumental
 </context-update>
 
-# Tools: 18, 12676 characters of JSON
+# Tools: 18, 12710 characters of JSON
 
 [
   {
@@ -640,6 +640,9 @@ Sound models you can use with GenerateAudio, and what each makes:
           "type": "string",
           "minLength": 1,
           "maxLength": 4000
+        },
+        "instrumental": {
+          "type": "boolean"
         },
         "seconds": {
           "type": "number"

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 // Overridable so several checkouts can run their E2E suites at once (see e2e/fixtures.ts).
-const [ollamaPort, webPort, oidcPort, imagesPort, videoPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360), Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362), Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610), Number(process.env.ATELIER_E2E_VIDEO_PORT ?? 11620)];
+const [ollamaPort, webPort, oidcPort, imagesPort, videoPort, audioPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360), Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362), Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610), Number(process.env.ATELIER_E2E_VIDEO_PORT ?? 11620), Number(process.env.ATELIER_E2E_AUDIO_PORT ?? 11630)];
 const dataDir = await mkdtemp(join(tmpdir(), 'atelier-e2e-web-'));
 await writeFile(
   join(dataDir, 'settings.json'),
@@ -15,6 +15,7 @@ await writeFile(
     imageProviders: [
       { id: 'fake-images', type: 'openai-images', preset: 'openai-compatible', name: 'Fake Images', baseUrl: `http://127.0.0.1:${imagesPort}` },
       { id: 'fake-video', type: 'openrouter-video', preset: 'openrouter-video', name: 'Fake Video', baseUrl: `http://127.0.0.1:${videoPort}/api` },
+      { id: 'fake-audio', type: 'openai-speech', preset: 'localai-speech', name: 'Fake Audio', baseUrl: `http://127.0.0.1:${audioPort}` },
     ],
     // The video model people get unless they name one: the other needs no picture here, but is a different model.
     models: { defaults: { video: 'fake-video/fake/dusk' }, overrides: { 'fake/fake-eyes:8b': { promptTier: 'full' } } },
@@ -48,6 +49,7 @@ const children = [
   spawn(process.execPath, ['e2e/fake-oidc.mjs', String(oidcPort)], { stdio: 'inherit' }),
   spawn(process.execPath, ['e2e/fake-images.mjs', String(imagesPort)], { stdio: 'inherit' }),
   spawn(process.execPath, ['e2e/fake-video.mjs', String(videoPort)], { stdio: 'inherit' }),
+  spawn(process.execPath, ['e2e/fake-audio.mjs', String(audioPort)], { stdio: 'inherit' }),
   // The setup project (e2e/auth.setup.ts) creates the admin with this token (SETUP_TOKEN in fixtures.ts).
   spawn(process.execPath, ['apps/server/dist/server.mjs'], {
     stdio: 'inherit',

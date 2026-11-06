@@ -10,6 +10,7 @@ export const WEB_PORT = Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360);
 export const FAKE_OIDC_PORT = Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362);
 export const FAKE_IMAGES_PORT = Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610);
 export const FAKE_VIDEO_PORT = Number(process.env.ATELIER_E2E_VIDEO_PORT ?? 11620);
+export const FAKE_AUDIO_PORT = Number(process.env.ATELIER_E2E_AUDIO_PORT ?? 11630);
 
 /** e2e/serve.mjs starts the web server with this as ATELIER_SETUP_TOKEN. */
 export const SETUP_TOKEN = 'atelier-e2e-setup-token';
@@ -63,6 +64,29 @@ export const VIDEO_SETTINGS = {
   imagePricing: IMAGE_SETTINGS.imagePricing,
   models: { ...IMAGE_SETTINGS.models, defaults: { video: 'fake-video/fake/dusk' } },
 };
+
+/** Settings for the scripted fake sound server (e2e/fake-audio.mjs), on top of IMAGE_SETTINGS; e2e/serve.mjs gives the web server the same. */
+export const AUDIO_SETTINGS = {
+  imageProviders: [...IMAGE_SETTINGS.imageProviders, { id: 'fake-audio', type: 'openai-speech', preset: 'localai-speech', name: 'Fake Audio', baseUrl: `http://127.0.0.1:${FAKE_AUDIO_PORT}` }],
+  imagePricing: IMAGE_SETTINGS.imagePricing,
+  models: IMAGE_SETTINGS.models,
+};
+
+/** What the fake sound server was asked to do, oldest first. */
+export interface FakeAudioRequest {
+  route: 'speech' | 'sound';
+  model: string | null;
+  text: string;
+  voice?: string | null;
+  speed?: number | null;
+  seconds?: number | null;
+  lyrics?: string | null;
+  instrumental?: boolean | null;
+}
+
+export async function fakeAudioRequests(): Promise<FakeAudioRequest[]> {
+  return (await fetch(`http://127.0.0.1:${FAKE_AUDIO_PORT}/__log`)).json() as Promise<FakeAudioRequest[]>;
+}
 
 /** What the fake video service was asked to do, oldest first. */
 export interface FakeVideoJob {

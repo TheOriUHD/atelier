@@ -7,7 +7,7 @@ Add an image provider, and the assistant can make images in Chat, Code and Cowor
 model writes the prompt, and the image appears in the conversation while you watch it being made. Ask for a change and
 the model edits that image. In Code and Cowork it can save an image into your folder.
 
-Image providers are separate from the [text providers](/providers/), and the same page adds [video providers](/video-generation/). A text model calls the image model as a tool, so it
+Image providers are separate from the [text providers](/providers/), and the same page adds [video providers](/video-generation/) and [audio providers](/audio-generation/). A text model calls the image model as a tool, so it
 works with any text model that can call tools, local ones included. Nothing changes until you add one: without an image
 provider, Atelier sends models exactly what it sent before.
 

@@ -20,8 +20,13 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.4.2',
-    intro: 'Edits show where they are in the file, and a session can move to another folder.',
+    intro: 'Assistants can speak, make music and sound effects. Edits show where they are in the file, and a session can move to another folder.',
     highlights: [
+      {
+        icon: Volume2,
+        title: 'Speech, music and sound effects',
+        body: 'Add an audio provider in Settings › Media, such as ElevenLabs, OpenAI, Google Gemini or a server on your own computer like Kokoro or ComfyUI, and ask for something to hear: a text read aloud in a voice, a song, a sound effect. It plays right in the conversation, with its waveform to seek on.',
+      },
       {
         icon: FileDiff,
         title: 'Line numbers and the whole file for every edit',

@@ -36,6 +36,6 @@ describe('the sound tools in a session’s request', () => {
     const full = (await assemble(CASES['code.full.audio']!)).tools.find((t) => t.name === 'GenerateAudio')!;
     const compact = (await assemble(CASES['code.compact.audio']!)).tools.find((t) => t.name === 'GenerateAudio')!;
     expect(JSON.stringify(compact).length).toBeLessThan(JSON.stringify(full).length / 2);
-    expect(Object.keys((compact.inputSchema as { properties: object }).properties)).toEqual(['kind', 'text', 'voice', 'prompt', 'seconds', 'model']);
+    expect(Object.keys((compact.inputSchema as { properties: object }).properties)).toEqual(['kind', 'text', 'voice', 'prompt', 'instrumental', 'seconds', 'model']);
   });
 });

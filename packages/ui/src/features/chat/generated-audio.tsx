@@ -206,8 +206,9 @@ export function SoundPlayer({ sound, size = 'md', onDetails }: PlayerProps) {
         <div className="flex h-5 items-center gap-2 text-footnote">
           <KindIcon className="size-3.5 shrink-0 text-fg-muted" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-fg-secondary">{label}</span>
-          <span className="shrink-0 text-fg-muted tabular-nums">
-            {total !== undefined ? `${formatClock(second)} / ${formatClock(total)}` : formatClock(second)}
+          {/* Pointing at the waveform shows the time there, in the readout, where it covers nothing. */}
+          <span className={cn('shrink-0 tabular-nums', hover !== null && total !== undefined ? 'text-fg' : 'text-fg-muted')}>
+            {total !== undefined ? `${formatClock(hover !== null ? hover * total : second)} / ${formatClock(total)}` : formatClock(second)}
           </span>
         </div>
         <div
@@ -244,14 +245,7 @@ export function SoundPlayer({ sound, size = 'md', onDetails }: PlayerProps) {
           <div className="absolute inset-0" style={{ clipPath: 'inset(0 calc((1 - var(--at-played)) * 100%) 0 0)' }}>
             <Bars heights={shown} className="bg-interactive" />
           </div>
-          {hover !== null && total !== undefined && (
-            <>
-              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-fg-muted" style={{ left: `${hover * 100}%` }} />
-              <span aria-hidden="true" className="pointer-events-none absolute -top-6 -translate-x-1/2 rounded-md bg-tooltip-bg px-1.5 py-0.5 text-caption text-tooltip-fg tabular-nums" style={{ left: `${hover * 100}%` }}>
-                {formatClock(hover * total)}
-              </span>
-            </>
-          )}
+          {hover !== null && total !== undefined && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-px bg-fg-muted" style={{ left: `${hover * 100}%` }} />}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-0.5 self-start">
