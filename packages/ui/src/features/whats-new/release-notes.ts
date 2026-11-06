@@ -43,7 +43,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         body: 'Click the folder in a Code or Cowork session’s header and pick another of your folders on the same computer, or open one. The conversation goes on there, the model is told, and Undo moves it back. A reply that is running finishes first.',
       },
     ],
-    also: ['Permission cards show the lines around an edit too.', 'Rewind after a folder change restores each file in its own folder. It used to write the old folder’s files into the new one.', 'The clock under a running reply starts again from zero on Retry, instead of counting from when the message was first sent.'],
+    also: ['Permission cards show the lines around an edit too.', 'Rewind after a folder change restores each file in its own folder. It used to write the old folder’s files into the new one.', 'The clock under a running reply starts again from zero on Retry, instead of counting from when the message was first sent.', 'Leaving Ultracode no longer leaves faint cells on the effort slider the next time it opens.'],
   },
   {
     version: '0.4.1',
