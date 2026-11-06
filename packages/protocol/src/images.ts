@@ -22,6 +22,7 @@ export const ImageProviderType = z.enum([
   'huggingface',
   'ideogram',
   'bedrock',
+  'mistral-images',
   'openrouter-video',
   'xai-video',
   // Sound: speech, music and sound effects.
@@ -407,7 +408,7 @@ export interface ImagePreset {
   /** The service reports no models: they are typed in, starting from these. */
   suggestedModels?: readonly string[];
   /** The text provider type whose key works here too. */
-  sharesKeyWith?: 'openai' | 'openai-compatible';
+  sharesKeyWith?: 'openai' | 'openai-compatible' | 'mistral';
 }
 
 /** Every service in the Add dialog, in its order. */
@@ -433,6 +434,7 @@ export const IMAGE_PROVIDER_PRESETS: readonly ImagePreset[] = [
   { id: 'recraft', label: 'Recraft', type: 'openai-images', group: 'cloud', baseUrl: 'https://external.api.recraft.ai', key: 'required', keyUrl: 'https://www.recraft.ai/profile/api' },
   { id: 'azure', label: 'Azure OpenAI', type: 'openai-images', group: 'cloud', baseUrl: 'https://YOUR-RESOURCE.openai.azure.com', key: 'required', help: 'Add each image deployment by name as a model.' },
   { id: 'bedrock', label: 'Amazon Bedrock', type: 'bedrock', group: 'cloud', baseUrl: 'https://bedrock-runtime.us-west-2.amazonaws.com', key: 'required', help: 'Paste a Bedrock API key, or an access key and secret as ACCESS_KEY:SECRET. Its Stability image models run in us-west-2.' },
+  { id: 'mistral-images', label: 'Mistral', type: 'mistral-images', group: 'cloud', baseUrl: 'https://api.mistral.ai', key: 'required', keyUrl: 'https://console.mistral.ai/api-keys', sharesKeyWith: 'mistral', help: 'Runs through a Mistral chat model and its image tool (FLUX), so each image also costs that model’s tokens.' },
   { id: 'openrouter', label: 'OpenRouter', type: 'chat-images', group: 'aggregator', baseUrl: 'https://openrouter.ai/api', key: 'required', keyUrl: 'https://openrouter.ai/keys', sharesKeyWith: 'openai-compatible' },
   { id: 'fal', label: 'fal.ai', type: 'fal', group: 'aggregator', baseUrl: 'https://queue.fal.run', key: 'required', keyUrl: 'https://fal.ai/dashboard/keys', suggestedModels: ['fal-ai/flux/schnell', 'fal-ai/flux-2-pro'] },
   { id: 'replicate', label: 'Replicate', type: 'replicate', group: 'aggregator', baseUrl: 'https://api.replicate.com', key: 'required', keyUrl: 'https://replicate.com/account/api-tokens', suggestedModels: ['black-forest-labs/flux-schnell', 'black-forest-labs/flux-1.1-pro'] },
@@ -462,7 +464,7 @@ export const IMAGE_PROVIDER_PRESETS: readonly ImagePreset[] = [
   { id: 'xai-speech', label: 'xAI speech', type: 'xai-speech', group: 'cloud', baseUrl: 'https://api.x.ai', key: 'required', keyUrl: 'https://console.x.ai' },
   { id: 'stability-audio', label: 'Stability AI audio', type: 'stability', group: 'cloud', baseUrl: 'https://api.stability.ai', key: 'required', keyUrl: 'https://platform.stability.ai/dashboard/api-keys', help: 'Stable Audio: music and sound effects, without vocals.' },
   { id: 'azure-speech', label: 'Azure OpenAI speech', type: 'openai-speech', group: 'cloud', baseUrl: 'https://YOUR-RESOURCE.openai.azure.com', key: 'required', help: 'Add each speech deployment by name as a model.' },
-  { id: 'mistral-speech', label: 'Mistral Voxtral', type: 'openai-speech', group: 'cloud', baseUrl: 'https://api.mistral.ai', key: 'required', keyUrl: 'https://console.mistral.ai/api-keys' },
+  { id: 'mistral-speech', label: 'Mistral Voxtral', type: 'openai-speech', group: 'cloud', baseUrl: 'https://api.mistral.ai', key: 'required', keyUrl: 'https://console.mistral.ai/api-keys', sharesKeyWith: 'mistral' },
   { id: 'groq-speech', label: 'Groq speech', type: 'openai-speech', group: 'cloud', baseUrl: 'https://api.groq.com/openai', key: 'required', keyUrl: 'https://console.groq.com/keys', help: 'Orpheus. It reads up to 200 characters a call.' },
   { id: 'cartesia', label: 'Cartesia', type: 'cartesia', group: 'cloud', baseUrl: 'https://api.cartesia.ai', key: 'required', keyUrl: 'https://play.cartesia.ai/keys' },
   { id: 'deepgram', label: 'Deepgram Aura', type: 'deepgram', group: 'cloud', baseUrl: 'https://api.deepgram.com', key: 'required', keyUrl: 'https://console.deepgram.com' },

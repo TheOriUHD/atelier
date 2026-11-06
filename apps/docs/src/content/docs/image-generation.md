@@ -43,14 +43,17 @@ you trust.
 ### Cloud
 
 **OpenAI**, **Google Gemini**, **Vertex AI**, **Black Forest Labs**, **Stability AI**, **xAI**, **Ideogram**, **Recraft**,
-**Azure OpenAI** and **Amazon Bedrock** connect with a key. If you've added OpenAI as a text provider, **Use the key from
-OpenAI** saves pasting it again.
+**Mistral**, **Azure OpenAI** and **Amazon Bedrock** connect with a key. If you've added OpenAI or Mistral as a text
+provider, **Use the key from …** saves pasting it again.
 
 - **ChatGPT Plan** uses the ChatGPT Plan you've already signed in to, and your plan's limits. OpenAI doesn't document this
   route, so it may stop working or not be open to every plan.
 - **Amazon Bedrock** takes a Bedrock API key, or `ACCESS_KEY:SECRET` with an optional `:SESSION_TOKEN`. It offers Stability's
   models, in `us-west-2`.
 - **Vertex AI** uses express mode, and you type in the model ids.
+- **Mistral** has no image API of its own: a Mistral chat model calls its image tool, which runs Black Forest Labs' FLUX,
+  so each image also costs that model's tokens. It takes the shape you ask for, but no size, seed or input image, and
+  makes one image at a time. It hasn't been tested against Mistral's live service yet.
 
 **OpenRouter**, **fal.ai**, **Replicate**, **Together AI** and **Hugging Face** give you many models with one key. For
 services that don't list their models, type the model ids in the form. On Hugging Face an id can name a provider, as in

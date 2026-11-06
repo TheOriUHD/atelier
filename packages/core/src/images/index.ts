@@ -13,6 +13,7 @@ import { createGeminiAudio } from './dialects/gemini-audio.ts';
 import { createHuggingFace } from './dialects/huggingface.ts';
 import { createIdeogram } from './dialects/ideogram.ts';
 import { createInvokeAi } from './dialects/invokeai.ts';
+import { createMistralImages } from './dialects/mistral-images.ts';
 import { createOpenAiImages } from './dialects/openai-images.ts';
 import { createOpenAiSpeech } from './dialects/openai-speech.ts';
 import { createOpenRouterVideo } from './dialects/openrouter-video.ts';
@@ -40,6 +41,7 @@ const DIALECTS: Partial<Record<ImageProviderType, (instance: ImageInstance, deps
   huggingface: createHuggingFace,
   ideogram: createIdeogram,
   bedrock: createBedrock,
+  'mistral-images': createMistralImages,
   a1111: createA1111,
   swarmui: createSwarmUi,
   invokeai: createInvokeAi,

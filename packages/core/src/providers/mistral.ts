@@ -86,7 +86,7 @@ export function mistralCatalog(id: string): MistralEntry | undefined {
 }
 
 /** Tells a 422's validation list as a sentence: "body.stream_options: Extra inputs are not permitted". */
-function mistralErrorMessage(body: string): string {
+export function mistralErrorMessage(body: string): string {
   try {
     const json = rec(JSON.parse(body));
     const message = isRecord(json.message) ? json.message : typeof json.message === 'string' && json.message.startsWith('{') ? rec(JSON.parse(json.message)) : null;
