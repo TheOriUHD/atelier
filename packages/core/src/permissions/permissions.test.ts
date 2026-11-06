@@ -508,6 +508,28 @@ describe('video tools', () => {
   });
 });
 
+describe('sound tools', () => {
+  const generate = { name: 'GenerateAudio', input: { kind: 'speech', text: 'Hello' } };
+  const save = (file_path: string) => ({ name: 'SaveAudio', input: { audio: 'aud_ab12cd34', file_path } });
+
+  it('makes sounds without review in Auto and Bypass, asks in Ask, and refuses in Plan', () => {
+    expect(decide(generate, ctx({}, 'auto')).behavior).toBe('allow');
+    expect(decide(generate, ctx({}, 'bypassPermissions')).behavior).toBe('allow');
+    expect(decide(generate, ctx({}, 'default')).behavior).toBe('ask');
+    expect(decide(generate, ctx({}, 'plan')).behavior).toBe('deny');
+  });
+
+  it('keeps a deny rule on GenerateAudio in every mode', () => {
+    for (const mode of ['auto', 'bypassPermissions', 'default'] as const) expect(decide(generate, ctx({ deny: ['GenerateAudio'] }, mode)).behavior).toBe('deny');
+  });
+
+  it('holds SaveAudio to Edit rules like any write', () => {
+    for (const mode of ['auto', 'acceptEdits', 'bypassPermissions', 'default'] as const) expect(decide(save('/work/app/deploy/intro.mp3'), ctx({ deny: ['Edit(/deploy/**)'] }, mode)).behavior).toBe('deny');
+    expect(decide(save('/work/app/deploy/intro.mp3'), ctx({ ask: ['Edit(/deploy/**)'] }, 'auto')).behavior).toBe('ask');
+    expect(suggestRule(save('/work/app/assets/intro.mp3'), paths)).toBe('Edit(/assets/**)');
+  });
+});
+
 describe('a chat sandbox', () => {
   const sandbox = { root: '/home/sandbox/chats/u1/chat-1', home: '/home/sandbox', confined: true, flavor: 'posix' as const };
   const bash = (command: string, s = sandbox) => sandboxDecide({ name: 'Bash', input: { command } }, s);

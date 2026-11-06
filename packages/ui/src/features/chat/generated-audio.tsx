@@ -174,6 +174,7 @@ export function SoundPlayer({ sound, size = 'md', onDetails }: PlayerProps) {
 
   return (
     <div role="group" aria-label={`${label}: ${sound.prompt.slice(0, ALT_CHARS)}`} className={cn('group/audio @container/cell relative flex items-center rounded-2xl bg-fill-ghost-hover inset-ring inset-ring-line', large ? 'gap-4 px-4 py-4' : 'gap-3 py-2.5 pr-2.5 pl-3')}>
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption -- a speech's words are the line under the card and in its details; music and effects have none. */}
       <audio
         ref={audio}
         src={src}

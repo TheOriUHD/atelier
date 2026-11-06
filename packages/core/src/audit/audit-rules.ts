@@ -263,6 +263,7 @@ export const AUDIT_RULES = {
   'imageProviders.detect': skip('looks for servers; stores nothing'),
   'imageProviders.test': skip('a trial request; stores nothing'),
   'imageProviders.tryImage': skip('a trial image; stores nothing in settings'),
+  'imageProviders.trySound': skip('a trial sound; stores nothing in settings'),
   'imageProviders.refresh': skip('asks the providers again; stores nothing'),
   'imageProviders.parseWorkflow': skip('reads a file; stores nothing'),
   'imageProviders.savedWorkflows': skip('reads only'),

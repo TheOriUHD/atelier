@@ -428,3 +428,78 @@ describe('video generation limits', () => {
     expect(screen.queryByRole('combobox', { name: 'Default video model for everyone' })).toBeNull();
   });
 });
+
+const soundModel = (providerId: string, modelId: string, audio: Partial<NonNullable<ImageModelInfo['capabilities']['audio']>> = {}): ImageModelInfo =>
+  imageModel(providerId, modelId, {
+    capabilities: {
+      ...imageModel(providerId, modelId).capabilities,
+      family: 'hosted',
+      output: 'audio',
+      tunable: false,
+      edit: false,
+      previews: false,
+      audio: { kinds: ['speech'], voices: [{ id: 'alloy', name: 'Alloy' }, { id: 'v2', name: 'Bella', description: 'warm' }], defaultVoice: 'alloy', direction: true, ...audio },
+    },
+  });
+const ALL = { imageGeneration: true, videoGeneration: true, audioGeneration: true };
+
+describe('sound models', () => {
+  it('marks a sound model by what it makes, its voices and what it takes', async () => {
+    renderPage({}, [soundModel('eleven', 'v4', { maxSpeakers: 2 }), soundModel('eleven', 'music', { kinds: ['music'], voices: undefined, durations: { kind: 'range', min: 3, max: 600 }, lyrics: true, direction: undefined })], [], ALL);
+    const speech = await screen.findByRole('row', { name: /v4/ });
+    for (const text of ['Speech', '2 voices', 'Dialogue', 'Directions']) expect(within(speech).getByText(text)).toBeTruthy();
+    const music = screen.getByRole('row', { name: /music/ });
+    for (const text of ['Music', 'Lyrics', '3 s–10 min']) expect(within(music).getByText(text)).toBeTruthy();
+  });
+
+  it('keeps a default per kind, shown once some model makes it', async () => {
+    renderPage({}, [imageModel('comfy', 'z-image'), soundModel('tts', 'kokoro')], [], ALL);
+    const speech = await screen.findByRole('combobox', { name: 'Default speech model for everyone' });
+    expect(screen.queryByRole('combobox', { name: 'Default music model for everyone' })).toBeNull();
+    fireEvent.click(speech);
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent ?? '');
+    expect(options.some((t) => t.startsWith('kokoro'))).toBe(true);
+    expect(options.some((t) => t.startsWith('z-image'))).toBe(false);
+  });
+
+  it('makes a model the default for each kind it makes', async () => {
+    renderPage({}, [soundModel('eleven', 'sfx', { kinds: ['music', 'sound'], voices: undefined })], [], ALL);
+    fireEvent.click(await screen.findByRole('button', { name: 'sfx options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Make default for sound effects' }));
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['models', 'defaults', 'sound'], value: 'eleven/sfx' }]));
+  });
+
+  it('sets a speech model’s usual voice from its list', async () => {
+    renderPage({}, [soundModel('tts', 'kokoro')], [], ALL);
+    fireEvent.click(await screen.findByRole('button', { name: 'kokoro options' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Description and tuning…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'kokoro' });
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Voice' }));
+    const bella = await screen.findByRole('option', { name: 'Bella · warm' });
+    // Base UI only takes a click that started on the option.
+    fireEvent.pointerDown(bella, { pointerType: 'mouse' });
+    fireEvent.click(bella);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['imageModels', 'overrides', 'tts/kokoro', 'audio'], value: { voice: 'v2' } }]));
+  });
+});
+
+describe('sound generation limits', () => {
+  it('has its own switch and six sounds a turn until it says otherwise', async () => {
+    renderPage({}, [], [], ALL);
+    const toggle = await screen.findByRole('switch', { name: 'Let models make sounds' });
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    const perTurn = screen.getByRole('textbox', { name: 'Sounds per turn' });
+    expect((perTurn as HTMLInputElement).placeholder).toBe('6');
+    fireEvent.focus(perTurn);
+    fireEvent.change(perTurn, { target: { value: '10' } });
+    fireEvent.blur(perTurn);
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['imageGeneration', 'maxAudioPerTurn'], value: 10 }]));
+  });
+
+  it('is not shown by a server that cannot make sound', async () => {
+    renderPage({}, [], [], BOTH);
+    await screen.findByRole('switch', { name: 'Let models make videos' });
+    expect(screen.queryByRole('switch', { name: 'Let models make sounds' })).toBeNull();
+  });
+});

@@ -151,3 +151,36 @@ describe('the default video model', () => {
   });
 });
 
+describe('the default sound models', () => {
+  const model = (modelId: string, kinds: string[] = []) => ({ ref: `snd/${modelId}`, providerId: 'snd', modelId, displayName: modelId, hidden: false, capabilities: kinds.length ? { output: 'audio', audio: { kinds } } : {} });
+  const offered = (models: unknown[]) => ({ 'app.info': () => ({ imageGeneration: true, videoGeneration: true, audioGeneration: true }), 'imageModels.list': () => models });
+
+  it('has a row for each kind some model makes, each from its own models', async () => {
+    renderPage(defaultUserPrefs(), offered([model('flux'), model('kokoro', ['speech']), model('eleven', ['speech', 'sound'])]));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Default speech model' }));
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Server default (kokoro)', 'kokoro', 'eleven']);
+    expect(screen.getByRole('combobox', { name: 'Default sound effects model' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Default music model' })).toBeNull();
+    // The picture row keeps to pictures.
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryAllByRole('option')).toHaveLength(0));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Default image model' }));
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Server default (flux)', 'flux']);
+  });
+
+  it('sets the person’s own preference for that kind', async () => {
+    renderPage(defaultUserPrefs(), offered([model('kokoro', ['speech'])]));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Default speech model' }));
+    const option = await screen.findByRole('option', { name: 'kokoro' });
+    fireEvent.pointerDown(option, { pointerType: 'mouse' });
+    fireEvent.click(option);
+    await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['models', 'speech'], value: 'snd/kokoro' }]));
+  });
+
+  it('goes while an admin has sounds off, and on a server that cannot make them', async () => {
+    renderPage(defaultUserPrefs(), { ...offered([model('kokoro', ['speech']), model('flux')]), 'settings.get': () => snapshot({ imageGeneration: { enabled: true, maxImagesPerTurn: 8, audioEnabled: false } }) });
+    await screen.findByRole('combobox', { name: 'Default image model' });
+    expect(screen.queryByRole('combobox', { name: 'Default speech model' })).toBeNull();
+  });
+});
+

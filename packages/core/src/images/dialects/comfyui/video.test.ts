@@ -137,7 +137,7 @@ describe('generating a clip with a workflow', () => {
     const g = graph();
     g['13'] = { class_type: 'SaveAnimatedWEBP', inputs: { images: ['11', 0], filename_prefix: 'a', fps: 16, lossless: false, quality: 80, method: 'default' } };
     delete g['12'];
-    expect(() => mapWorkflow(g)).toThrow('no SaveImage, PreviewImage, SaveVideo, SaveWEBM or VHS_VideoCombine');
+    expect(() => mapWorkflow(g)).toThrow('no SaveImage, PreviewImage, SaveVideo, SaveWEBM, VHS_VideoCombine, SaveAudio or PreviewAudio');
   });
 });
 

@@ -65,4 +65,22 @@ describe('the image library', () => {
     expect(generatedImagesFor(db, 'ada', { limit: 10, kind: 'video' }).items).toHaveLength(1);
     expect(generatedImagesFor(db, 'ada', { limit: 10, kind: 'image' }).items.map((i) => i.createdAt)).toEqual([1]);
   });
+
+  it('lists a sound with what it is, its voice and its words, and filters by kind', async () => {
+    const { db, image } = await library();
+    await image(1);
+    await image(2, { kind: 'audio', mime: 'audio/mpeg', width: 0, height: 0, mediaSeconds: 3.5, prompt: 'Hello there', params: { audioKind: 'speech', voice: 'v2', voiceName: 'Bella', direction: 'warm' } });
+    await image(3, { kind: 'audio', mime: 'audio/mpeg', width: 0, height: 0, prompt: 'lofi', params: { audioKind: 'music', lyrics: 'la la', speakers: undefined } });
+    const sounds = generatedImagesFor(db, 'ada', { limit: 10, kind: 'audio' }).items;
+    expect(sounds.map((s) => s.prompt)).toEqual(['lofi', 'Hello there']);
+    expect(sounds[1]).toMatchObject({ id: `aud_${'1'.padStart(64, '0').slice(0, 8)}`, kind: 'audio', audioKind: 'speech', seconds: 3.5, voice: 'Bella', direction: 'warm' });
+    expect(sounds[0]).toMatchObject({ audioKind: 'music', lyrics: 'la la' });
+    expect(generatedImagesFor(db, 'ada', { limit: 10, kind: 'image' }).items).toHaveLength(1);
+  });
+
+  it('names a conversation’s voices by speaker', async () => {
+    const { db, image } = await library();
+    await image(1, { kind: 'audio', mime: 'audio/mpeg', width: 0, height: 0, params: { audioKind: 'speech', speakers: [{ name: 'Ann', voice: 'Kore' }, { name: 'Bo', voice: 'Puck' }] } });
+    expect(generatedImagesFor(db, 'ada', { limit: 10 }).items[0]!.voice).toBe('Ann: Kore, Bo: Puck');
+  });
 });

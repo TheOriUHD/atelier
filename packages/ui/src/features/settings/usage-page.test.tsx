@@ -402,3 +402,19 @@ describe('usage data', () => {
     expect([formatUsd(0), formatUsd(0.004), formatUsd(1280)]).toEqual(['$0.00', '<$0.01', '$1,280.00']);
   });
 });
+
+describe('sounds in usage', () => {
+  const sounds = (extra: Partial<UsageRow>) => usage({ providerId: 'eleven', modelId: 'v4', input: 0, output: 0, audios: 3, audioSeconds: 75, audioChars: 1200, ...extra });
+  const SOUND_MODELS = { 'imageModels.list': () => [{ ref: 'eleven/v4', providerId: 'eleven', modelId: 'v4', displayName: 'Eleven v4' }], 'app.info': () => ({ imageGeneration: true, videoGeneration: true, audioGeneration: true }) };
+
+  it('adds sounds and their length to the statement, keeps them out of the tokens, and has a table of their own', async () => {
+    resetBackend({ ...settingsBackend(), ...SOUND_MODELS, 'usage.summary': () => [...ROWS, sounds({ costUsd: 0.1, unpriced: 0, estimatedUsd: 0.1 })] });
+    await renderPage();
+    expect(await screen.findByText(/3 sounds \(1 min 15 s\)/)).toBeTruthy();
+    const table = await screen.findByRole('table', { name: 'Sounds' });
+    const row = await within(table).findByRole('row', { name: /Eleven v4/ });
+    expect(within(row).getByText('1,200')).toBeTruthy();
+    expect(within(row).getByText('estimate')).toBeTruthy();
+  });
+});
+

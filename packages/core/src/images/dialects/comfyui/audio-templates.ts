@@ -32,8 +32,9 @@ const t5Base = (info: ObjectInfo) => (choices(info.CLIPLoader, 'type').includes(
 /** Settings from ComfyUI's examples, with what this server's sampler list has. */
 function defaults(family: AudioFamily, info: ObjectInfo) {
   const samplers = choices(info.KSampler, 'sampler_name');
-  const has = (name: string) => samplers.length === 0 || samplers.includes(name);
-  if (family === 'stable-audio') return { steps: 50, guidance: 5, sampler: has('dpmpp_3m_sde_gpu') ? 'dpmpp_3m_sde_gpu' : has('dpmpp_3m_sde') ? 'dpmpp_3m_sde' : 'euler', scheduler: has('exponential') ? 'exponential' : 'simple' };
+  const schedulers = choices(info.KSampler, 'scheduler');
+  const has = (list: readonly string[], name: string) => list.length === 0 || list.includes(name);
+  if (family === 'stable-audio') return { steps: 50, guidance: 5, sampler: has(samplers, 'dpmpp_3m_sde_gpu') ? 'dpmpp_3m_sde_gpu' : has(samplers, 'dpmpp_3m_sde') ? 'dpmpp_3m_sde' : 'euler', scheduler: has(schedulers, 'exponential') ? 'exponential' : 'simple' };
   return { steps: 50, guidance: 5, sampler: 'euler', scheduler: 'simple' };
 }
 

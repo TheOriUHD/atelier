@@ -32,7 +32,7 @@ interface ListInput {
   before?: number;
   query?: string;
   ref?: string;
-  kind?: 'image' | 'video';
+  kind?: 'image' | 'video' | 'audio';
 }
 
 function renderPage(list: (input: ListInput) => { items: GeneratedImage[]; next: number | null; totalBytes: number }, extra: Record<string, (input: never) => unknown> = {}) {
@@ -327,3 +327,28 @@ describe('the total size', () => {
     expect(totalSize(5000)).toBe('5 KB');
   });
 });
+
+const sound = (n: number, extra: Partial<GeneratedImage> = {}): GeneratedImage => image(n, { id: `aud_${n}`, mime: 'audio/mpeg', kind: 'audio', audioKind: 'speech', voice: 'Bella', width: 0, height: 0, seconds: 65, ref: 'tts/kokoro', modelName: 'Kokoro', ...extra });
+
+describe('sounds on the page', () => {
+  it('shows a sound as a tile with its kind, voice, words and length, and opens it with its player', async () => {
+    renderPage(() => ({ items: [sound(1), image(2)], next: null, totalBytes: 1 }));
+    const tile = await screen.findByRole('button', { name: 'Play speech: Prompt 1' });
+    expect(within(tile).getByText('Speech · Bella')).toBeTruthy();
+    expect(within(tile).getByText('1:05')).toBeTruthy();
+    fireEvent.click(tile);
+    const dialog = await screen.findByRole('dialog', { name: 'Speech' });
+    expect(within(dialog).getByRole('button', { name: 'Play' })).toBeTruthy();
+    expect(within(dialog).getByText('Kokoro')).toBeTruthy();
+    expect(within(dialog).getByRole('link', { name: /Summer party/ })).toBeTruthy();
+  });
+
+  it('filters to sounds once there are some', async () => {
+    renderPage(({ kind }) => ({ items: kind === 'audio' ? [sound(1)] : [sound(1), image(2)], next: null, totalBytes: 1 }));
+    await screen.findByRole('button', { name: 'Play speech: Prompt 1' });
+    expect(screen.queryByRole('radio', { name: 'Videos' })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Sounds' }));
+    await waitFor(() => expect(callsTo('generatedImages.list').at(-1)).toMatchObject({ kind: 'audio' }));
+  });
+});
+
