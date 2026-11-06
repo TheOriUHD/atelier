@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, FileDiff, Film, FolderInput, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Cloud, FileDiff, Film, FolderInput, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -20,12 +20,17 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.4.2',
-    intro: 'Assistants can speak, make music and sound effects. Edits show where they are in the file, and a session can move to another folder.',
+    intro: 'Assistants can speak, make music and sound effects. Mistral joins the providers, Vibe plan included. Edits show where they are in the file, and a session can move to another folder.',
     highlights: [
       {
         icon: Volume2,
         title: 'Speech, music and sound effects',
         body: 'Add an audio provider in Settings › Media, such as ElevenLabs, OpenAI, Google Gemini or a server on your own computer like Kokoro or ComfyUI, and ask for something to hear: a text read aloud in a voice, a song, a sound effect. It plays right in the conversation, with its waveform to seek on.',
+      },
+      {
+        icon: Cloud,
+        title: 'Mistral, and your Vibe plan',
+        body: 'Add Mistral in Settings › Admin › Providers with a key from Mistral’s console, or choose Mistral Vibe and paste the Vibe key from your Le Chat Pro or Team plan to use its allowance instead of paying per token. Large 4, Medium 3.5, Small 4, Codestral and the rest are listed with their reasoning levels, and the context ring shows how much of the month’s Vibe allowance is used.',
       },
       {
         icon: FileDiff,
@@ -38,7 +43,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         body: 'Click the folder in a Code or Cowork session’s header and pick another of your folders on the same computer, or open one. The conversation goes on there, the model is told, and Undo moves it back. A reply that is running finishes first.',
       },
     ],
-    also: ['Permission cards show the lines around an edit too.', 'Rewind after a folder change restores each file in its own folder. It used to write the old folder’s files into the new one.'],
+    also: ['Permission cards show the lines around an edit too.', 'Rewind after a folder change restores each file in its own folder. It used to write the old folder’s files into the new one.', 'The clock under a running reply starts again from zero on Retry, instead of counting from when the message was first sent.'],
   },
   {
     version: '0.4.1',
