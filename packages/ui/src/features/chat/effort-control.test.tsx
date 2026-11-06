@@ -51,9 +51,14 @@ async function openSlider(name: string): Promise<HTMLElement> {
 /**
  * A WebGL2 stand-in that accepts every call and reports shaders and programs as compiled and linked; it counts the
  * contexts made, the frames drawn and the contexts released. `drop` loses the current context the way a GPU reset does.
+ * `shows` tells whether the canvas has any of the field on it: a frame drawn with the envelope up leaves cells, a clear
+ * or a frame at zero leaves nothing, and between openings it keeps what it has, as a browser's canvas does while its size
+ * stays the same. `envelope` is the last frame's.
  */
 function fakeWebGl() {
-  const draws = vi.fn();
+  let envelope = 0;
+  let shows = false;
+  const draws = vi.fn(() => void (shows = envelope > 0));
   // One context at a time: a new one replaces whatever was lost or released.
   let lost = false;
   const loseContext = vi.fn(() => void (lost = true));
@@ -62,6 +67,11 @@ function fakeWebGl() {
     getProgramParameter: () => true,
     isContextLost: () => lost,
     getExtension: (name: string) => (name === 'WEBGL_lose_context' ? { loseContext } : null),
+    getUniformLocation: (_program: unknown, name: string) => ({ name }),
+    uniform1f: (location: { name: string }, value: number) => {
+      if (location.name === 'uEnvelope') envelope = value;
+    },
+    clear: () => void (shows = false),
     drawArrays: draws,
   };
   const gl = new Proxy({}, { get: (_, key) => special[key] ?? (() => ({})) });
@@ -73,7 +83,7 @@ function fakeWebGl() {
     lost = true;
     canvas.dispatchEvent(new Event('webglcontextlost'));
   };
-  return { contexts: () => getContext.mock.calls.length, getContext, draws, loseContext, drop };
+  return { contexts: () => getContext.mock.calls.length, getContext, draws, loseContext, drop, shows: () => shows, envelope: () => envelope };
 }
 
 afterEach(() => {
@@ -431,6 +441,80 @@ describe('EffortControl', () => {
     expect(gl.loseContext).not.toHaveBeenCalled();
     unmount();
     expect(gl.loseContext).toHaveBeenCalledTimes(1);
+  });
+
+  describe('leaves nothing of the field on the track once the value is off its stop', () => {
+    /** A session's control, whose level and mode change from outside. */
+    const control = (effort: Effort, mode: Mode = 'code') => <EffortControl model={opus} mode={mode} effort={effort} onChange={() => {}} />;
+
+    /** The field's canvas is back over the track, and stays empty while the value is elsewhere. */
+    const expectEmpty = async (gl: ReturnType<typeof fakeWebGl>) => {
+      await waitFor(() => expect(document.querySelector('canvas[data-ultracode-field]')).toBeTruthy());
+      expect(gl.shows()).toBe(false);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(gl.shows()).toBe(false);
+    };
+
+    it('when the popover closed while the field was still cooling, and comes and goes again in the next opening', async () => {
+      const gl = fakeWebGl();
+      render(<Harness initial="ultracode" />);
+      const slider = await openSlider('Effort: Ultracode, high usage');
+      // Well up, so its fade outlasts the popover's closing.
+      await waitFor(() => expect(gl.envelope()).toBeGreaterThan(0.5));
+      // Off the stop and closed straight away, within the fade: its frame still has the field in it. (Checked here, not
+      // after the popover has closed, which on a slow machine can outlast the fade; closing while lit is the next test.)
+      fireEvent.keyDown(slider, { key: 'Home' });
+      fireEvent.click(screen.getByRole('button', { name: 'Effort: Low' }));
+      expect(gl.envelope()).toBeGreaterThan(0);
+      await waitFor(() => expect(screen.queryByRole('slider')).toBeNull());
+
+      const again = await openSlider('Effort: Low');
+      await expectEmpty(gl);
+      // Back on the stop the field rises again, and leaving it, it fades out to nothing.
+      fireEvent.keyDown(again, { key: 'End' });
+      await waitFor(() => expect(gl.shows()).toBe(true));
+      fireEvent.keyDown(again, { key: 'Home' });
+      await waitFor(() => expect(gl.shows()).toBe(false), { timeout: 2000 });
+    });
+
+    it('when the session’s level changed while the popover was closed', async () => {
+      const gl = fakeWebGl();
+      const { rerender } = render(control('ultracode'));
+      await openSlider('Effort: Ultracode, high usage');
+      await waitFor(() => expect(gl.shows()).toBe(true));
+      fireEvent.click(screen.getByRole('button', { name: 'Effort: Ultracode, high usage' }));
+      await waitFor(() => expect(screen.queryByRole('slider')).toBeNull());
+
+      rerender(control('low'));
+      await openSlider('Effort: Low');
+      await expectEmpty(gl);
+    });
+
+    it('when a mode without the stop came and went while it was lit', async () => {
+      const gl = fakeWebGl();
+      const { rerender } = render(control('ultracode'));
+      await openSlider('Effort: Ultracode, high usage');
+      await waitFor(() => expect(gl.shows()).toBe(true));
+      // Outside Code the last stop is Max, without a field.
+      rerender(control('ultracode', 'chat'));
+      await waitFor(() => expect(document.querySelector('canvas')).toBeNull());
+
+      rerender(control('low'));
+      await expectEmpty(gl);
+    });
+
+    it('when reduced motion came on while it was lit and went off with the value elsewhere', async () => {
+      const gl = fakeWebGl();
+      render(<Harness initial="ultracode" />);
+      const slider = await openSlider('Effort: Ultracode, high usage');
+      await waitFor(() => expect(gl.shows()).toBe(true));
+      act(() => void (document.documentElement.dataset.motion = 'reduced'));
+      await waitFor(() => expect(document.querySelector('canvas')).toBeNull());
+      fireEvent.keyDown(slider, { key: 'Home' });
+
+      act(() => void delete document.documentElement.dataset.motion);
+      await expectEmpty(gl);
+    });
   });
 
   it('stops drawing when the GPU drops the context, falls back to the plain fill, and takes a new one on the next opening', async () => {

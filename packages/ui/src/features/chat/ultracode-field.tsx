@@ -196,6 +196,9 @@ class Field {
   attach(host: HTMLElement, onLost: () => void): void {
     this.onLost = onLost;
     host.append(this.canvas);
+    // Empty again before it paints: the clear made when it was taken out may not have reached the screen, and a field
+    // that stays unlit never draws, so an old frame would sit over the track for the whole opening.
+    this.clear();
     try {
       this.resize.observe(this.canvas, { box: 'device-pixel-content-box' });
     } catch {
@@ -251,13 +254,24 @@ class Field {
     this.onLost();
   };
 
-  /** No more frames, unlit and cold. */
+  /**
+   * No more frames, unlit and cold, and nothing on the canvas. The rest of the field takes a cold envelope to mean that
+   * nothing shows, but a canvas keeps its last frame, out of the page too: stopped while lit or still cooling (the popover
+   * closed, reduced motion came on, the stop went away), it would bring those cells back over a track at another level.
+   */
   private stop(): void {
     cancelAnimationFrame(this.frame);
     this.frame = 0;
     this.lit = false;
     this.level = 0;
     this.bursts = [];
+    this.clear();
+  }
+
+  /** Nothing on the canvas until the next frame. */
+  private clear(): void {
+    this.gl.clearColor(0, 0, 0, 0);
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT);
   }
 
   private run(): void {
@@ -314,8 +328,7 @@ class Field {
     const { gl, canvas, palette } = this;
     if (!palette) return;
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.clear();
     gl.useProgram(this.program);
     const width = Math.max(canvas.clientWidth, 1);
     gl.uniform2f(this.uniform('uSize'), width, Math.max(canvas.clientHeight, 1));
