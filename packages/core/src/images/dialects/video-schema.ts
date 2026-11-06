@@ -14,6 +14,7 @@ export interface Field {
   enum?: (string | number)[] | undefined;
   minimum?: number | undefined;
   maximum?: number | undefined;
+  maxLength?: number | undefined;
   default?: unknown;
 }
 
@@ -39,7 +40,7 @@ export interface InputNames {
 const AUTO = new Set(['auto', 'adaptive']);
 
 /** One property of the schema, with `$ref`s followed and a nullable `anyOf` or a single-entry `allOf` reduced to its real alternative. */
-function field(raw: unknown, schemas: Record<string, unknown>, depth = 0): Field {
+export function field(raw: unknown, schemas: Record<string, unknown>, depth = 0): Field {
   const prop = rec(raw);
   const ref = str(prop.$ref);
   if (ref && depth < 4) return field(schemas[ref.split('/').at(-1)!], schemas, depth + 1);
@@ -51,6 +52,7 @@ function field(raw: unknown, schemas: Record<string, unknown>, depth = 0): Field
     enum: values.length ? values : inner?.enum,
     minimum: num(prop.minimum) ?? inner?.minimum,
     maximum: num(prop.maximum) ?? inner?.maximum,
+    maxLength: num(prop.maxLength) ?? inner?.maxLength,
     default: prop.default ?? inner?.default,
   };
 }

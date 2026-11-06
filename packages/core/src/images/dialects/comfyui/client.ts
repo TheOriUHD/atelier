@@ -33,12 +33,12 @@ const promptIds = (entries: unknown): string[] =>
 
 /**
  * `{ images: [...] }` per output node, for what comes over the socket and what's in the history alike. A video node
- * lists its file there too (`SaveVideo` and `SaveWEBM` with `animated: [true]`), and Video Helper Suite's combine node
- * under `gifs`.
+ * lists its file there too (`SaveVideo` and `SaveWEBM` with `animated: [true]`), Video Helper Suite's combine node
+ * under `gifs`, and a sound node (`SaveAudio…`, `PreviewAudio`) under `audio`.
  */
 export function outputImages(output: unknown): ComfyImage[] {
   const files = rec(output);
-  return [...arr(files.images), ...arr(files.gifs)].flatMap((image) => {
+  return [...arr(files.images), ...arr(files.gifs), ...arr(files.audio)].flatMap((image) => {
     const { filename, subfolder, type } = rec(image);
     return typeof filename === 'string' ? [{ filename, subfolder: str(subfolder) ?? '', type: str(type) ?? 'output' }] : [];
   });

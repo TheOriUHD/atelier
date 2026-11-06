@@ -18,7 +18,20 @@ export const WORKFLOW_SLOTS = [
   { key: 'count', label: 'Images per run', kind: 'number' },
   { key: 'image', label: 'Input image', kind: 'text' },
   { key: 'mask', label: 'Mask', kind: 'text' },
+  // Shown only for a workflow that saves a sound.
+  { key: 'seconds', label: 'Length in seconds', kind: 'number', sound: true },
+  { key: 'lyrics', label: 'Lyrics', kind: 'text', sound: true },
 ] as const;
+
+/** Whether a workflow's result is a sound: its output node saves or previews audio. */
+export const savesSound = (workflow: Pick<ImageWorkflow, 'graph' | 'map'>): boolean => {
+  const node = workflow.map.output ? workflow.graph[workflow.map.output] : undefined;
+  const type = typeof node === 'object' && node !== null ? (node as { class_type?: unknown }).class_type : undefined;
+  return typeof type === 'string' && /^(?:SaveAudio|PreviewAudio)/.test(type);
+};
+
+/** The slots this workflow has: the sound ones only for a sound. */
+export const slotsFor = (workflow: Pick<ImageWorkflow, 'graph' | 'map'>) => WORKFLOW_SLOTS.filter((slot) => !('sound' in slot) || savesSound(workflow));
 
 type Slot = (typeof WORKFLOW_SLOTS)[number];
 export type SlotKey = Slot['key'];

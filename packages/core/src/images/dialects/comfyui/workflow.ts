@@ -11,6 +11,7 @@ import type { ImageRequest } from '../../types.ts';
 import type { NodeInfo, ObjectInfo } from './discovery.ts';
 import type { Graph, GraphNode, GraphPlan, Link } from './templates.ts';
 import { hostedVideo } from '../video-common.ts';
+import { soundModel } from '../audio-common.ts';
 
 export const MAX_WORKFLOW_BYTES = 256 * 1024;
 
@@ -30,6 +31,10 @@ const SAMPLER = /KSampler(?!Select)|SamplerCustom/;
 const SAVES_IMAGE = /^(Save|Preview)Image/;
 /** The nodes that write a clip Atelier can keep: MP4 or WebM. Animated WebP and PNG are pictures, which it doesn't take as video. */
 const SAVES_VIDEO = /^(?:SaveVideo|SaveWEBM|VHS_VideoCombine)$/;
+/** The nodes that write a sound Atelier can keep. */
+const SAVES_AUDIO = /^(?:SaveAudio(?:MP3|Opus|Advanced)?|PreviewAudio)$/;
+/** Where a sound's length lives besides its latent, which has to agree with it. */
+const AUDIO_SECONDS: Record<string, string> = { ConditioningStableAudio: 'seconds_total', 'TextEncodeAceStepAudio1.5': 'duration' };
 /** Nodes that make a video's latent from words or a picture: they hold its size and its frame count (`length`). */
 const VIDEO_LATENT = /ToVideo$|^Empty.*LatentVideo$/;
 /** Where the frame rate lives. */
@@ -37,7 +42,7 @@ const FPS_INPUT: Record<string, string> = { CreateVideo: 'fps', SaveWEBM: 'fps',
 const EMPTY_LATENT = /^Empty.*Latent/;
 /** Inputs that carry a model or an image, never the conditioning a prompt lives in. */
 const NOT_CONDITIONING = new Set(['clip', 'model', 'vae', 'control_net', 'image', 'pixels', 'latent', 'samples', 'style_model', 'clip_vision']);
-const TEXT_INPUTS = ['text', 'prompt', 'text_g', 'value', 'string'];
+const TEXT_INPUTS = ['text', 'prompt', 'text_g', 'value', 'string', 'tags'];
 
 function inputsOf(graph: Graph, id: string): Record<string, unknown> {
   return graph[id]?.inputs ?? {};
@@ -138,7 +143,7 @@ function samplerSettings(graph: Graph, sampler: string) {
 /** The node that makes the result: a save over a preview, and the one with the most sampling behind it. */
 function findOutput(graph: Graph): string | null {
   const score = (id: string) => ancestors(graph, id).filter((a) => SAMPLER.test(graph[a]!.class_type)).length * 2 + (graph[id]!.class_type.startsWith('Save') ? 1 : 0);
-  const outputs = Object.keys(graph).filter((id) => (SAVES_IMAGE.test(graph[id]!.class_type) || SAVES_VIDEO.test(graph[id]!.class_type)) && ancestors(graph, id).some((a) => SAMPLER.test(graph[a]!.class_type)));
+  const outputs = Object.keys(graph).filter((id) => (SAVES_IMAGE.test(graph[id]!.class_type) || SAVES_VIDEO.test(graph[id]!.class_type) || SAVES_AUDIO.test(graph[id]!.class_type)) && ancestors(graph, id).some((a) => SAMPLER.test(graph[a]!.class_type)));
   return outputs.sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
@@ -152,7 +157,7 @@ function loaderBehind(graph: Graph, node: string, input: string): string | undef
 /** What Atelier can set in a graph, found by following the links back from its output. Throws when there's no prompt. */
 export function mapWorkflow(graph: Graph): ImageWorkflow['map'] {
   const output = findOutput(graph);
-  if (!output) throw new WorkflowRefused("This workflow has no SaveImage, PreviewImage, SaveVideo, SaveWEBM or VHS_VideoCombine after a sampler, so there's no result to take from it.");
+  if (!output) throw new WorkflowRefused("This workflow has no SaveImage, PreviewImage, SaveVideo, SaveWEBM, VHS_VideoCombine, SaveAudio or PreviewAudio after a sampler, so there's no result to take from it.");
   const upstream = ancestors(graph, output);
   const last = upstream.find((id) => SAMPLER.test(graph[id]!.class_type))!;
   const { sampler, latent } = firstPass(graph, last);
@@ -174,7 +179,14 @@ export function mapWorkflow(graph: Graph): ImageWorkflow['map'] {
   const frames = video && empty ? (literal(graph, empty, 'length') ?? literal(graph, empty, 'frames') ?? undefined) : undefined;
   const rateNode = video ? [output, ...upstream].find((id) => FPS_INPUT[graph[id]!.class_type]) : undefined;
   const fps = rateNode ? (literal(graph, rateNode, FPS_INPUT[graph[rateNode]!.class_type]!) ?? undefined) : undefined;
-  const optional = { negative, seed: settings.seed, steps: settings.steps, guidance: settings.guidance, sampler: settings.sampler, scheduler: settings.scheduler, width, height, count, frames, fps, ...(image ? { image: { node: image, input: 'image' } } : {}), ...(end ? { endImage: { node: end, input: 'image' } } : {}), ...(mask ? { mask: { node: mask, input: 'image' } } : {}) };
+  // A sound's length is on its empty latent, and its words to sing on the node that encodes the tags.
+  const sound = SAVES_AUDIO.test(graph[output]!.class_type);
+  const seconds = sound && empty ? (literal(graph, empty, 'seconds') ?? undefined) : undefined;
+  const singer = sound ? upstream.find((id) => inputsOf(graph, id).lyrics !== undefined) : undefined;
+  const lyrics = singer ? (literal(graph, singer, 'lyrics') ?? undefined) : undefined;
+  // ACE-Step 1.5 keeps its seed on the encoder, where a sampler's seed doesn't reach.
+  const seed = settings.seed ?? (singer ? (literal(graph, singer, 'seed') ?? undefined) : undefined);
+  const optional = { negative, seed, steps: settings.steps, guidance: settings.guidance, sampler: settings.sampler, scheduler: settings.scheduler, width, height, count: sound ? undefined : count, frames, fps, seconds, lyrics, ...(image && !sound ? { image: { node: image, input: 'image' } } : {}), ...(end ? { endImage: { node: end, input: 'image' } } : {}), ...(mask && !sound ? { mask: { node: mask, input: 'image' } } : {}) };
   return { prompt, output, ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined)) };
 }
 
@@ -191,6 +203,7 @@ export function workflowCapabilities(workflow: ImageWorkflow, samplers: readonly
   const scheduler = str(valueAt(graph, map.scheduler));
   const base = width && height ? Math.max(width, height) : 1024;
   if (SAVES_VIDEO.test(str(rec(graph[map.output ?? '']).class_type) ?? '')) return videoWorkflowCapabilities(workflow, { width, height, steps, guidance });
+  if (SAVES_AUDIO.test(str(rec(graph[map.output ?? '']).class_type) ?? '')) return audioWorkflowCapabilities(workflow, { steps, guidance, sampler, scheduler }, samplers);
   const sizes: ImageCapabilities['sizes'] = map.width && map.height ? { kind: 'free', min: 256, max: 2048, multiple: 16, base } : { kind: 'fixed', list: [{ width: width ?? 1024, height: height ?? 1024 }] };
   return {
     family: 'workflow',
@@ -248,6 +261,37 @@ function videoWorkflowCapabilities(workflow: ImageWorkflow, found: { width: numb
   };
 }
 
+/** A workflow that makes a sound as a model: music, or music and effects for Stable Audio, as long as its latent says. */
+function audioWorkflowCapabilities(workflow: ImageWorkflow, found: { steps: number | undefined; guidance: number | undefined; sampler: string | undefined; scheduler: string | undefined }, samplers: readonly string[]): ImageCapabilities {
+  const { map, graph } = workflow;
+  const types = new Set(Object.values(graph).map((node) => str(rec(node).class_type) ?? ''));
+  const stableAudio = types.has('ConditioningStableAudio');
+  const seconds = num(valueAt(graph, map.seconds));
+  // Stable Audio Open was trained on clips under 48 seconds; the music models make minutes.
+  const max = stableAudio ? 47 : 600;
+  return {
+    ...soundModel(
+      {
+        kinds: stableAudio ? ['music', 'sound'] : ['music'],
+        ...(map.seconds ? { durations: { kind: 'range', min: 1, max, step: 1 } } : {}),
+        ...(seconds ? { defaultSeconds: Math.min(max, seconds) } : {}),
+        lyrics: !!map.lyrics,
+        vocals: map.lyrics ? 'optional' : 'none',
+      },
+      {
+        family: 'workflow-audio',
+        promptStyle: types.has('TextEncodeAceStepAudio') || types.has('TextEncodeAceStepAudio1.5') ? 'tags' : 'natural',
+        negativePrompt: !!map.negative && (found.guidance === undefined || found.guidance > 1),
+        seed: !!map.seed,
+        tunable: !!(map.steps || map.guidance || map.sampler || map.scheduler),
+        defaults: { ...(found.steps !== undefined ? { steps: found.steps } : {}), ...(found.guidance !== undefined ? { guidance: found.guidance } : {}), ...(found.sampler ? { sampler: found.sampler } : {}), ...(found.scheduler ? { scheduler: found.scheduler } : {}) },
+        ...(samplers.length && map.sampler ? { samplers: [...samplers] } : {}),
+      },
+    ),
+    ...workflow.capabilities,
+  };
+}
+
 /** Frames for a length, in the counts each family makes: Wan and Hunyuan 4n+1, LTX-V 8n+1, Mochi 6n+1. */
 export function frameCount(classType: string | undefined, seconds: number, fps: number): number {
   const wanted = Math.max(1, Math.round(seconds * fps));
@@ -281,6 +325,12 @@ export function applyWorkflow(workflow: ImageWorkflow, request: ImageRequest, se
     put(map.fps, fps);
     put(map.frames, frameCount(map.frames ? graph[map.frames.node]?.class_type : undefined, request.video.seconds, fps));
   }
+  if (request.audio) {
+    put(map.seconds, request.audio.seconds);
+    // An instrumental is asked for with the tag ACE-Step reads; no lyrics given leaves the workflow's own.
+    if (request.audio.instrumental) put(map.lyrics, '[instrumental]');
+    else put(map.lyrics, request.audio.lyrics);
+  }
   for (const node of Object.values(graph)) {
     // Its size is a second copy of the latent's, and the two have to agree.
     if (node.class_type === 'Flux2Scheduler') {
@@ -292,6 +342,13 @@ export function applyWorkflow(workflow: ImageWorkflow, request: ImageRequest, se
       node.class_type = 'PreviewImage';
       delete node.inputs.filename_prefix;
     }
+    if (/^SaveAudio/.test(node.class_type)) {
+      node.class_type = 'PreviewAudio';
+      for (const key of Object.keys(node.inputs)) if (key !== 'audio') delete node.inputs[key];
+    }
+    // A length kept twice (the latent and the conditioning or the encoder) has to agree.
+    const secondsInput = AUDIO_SECONDS[node.class_type];
+    if (request.audio?.seconds !== undefined && secondsInput && !isLink(node.inputs[secondsInput])) node.inputs[secondsInput] = request.audio.seconds;
   }
   return { graph, output: map.output ?? '', samplers: [] };
 }

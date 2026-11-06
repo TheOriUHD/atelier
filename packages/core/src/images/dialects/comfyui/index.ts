@@ -15,6 +15,7 @@ import { promptError } from './errors.ts';
 import { followJob, TIMING, type JobTiming } from './job.ts';
 import { buildGraph, type GraphPlan } from './templates.ts';
 import { applyWorkflow, maskChannel, readWorkflow, workflowIdOf } from './workflow.ts';
+import { audioFamily, audioGraph, discoverAudioModels } from './audio-templates.ts';
 
 /** How many `/object_info/<node>` reads run at once: each holds up that server's other requests while it runs. */
 const NODE_READS_AT_ONCE = 4;
@@ -59,6 +60,11 @@ export function createComfyUi(instance: ImageInstance, deps: ImageAdapterDeps, t
       return applyWorkflow(workflow, request, seed, images, mask, endImage);
     }
     const info = await serverNodes(signal);
+    if (request.audio) {
+      const family = audioFamily(model);
+      if (!family) throw new Error(`${instance.name} can't make sound with ${model}.`);
+      return audioGraph(model, family, request, seed, info);
+    }
     const source = sourceOf(model, info);
     const family = source && detectFamily(model, source);
     const stack = family && source && stackFor(family, model, source, info);
@@ -99,6 +105,17 @@ export function createComfyUi(instance: ImageInstance, deps: ImageAdapterDeps, t
         yield { type: 'finish', reason: 'error', error: warned ? promptError(instance, { node_errors: submission.warnings }) : { code: 'provider_error', message: `${instance.name} finished without an image.`, retryable: false } };
         return;
       }
+      if (request.audio) {
+        // A sound is the one file a sound node wrote: FLAC from a preview, MP3 or Opus from a save.
+        const sound = images.find((file) => /\.(?:flac|mp3|opus|ogg|wav|m4a)$/i.test(file.filename));
+        if (!sound) {
+          yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: `${instance.name} finished, but its workflow wrote no sound. In the workflow, end with SaveAudio, SaveAudioMP3, SaveAudioOpus or PreviewAudio.`, retryable: false } };
+          return;
+        }
+        yield { type: 'audio', bytes: await client.view(sound, signal), seed };
+        yield { type: 'finish', reason: 'done' };
+        return;
+      }
       if (request.video) {
         // A clip is the one MP4 or WebM the output node wrote; a node may also list a preview picture beside it.
         const clip = images.find((image) => /\.(?:mp4|webm)$/i.test(image.filename));
@@ -119,7 +136,8 @@ export function createComfyUi(instance: ImageInstance, deps: ImageAdapterDeps, t
   return {
     type: 'comfyui',
     async listModels(signal) {
-      return discoverModels(instance, await serverNodes(signal, true));
+      const info = await serverNodes(signal, true);
+      return [...discoverModels(instance, info), ...discoverAudioModels(instance, info)];
     },
     health(signal) {
       return probe(deps, instance, client.healthUrl(), client.headers(false), signal, async (res, latencyMs) => {

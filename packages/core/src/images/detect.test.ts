@@ -50,7 +50,8 @@ describe('detectImageServers', () => {
   });
 
   it('finds LocalAI by its capability route, and not llama.cpp on the same port', async () => {
-    await expect(found({ '8080/v1/models/capabilities': { object: 'list', data: [] } })).resolves.toEqual(['localai']);
+    // One LocalAI is two providers here: its pictures and its sound.
+    await expect(found({ '8080/v1/models/capabilities': { object: 'list', data: [] } })).resolves.toEqual(['localai', 'localai-speech']);
     await expect(found({ '8080/v1/models': { data: [{ id: 'gemma' }] } })).resolves.toEqual([]);
   });
 
@@ -60,6 +61,24 @@ describe('detectImageServers', () => {
 
   it('does not offer Ollama, whose current versions make no images', async () => {
     await expect(found({ '11434/api/tags': { models: [{ name: 'x/z-image-turbo' }] } })).resolves.toEqual([]);
+  });
+
+  it('finds the sound servers by a reply only each gives', async () => {
+    await expect(found({ '8880/v1/audio/voices': { voices: [{ id: 'af_heart', name: 'af_heart' }], default_voice: 'af_heart' } })).resolves.toEqual(['kokoro']);
+    await expect(found({ '8004/v1/audio/voices': { status: 'ok', voices: ['Emily.wav'] } })).resolves.toEqual(['chatterbox']);
+    await expect(found({ '8000/v1/registry': { data: [{ id: 'speaches-ai/Kokoro-82M-v1.0-ONNX' }] } })).resolves.toEqual(['speaches']);
+    await expect(found({ '8001/v1/models': { data: { models: ['acestep-v15-turbo'] }, code: 200, error: null } })).resolves.toEqual(['acestep']);
+    await expect(found({ '8080/v1/health': { status: 'ok' } })).resolves.toEqual(['fish-speech']);
+  });
+
+  it('finds KoboldCpp speaking only when it says it has a speech model', async () => {
+    await expect(found({ '5001/api/extra/version': { result: 'KoboldCpp', version: '1.124.2', tts: true } })).resolves.toEqual(['koboldcpp-speech']);
+    await expect(found({ '5001/api/extra/version': { result: 'KoboldCpp', version: '1.124.2', tts: false } })).resolves.toEqual([]);
+  });
+
+  it('offers Ollama for speech once it has a speech model', async () => {
+    await expect(found({ '11434/api/tags': { models: [{ name: 'phonon:latest' }] } })).resolves.toEqual(['ollama-speech']);
+    await expect(found({ '11434/api/tags': { models: [{ name: 'qwen3:8b' }] } })).resolves.toEqual([]);
   });
 
   it('does not offer a server that is already added', async () => {

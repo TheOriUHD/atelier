@@ -13,6 +13,7 @@ import { guardImages } from '../guard.ts';
 import { multipart, type MultipartField } from '../multipart.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest } from '../types.ts';
 import { failureOf, listedModel, noImage, refusal } from './hosted.ts';
+import { stabilityAudio, stabilityAudioModels } from './stability-audio.ts';
 
 /** How far an input image may be changed; Stability has no default for this and the tool has no field for it. */
 const IMAGE_STRENGTH = 0.7;
@@ -72,14 +73,16 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
 
 export function createStability(instance: ImageInstance, deps: ImageAdapterDeps): ImageAdapter {
   const ids = [...new Set([...STABILITY_MODEL_IDS, ...instance.models])];
+  // Added for sound, it lists Stable Audio's models and makes music and effects instead of pictures.
+  const sound = instance.preset === 'stability-audio';
   return {
     type: 'stability',
-    listModels: () => Promise.resolve(ids.map((id) => listedModel(instance, id, lookUp(STABILITY_MODELS, id), instance.models.includes(id) ? 'default' : 'catalog'))),
+    listModels: () => Promise.resolve(sound ? stabilityAudioModels(instance) : ids.map((id) => listedModel(instance, id, lookUp(STABILITY_MODELS, id), instance.models.includes(id) ? 'default' : 'catalog'))),
     health(signal) {
       return probe(deps, instance, `${instance.baseUrl}/v1/user/account`, authorized(instance), signal);
     },
     generate(request) {
-      return guardImages(request, instance, () => run(instance, deps, request));
+      return guardImages(request, instance, () => (request.audio ? stabilityAudio(instance, deps, request) : run(instance, deps, request)));
     },
   };
 }

@@ -38,7 +38,18 @@ export const DISCOVERY_NODES = [
   'ReferenceLatent',
   'FaceDetailer',
   'UltralyticsDetectorProvider',
+  // The sound recipes' nodes (audio-templates.ts).
+  'EmptyLatentAudio',
+  'ConditioningStableAudio',
+  'VAEDecodeAudio',
+  'PreviewAudio',
+  'CLIPTextEncode',
+  'TextEncodeAceStepAudio',
+  'EmptyAceStepLatentAudio',
 ] as const;
+
+/** A checkpoint that holds a sound model, by its name: never a picture model, whatever else the name says. */
+export const SOUND_CHECKPOINT = /stable[-_ ]?audio|ace[-_ ]?step|audioldm|musicgen|yue/i;
 
 const inputSpec = (info: NodeInfo | undefined, input: string): unknown => {
   const inputs = rec(rec(info).input);
@@ -99,6 +110,8 @@ const KLEIN_BASE = /klein[-_ ]?base/i;
 
 /** A file's family from its name. A checkpoint with no hint is SDXL: that's what nearly every checkpoint made today is. */
 export function detectFamily(file: string, source: ModelSource): FamilyId | null {
+  // A sound checkpoint would otherwise be taken for SDXL, as every checkpoint without a hint is.
+  if (SOUND_CHECKPOINT.test(file)) return null;
   if (/z[-_ ]?image/i.test(file)) return 'z-image';
   if (/flux[-_. ]?2/i.test(file)) return /klein/i.test(file) ? 'flux2' : null;
   if (/flux/i.test(file)) return 'flux';

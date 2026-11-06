@@ -9,7 +9,7 @@ import { Button, ConfirmDialog, Dialog, DialogClose, DialogContent, DialogFooter
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { FileDropZone } from '../chat/composer.tsx';
 import { configToDraft } from './image-provider-form.ts';
-import { WORKFLOW_SLOTS, inputValue, mappedSummary, parseInputValue, slotOptions, withSlot, workflowInputs } from './image-workflow.ts';
+import { inputValue, mappedSummary, parseInputValue, slotOptions, slotsFor, withSlot, workflowInputs } from './image-workflow.ts';
 import { ITEM_ROW_CLASS } from './item-row.tsx';
 
 export interface ImageWorkflowsDialogProps {
@@ -195,7 +195,7 @@ function MappingForm({ workflow, onCancel, onSave }: { workflow: ImageWorkflow; 
         <TextField maxLength={100} value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
       </Field>
       <div className="grid grid-cols-2 gap-x-3 gap-y-4 max-md:grid-cols-1">
-        {WORKFLOW_SLOTS.map((slot) => {
+        {slotsFor(draft).map((slot) => {
           const chosen = draft.map[slot.key];
           const options = slotOptions(draft, slot, inputs);
           return (

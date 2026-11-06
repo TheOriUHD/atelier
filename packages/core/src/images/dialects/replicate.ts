@@ -11,6 +11,7 @@ import { ASPECT_DEFAULTS, lookUp, REPLICATE_MODELS } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 import { replicateVideoCapabilities, replicateVideoInput, replicateVideoSchema, modelDescription, type ReplicateVideoSchema } from './replicate-video.ts';
+import { audioBody, audioCapabilities, audioKinds, readAudioInputs, type AudioInputSchema } from './audio-schema.ts';
 import { assertOwnHost, failure, failureOf, listedModel, noImage, refusal, soundsRefused, waitFor } from './hosted.ts';
 
 const POLL_MS = 1_500;
@@ -73,6 +74,13 @@ async function* run(instance: ImageInstance, deps: ImageAdapterDeps, request: Im
           if (clip) yield { type: 'finish', reason: 'done' };
           return;
         }
+        // The same for a sound: one file.
+        if (request.audio) {
+          const sound = links[0];
+          yield sound ? { type: 'audio', url: sound } : noImage(instance, 'its answer had no sound');
+          if (sound) yield { type: 'finish', reason: 'done' };
+          return;
+        }
         for (const url of links) yield { type: 'image', url };
         yield links.length ? { type: 'finish', reason: 'done' } : noImage(instance);
         return;
@@ -110,11 +118,39 @@ const VIDEO_LIMIT = 24;
 const VIDEO_CONCURRENCY = 6;
 /** A clip takes minutes. */
 const VIDEO_POLL_MS = 3_000;
+/** Sound models are listed from these collections, read the same way. */
+const AUDIO_COLLECTIONS = ['text-to-speech', 'ai-music-generation'];
+
+/** A sound model's input schema out of a model answer. */
+function replicateAudioSchema(model: unknown): AudioInputSchema | null {
+  const all = rec(rec(rec(rec(rec(model).latest_version).openapi_schema).components).schemas);
+  return readAudioInputs(rec(all.Input), all);
+}
 
 export function createReplicate(instance: ImageInstance, deps: ImageAdapterDeps, options: { pollMs?: number } = {}): ImageAdapter {
   const pollMs = options.pollMs ?? POLL_MS;
   const videoPollMs = options.pollMs ?? VIDEO_POLL_MS;
   const forVideo = instance.preset === 'replicate-video';
+  const forAudio = instance.preset === 'replicate-audio';
+  const audioSchemas = new Map<string, AudioInputSchema>();
+  const audioModel = async (id: string, source: ListedImageModel['source'], collection: string | undefined, signal?: AbortSignal): Promise<ListedImageModel> => {
+    const model = await requestJson(deps, instance, `${instance.baseUrl}/v1/models/${id.split(':')[0]!.split('/').map(encodeURIComponent).join('/')}`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
+    const schema = replicateAudioSchema(model) ?? { fields: {}, required: [] };
+    audioSchemas.set(id, schema);
+    const description = modelDescription(model);
+    const kinds = audioKinds(schema, { category: collection === 'text-to-speech' ? 'text-to-speech' : undefined, id });
+    return listedModel(instance, id, audioCapabilities(schema, kinds, 'replicate-audio'), source, description ? { description } : {});
+  };
+  const audioModels = async (signal?: AbortSignal): Promise<ListedImageModel[]> => {
+    const seen = new Set(instance.models);
+    const found = await Promise.all(AUDIO_COLLECTIONS.map(async (slug) => ({ slug, body: await requestJson(deps, instance, `${instance.baseUrl}/v1/collections/${slug}`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null) })));
+    const ids = new Map<string, string>();
+    for (const { slug, body } of found) for (const m of arr(rec(body).models).filter(isRecord)) if (str(m.owner) && str(m.name) && !seen.has(`${str(m.owner)}/${str(m.name)}`)) ids.set(`${str(m.owner)}/${str(m.name)}`, slug);
+    const queue = [...instance.models.map((id) => [id, 'default', undefined] as const), ...[...ids].slice(0, VIDEO_LIMIT).map(([id, slug]) => [id, 'detected', slug] as const)];
+    const listed: ListedImageModel[] = [];
+    for (let at = 0; at < queue.length; at += VIDEO_CONCURRENCY) listed.push(...(await Promise.all(queue.slice(at, at + VIDEO_CONCURRENCY).map(([id, source, slug]) => audioModel(id, source, slug, signal)))));
+    return listed;
+  };
   const schemas = new Map<string, ReplicateVideoSchema>();
   /** A model's schema, from its own page of the API (it takes the key). */
   const schemaOf = async (id: string, signal?: AbortSignal): Promise<{ schema: ReplicateVideoSchema | null; model: unknown }> => {
@@ -143,6 +179,7 @@ export function createReplicate(instance: ImageInstance, deps: ImageAdapterDeps,
     type: 'replicate',
     async listModels(signal) {
       if (forVideo) return videoModels(signal);
+      if (forAudio) return audioModels(signal);
       const typed = instance.models.map((id) => listed(id, 'default'));
       const collection = await requestJson(deps, instance, `${instance.baseUrl}/v1/collections/${COLLECTION}`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
       const seen = new Set(instance.models);
@@ -160,7 +197,10 @@ export function createReplicate(instance: ImageInstance, deps: ImageAdapterDeps,
     generate(request) {
       return guardImages(request, instance, async function* () {
         let payload: Record<string, unknown>;
-        if (request.video) {
+        if (request.audio) {
+          if (!audioSchemas.has(request.model)) await audioModel(request.model, 'default', undefined, request.signal);
+          payload = audioBody(audioSchemas.get(request.model) ?? { fields: {}, required: [] }, request);
+        } else if (request.video) {
           const schema = schemas.get(request.model) ?? (await schemaOf(request.model, request.signal)).schema ?? { fields: {}, required: [] };
           payload = replicateVideoInput(schema, request);
         } else payload = input(request);

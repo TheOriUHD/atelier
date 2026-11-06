@@ -1,5 +1,5 @@
 /**
- * Image servers on this computer's default ports, each proved by a reply only that server gives. Found the same way by
+ * Image and sound servers on this computer's default ports, each proved by a reply only that server gives. Found the same way by
  * the backend's list and by a desktop app asked about its own computer for a server (device services, ARCHITECTURE §21).
  */
 import { imagePreset, type DetectedImageServer } from '@atelier/protocol';
@@ -25,6 +25,15 @@ const PROBES: { preset: string; path: string; method?: 'POST'; accepts(status: n
   { preset: 'swarmui', path: '/API/GetNewSession', method: 'POST', accepts: (s, b) => s === 200 && isObject(b) && typeof b.session_id === 'string' },
   { preset: 'invokeai', path: '/api/v1/app/version', accepts: (s, b) => s === 200 && isObject(b) && typeof b.version === 'string' },
   { preset: 'localai', path: '/v1/models/capabilities', accepts: (s, b) => s === 200 && isObject(b) && Array.isArray(b.data) },
+  // Sound. KoboldCpp answers like ComfyUI, AUTOMATIC1111 and Ollama too, so its own version route is the proof.
+  { preset: 'localai-speech', path: '/v1/models/capabilities', accepts: (s, b) => s === 200 && isObject(b) && Array.isArray(b.data) },
+  { preset: 'kokoro', path: '/v1/audio/voices', accepts: (s, b) => s === 200 && isObject(b) && Array.isArray(b.voices) && 'default_voice' in b },
+  { preset: 'speaches', path: '/v1/registry', accepts: (s, b) => s === 200 && (Array.isArray(b) || (isObject(b) && Array.isArray(b.data))) },
+  { preset: 'koboldcpp-speech', path: '/api/extra/version', accepts: (s, b) => s === 200 && isObject(b) && b.result === 'KoboldCpp' && !!b.tts },
+  { preset: 'chatterbox', path: '/v1/audio/voices', accepts: (s, b) => s === 200 && isObject(b) && Array.isArray(b.voices) },
+  { preset: 'ollama-speech', path: '/api/tags', accepts: (s, b) => s === 200 && isObject(b) && Array.isArray(b.models) && b.models.some((m) => isObject(m) && /phonon/i.test(String(m.name))) },
+  { preset: 'acestep', path: '/v1/models', accepts: (s, b) => s === 200 && isObject(b) && 'code' in b && 'data' in b },
+  { preset: 'fish-speech', path: '/v1/health', accepts: (s, b) => s === 200 && isObject(b) && !('data' in b) },
 ];
 
 export async function detectImageServers(fetch: (url: string, init: RequestInit) => Promise<Response>, skip: ReadonlySet<string> = new Set()): Promise<DetectedImageServer[]> {

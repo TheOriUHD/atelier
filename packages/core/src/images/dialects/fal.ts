@@ -11,6 +11,7 @@ import { FAL_MODELS, lookUp } from '../catalog.ts';
 import { guardImages } from '../guard.ts';
 import type { ImageAdapter, ImageAdapterDeps, ImageEvent, ImageInstance, ImageRequest, ListedImageModel } from '../types.ts';
 import { falVideoBody, falVideoCapabilities, falVideoSchema, type FalVideoSchema } from './fal-video.ts';
+import { audioBody, audioCapabilities, audioKinds, readAudioInputs, soundUrl, type AudioInputSchema } from './audio-schema.ts';
 import { assertOwnHost, bytesOfDataUrl, failure, failureOf, listedModel, noImage, refusal, soundsRefused, waitFor } from './hosted.ts';
 
 const POLL_MS = 1_000;
@@ -48,6 +49,19 @@ async function* result(instance: ImageInstance, deps: ImageAdapterDeps, request:
     return;
   }
   const answer = rec(await res.json());
+  if (request.audio) {
+    // A sound: `audio.url` (or `audio_file`, `audio_url`) on fal's CDN, or a data URL.
+    const link = soundUrl(answer);
+    if (!link) {
+      yield noImage(instance, 'its answer had no sound');
+      return;
+    }
+    const bytes = bytesOfDataUrl(link);
+    const seed = num(answer.seed);
+    yield bytes ? { type: 'audio', bytes, ...(seed !== undefined ? { seed } : {}) } : { type: 'audio', url: link, ...(seed !== undefined ? { seed } : {}) };
+    yield { type: 'finish', reason: 'done' };
+    return;
+  }
   if (request.video) {
     // A clip: `video.url`, on fal's CDN. Its safety checker, when on, fails the job instead of blanking the file.
     const link = str(rec(answer.video).url);
@@ -147,6 +161,26 @@ export function createFal(instance: ImageInstance, deps: ImageAdapterDeps, optio
   const videoPollMs = options.pollMs ?? VIDEO_POLL_MS;
   // This service is added for video: its models are fal's video endpoints, described by their own schemas.
   const forVideo = instance.preset === 'fal-video';
+  // And for sound, its speech, music and sound endpoints, read the same way.
+  const forAudio = instance.preset === 'fal-audio';
+  const audioSchemas = new Map<string, AudioInputSchema>();
+  const audioListed = (entry: Record<string, unknown>): ListedImageModel | null => {
+    const id = str(entry.endpoint_id);
+    const schema = falAudioSchema(entry);
+    if (!id || !schema) return null;
+    audioSchemas.set(id, schema);
+    const metadata = rec(entry.metadata);
+    const kinds = audioKinds(schema, { category: str(metadata.category) ?? str(entry.category), id });
+    return listedModel(instance, id, audioCapabilities(schema, kinds, 'fal-audio'), instance.models.includes(id) ? 'default' : 'detected', { displayName: str(metadata.display_name) ?? id });
+  };
+  const withAudioSchemas = async (query: string, signal?: AbortSignal): Promise<ListedImageModel[]> => {
+    const found = await requestJson(deps, instance, `${SEARCH_URL}?${query}&expand=openapi-3.0`, { headers: headers(instance), ...(signal ? { signal } : {}) }).catch(() => null);
+    return arr(rec(found).models).filter(isRecord).flatMap((entry) => audioListed(entry) ?? []);
+  };
+  const audioSchemaOf = async (model: string, signal: AbortSignal): Promise<AudioInputSchema> => {
+    if (!audioSchemas.has(model)) await withAudioSchemas(`endpoint_id=${encodeURIComponent(model)}`, signal);
+    return audioSchemas.get(model) ?? { fields: {}, required: [] };
+  };
   const schemas = new Map<string, FalVideoSchema>();
   const videoListed = (entry: Record<string, unknown>): ListedImageModel | null => {
     const id = str(entry.endpoint_id);
@@ -169,6 +203,14 @@ export function createFal(instance: ImageInstance, deps: ImageAdapterDeps, optio
   return {
     type: 'fal',
     async listModels(signal) {
+      if (forAudio) {
+        const typedIds = instance.models.slice(0, 50);
+        const typedModels = typedIds.length ? await withAudioSchemas(typedIds.map((id) => `endpoint_id=${encodeURIComponent(id)}`).join('&'), signal) : [];
+        const unknown = typedIds.filter((id) => !typedModels.some((m) => m.modelId === id)).map((id) => listedModel(instance, id, audioCapabilities({ fields: {}, required: [] }, audioKinds({ fields: {}, required: [] }, { id }), 'fal-audio'), 'default'));
+        const seen = new Set(typedIds);
+        const searched = (await Promise.all(['text-to-speech', 'text-to-audio'].map((category) => withAudioSchemas(`category=${category}&status=active&limit=${VIDEO_SEARCH_LIMIT}`, signal)))).flat().filter((m) => !seen.has(m.modelId));
+        return [...typedModels, ...unknown, ...searched];
+      }
       if (forVideo) {
         const typedIds = instance.models.slice(0, 50);
         const typedModels = typedIds.length ? await withSchemas(typedIds.map((id) => `endpoint_id=${encodeURIComponent(id)}`).join('&'), signal) : [];
@@ -195,9 +237,22 @@ export function createFal(instance: ImageInstance, deps: ImageAdapterDeps, optio
     },
     generate(request) {
       return guardImages(request, instance, async function* () {
-        const payload = request.video ? falVideoBody(await schemaOf(request.model, request.signal), request) : body(request);
+        const payload = request.audio ? audioBody(await audioSchemaOf(request.model, request.signal), request) : request.video ? falVideoBody(await schemaOf(request.model, request.signal), request) : body(request);
         yield* run(instance, deps, request, request.video ? videoPollMs : pollMs, payload);
       });
     },
   };
+}
+
+/** The input schema of a sound endpoint's POST, from a model entry of fal's models API, as `falVideoSchema` reads a clip's. */
+function falAudioSchema(entry: unknown): AudioInputSchema | null {
+  const openapi = rec(rec(entry).openapi);
+  const schemas = rec(rec(openapi.components).schemas);
+  for (const path of Object.values(rec(openapi.paths))) {
+    const json = rec(rec(rec(rec(path).post).requestBody).content)['application/json'];
+    const ref = str(rec(rec(json).schema).$ref);
+    const schema = ref ? readAudioInputs(rec(schemas[ref.split('/').at(-1)!]), schemas) : null;
+    if (schema) return schema;
+  }
+  return null;
 }

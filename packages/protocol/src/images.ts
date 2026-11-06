@@ -6,7 +6,35 @@ import { z } from 'zod';
 import { PersonalProviderId, ProviderId, ProviderStatus } from './models.ts';
 
 /** How a service is spoken to. A service that uses a known wire format is a preset, not a new type. */
-export const ImageProviderType = z.enum(['comfyui', 'a1111', 'swarmui', 'invokeai', 'openai-images', 'gemini', 'chat-images', 'responses-image', 'bfl', 'stability', 'fal', 'replicate', 'huggingface', 'ideogram', 'bedrock', 'openrouter-video', 'xai-video']);
+export const ImageProviderType = z.enum([
+  'comfyui',
+  'a1111',
+  'swarmui',
+  'invokeai',
+  'openai-images',
+  'gemini',
+  'chat-images',
+  'responses-image',
+  'bfl',
+  'stability',
+  'fal',
+  'replicate',
+  'huggingface',
+  'ideogram',
+  'bedrock',
+  'openrouter-video',
+  'xai-video',
+  // Sound: speech, music and sound effects.
+  'openai-speech',
+  'elevenlabs',
+  'gemini-audio',
+  'xai-speech',
+  'cartesia',
+  'deepgram',
+  'fish-audio',
+  'minimax-audio',
+  'acestep',
+]);
 export type ImageProviderType = z.infer<typeof ImageProviderType>;
 
 export const ImageSize = z.object({ width: z.number().int().positive(), height: z.number().int().positive() });
@@ -418,12 +446,39 @@ export const IMAGE_PROVIDER_PRESETS: readonly ImagePreset[] = [
   { id: 'bfl-video', label: 'Black Forest Labs video', type: 'bfl', group: 'cloud', baseUrl: 'https://api.bfl.ai', key: 'required', keyUrl: 'https://dashboard.bfl.ai', suggestedModels: ['flux-3-video'] },
   { id: 'gemini-video', label: 'Google Gemini video', type: 'gemini', group: 'cloud', baseUrl: 'https://generativelanguage.googleapis.com', key: 'required', keyUrl: 'https://aistudio.google.com/apikey', help: 'Gemini Omni makes the video in one request, so it can take a few minutes and has no length setting.', suggestedModels: ['gemini-omni-1.1-flash'] },
   { id: 'openai-compatible', label: 'OpenAI-compatible images', type: 'openai-images', group: 'custom', baseUrl: 'http://127.0.0.1:8000', key: 'optional', help: 'Any server with /v1/images/generations, such as LiteLLM.' },
+  // Sound: speech, music and sound effects. Most speech servers copy OpenAI's /v1/audio/speech, so they are presets of it.
+  { id: 'kokoro', label: 'Kokoro-FastAPI', type: 'openai-speech', group: 'local', baseUrl: 'http://127.0.0.1:8880', key: 'none', help: 'Its voices are listed for you, and voices can be mixed, like af_bella+af_sky.' },
+  { id: 'speaches', label: 'Speaches', type: 'openai-speech', group: 'local', baseUrl: 'http://127.0.0.1:8000', key: 'optional', help: 'Speaks with the Kokoro and Piper models it has downloaded.' },
+  { id: 'localai-speech', label: 'LocalAI audio', type: 'openai-speech', group: 'local', baseUrl: 'http://127.0.0.1:8080', key: 'optional', help: 'Speech, and music and sound effects from models such as ACE-Step, MusicGen or Stable Audio.' },
+  { id: 'koboldcpp-speech', label: 'KoboldCpp speech', type: 'openai-speech', group: 'local', baseUrl: 'http://127.0.0.1:5001', key: 'none', help: 'Start it with a speech model loaded (--ttsmodel).' },
+  { id: 'chatterbox', label: 'Chatterbox TTS Server', type: 'openai-speech', group: 'local', baseUrl: 'http://127.0.0.1:8004', key: 'none', help: 'Its predefined voices and the reference voices you added are listed.' },
+  { id: 'ollama-speech', label: 'Ollama speech', type: 'openai-speech', group: 'local', baseUrl: 'http://127.0.0.1:11434', key: 'none', help: 'Pull a speech model first, such as phonon.' },
+  { id: 'vllm-omni', label: 'vLLM-Omni', type: 'openai-speech', group: 'local', baseUrl: 'http://127.0.0.1:8091', key: 'optional', help: 'Serves Qwen3-TTS, CosyVoice, Fish and others in OpenAI’s speech format.' },
+  { id: 'fish-speech', label: 'Fish Speech', type: 'fish-audio', group: 'local', baseUrl: 'http://127.0.0.1:8080', key: 'optional', help: 'Fish Speech’s own API server. A voice is the id of a reference you added to it.' },
+  { id: 'acestep', label: 'ACE-Step 1.5', type: 'acestep', group: 'local', baseUrl: 'http://127.0.0.1:8001', key: 'optional', help: 'Songs with vocals and instrumentals. Start acestep-api.' },
+  { id: 'openai-speech', label: 'OpenAI speech', type: 'openai-speech', group: 'cloud', baseUrl: 'https://api.openai.com', key: 'required', keyUrl: 'https://platform.openai.com/api-keys', sharesKeyWith: 'openai', help: 'GPT-4o mini TTS with directions, TTS-1 and TTS-1 HD. OpenAI retires them on 6 January 2027.' },
+  { id: 'elevenlabs', label: 'ElevenLabs', type: 'elevenlabs', group: 'cloud', baseUrl: 'https://api.elevenlabs.io', key: 'required', keyUrl: 'https://elevenlabs.io/app/settings/api-keys', help: 'Speech in your account’s voices, music and sound effects. Music needs a paid plan.' },
+  { id: 'gemini-audio', label: 'Google Gemini audio', type: 'gemini-audio', group: 'cloud', baseUrl: 'https://generativelanguage.googleapis.com', key: 'required', keyUrl: 'https://aistudio.google.com/apikey', help: 'Gemini’s speech models, with 30 voices and up to two speakers, and Lyria music.' },
+  { id: 'xai-speech', label: 'xAI speech', type: 'xai-speech', group: 'cloud', baseUrl: 'https://api.x.ai', key: 'required', keyUrl: 'https://console.x.ai' },
+  { id: 'stability-audio', label: 'Stability AI audio', type: 'stability', group: 'cloud', baseUrl: 'https://api.stability.ai', key: 'required', keyUrl: 'https://platform.stability.ai/dashboard/api-keys', help: 'Stable Audio: music and sound effects, without vocals.' },
+  { id: 'azure-speech', label: 'Azure OpenAI speech', type: 'openai-speech', group: 'cloud', baseUrl: 'https://YOUR-RESOURCE.openai.azure.com', key: 'required', help: 'Add each speech deployment by name as a model.' },
+  { id: 'mistral-speech', label: 'Mistral Voxtral', type: 'openai-speech', group: 'cloud', baseUrl: 'https://api.mistral.ai', key: 'required', keyUrl: 'https://console.mistral.ai/api-keys' },
+  { id: 'groq-speech', label: 'Groq speech', type: 'openai-speech', group: 'cloud', baseUrl: 'https://api.groq.com/openai', key: 'required', keyUrl: 'https://console.groq.com/keys', help: 'Orpheus. It reads up to 200 characters a call.' },
+  { id: 'cartesia', label: 'Cartesia', type: 'cartesia', group: 'cloud', baseUrl: 'https://api.cartesia.ai', key: 'required', keyUrl: 'https://play.cartesia.ai/keys' },
+  { id: 'deepgram', label: 'Deepgram Aura', type: 'deepgram', group: 'cloud', baseUrl: 'https://api.deepgram.com', key: 'required', keyUrl: 'https://console.deepgram.com' },
+  { id: 'fish-audio', label: 'Fish Audio', type: 'fish-audio', group: 'cloud', baseUrl: 'https://api.fish.audio', key: 'required', keyUrl: 'https://fish.audio/app/api-keys', help: 'Your account’s voices are listed for you.' },
+  { id: 'minimax-audio', label: 'MiniMax speech', type: 'minimax-audio', group: 'cloud', baseUrl: 'https://api.minimax.io', key: 'required', keyUrl: 'https://platform.minimax.io' },
+  { id: 'openrouter-speech', label: 'OpenRouter speech', type: 'openai-speech', group: 'aggregator', baseUrl: 'https://openrouter.ai/api', key: 'required', keyUrl: 'https://openrouter.ai/keys', sharesKeyWith: 'openai-compatible', help: 'Speech models from OpenAI, Google, Mistral, Fish, xAI and others through one key. Its models are listed for you.' },
+  { id: 'together-speech', label: 'Together AI speech', type: 'openai-speech', group: 'aggregator', baseUrl: 'https://api.together.xyz', key: 'required', keyUrl: 'https://api.together.ai/settings/api-keys' },
+  { id: 'fal-audio', label: 'fal.ai audio', type: 'fal', group: 'aggregator', baseUrl: 'https://queue.fal.run', key: 'required', keyUrl: 'https://fal.ai/dashboard/keys', help: 'Lists fal’s speech, music and sound models; type in any other audio endpoint by its id.', suggestedModels: ['fal-ai/elevenlabs/tts/eleven-v4', 'fal-ai/stable-audio-25/text-to-audio'] },
+  { id: 'replicate-audio', label: 'Replicate audio', type: 'replicate', group: 'aggregator', baseUrl: 'https://api.replicate.com', key: 'required', keyUrl: 'https://replicate.com/account/api-tokens', help: 'Type in a speech or music model as owner/name.', suggestedModels: ['minimax/speech-02-hd', 'meta/musicgen'] },
+  { id: 'openai-compatible-speech', label: 'OpenAI-compatible speech', type: 'openai-speech', group: 'custom', baseUrl: 'http://127.0.0.1:8000', key: 'optional', help: 'Any server with /v1/audio/speech, such as LiteLLM.' },
 ];
 
 export const imagePreset = (id: string | undefined): ImagePreset | undefined => IMAGE_PROVIDER_PRESETS.find((p) => p.id === id);
 
 /** The dialects a server on someone's own computer speaks. Cloud services are the admin's to add. */
-export const PersonalImageProviderType = ImageProviderType.extract(['comfyui', 'a1111', 'swarmui', 'invokeai', 'openai-images']);
+export const PersonalImageProviderType = ImageProviderType.extract(['comfyui', 'a1111', 'swarmui', 'invokeai', 'openai-images', 'openai-speech', 'fish-audio', 'acestep']);
 export type PersonalImageProviderType = z.infer<typeof PersonalImageProviderType>;
 
 const PersonalImageOptions = ImageProviderConfig.pick({ parallelRequests: true, freeAfterRun: true, models: true, workflows: true });
