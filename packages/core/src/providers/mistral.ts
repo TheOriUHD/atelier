@@ -129,6 +129,13 @@ function thinkingChunk(part: Extract<Part, { type: 'thinking' }>): Chunk {
 export interface MistralModelFacts {
   /** The model reads PDFs (its card says vision). */
   pdf: boolean;
+  /** Earlier thinking goes back as `thinking` chunks: only Mistral's own models are known to take them (default true). */
+  thinking?: boolean;
+}
+
+/** The models Mistral hosts for others (GLM, DeepSeek): served as their makers built them, streamed OpenAI-style. */
+export function hostedForOthers(model: string): boolean {
+  return /^(zai-|glm-|deepseek)/.test(model);
 }
 
 async function userContent(parts: readonly Part[], deps: AdapterDeps, facts: MistralModelFacts): Promise<Content> {
@@ -165,7 +172,7 @@ export async function toMistralMessages(request: Pick<ChatRequest, 'system' | 'm
     if (results.length === 0) flush();
     if (message.role === 'assistant') {
       const calls = message.parts.flatMap((p) => (p.type === 'tool_call' ? [p] : []));
-      const thinking = message.parts.flatMap((p) => (p.type === 'thinking' && p.provider === type && p.text && !p.redacted ? [thinkingChunk(p)] : []));
+      const thinking = message.parts.flatMap((p) => (facts.thinking !== false && p.type === 'thinking' && p.provider === type && p.text && !p.redacted ? [thinkingChunk(p)] : []));
       const text = textOf(message.parts);
       // An empty reply (stopped before it said anything) is refused: it is left out.
       if (!text && calls.length === 0 && thinking.length === 0) continue;
@@ -218,6 +225,34 @@ export function mistralBody(request: ChatRequest, messages: Chunk[], reasoning: 
   // One conversation's requests share a prefix: the key makes Mistral's cache more likely to keep it.
   if (request.queue?.owner) body.prompt_cache_key = request.queue.owner;
   return body;
+}
+
+/**
+ * The thinking text of one content chunk. Mistral's own: `{type:'thinking', thinking:[{type:'text', text}]}`. The
+ * models it hosts for others may also send the thinking as a string, as strings in the list, or as a `reasoning` chunk.
+ */
+function thinkingTexts(piece: Chunk): string[] {
+  const inner = piece.thinking;
+  if (typeof inner === 'string') return inner ? [inner] : [];
+  const texts = arr(inner).flatMap((i) => {
+    const t = typeof i === 'string' ? i : str(rec(i).text) ?? str(rec(i).thinking);
+    return t ? [t] : [];
+  });
+  if (texts.length > 0) return texts;
+  const own = piece.type === 'reasoning' || piece.type === 'reasoning_text' ? str(piece.text) ?? str(piece.reasoning) : undefined;
+  return own ? [own] : [];
+}
+
+/** What a delta carries besides `content`: the OpenAI-style reasoning fields (`reasoning_content`, `reasoning`, `reasoning_details`). */
+function deltaReasoning(delta: Record<string, unknown>): string[] {
+  const direct = delta.reasoning_content ?? delta.reasoning;
+  if (typeof direct === 'string') return direct ? [direct] : [];
+  const fromObject = isRecord(direct) ? thinkingTexts({ type: 'reasoning', ...direct }) : [];
+  if (fromObject.length > 0) return fromObject;
+  return arr(delta.reasoning_details).flatMap((f) => {
+    const t = str(rec(f).text) ?? str(rec(f).summary);
+    return t ? [t] : [];
+  });
 }
 
 function mapUsage(raw: Record<string, unknown>): Usage {
@@ -303,7 +338,7 @@ export async function vibeBudget(instance: ProviderInstance, deps: AdapterDeps, 
 }
 
 async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, request: ChatRequest, known: Known): AsyncGenerator<StreamEvent> {
-  const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf });
+  const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf, thinking: !hostedForOthers(request.model) });
   const res = await deps.fetch(apiUrl(instance.baseUrl, '/v1/chat/completions'), {
     method: 'POST',
     headers: jsonHeaders(instance, bearer(instance)),
@@ -337,16 +372,18 @@ async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, reques
     if (isRecord(chunk.usage)) usage = mapUsage(chunk.usage);
     const choice = rec(arr(chunk.choices)[0]);
     const delta = rec(choice.delta);
+    for (const text of deltaReasoning(delta)) yield { type: 'thinking', delta: text };
     const content = delta.content;
     if (typeof content === 'string' && content) yield { type: 'text', delta: content };
     for (const item of arr(content)) {
+      if (typeof item === 'string') {
+        if (item) yield { type: 'text', delta: item };
+        continue;
+      }
       const piece = rec(item);
       if (piece.type === 'text' && str(piece.text)) yield { type: 'text', delta: str(piece.text)! };
-      if (piece.type === 'thinking') {
-        for (const inner of arr(piece.thinking)) {
-          const text = str(rec(inner).text);
-          if (text) yield { type: 'thinking', delta: text };
-        }
+      if (piece.type === 'thinking' || piece.type === 'reasoning' || piece.type === 'reasoning_text') {
+        for (const text of thinkingTexts(piece)) yield { type: 'thinking', delta: text };
         signature = str(piece.signature) ?? signature;
       }
     }

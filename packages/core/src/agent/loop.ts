@@ -99,6 +99,7 @@ export async function runTurn(opts: TurnOptions): Promise<TurnResult> {
   const maxSteps = opts.maxSteps ?? Infinity;
   let lastAssistantId: string | null = null;
   let continued = false;
+  let emptyRetried = false;
   const recent: string[] = [];
   for (let step = 0; step < maxSteps; step++) {
     if (opts.signal.aborted) return { stopReason: 'aborted', error: null, lastAssistantId };
@@ -118,6 +119,21 @@ export async function runTurn(opts: TurnOptions): Promise<TurnResult> {
     lastAssistantId = result.message.id;
     const calls = result.message.parts.filter((p): p is Extract<Part, { type: 'tool_call' }> => p.type === 'tool_call');
     // Cut off by the output limit: carry on once, after a note saying so (a half-written call never ran).
+    // Cut off with nothing to show (all of it went to thinking, or the reply was never read): the same request would
+    // end the same way, so it is tried once more and then stopped with an error instead of burning tokens forever.
+    if (result.stopReason === 'max_tokens' && !opts.signal.aborted && !result.message.parts.some((p) => (p.type === 'text' && p.text.trim() !== '') || p.type === 'tool_call')) {
+      if (emptyRetried || !opts.onOutputCut) {
+        return {
+          stopReason: 'error',
+          error: { code: 'empty_output', message: 'The model used its whole output limit without writing anything (its reasoning may have used it all). Try a lower reasoning effort or a different model.', retryable: false },
+          lastAssistantId,
+        };
+      }
+      emptyRetried = true;
+      continued = true;
+      await opts.onOutputCut();
+      continue;
+    }
     if (result.stopReason === 'max_tokens' && opts.onOutputCut && !continued && !opts.signal.aborted) {
       continued = true;
       await opts.onOutputCut();

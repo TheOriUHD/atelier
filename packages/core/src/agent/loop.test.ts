@@ -402,4 +402,39 @@ describe('a call written out as the reply', () => {
     expect(callWrittenAsText(text('Read {not json}'), tools)).toBeNull();
     expect(callWrittenAsText([...text('Read {"file_path":"a"}'), ...text('second')], tools)).toBeNull();
   });
+
+  describe('output limit', () => {
+    const cut = (events: StreamEvent[] = []): StreamEvent[] => [...events, { type: 'finish', reason: 'max_tokens' }];
+    const run = (adapter: ProviderAdapter, onOutputCut?: () => Promise<void>) =>
+      runTurn({ sessionId, repo, adapter, model, system: [], tools: [], effort: null, signal: new AbortController().signal, emit: () => {}, prepare: history(500), ...(onOutputCut ? { onOutputCut } : {}) });
+
+    it('stops with an error when the reply was cut off twice with nothing but thinking', async () => {
+      const seen: ChatRequest[] = [];
+      const onOutputCut = vi.fn(async () => {});
+      const adapter = scripted([cut([{ type: 'thinking', delta: 'hmm' }]), cut([{ type: 'thinking', delta: 'hmm' }]), cut([{ type: 'text', delta: 'never asked for' }])], seen);
+      const result = await run(adapter, onOutputCut);
+      expect(result.stopReason).toBe('error');
+      expect(result.error?.code).toBe('empty_output');
+      expect(seen).toHaveLength(2);
+      expect(onOutputCut).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops at once when there is no way to continue', async () => {
+      const seen: ChatRequest[] = [];
+      const result = await run(scripted([cut()], seen));
+      expect(result.error?.code).toBe('empty_output');
+      expect(seen).toHaveLength(1);
+    });
+
+    it('still continues once after a cut-off reply that wrote something, and carries on from there', async () => {
+      const seen: ChatRequest[] = [];
+      const onOutputCut = vi.fn(async () => {});
+      const adapter = scripted([cut([{ type: 'text', delta: 'part one' }]), [{ type: 'text', delta: ' and two' }, { type: 'finish', reason: 'end' }]], seen);
+      const result = await run(adapter, onOutputCut);
+      expect(result.stopReason).toBe('end');
+      expect(result.error).toBeNull();
+      expect(seen).toHaveLength(2);
+      expect(onOutputCut).toHaveBeenCalledTimes(1);
+    });
+  });
 });

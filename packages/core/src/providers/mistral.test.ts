@@ -266,6 +266,55 @@ describe('Mistral replies', () => {
     expect(events.find((e) => e.type === 'tool_call_end')).toEqual({ type: 'tool_call_end', id: 'chatcmpl-tool-9f14', input: { query: 'berlin' } });
   });
 
+  it('reads GLM thinking sent OpenAI-style as reasoning_content or reasoning, and its answer as chunk lists', async () => {
+    const { adapter } = setup(
+      'mistral',
+      sseOf([
+        chunk({ role: 'assistant', content: '', reasoning_content: 'Sun angle ' }),
+        chunk({ content: [], reasoning: 'and waves.', index: 0 }),
+        chunk({ content: [{ type: 'text', text: 'Here is ' }] }),
+        chunk({ content: ['the shader.'] }),
+        last({ content: '' }, 'stop', { prompt_tokens: 10, completion_tokens: 40 }),
+      ]),
+    );
+    const events = await collect(adapter.stream(chatRequest({ model: 'zai-glm-5-3-flash', effort: 'medium' })));
+    expect(thinkingOf(events)).toBe('Sun angle and waves.');
+    expect(textOf(events)).toBe('Here is the shader.');
+  });
+
+  it('reads thinking chunks whose thinking is a string or a list of strings, and reasoning chunks', async () => {
+    const { adapter } = setup(
+      'mistral',
+      sseOf([
+        chunk({ content: [{ type: 'thinking', thinking: 'a ' }] }),
+        chunk({ content: [{ type: 'thinking', thinking: ['b ', { type: 'text', text: 'c ' }] }] }),
+        chunk({ content: [{ type: 'reasoning', text: 'd' }, { type: 'text', text: 'Done' }] }),
+        last({ content: '' }, 'stop', { prompt_tokens: 1, completion_tokens: 1 }),
+      ]),
+    );
+    const events = await collect(adapter.stream(chatRequest({ model: 'deepseek-v4-1-flash' })));
+    expect(thinkingOf(events)).toBe('a b c d');
+    expect(textOf(events)).toBe('Done');
+  });
+
+  it('reads DeepSeek reasoning_details fragments', async () => {
+    const { adapter } = setup('mistral', sseOf([chunk({ reasoning_details: [{ type: 'reasoning.text', text: 'think' }] }), last({ content: 'ok' }, 'stop', { prompt_tokens: 1, completion_tokens: 1 })]));
+    const events = await collect(adapter.stream(chatRequest({ model: 'deepseek-v4-1-flash' })));
+    expect(thinkingOf(events)).toBe('think');
+  });
+
+  it('does not send thinking back to the models it hosts for others', async () => {
+    const { adapter, calls } = setup();
+    const history = [userText('hi'), message('assistant', [{ type: 'thinking', text: 'private', provider: 'mistral' }, { type: 'text', text: 'Hello' }]), userText('go on')];
+    await collect(adapter.stream(chatRequest({ model: 'zai-glm-5-3-flash', messages: history })));
+    expect((sent(calls).messages as Record<string, unknown>[])[2]).toEqual({ role: 'assistant', content: 'Hello' });
+    await collect(adapter.stream(chatRequest({ model: 'mistral-small-2603', messages: history })));
+    expect((sent(calls).messages as Record<string, unknown>[])[2]!.content).toEqual([
+      { type: 'thinking', thinking: [{ type: 'text', text: 'private' }] },
+      { type: 'text', text: 'Hello' },
+    ]);
+  });
+
   it('says the reply was cut off at the model’s length', async () => {
     const { adapter } = setup('mistral', sseOf([last({ content: 'partial' }, 'model_length', { prompt_tokens: 1, completion_tokens: 1 })]));
     expect(finishOf(await collect(adapter.stream(chatRequest()))).reason).toBe('max_tokens');
