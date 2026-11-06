@@ -180,6 +180,11 @@ export const Message = z.object({
   kind: MessageKind,
   /** For compaction summaries: the last message the summary covers. */
   summarizesThroughId: z.string().nullable(),
+  /**
+   * Co-op: the participant who wrote a user message, or for whom an assistant message answered (packages/protocol/src/
+   * coop.ts). Absent outside co-op, and on the host's own messages from before co-op began.
+   */
+  author: z.string().optional(),
   createdAt: z.number(),
 });
 export type Message = z.infer<typeof Message>;

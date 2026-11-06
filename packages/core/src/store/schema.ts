@@ -267,11 +267,108 @@ export const messages = sqliteTable(
     error: text('error', { mode: 'json' }).$type<{ code: string; message: string; fix?: string; retryable?: boolean } | null>(),
     kind: text('kind', { enum: ['normal', 'compaction_summary', 'context'] }).notNull().default('normal'),
     summarizesThroughId: text('summarizes_through_id'),
+    /** Co-op: the participant who wrote it, or for whom it answered (packages/protocol/src/coop.ts); null outside co-op. */
+    author: text('author'),
     /** Plain text for full-text search (kept in sync with messages_fts by triggers). */
     searchText: text('search_text').notNull().default(''),
     createdAt: integer('created_at').notNull(),
   },
   (t) => [index('messages_session').on(t.sessionId, t.createdAt), index('messages_parent').on(t.parentId)],
+);
+
+/**
+ * Co-op (ARCHITECTURE §24): who takes part in a session besides its owner, the host. An account on this backend
+ * (`userId`) or a peer from another computer (`peerKey`, its pinned device key). The per-viewer state that sessions keep
+ * for their owner (pinned, group, archived, unseen) lives here for everyone else.
+ */
+export const sessionParticipants = sqliteTable(
+  'session_participants',
+  {
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    /** `account:<userId>` or `peer:<key id>`. */
+    id: text('id').notNull(),
+    kind: text('kind', { enum: ['account', 'peer'] }).notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    /** A peer's X25519 static key, base64. */
+    peerKey: text('peer_key'),
+    name: text('name').notNull(),
+    avatar: text('avatar'),
+    role: text('role', { enum: ['editor', 'viewer'] }).notNull(),
+    models: text('models', { enum: ['host', 'own'] }).notNull().default('host'),
+    model: text('model'),
+    trusted: integer('trusted', { mode: 'boolean' }).notNull().default(false),
+    pinnedAt: integer('pinned_at'),
+    groupId: text('group_id'),
+    archivedAt: integer('archived_at'),
+    finishedUnseenAt: integer('finished_unseen_at'),
+    joinedAt: integer('joined_at').notNull(),
+    leftAt: integer('left_at'),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.id] }), index('session_participants_user').on(t.userId)],
+);
+
+/** Co-op: a session's room on the relay (desktop hosts), and what its host decided (CoopSettings). */
+export const coopRooms = sqliteTable('coop_rooms', {
+  sessionId: text('session_id')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  /** Null on a team server, where co-op needs no relay. */
+  relayUrl: text('relay_url'),
+  roomId: text('room_id'),
+  /** Secret ids in the secret store: the room's host token and the open invite's secret. */
+  hostTokenSecret: text('host_token_secret'),
+  inviteSecret: text('invite_secret'),
+  inviteExpiresAt: integer('invite_expires_at'),
+  settings: text('settings', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  createdAt: integer('created_at').notNull(),
+  endedAt: integer('ended_at'),
+});
+
+/**
+ * Co-op on a guest's computer: the sessions it takes part in on other people's computers, mirrored under
+ * `coop_<room>_<id>` while it is connected (packages/core/src/coop/gateway.ts). The conversation itself stays on the
+ * host's computer; `copy` is set when the host let guests keep one and the guest left or co-op ended.
+ */
+export const coopMemberships = sqliteTable('coop_memberships', {
+  /** The mirror's session id on this computer. */
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  relayUrl: text('relay_url').notNull(),
+  roomId: text('room_id').notNull(),
+  /** Secret id of the room's pre-shared key (from the invite), to join again without a new link. */
+  pskSecret: text('psk_secret').notNull(),
+  /** The host's pinned static key, base64. */
+  hostKey: text('host_key'),
+  hostName: text('host_name').notNull(),
+  hostSessionId: text('host_session_id'),
+  title: text('title').notNull(),
+  mode: text('mode', { enum: ['chat', 'work', 'code'] }).notNull(),
+  /** A local copy of the conversation (a normal session of this person's), once co-op ended or they left. */
+  copySessionId: text('copy_session_id'),
+  joinedAt: integer('joined_at').notNull(),
+  endedAt: integer('ended_at'),
+});
+
+/**
+ * Co-op: one frozen system prompt per lane (who answers and with which model), so turns that alternate between
+ * participants' models keep their own prompt cache and notes instead of rebuilding the session's single snapshot.
+ */
+export const sessionLanes = sqliteTable(
+  'session_lanes',
+  {
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    lane: text('lane').notNull(),
+    systemSnapshot: text('system_snapshot', { mode: 'json' }).$type<unknown>(),
+    toolsSnapshot: text('tools_snapshot', { mode: 'json' }).$type<unknown>(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.lane] })],
 );
 
 /**

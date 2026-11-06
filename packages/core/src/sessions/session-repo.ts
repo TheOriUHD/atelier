@@ -57,6 +57,7 @@ export function toMessage(r: MessageRow): Message {
     error: r.error ?? null,
     kind: r.kind,
     summarizesThroughId: r.summarizesThroughId,
+    ...(r.author ? { author: r.author } : {}),
     createdAt: r.createdAt,
   };
 }
@@ -281,6 +282,7 @@ export class SessionRepo {
       error: m.error,
       kind: m.kind,
       summarizesThroughId: m.summarizesThroughId,
+      author: m.author ?? null,
       searchText: searchTextOf(m.parts),
       createdAt,
     });
