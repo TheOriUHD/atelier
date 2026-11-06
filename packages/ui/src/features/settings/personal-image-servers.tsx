@@ -1,5 +1,5 @@
 /**
- * Settings › Your models › Image servers on your computers (ARCHITECTURE §23): the person's own image servers. Only they
+ * Settings › Your models › Image and sound servers on your computers (ARCHITECTURE §23): the person's own image servers. Only they
  * see and use these models, and only while that computer is connected to the server. They are added from the desktop
  * app there, which first lends the server the address.
  */
@@ -37,8 +37,8 @@ export function usePersonalImageServers() {
   return useQuery({ queryKey: keys.personalImageProviders, queryFn: () => rpc().call('personalImageProviders.list', {}), enabled: offered });
 }
 
-/** What a server on a computer can be added as: the ones that run there, and any server with the OpenAI images API. */
-const PRESETS = IMAGE_PROVIDER_PRESETS.filter((p) => p.group === 'local' || p.id === 'openai-compatible');
+/** What a server on a computer can be added as: the ones that run there, and any server with the OpenAI images or speech API. */
+const PRESETS = IMAGE_PROVIDER_PRESETS.filter((p) => p.group === 'local' || p.id === 'openai-compatible' || p.id === 'openai-compatible-speech');
 
 /** An image server found or entered here: its address is lent to the server, which checks it through this computer and saves it. */
 async function addImageServer(server: { preset: ImagePreset; name: string; baseUrl: string; apiKey?: string }): Promise<PersonalImageProvider> {
@@ -55,7 +55,7 @@ async function addImageServer(server: { preset: ImagePreset; name: string; baseU
   }
 }
 
-/** The "Image servers on your computers" part of Your models; `here` is this computer's device id. */
+/** The "Image and sound servers on your computers" part of Your models; `here` is this computer's device id. */
 export function PersonalImageServers({ here }: { here: string | undefined }) {
   const offered = useImageServersOffered();
   const lending = useLending();
@@ -66,12 +66,12 @@ export function PersonalImageServers({ here }: { here: string | undefined }) {
   return (
     <>
       {addsHere && <FoundHere />}
-      <SettingsSection title="Image servers on your computers" description="ComfyUI, Forge and other image servers on your own computers. Only you see their models, and only while that computer is connected.">
+      <SettingsSection title="Image and sound servers on your computers" description="ComfyUI, Forge, Kokoro and other image and sound servers on your own computers. Only you see their models, and only while that computer is connected.">
         {servers?.map((s) => <ImageServerRow key={s.id} server={s} here={s.deviceId === here} />)}
         {servers?.length === 0 && <p className="pb-3 text-body text-fg-muted">None yet.</p>}
         <div className="flex flex-col items-start gap-2 pt-3">
           <Button leadingIcon={Plus} disabled={!addsHere} onClick={() => setAdding((a) => ({ key: a.key + 1, open: true }))}>
-            Add image server
+            Add server
           </Button>
           {!addsHere && <p className="text-footnote text-fg-muted">Open the desktop app on the computer that runs them, signed in to this server, and add them there.</p>}
         </div>
@@ -102,8 +102,8 @@ function FoundHere() {
   };
   return (
     <SettingsSection
-      title="Image servers found on this computer"
-      description="Image servers answering on their default ports here (ComfyUI, Forge, SwarmUI and others)."
+      title="Servers found on this computer"
+      description="Image and sound servers answering on their default ports here (ComfyUI, Forge, Kokoro and others)."
       action={
         <Button size="sm" variant="ghost" leadingIcon={RefreshCw} loading={isFetching} onClick={() => void refetch()}>
           Scan again
@@ -253,7 +253,7 @@ function AddImageServerDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Add image server" description="On this computer or its network. Only you see its models, while this computer is connected.">
+      <DialogContent title="Add server" description="On this computer or its network. Only you see its models, while this computer is connected.">
         <form
           noValidate
           onSubmit={(e) => {

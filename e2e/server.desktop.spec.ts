@@ -153,8 +153,8 @@ test('desktop: an image server on the desktop makes images for its owner on the 
     // Settings › Your models, on this desktop: its image server, added by its address. The desktop lends the address first.
     await page.evaluate(() => (location.hash = '#/?settings=personal-models'));
     const settings = page.getByRole('dialog', { name: 'Settings' });
-    await settings.getByRole('button', { name: 'Add image server' }).click();
-    const adding = page.getByRole('dialog', { name: 'Add image server' });
+    await settings.getByRole('button', { name: 'Add server' }).click();
+    const adding = page.getByRole('dialog', { name: 'Add server' });
     await adding.getByRole('combobox').click();
     await page.getByRole('option', { name: 'OpenAI-compatible images' }).click();
     await adding.getByRole('textbox', { name: 'Name' }).fill('Laptop images');

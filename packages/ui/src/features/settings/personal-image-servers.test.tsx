@@ -82,7 +82,7 @@ const backendWith = (handlers: Record<string, (input: never) => unknown>) =>
 
 /** Opens the dialog, once the app knows this computer can add one. */
 async function openAdd() {
-  const button = (await screen.findByRole('button', { name: 'Add image server' })) as HTMLButtonElement;
+  const button = (await screen.findByRole('button', { name: 'Add server' })) as HTMLButtonElement;
   await waitFor(() => expect(button.disabled).toBe(false));
   fireEvent.click(button);
 }
@@ -110,9 +110,9 @@ describe('image servers on your computers', () => {
     expect(within(studio).getByText(/On Desktop · 127.0.0.1:7860 · Not connected/)).toBeTruthy();
     expect(within(studio).getByText('Forge')).toBeTruthy();
     // A browser has no computer of its own to add one from.
-    expect((screen.getByRole('button', { name: 'Add image server' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Add server' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/Open the desktop app on the computer that runs them/)).toBeTruthy();
-    expect(screen.queryByText('Image servers found on this computer')).toBeNull();
+    expect(screen.queryByText('Servers found on this computer')).toBeNull();
   });
 
   it('shows none of this on a server that doesn’t take image servers from computers', async () => {
@@ -127,7 +127,7 @@ describe('image servers on your computers', () => {
       );
       await waitFor(() => expect(callsTo('app.info').length).toBeGreaterThan(0));
       await new Promise((r) => setTimeout(r, 10));
-      expect(screen.queryByText('Image servers on your computers')).toBeNull();
+      expect(screen.queryByText('Image and sound servers on your computers')).toBeNull();
       expect(callsTo('personalImageProviders.list')).toEqual([]);
       unmount();
     }
@@ -135,7 +135,7 @@ describe('image servers on your computers', () => {
 
   it('sits on Your models, below the model servers', async () => {
     show(<PersonalModelsPage />);
-    expect(await screen.findByRole('heading', { name: 'Image servers on your computers' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Image and sound servers on your computers' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Models on your computers' })).toBeTruthy();
   });
 
@@ -183,7 +183,7 @@ describe('image servers on your computers', () => {
     });
     show(<PersonalImageServers here="d-mac" />);
     await openAdd();
-    const dialog = await screen.findByRole('dialog', { name: 'Add image server' });
+    const dialog = await screen.findByRole('dialog', { name: 'Add server' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Name' }), { target: { value: 'Studio' } });
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Address' }), { target: { value: 'ftp://studio.local' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
@@ -206,7 +206,7 @@ describe('image servers on your computers', () => {
     onDesktop();
     show(<PersonalImageServers here="d-mac" />);
     await openAdd();
-    const dialog = await screen.findByRole('dialog', { name: 'Add image server' });
+    const dialog = await screen.findByRole('dialog', { name: 'Add server' });
     fireEvent.click(within(dialog).getByRole('combobox'));
     const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
     expect(options).toEqual(expect.arrayContaining(['ComfyUI', 'Forge', 'SwarmUI', 'InvokeAI', 'stable-diffusion.cpp', 'OpenAI-compatible images']));
