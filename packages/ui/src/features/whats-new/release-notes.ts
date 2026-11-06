@@ -19,6 +19,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.4.4',
+    intro: 'A fix for GLM and DeepSeek through Mistral.',
+    highlights: [
+      {
+        icon: MessagesSquare,
+        title: 'GLM and DeepSeek on Mistral show their replies',
+        body: 'These models, which Mistral hosts for their makers, could answer with nothing on screen while they worked up to their output limit, because Atelier only read Mistral’s own reply format. It now reads theirs too. And a reply that uses its whole output limit without writing anything is tried once more, then stops with a message instead of starting over.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.4.3',
     intro: 'A fix for conversations that compact often.',
     highlights: [
