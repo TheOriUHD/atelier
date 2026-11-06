@@ -110,7 +110,7 @@ function wire(): void {
     if (entry.buffer) entry.buffer.push({ seq, event });
     // Compaction can slot its summary in before the newest message, a switch or rewind changes the branch, and a message
     // can follow one this window never had (it moved elsewhere): take the backend's view of the branch.
-    else if (event.type === 'compacted' || event.type === 'branch' || unknownParent(entry.store.getState(), event)) void load(sessionId, entry);
+    else if (needsReload(entry.store.getState(), event)) void load(sessionId, entry);
     else if (seq > entry.store.getState().seq) entry.store.setState((s) => ({ ...applyEvent(s, event), seq }));
   });
   rpc().on('sessions.changed', (summary) => {
@@ -133,7 +133,13 @@ async function load(sessionId: string, entry: Entry): Promise<void> {
     const snapshot = await rpc().call('sessions.subscribe', { id: sessionId });
     const artifacts = await rpc().call('artifacts.list', { sessionId });
     let state = fromSnapshot(snapshot, artifacts);
-    for (const { seq, event } of entry.buffer) if (seq > state.seq) state = { ...applyEvent(state, event), seq };
+    for (const { seq, event } of entry.buffer) {
+      if (seq <= state.seq) continue;
+      // The branch changed again while this loaded (a second compaction slotted its summary in, a switch): the events
+      // after it name messages this snapshot doesn't have, and applied anyway one would cut the list down to itself.
+      if (needsReload(state, event)) return await load(sessionId, entry);
+      state = { ...applyEvent(state, event), seq };
+    }
     entry.buffer = null;
     entry.store.setState(state, true);
   } catch (error) {
@@ -176,6 +182,11 @@ function updateMessage(state: LiveSessionState, id: string, fn: (m: Message) => 
   const messages = state.messages.slice();
   messages[index] = fn(messages[index]!);
   return { ...state, messages };
+}
+
+/** The event changes which messages make up the branch, so this window takes the backend's view of it again. */
+function needsReload(state: LiveSessionState, event: RunEvent): boolean {
+  return event.type === 'compacted' || event.type === 'branch' || unknownParent(state, event);
 }
 
 /** A new message whose parent this window doesn't have: the conversation went on from a branch it never loaded. */

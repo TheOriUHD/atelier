@@ -21,7 +21,8 @@ export function launchDesktop(configDir: string, env: Record<string, string> = {
 
 /** First run on this computer: choose the built-in backend, then give a name (there is no password). */
 export async function setUpLocal(page: Page, name = 'Tester'): Promise<void> {
-  await page.getByRole('button', { name: 'Run on this computer' }).click();
+  // The first screen comes once the app's backend is up, which on a busy build machine can take longer than a click waits.
+  await page.getByRole('button', { name: 'Run on this computer' }).click({ timeout: 90_000 });
   await page.getByLabel('Your name').fill(name);
   await page.getByRole('button', { name: 'Continue' }).click();
 }
