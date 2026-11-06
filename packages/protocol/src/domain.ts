@@ -430,6 +430,8 @@ export const SessionSnapshot = z.object({
   limitWarning: LimitWarning.nullable().optional(),
   /** Messages sent while the agent worked that it hasn't taken yet, oldest first. */
   outbox: z.array(OutboxMessage),
+  /** When the run going on began (the `status` event's `runStartedAt`), null while none runs. */
+  runStartedAt: z.number().nullable().optional(),
   seq: z.number().int().nonnegative(),
 });
 export type SessionSnapshot = z.infer<typeof SessionSnapshot>;
@@ -452,7 +454,11 @@ export const RunEvent = z.discriminatedUnion('type', [
     stopReason: z.string().nullable(),
     error: MessageError.nullable(),
   }),
-  z.object({ type: z.literal('status'), status: SessionStatus }),
+  /**
+   * `runStartedAt`: when the run going on began, sent while one does (running, or waiting on the person within it). A
+   * retry keeps the person's message, so the running line counts from this, not from when the message was sent.
+   */
+  z.object({ type: z.literal('status'), status: SessionStatus, runStartedAt: z.number().optional() }),
   z.object({ type: z.literal('context'), context: ContextUsage }),
   z.object({ type: z.literal('title'), title: z.string() }),
   z.object({ type: z.literal('artifact'), artifact: z.lazy(() => ArtifactSummary) }),

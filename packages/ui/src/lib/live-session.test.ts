@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from '@atelier/protocol';
-import { applyEvent, type LiveSessionState } from './live-session.ts';
+import { applyEvent, turnStart, type LiveSessionState } from './live-session.ts';
 
 const msg = (id: string, parentId: string | null, role: Message['role'], text = ''): Message => ({
   id,
@@ -120,6 +120,33 @@ describe('applyEvent', () => {
     expect(s.limitWarning).toEqual(warning);
     s = applyEvent(s, { type: 'limit_warning', warning: null });
     expect(s.limitWarning).toBeNull();
+  });
+});
+
+describe('turnStart', () => {
+  const sent = { ...base, messages: [{ ...msg('u1', null, 'user', 'hi'), createdAt: 1_000 }] };
+
+  it('counts a retry of an old message from the run, not from when the message was sent', () => {
+    let s = applyEvent(sent, { type: 'status', status: 'running', runStartedAt: 90_000 });
+    expect(turnStart(s)).toBe(90_000);
+    // Waiting on the person is the same run: its clock goes on.
+    s = applyEvent(s, { type: 'status', status: 'waiting' });
+    s = applyEvent(s, { type: 'status', status: 'running', runStartedAt: 90_000 });
+    expect(turnStart(s)).toBe(90_000);
+    // The run ended: the next one starts its own clock.
+    s = applyEvent(s, { type: 'status', status: 'idle' });
+    expect(s.runStartedAt).toBeNull();
+    s = applyEvent(s, { type: 'status', status: 'running', runStartedAt: 200_000 });
+    expect(turnStart(s)).toBe(200_000);
+  });
+
+  it('counts from the message when it was sent after the run began (a message taken mid-run)', () => {
+    const s = applyEvent(sent, { type: 'status', status: 'running', runStartedAt: 500 });
+    expect(turnStart(s)).toBe(1_000);
+  });
+
+  it('counts from the message when the server does not say when the run began', () => {
+    expect(turnStart(applyEvent(sent, { type: 'status', status: 'running' }))).toBe(1_000);
   });
 });
 

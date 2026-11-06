@@ -5,7 +5,7 @@ import { Badge, Button, Icon, IconButton, Menu, MenuContent, MenuGroup, MenuItem
 import { ITEM_GAPS, LINE, ROW_GAPS } from './rows.ts';
 import { blobUrl } from '../../lib/platform.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
-import { queuedLabel, resetFromSnapshot, type LiveSessionState } from '../../lib/live-session.ts';
+import { queuedLabel, resetFromSnapshot, turnStart, type LiveSessionState } from '../../lib/live-session.ts';
 import { useModels } from '../../lib/queries.ts';
 import { useLowestIndicatorOnly } from '../../lib/lowest-indicator.ts';
 import { sessionNoun } from '../../lib/sessions.ts';
@@ -62,8 +62,8 @@ export function Transcript({
   const running = live.session?.status === 'running';
   const busy = running || live.session?.status === 'waiting';
   const last = turns.at(-1);
-  // The running line counts the whole turn, from the person's message to the reply, not from the step it is in.
-  const turnSince = busy ? live.messages.findLast((m) => m.role === 'user' && m.kind === 'normal')?.createdAt : undefined;
+  // The running line counts the whole turn, from the person's message (or a retry's start) to the reply, not from the step it is in.
+  const turnSince = busy ? turnStart(live) : undefined;
   // The person's message being edited; a reply's notice can open it too.
   const [editing, setEditing] = useState<string | null>(null);
   // Two running indicators on screen at once look cheap: only the lowest one is drawn.

@@ -41,7 +41,19 @@ export interface LiveSessionState {
   suggestion: string | null;
   /** The person passed 80% of a usage limit: shown above the message box until their next turn starts. */
   limitWarning?: LimitWarning | null;
+  /** When the run going on began, from the server; null or absent while none runs (or from a server too old to say). */
+  runStartedAt?: number | null;
   seq: number;
+}
+
+/**
+ * When the turn on screen began, for the running line's clock: the person's latest message, or the run's start where that
+ * is later. A retry keeps the message and a woken turn has none of its own, so their clock starts again from zero.
+ */
+export function turnStart(state: Pick<LiveSessionState, 'messages' | 'runStartedAt'>): number | undefined {
+  const sent = state.messages.findLast((m) => m.role === 'user' && m.kind === 'normal')?.createdAt;
+  if (!state.runStartedAt) return sent;
+  return sent === undefined ? state.runStartedAt : Math.max(sent, state.runStartedAt);
 }
 
 /** The line for a run waiting on its model's server, with how many requests (or sub-agents) go first. */
@@ -75,6 +87,7 @@ const initial: LiveSessionState = {
   toolProgress: {},
   suggestion: null,
   limitWarning: null,
+  runStartedAt: null,
   seq: 0,
 };
 
@@ -152,6 +165,7 @@ function fromSnapshot(s: SessionSnapshot, artifacts: ArtifactSummary[]): LiveSes
     toolProgress: s.toolProgress ?? {},
     suggestion: s.suggestion ?? null,
     limitWarning: s.limitWarning ?? null,
+    runStartedAt: s.runStartedAt ?? null,
     seq: s.seq,
   };
 }
@@ -225,8 +239,11 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
       }));
       return { ...next, streamingMessageId: next.streamingMessageId === event.messageId ? null : next.streamingMessageId };
     }
-    case 'status':
-      return { ...state, session: state.session ? { ...state.session, status: event.status } : null, ...(event.status !== 'running' ? { streamingMessageId: null, phase: null } : {}) };
+    case 'status': {
+      // Waiting on the person is still the same run; anything else but running ends it.
+      const runStartedAt = event.runStartedAt ?? (event.status === 'running' || event.status === 'waiting' ? (state.runStartedAt ?? null) : null);
+      return { ...state, session: state.session ? { ...state.session, status: event.status } : null, runStartedAt, ...(event.status !== 'running' ? { streamingMessageId: null, phase: null } : {}) };
+    }
     case 'context':
       return { ...state, context: event.context };
     case 'title':

@@ -43,3 +43,18 @@ test('stop keeps the partial reply and retry adds a second version', async ({ pa
   await expect(page.getByText('1/2')).toBeVisible();
   await expect(page.getByText(/^Counting slowly:/)).toHaveText(partial);
 });
+
+test('the running clock of a retry starts again from zero, not from when the message was sent', async ({ page }) => {
+  await page.goto('/');
+  await send(page, 'slow again');
+  await expect(page.getByText(/Counting slowly: 1, 2, 3/)).toBeVisible();
+  const clock = page.getByRole('status').filter({ hasText: /\d+s/ });
+  await expect(clock).toContainText(/\b[3-9]s\b/, { timeout: 15_000 });
+  await page.getByRole('button', { name: 'Stop' }).click();
+  await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(0);
+  // The message is older still by the time it is retried.
+  await page.waitForTimeout(3000);
+  await page.getByRole('button', { name: 'Retry', exact: true }).last().click();
+  await expect(clock).toContainText(/\b[0-2]s\b/);
+  await page.getByRole('button', { name: 'Stop' }).click();
+});

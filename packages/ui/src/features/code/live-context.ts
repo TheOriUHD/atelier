@@ -4,7 +4,7 @@
  * arrives, and the context window grown by the reply streaming now.
  */
 import type { ContextUsage, Message, RunPhase } from '@atelier/protocol';
-import { queuedLabel, type LiveSessionState } from '../../lib/live-session.ts';
+import { queuedLabel, turnStart, type LiveSessionState } from '../../lib/live-session.ts';
 import { PHASE_TEXTS } from '../chat/run-phase.tsx';
 import { toolResults, turnItems } from '../chat/turns.ts';
 
@@ -98,7 +98,7 @@ export interface LiveStatus {
   /** The model's server is loading the model or reading the prompt: the verb is that phase's first text (it says more the longer it takes). */
   phase: RunPhase | null;
   retryAttempt?: number;
-  /** When the person's request was sent (the turn's elapsed time counts from it). */
+  /** When the person's request was sent, or the run began where that is later (a retry): the elapsed time counts from it. */
   since: number;
   /** Output tokens of the whole turn so far. */
   tokens: number;
@@ -141,7 +141,7 @@ export function liveStatus(state: LiveSessionState): LiveStatus | null {
   const context = liveContext(state);
   const window = { contextUsed: context?.used ?? null, contextLimit: context?.limit ?? null };
   if (command) return { verb: 'Compacting conversation', phase: null, since: command.createdAt, tokens: 0, counts: false, queued: null, activity: false, image: false, rate: null, generating: false, ...window };
-  return { verb: verb(state, turn), phase, retryAttempt: phase === 'retrying' ? state.retryAttempt : undefined, since: state.messages[start]?.createdAt ?? 0, tokens, counts: !state.compacting, queued: state.queued, activity, image, rate: replyRate(state.messages), generating, ...window };
+  return { verb: verb(state, turn), phase, retryAttempt: phase === 'retrying' ? state.retryAttempt : undefined, since: turnStart(state) ?? 0, tokens, counts: !state.compacting, queued: state.queued, activity, image, rate: replyRate(state.messages), generating, ...window };
 }
 
 function replyRate(messages: Message[]): number | null {

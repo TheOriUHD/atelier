@@ -345,6 +345,24 @@ describe('ChatService', () => {
     expect(snap.siblings[snap.messages[0]!.id]).toHaveLength(2);
   });
 
+  it('says when each run began, so the clock of a retry starts at the retry, not at the old message', async () => {
+    const chat = service();
+    const s = await repo.create({ mode: 'chat' });
+    await chat.send(s.id, [{ type: 'text', text: 'Q' }]);
+    await chat.settle(s.id);
+    const before = await chat.snapshot(s.id);
+    expect(before.runStartedAt).toBeNull();
+    const sentAt = before.messages[0]!.createdAt;
+    await new Promise((r) => setTimeout(r, 5));
+    const from = events.length;
+    await chat.retry(s.id, before.messages[1]!.id);
+    await chat.settle(s.id);
+    const statuses = events.slice(from).filter((e) => e.sessionId === s.id && e.event.type === 'status').map((e) => e.event as { status: string; runStartedAt?: number });
+    const running = statuses.find((e) => e.status === 'running')!;
+    expect(running.runStartedAt).toBeGreaterThan(sentAt);
+    expect(statuses.at(-1)).toEqual({ type: 'status', status: 'idle' });
+  });
+
   it('a snapshot taken mid-stream contains exactly the text emitted up to its seq', async () => {
     const { adapter, resume } = pausingAdapter(['one ', 'two ', 'three '], ['four']);
     const chat = service(undefined, adapter);

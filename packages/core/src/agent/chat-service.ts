@@ -337,6 +337,8 @@ interface SystemSnapshot {
 interface ActiveRun {
   controller: AbortController;
   done: Promise<void>;
+  /** When it began: the running line counts from it (a retry's message was sent long before). */
+  startedAt: number;
 }
 
 /** What a run's requests are built from, and what its context accounting learned on the way (ARCHITECTURE §8). */
@@ -722,6 +724,7 @@ export class ChatService {
         suggestion: this.suggestions.get(sessionId) ?? null,
         limitWarning: this.limitWarnings.get(sessionId) ?? null,
         outbox: [...(this.outboxes.get(sessionId) ?? [])],
+        runStartedAt: this.runs.get(sessionId)?.startedAt ?? null,
         seq: this.seqs.get(sessionId) ?? 0,
       };
     }
@@ -1032,6 +1035,7 @@ export class ChatService {
   async compact(sessionId: string, focus?: string): Promise<void> {
     if (this.runs.has(sessionId)) throw new Error('Stop the response before compacting');
     const controller = new AbortController();
+    const startedAt = Date.now();
     const done = (async () => {
       try {
         const session = await this.requireSession(sessionId);
@@ -1057,7 +1061,7 @@ export class ChatService {
         this.afterRun(sessionId, controller.signal.aborted);
       }
     })();
-    this.runs.set(sessionId, { controller, done: done.catch(() => undefined) });
+    this.runs.set(sessionId, { controller, done: done.catch(() => undefined), startedAt });
     await done;
   }
 
@@ -1113,6 +1117,7 @@ export class ChatService {
   private start(sessionId: string, submitted = false, opts: { before?(): Promise<void>; wake?: boolean } = {}): Promise<void> {
     if (this.runs.has(sessionId)) return Promise.reject(new Error('A response is still being generated'));
     const controller = new AbortController();
+    const startedAt = Date.now();
     // A new turn makes the guess at the next message moot, and the request still working one out gives way.
     this.dropSuggestion(sessionId);
     if (this.limitWarnings.delete(sessionId)) this.emit(sessionId, { type: 'limit_warning', warning: null });
@@ -1137,7 +1142,7 @@ export class ChatService {
       this.toolOutputs.delete(sessionId);
       this.afterRun(sessionId, controller.signal.aborted);
     });
-    this.runs.set(sessionId, { controller, done });
+    this.runs.set(sessionId, { controller, done, startedAt });
     return ready;
   }
 
@@ -1933,7 +1938,8 @@ export class ChatService {
 
   private async setStatus(sessionId: string, status: SessionSummary['status'], finished = false): Promise<void> {
     await this.deps.repo.patchQuietly(sessionId, { status, seq: this.seqs.get(sessionId) ?? 0, ...(finished ? { finishedUnseenAt: Date.now() } : {}) });
-    this.emit(sessionId, { type: 'status', status });
+    const startedAt = status === 'running' || status === 'waiting' ? this.runs.get(sessionId)?.startedAt : undefined;
+    this.emit(sessionId, { type: 'status', status, ...(startedAt !== undefined ? { runStartedAt: startedAt } : {}) });
     const summary = await this.deps.repo.get(sessionId);
     if (summary) this.deps.sessionChanged(summary);
   }

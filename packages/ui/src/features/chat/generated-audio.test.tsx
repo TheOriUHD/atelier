@@ -147,7 +147,7 @@ describe('GeneratedAudio when done', () => {
   it('says so when the file is gone, and stops following the playhead', async () => {
     const frames = vi.spyOn(window, 'requestAnimationFrame');
     const { container } = show(done());
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Play', exact: true })));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Play' })));
     fireEvent.error(container.querySelector('audio')!);
     expect(screen.getByText('This sound is no longer available.')).toBeTruthy();
     const after = frames.mock.calls.length;
