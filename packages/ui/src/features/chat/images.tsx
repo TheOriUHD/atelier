@@ -34,6 +34,7 @@ export function toolLabel(name: string): string {
   if (/screenshot/i.test(name) || name === 'ComputerAction') return 'Screenshot';
   if (name === 'SaveImage') return 'Saved image';
   if (name === 'SaveVideo') return 'Saved video';
+  if (name === 'SaveAudio') return 'Saved sound';
   const words = (name.startsWith('mcp__') ? name.slice(name.lastIndexOf('__') + 2) : name).replace(/[_-]+/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
@@ -43,8 +44,8 @@ export function viewedImages(steps: readonly ActivityStepView[]): ViewedImage[] 
   return steps.flatMap((step) => {
     if (step.kind !== 'tool' || !step.result) return [];
     const tool = toolLabel(step.call.name);
-    // A saved clip has no picture to show on the line; its row says what it is.
-    if (step.result.saved?.mime.startsWith('video/')) return [];
+    // A saved clip or sound has no picture to show on the line; its row says what it is.
+    if (step.result.saved && !step.result.saved.mime.startsWith('image/')) return [];
     const parts = step.result.saved ? [{ type: 'image' as const, ...step.result.saved }] : step.result.content;
     return parts.flatMap((c) => (c.type === 'image' ? [{ src: blobUrl(c.blob), alt: `${tool} image`, tool }] : []));
   });

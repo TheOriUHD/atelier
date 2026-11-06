@@ -171,7 +171,7 @@ describe('image models', () => {
 
   it('points to providers while there are no models', async () => {
     renderPage();
-    expect(await screen.findByText('Models appear here once an image or video provider is connected.')).toBeTruthy();
+    expect(await screen.findByText('Models appear here once an image, video or audio provider is connected.')).toBeTruthy();
   });
 
   it('shows each model by provider with its capabilities and what it’s good at', async () => {

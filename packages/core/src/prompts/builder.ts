@@ -138,6 +138,7 @@ export function buildSystemPrompt(ctx: PromptContext): SystemBlock[] {
   if (has('artifact') && !ctx.subagent && ctx.mode !== 'code') prefix.push(fill(`fragments/artifacts.${ctx.tier}`));
   if (has('GenerateImage') && !ctx.subagent) prefix.push(fill(`fragments/images.${ctx.tier}`));
   if (has('GenerateVideo') && !ctx.subagent) prefix.push(fill(`fragments/videos.${ctx.tier}`));
+  if (has('GenerateAudio') && !ctx.subagent) prefix.push(fill(`fragments/audio.${ctx.tier}`));
   if (!ctx.subagent && (has('MemorySearch') || has('MemoryUpdate') || has('ChatSearch')))
     prefix.push(fill('fragments/memory'));
   const blocks: SystemBlock[] = prefix.map((text) => ({ text }));

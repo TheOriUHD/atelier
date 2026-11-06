@@ -74,6 +74,8 @@ export interface PromptCase {
   images?: boolean;
   /** A video model: GenerateVideo and SaveVideo. */
   videos?: boolean;
+  /** A sound model: GenerateAudio and SaveAudio. */
+  audio?: boolean;
 }
 
 export interface Assembled {
@@ -308,6 +310,16 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
             },
           }
         : {}),
+      ...(c.audio
+        ? {
+            audio: {
+              generate: async () => ({ content: [] }),
+              available: async () => true,
+              modelList: async () =>
+                "- kokoro/kokoro (Kokoro): speech (the person's choice for speech); takes a speed\n  voices: af_heart (Heart: warm, American) [usual], bm_george (George: calm, British)\n- eleven/music_v2_5 (Eleven Music): music; 3 to 600 seconds, usually 30; sings lyrics, or instrumental",
+            },
+          }
+        : {}),
       ...(c.computer
         ? {
             computer: {
@@ -513,6 +525,9 @@ export const CASES: Record<string, PromptCase> = {
   'chat.full.videos': { mode: 'chat', videos: true },
   'code.full.videos': { mode: 'code', videos: true },
   'code.compact.videos': { mode: 'code', tier: 'compact', videos: true },
+  'chat.full.audio': { mode: 'chat', audio: true },
+  'code.full.audio': { mode: 'code', audio: true },
+  'code.compact.audio': { mode: 'code', tier: 'compact', audio: true },
   'code.compact.computer': { mode: 'code', tier: 'compact', computer: true },
   'code.full': { mode: 'code' },
   'code.full.plan': { mode: 'code', permissionMode: 'plan' },

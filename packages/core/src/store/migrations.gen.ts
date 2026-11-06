@@ -232,5 +232,13 @@ export const migrations: { name: string; statements: string[] }[] = [
     "statements": [
       "ALTER TABLE `checkpoints` ADD `workspace_id` text;"
     ]
+  },
+  {
+    "name": "20261106075302_audio_generation",
+    "statements": [
+      "ALTER TABLE `usage_events` ADD `audios` integer DEFAULT 0 NOT NULL;",
+      "ALTER TABLE `usage_events` ADD `audio_seconds` real DEFAULT 0 NOT NULL;",
+      "ALTER TABLE `usage_events` ADD `audio_chars` integer DEFAULT 0 NOT NULL;"
+    ]
   }
 ];

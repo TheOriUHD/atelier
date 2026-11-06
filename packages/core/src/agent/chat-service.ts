@@ -75,8 +75,10 @@ import { toSummary, type SessionRepo, type SessionRow } from '../sessions/sessio
 import { usesPersonalContext } from '../sessions/temporary.ts';
 import { createGenerateImageTool, type GenerateImageDeps } from '../tools/generate-image.ts';
 import { createGenerateVideoTool, type GenerateVideoDeps } from '../tools/generate-video.ts';
+import { createGenerateAudioTool, type GenerateAudioDeps } from '../tools/generate-audio.ts';
 import { createSaveImageTool } from '../tools/save-image.ts';
 import { createSaveVideoTool } from '../tools/save-video.ts';
+import { createSaveAudioTool } from '../tools/save-audio.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { createArtifactTool } from '../tools/artifact.ts';
 import { createInlineVisualTool } from '../tools/inline-visual.ts';
@@ -248,6 +250,12 @@ export interface ChatServiceDeps {
   /** Video generation (ARCHITECTURE §23): the same, for GenerateVideo. */
   videos?: {
     generate: GenerateVideoDeps['generate'];
+    available(session: SessionRow): Promise<boolean>;
+    modelList(session: SessionRow): Promise<string>;
+  };
+  /** Sound generation (ARCHITECTURE §23): speech, music and sound effects, for GenerateAudio. */
+  audio?: {
+    generate: GenerateAudioDeps['generate'];
     available(session: SessionRow): Promise<boolean>;
     modelList(session: SessionRow): Promise<string>;
   };
@@ -1378,6 +1386,7 @@ export class ChatService {
         research: session.overrides.research === true && settings.capabilities.webSearch.enabled,
         ...(run.tools.some((t) => t.name === 'GenerateImage') && this.deps.images ? { imageModels: await this.deps.images.modelList(session) } : {}),
         ...(run.tools.some((t) => t.name === 'GenerateVideo') && this.deps.videos ? { videoModels: await this.deps.videos.modelList(session) } : {}),
+        ...(run.tools.some((t) => t.name === 'GenerateAudio') && this.deps.audio ? { audioModels: await this.deps.audio.modelList(session) } : {}),
         contextFill: context ? context.used / context.limit : 0,
         ...(session.mode === 'code' && this.deps.gitSnapshot ? { gitSnapshot: () => this.deps.gitSnapshot!(session) } : {}),
         todos: row.todos as Todo[],
@@ -2006,6 +2015,11 @@ export class ChatService {
     return !session.parentSessionId && !!(await this.deps.videos?.available(session));
   }
 
+  /** Whether a session has sound generation; as with clips, a sub-agent's sounds wouldn't reach the person. */
+  private async audioFor(session: SessionRow): Promise<boolean> {
+    return !session.parentSessionId && !!(await this.deps.audio?.available(session));
+  }
+
   private async toolsFor(session: SessionRow): Promise<Tool[]> {
     const { webSearch, webFetch } = this.deps.settings().capabilities;
     const web = [...(webSearch.enabled ? [this.webSearch] : []), ...(webFetch ? [this.webFetch] : [])];
@@ -2023,7 +2037,8 @@ export class ChatService {
     const usage = modelRef && this.deps.usage?.offered(modelRef) ? [this.usage] : [];
     const images = (await this.imagesFor(session)) ? [createGenerateImageTool({ generate: (input, ctx) => this.deps.images!.generate(input, ctx) })] : [];
     const videos = (await this.videosFor(session)) ? [createGenerateVideoTool({ generate: (input, ctx) => this.deps.videos!.generate(input, ctx) })] : [];
-    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...images, ...videos, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
+    const sounds = (await this.audioFor(session)) ? [createGenerateAudioTool({ generate: (input, ctx) => this.deps.audio!.generate(input, ctx) })] : [];
+    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...images, ...videos, ...sounds, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
     if (workspace) {
@@ -2058,7 +2073,9 @@ export class ChatService {
     const saveImage = workspace && images.length ? [createSaveImageTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
     // The same, with video: SaveVideo exists only where a session can make one.
     const saveVideo = workspace && videos.length ? [createSaveVideoTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
-    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...saveImage, ...saveVideo, ...web, ...connect, ...computer, ...memory, ...mcp];
+    // And with sound: SaveAudio exists only where a session can make one.
+    const saveAudio = workspace && sounds.length ? [createSaveAudioTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
+    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */
@@ -2933,7 +2950,7 @@ const POSITION_WAIT_MS = 2000;
 const connectorOrNone = (name: string) => name.startsWith('mcp__');
 /** Tools that only look at files. */
 const LOOKS = new Set(['Read', 'Glob', 'Grep']);
-const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage', 'SaveVideo']);
+const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage', 'SaveVideo', 'SaveAudio']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
 const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'ComputerApps', 'OpenApp', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);
 /** One instruction file of a folder the session moved to, at most this long in the tool's result. */

@@ -67,11 +67,57 @@ export const VideoCapabilities = z.object({
 });
 export type VideoCapabilities = z.infer<typeof VideoCapabilities>;
 
+/** What a sound model makes: someone speaking, a piece of music, or a sound effect. */
+export const AudioKind = z.enum(['speech', 'music', 'sound']);
+export type AudioKind = z.infer<typeof AudioKind>;
+
+/** One voice a speech model speaks in, as its service lists it. */
+export const AudioVoice = z.object({
+  /** What the request names: a voice id or a voice name, as the service takes it. */
+  id: z.string().min(1).max(200),
+  name: z.string().min(1).max(100),
+  /** What it sounds like, in the service's words ("warm, middle-aged, British"), so the text model can choose. */
+  description: z.string().max(300).optional(),
+  /** Languages it speaks, as codes or names. */
+  languages: z.array(z.string().max(40)).max(100).optional(),
+});
+export type AudioVoice = z.infer<typeof AudioVoice>;
+
+/** What a sound model takes, beside what every model takes (`ImageCapabilities`, where sizes and counts mean nothing for sound). */
+export const AudioCapabilities = z.object({
+  kinds: z.array(AudioKind).min(1),
+  /** Speech: the voices it has. Absent when the service has one voice, or takes any name it knows. */
+  voices: z.array(AudioVoice).max(2000).optional(),
+  /** The voice used when the call names none. A person can change it per model. */
+  defaultVoice: z.string().max(200).optional(),
+  /** Speech: takes words about how to say it (tone, pace, accent, feeling). */
+  direction: z.boolean().optional(),
+  /** Speech: voices one request can have, for a conversation between speakers. */
+  maxSpeakers: z.number().int().min(1).max(10).optional(),
+  /** Speech: the most text one request takes, in characters. */
+  maxChars: z.number().int().positive().optional(),
+  /** Speech: takes a speaking rate. */
+  speed: z.boolean().optional(),
+  /** Music and sound: the lengths it makes. Absent where the model decides, or where it speaks for as long as the text is. */
+  durations: VideoDurations.optional(),
+  /** The length used when the call names none. A person can change it per model. */
+  defaultSeconds: z.number().positive().optional(),
+  /** Music: sings words it's given. */
+  lyrics: z.boolean().optional(),
+  /** Music: `none` makes only instrumentals, `optional` can sing or not, `always` always sings. */
+  vocals: z.enum(['none', 'optional', 'always']).optional(),
+  /** Languages it speaks or sings, as codes or names; absent when the service doesn't say. */
+  languages: z.array(z.string().max(40)).max(200).optional(),
+});
+export type AudioCapabilities = z.infer<typeof AudioCapabilities>;
+
 export const ImageCapabilities = z.object({
-  /** What the model makes. Absent means an image, so everything saved before video stays valid. */
-  output: z.enum(['image', 'video']).optional(),
+  /** What the model makes. Absent means an image, so everything saved before video and sound stays valid. */
+  output: z.enum(['image', 'video', 'audio']).optional(),
   /** Set when `output` is `video`. */
   video: VideoCapabilities.optional(),
+  /** Set when `output` is `audio`. */
+  audio: AudioCapabilities.optional(),
   /** `sd15`, `sdxl`, `sdxl-distilled`, `flux`, `flux2`, `z-image`, `hosted` and so on: which recipe a model needs. */
   family: z.string().max(40),
   /** Comma-separated tags or plain sentences. */
@@ -122,6 +168,9 @@ export const ImageWorkflow = z.object({
     frames: ImageWorkflowInput.optional(),
     fps: ImageWorkflowInput.optional(),
     endImage: ImageWorkflowInput.optional(),
+    /** For a workflow that makes sound: its length in seconds, and the words to sing. */
+    seconds: ImageWorkflowInput.optional(),
+    lyrics: ImageWorkflowInput.optional(),
     /** The node whose images are the result. */
     output: z.string().max(40).optional(),
   }),
@@ -185,6 +234,8 @@ export const ImageModelOverride = z
     manual: z.boolean(),
     /** For a video model: the length, frame rate and resolution used when a call names none. */
     video: z.object({ seconds: z.number().positive().max(600), fps: z.number().int().positive().max(240), resolution: z.string().max(20) }).partial(),
+    /** For a sound model: the voice and the length used when a call names none. */
+    audio: z.object({ voice: z.string().max(200), seconds: z.number().positive().max(3600) }).partial(),
   })
   .partial();
 export type ImageModelOverride = z.infer<typeof ImageModelOverride>;
@@ -211,9 +262,11 @@ export const ImagePrice = z.object({
   /** Dollars per image by `1024x1024` or by size name. */
   bySize: z.record(z.string(), z.number().nonnegative()).optional(),
   perMegapixel: z.number().nonnegative().optional(),
-  /** A video: dollars per second of video, flat or by resolution name. */
+  /** A video or a sound: dollars per second made, flat or (video) by resolution name. */
   perSecond: z.number().nonnegative().optional(),
   bySecond: z.record(z.string(), z.number().nonnegative()).optional(),
+  /** Speech: dollars per million characters read out. */
+  perMillionChars: z.number().nonnegative().optional(),
   /** Dollars per million tokens, for services that count those. */
   input: z.number().nonnegative().optional(),
   output: z.number().nonnegative().optional(),
@@ -238,13 +291,20 @@ export const GeneratedImageMeta = z.object({
   costUsd: z.number().nonnegative().optional(),
   /** The cost comes from a price list, not from the service. */
   costEstimated: z.boolean().optional(),
-  /** `video` for a clip: `mime` is then its container, and `width` and `height` its frame. Absent means an image. */
-  kind: z.enum(['image', 'video']).optional(),
-  /** A clip's length in seconds, as the file says. */
+  /** `video` for a clip: `mime` is then its container, and `width` and `height` its frame. `audio` for a sound, whose size is 0. Absent means an image. */
+  kind: z.enum(['image', 'video', 'audio']).optional(),
+  /** A clip's or a sound's length in seconds, as the file says. */
   seconds: z.number().nonnegative().optional(),
   fps: z.number().positive().optional(),
   /** The clip has a sound track. */
   audio: z.boolean().optional(),
+  /** A sound: speech, music or an effect. For speech, `prompt` is the words said. */
+  audioKind: AudioKind.optional(),
+  /** Speech: the voice's name, and how it was asked to speak. */
+  voice: z.string().optional(),
+  direction: z.string().optional(),
+  /** Music: the words sung. */
+  lyrics: z.string().optional(),
 });
 export type GeneratedImageMeta = z.infer<typeof GeneratedImageMeta>;
 
@@ -258,8 +318,10 @@ export const ImageProgress = z.object({
   /** 0 to 1. */
   fraction: z.number().min(0).max(1).optional(),
   etaMs: z.number().nonnegative().optional(),
-  /** `video` for a clip: its frame gets a play shape, and the line says seconds. */
-  kind: z.enum(['image', 'video']).optional(),
+  /** `video` for a clip: its frame gets a play shape, and the line says seconds. `audio` for a sound, which has no frame. */
+  kind: z.enum(['image', 'video', 'audio']).optional(),
+  /** A sound: what kind, for the line that says what is being made. */
+  audioKind: AudioKind.optional(),
   /** The length asked for, for the line under a clip's frame. */
   seconds: z.number().positive().optional(),
   /** The size it will be, so the frame has its shape from the start. */
@@ -291,6 +353,14 @@ export const VIDEO_ID_PREFIX = 'vid_';
 export const videoId = (sha256: string): string => `${VIDEO_ID_PREFIX}${sha256.slice(0, 8)}`;
 /** Whether a stored file is a clip, by its type. */
 export const isVideoMime = (mime: string): boolean => mime === 'video/mp4' || mime === 'video/webm';
+export const AUDIO_ID_PREFIX = 'aud_';
+/** What the model calls a sound, as `imageId` does an image: `SaveAudio` takes it. */
+export const audioId = (sha256: string): string => `${AUDIO_ID_PREFIX}${sha256.slice(0, 8)}`;
+/** The sound files Atelier keeps and plays: the formats `checkAudio` lets in. */
+export const AUDIO_MIMES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/mp4', 'audio/aac', 'audio/webm'] as const;
+export type AudioMime = (typeof AUDIO_MIMES)[number];
+/** Whether a stored file is a sound, by its type. */
+export const isAudioMime = (mime: string): mime is AudioMime => (AUDIO_MIMES as readonly string[]).includes(mime);
 
 export type ImagePresetGroup = 'local' | 'cloud' | 'aggregator' | 'custom';
 

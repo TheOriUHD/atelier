@@ -41,7 +41,7 @@ export interface Decision {
   warning?: string;
 }
 
-const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'SaveImage', 'SaveVideo']);
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'SaveImage', 'SaveVideo', 'SaveAudio']);
 /** Folders and files whose edits change how git, shells, editors or the agent itself behave: never auto-approved. */
 const PROTECTED_DIRS = new Set(['.git', '.vscode', '.idea', '.husky', '.cargo', '.devcontainer', '.yarn', '.mvn', '.claude', '.atelier']);
 const PROTECTED_FILES =
@@ -124,6 +124,8 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   if (auto && call.name === 'GenerateImage') return { behavior: 'allow', reason: 'It only makes an image.' };
   // Same for a video: it costs more, but the per-turn limit (2 by default) and the admin's daily limits stand in for review.
   if (auto && call.name === 'GenerateVideo') return { behavior: 'allow', reason: 'It only makes a video.' };
+  // And a sound: speech costs little, music more, and the per-turn limit (6 by default) and the daily limits stand in for review.
+  if (auto && call.name === 'GenerateAudio') return { behavior: 'allow', reason: 'It only makes a sound.' };
   if (call.name === 'ComputerAction' && onlyLooks(call.input)) return { behavior: 'allow', reason: 'It only looks at the screen.' };
 
   // A connector describes its own tools: a read-only hint lets a call into plan mode but never skips the prompt,

@@ -116,7 +116,7 @@ export const SettingsSchema = z.object({
   models: z
     .object({
       defaults: z
-        .object({ chat: z.string(), work: z.string(), code: z.string(), small: z.string(), image: z.string(), video: z.string() })
+        .object({ chat: z.string(), work: z.string(), code: z.string(), small: z.string(), image: z.string(), video: z.string(), speech: z.string(), music: z.string(), sound: z.string() })
         .partial()
         .default({}),
       aliases: z.object({ opus: z.string(), sonnet: z.string(), haiku: z.string(), fable: z.string() }).partial().default({}),
@@ -163,6 +163,11 @@ export const SettingsSchema = z.object({
       maxVideosPerTurn: z.number().int().min(1).max(20).optional(),
       maxVideosPerUserPerDay: z.number().int().min(1).optional(),
       maxVideoSpendPerUserPerDayUsd: z.number().positive().optional(),
+      /** Sound generation: speech, music and effects. Absent means on, and six a turn, as for video. */
+      audioEnabled: z.boolean().optional(),
+      maxAudioPerTurn: z.number().int().min(1).max(50).optional(),
+      maxAudioPerUserPerDay: z.number().int().min(1).optional(),
+      maxAudioSpendPerUserPerDayUsd: z.number().positive().optional(),
     })
     .default({ enabled: true, maxImagesPerTurn: 8, videoEnabled: true, maxVideosPerTurn: 2 }),
   /** Per-person limits on text models for a shared server (ARCHITECTURE §8); none until an admin sets one. */

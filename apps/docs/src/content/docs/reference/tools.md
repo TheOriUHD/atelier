@@ -51,6 +51,8 @@ without asking are on [Permissions](/permissions/), and how descriptions are kep
 | [`SaveImage`](#saveimage) | Code (some setups) | Saves an image from this conversation (generated or attached, by its `img_…` id) as a file in the folder. |
 | [`GenerateVideo`](#generatevideo) | Chat (some setups), Code (some setups) | Makes a short video clip from a text description and shows it in the conversation. |
 | [`SaveVideo`](#savevideo) | Code (some setups) | Saves a video made in this conversation (by its `vid_…` id) as a file in the folder. |
+| [`GenerateAudio`](#generateaudio) | Chat (some setups), Code (some setups) | Makes a sound and shows it in the conversation for the person to play: speech read in a voice, a piece of music, or a sound effect. |
+| [`SaveAudio`](#saveaudio) | Code (some setups) | Saves a sound made in this conversation (by its `aud_…` id) as a file in the folder. |
 
 ## Read
 
@@ -1431,4 +1433,75 @@ Saves a video made in this conversation (by its `vid_…` id) as a file in the f
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `video` | string | yes | The video id, like vid_ab12cd34. |
+| `file_path` | string | yes | Where to save it. |
+
+## GenerateAudio
+
+**Available in:** Chat (some setups), Code (some setups)
+
+### Description
+
+````text wrap
+Makes a sound and shows it in the conversation for the person to play: speech read in a voice, a piece of music, or a sound effect. Make one only when the person asks to hear something.
+- `kind` "speech": `text` is exactly what is said, word for word: write numbers, abbreviations and names the way they should be spoken. Pick a `voice` from the note about sound models, by its id, to suit what is said and who says it. `direction` says how to say it (calm, excited, whispered, a slight Scottish accent), on models that take directions.
+- A conversation between people: give `speakers`, each a name and a voice, and write `text` as lines that start with the speaker's name and a colon, on models that take several speakers. Otherwise make each speaker's lines as a call of their own.
+- `kind` "music": `prompt` is the style, mood, tempo, instruments and structure. Put words to sing in `lyrics`, on models that sing, or set `instrumental` for none. `seconds` is the length.
+- `kind` "sound": `prompt` describes the sound effect or ambience (a door creaking open in an empty hall), and `seconds` its length.
+- A note tells you which sound models you can use and what each takes. Leave `model` out to use the person's choice for that kind.
+- You can't hear the result. Don't claim to describe how it sounds; say what you asked for.
+- It appears by itself: never paste its id or a link into your reply.
+- Never imitate a real person's voice or make speech that pretends to come from someone real. Don't name real artists or ask for an existing song: describe the style instead, and write your own lyrics.
+- A provider's refusal is final: tell the person, and don't reword the request to get around it.
+````
+
+<details>
+<summary>The description reads differently in 1 other setup</summary>
+
+A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
+
+**Code, compact tier**
+
+````text wrap
+Makes speech, music or a sound effect and gives it to the person to play.
+- Only when the person asks to hear something: read a text aloud, a song, a jingle, a sound.
+- `kind` "speech": put exactly the words in `text`, and pick a `voice` from the note about sound models.
+- `kind` "music" or "sound": describe it in `prompt`.
+````
+
+</details>
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `kind` | "speech" \| "music" \| "sound" | yes | Speech, music or a sound effect. |
+| `text` | string | no | Speech: exactly the words to say. |
+| `direction` | string | no | Speech: how to say it, on models that take directions. |
+| `voice` | string | no | Speech: a voice id from the note. |
+| `speakers` | array of object | no | Speech between several people: who speaks and in which voice. |
+| `speed` | number | no | Speech: 1 is normal, 1.2 a little faster. |
+| `language` | string | no | The language, like en or German, where the model needs telling. |
+| `prompt` | string | no | Music or sound: what it should sound like. |
+| `lyrics` | string | no | Music: words to sing, on models that sing. |
+| `instrumental` | boolean | no | Music: no vocals. |
+| `seconds` | number | no | Music or sound: how long it is. |
+| `negative_prompt` | string | no | What it must not have, for models that take one. |
+| `model` | string | no | Which sound model; leave it out for the person’s choice. |
+| `seed` | integer | no | Repeats a result, on models that can. |
+
+## SaveAudio
+
+**Available in:** Code (some setups)
+
+### Description
+
+````text wrap
+Saves a sound made in this conversation (by its `aud_…` id) as a file in the folder. Missing parent folders are created. The file type comes from the sound, so the extension must match it.
+````
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `audio` | string | yes | The sound id, like aud_ab12cd34. |
 | `file_path` | string | yes | Where to save it. |

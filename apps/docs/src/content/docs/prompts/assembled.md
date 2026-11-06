@@ -8,7 +8,7 @@ editUrl: false
 
 What a model really receives is more than the templates: the builder joins a core prompt, fragments, optional
 safeguards, an `<env>` block, instruction files, skills and personalization, and the request also carries the tool
-definitions. The files below are the complete assembled text of 44 typical sessions: every system block in
+definitions. The files below are the complete assembled text of 47 typical sessions: every system block in
 order (with the cache breakpoints marked), the notes on the first message, and the tools as JSON.
 
 They are produced by the project’s test suite with fixed inputs (the date 2026-01-15 in Europe/Berlin, fake model
@@ -48,6 +48,9 @@ prompts or replies.
 | [`chat.full.videos`](/prompts/assembled/chat.full.videos.txt) | Chat with a video model: GenerateVideo and how to use it. | 28 KB |
 | [`code.full.videos`](/prompts/assembled/code.full.videos.txt) | Code with a video model: GenerateVideo and SaveVideo. | 56 KB |
 | [`code.compact.videos`](/prompts/assembled/code.compact.videos.txt) | Code, compact tier, with a video model: the shorter GenerateVideo schema. | 23 KB |
+| [`chat.full.audio`](/prompts/assembled/chat.full.audio.txt) | Chat with a sound model: GenerateAudio for speech, music and sound effects, and how to use it. | 30 KB |
+| [`code.full.audio`](/prompts/assembled/code.full.audio.txt) | Code with a sound model: GenerateAudio and SaveAudio. | 58 KB |
+| [`code.compact.audio`](/prompts/assembled/code.compact.audio.txt) | Code, compact tier, with a sound model: the shorter GenerateAudio schema. | 23 KB |
 | [`code.compact.computer`](/prompts/assembled/code.compact.computer.txt) | Code, compact tier, with computer use on. | 26 KB |
 | [`code.full`](/prompts/assembled/code.full.txt) | Code, full tier: the baseline. | 51 KB |
 | [`code.full.plan`](/prompts/assembled/code.full.plan.txt) | Code in plan mode. | 51 KB |

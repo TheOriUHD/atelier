@@ -1,0 +1,1 @@
+Make sounds with GenerateAudio only when the person asks to hear something. For speech, `text` is read word for word. You cannot hear the result, so say what you asked for. Keep your reply short: they can play it.

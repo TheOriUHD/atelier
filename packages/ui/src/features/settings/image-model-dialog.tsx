@@ -18,6 +18,9 @@ interface Form {
   seconds: string;
   fps: string;
   resolution: string;
+  /** A sound model's own voice and length. */
+  voice: string;
+  soundSeconds: string;
 }
 
 function toForm(o: ImageModelOverride): Form {
@@ -31,7 +34,17 @@ function toForm(o: ImageModelOverride): Form {
     seconds: o.video?.seconds?.toString() ?? '',
     fps: o.video?.fps?.toString() ?? '',
     resolution: o.video?.resolution ?? AUTO,
+    voice: o.audio?.voice ?? AUTO,
+    soundSeconds: o.audio?.seconds?.toString() ?? '',
   };
+}
+
+/** The voice and length as chosen, with what's left empty gone. */
+function audioOf(f: Form): Record<string, unknown> {
+  const audio: Record<string, unknown> = {};
+  if (f.voice !== AUTO && f.voice.trim()) audio.voice = f.voice.trim();
+  if (f.soundSeconds.trim()) audio.seconds = Number(f.soundSeconds);
+  return audio;
 }
 
 /** The length, frame rate and resolution as typed, with what's left empty gone. */
@@ -88,6 +101,8 @@ function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): vo
     if (!tuning.success) return setInvalid(new Set(tuning.error.issues.map((i) => String(i.path[0]))));
     const video = ImageModelOverride.shape.video.unwrap().safeParse(videoOf(form));
     if (!video.success) return setInvalid(new Set(video.error.issues.map((i) => String(i.path[0]))));
+    const audio = ImageModelOverride.shape.audio.unwrap().safeParse(audioOf(form));
+    if (!audio.success) return setInvalid(new Set(audio.error.issues.map((i) => (i.path[0] === 'seconds' ? 'soundSeconds' : String(i.path[0])))));
     setInvalid(new Set());
     setSaving(true);
     setError(null);
@@ -96,9 +111,10 @@ function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): vo
       ...(form.description.trim() ? { description: form.description.trim() } : {}),
       ...(Object.keys(tuning.data).length ? { tuning: tuning.data } : {}),
       ...(Object.keys(video.data).length ? { video: video.data } : {}),
+      ...(Object.keys(audio.data).length ? { audio: audio.data } : {}),
     };
     try {
-      for (const key of ['displayName', 'description', 'tuning', 'video'] as const) {
+      for (const key of ['displayName', 'description', 'tuning', 'video', 'audio'] as const) {
         if (JSON.stringify(next[key]) === JSON.stringify(current[key])) continue;
         const path = ['imageModels', 'overrides', model.ref, key];
         if (next[key] === undefined) await rpc().call('settings.reset', { layer: 'global', path });
@@ -140,6 +156,18 @@ function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): vo
           {caps.video.resolutions?.length ? <Choice label="Resolution" choices={caps.video.resolutions} own={current.video?.resolution ? undefined : '720p when offered'} value={form.resolution} onChange={(resolution) => setForm((f) => ({ ...f, resolution }))} /> : null}
         </div>
       )}
+      {caps.audio && (caps.audio.kinds.includes('speech') || caps.audio.durations) && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-4 max-md:grid-cols-1">
+          {caps.audio.kinds.includes('speech') && (
+            <VoiceChoice voices={caps.audio.voices} own={current.audio?.voice ? undefined : caps.audio.defaultVoice} value={form.voice} onChange={(voice) => setForm((f) => ({ ...f, voice }))} />
+          )}
+          {caps.audio.durations && (
+            <Field label="Length in seconds" description="For music and sound effects. Speech is as long as its words." error={invalid.has('soundSeconds') ? 'Enter a number of seconds from 1 to 3600.' : undefined}>
+              <TextField inputMode="decimal" placeholder={current.audio?.seconds === undefined && caps.audio.defaultSeconds ? `${caps.audio.defaultSeconds} (its usual)` : 'Automatic'} {...field('soundSeconds')} />
+            </Field>
+          )}
+        </div>
+      )}
       {caps.tunable && !caps.video && (
         <div className="grid grid-cols-2 gap-x-3 gap-y-4 max-md:grid-cols-1">
           <Field label="Steps" error={invalid.has('steps') ? 'Enter a whole number from 1 to 200.' : undefined}>
@@ -164,6 +192,25 @@ function ImageModelForm({ model, onDone }: { model: ImageModelInfo; onDone(): vo
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+/** A speech model's voice: from its list, by name with what it sounds like, or typed in where the service lists none. */
+function VoiceChoice({ voices, own, value, onChange }: { voices: readonly { id: string; name: string; description?: string | undefined }[] | undefined; own: string | undefined; value: string; onChange(value: string): void }) {
+  const ownName = voices?.find((v) => v.id === own)?.name ?? own;
+  if (!voices?.length) {
+    return (
+      <Field label="Voice" description="The voice used when a request names none.">
+        <TextField spellCheck={false} placeholder={ownName ?? 'Automatic'} value={value === AUTO ? '' : value} onChange={(e) => onChange(e.target.value)} />
+      </Field>
+    );
+  }
+  const options: SelectOption[] = [{ value: AUTO, label: ownName ? `Automatic (${ownName})` : 'Automatic' }, ...voices.map((v) => ({ value: v.id, label: v.description ? `${v.name} · ${v.description}` : v.name }))];
+  if (value !== AUTO && !voices.some((v) => v.id === value)) options.push({ value, label: value });
+  return (
+    <Field label="Voice" description="The voice used when a request names none.">
+      <Select variant="field" options={options} value={value} onValueChange={onChange} />
+    </Field>
   );
 }
 

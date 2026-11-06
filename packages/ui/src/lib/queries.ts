@@ -284,6 +284,20 @@ export function useVideoGeneration(): boolean {
 /** Whether a model makes video. The picture pickers leave these out; the video ones keep only these. A model without capabilities (an older backend's cache) makes pictures. */
 export const makesVideo = (model: Pick<ImageModelInfo, 'capabilities'>): boolean => (model.capabilities as ImageModelInfo['capabilities'] | undefined)?.output === 'video';
 
+/** Whether a model makes sound (speech, music or effects); the picture and video pickers leave these out. */
+export const makesAudio = (model: Pick<ImageModelInfo, 'capabilities'>): boolean => (model.capabilities as ImageModelInfo['capabilities'] | undefined)?.output === 'audio';
+
+/** Whether a model makes pictures: neither clips nor sounds. */
+export const makesPictures = (model: Pick<ImageModelInfo, 'capabilities'>): boolean => !makesVideo(model) && !makesAudio(model);
+
+/** For code outside React: this backend can make sound too. */
+export const audioGenerationOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.audioGeneration;
+
+/** This backend can generate speech, music and sound effects: false on an older server, and until `app.info` answers. */
+export function useAudioGeneration(): boolean {
+  return !!useAppInfo().data?.audioGeneration;
+}
+
 /** This backend can generate images: false on an older server, and until `app.info` answers. */
 export function useImageGeneration(): boolean {
   return !!useAppInfo().data?.imageGeneration;

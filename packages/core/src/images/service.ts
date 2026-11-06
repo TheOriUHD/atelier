@@ -4,7 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { and, eq, gte, sql } from 'drizzle-orm';
-import { imageId, IMAGE_ID_PREFIX, type GeneratedImageMeta, type ImageModelInfo, type ImageProviderDraft, type ImageTuning, type Message, type MessageError, type Settings } from '@atelier/protocol';
+import { imageId, IMAGE_ID_PREFIX, type GeneratedImageMeta, type ImageCapabilities, type ImageModelInfo, type ImageProviderDraft, type ImageTuning, type Message, type MessageError, type Settings } from '@atelier/protocol';
 import type { BlobStore } from '../store/blobs.ts';
 import type { Db } from '../store/db.ts';
 import { generatedImages, usageEvents } from '../store/schema.ts';
@@ -93,6 +93,9 @@ function fileName(prompt: string, sha: string, mime: string): string {
 const seconds = (ms: number) => (ms < 10_000 ? (ms / 1000).toFixed(1) : String(Math.round(ms / 1000)));
 
 /** The ids of every image a conversation holds, attachments and generated alike, with their hashes. */
+/** A model that makes pictures, not clips or sounds. Absent `output` is a picture, as everything saved before video was. */
+export const makesPictures = (capabilities: Pick<ImageCapabilities, 'output'>): boolean => (capabilities.output ?? 'image') === 'image';
+
 export function imagesIn(messages: readonly Message[]): Map<string, string> {
   const found = new Map<string, string>();
   const add = (sha: string) => found.set(imageId(sha), sha);
@@ -127,8 +130,8 @@ export class ImageService {
   async models(session: ImageSessionFacts): Promise<ImageModelInfo[]> {
     if (!this.deps.settings().imageGeneration.enabled) return [];
     const admin = await this.deps.isAdmin(session.userId);
-    // Video models share the providers and the model cache, and belong to GenerateVideo: GenerateImage would get a clip back.
-    const all = (await this.deps.registry.listModels(session.userId)).filter((m) => (admin || !m.hidden) && m.capabilities.output !== 'video');
+    // Video and sound models share the providers and the model cache, and belong to GenerateVideo and GenerateAudio: GenerateImage would get a clip or a sound back.
+    const all = (await this.deps.registry.listModels(session.userId)).filter((m) => (admin || !m.hidden) && makesPictures(m.capabilities));
     const first = session.imageModel ?? (await this.deps.preferred(session.userId)) ?? this.deps.settings().models.defaults.image;
     return [...all].sort((a, b) => Number(b.ref === first) - Number(a.ref === first));
   }
@@ -140,7 +143,7 @@ export class ImageService {
 
   private async pick(session: ImageSessionFacts, asked: string | undefined): Promise<ResolvedImageModel> {
     const models = await this.models(session);
-    if (models.length === 0) throw new ImageCallError('No image model is available. An admin adds one in Settings › Image & video.');
+    if (models.length === 0) throw new ImageCallError('No image model is available. An admin adds one in Settings › Media.');
     const wanted = asked?.toLowerCase();
     const match = wanted ? models.find((m) => m.ref.toLowerCase() === wanted || m.modelId.toLowerCase() === wanted || m.displayName.toLowerCase() === wanted) : models[0];
     if (!match) throw new ImageCallError(`There's no image model "${asked}". You can use: ${models.map((m) => m.ref).join(', ')}.`);
@@ -248,7 +251,7 @@ export class ImageService {
     const started = Date.now();
     const { adapter } = await this.deps.registry.draftAdapter(draft);
     // A clip costs real money and takes minutes: the check above lists its models, which proves the key.
-    const models = (await adapter.listModels(AbortSignal.timeout(20_000))).filter((m) => m.capabilities.output !== 'video');
+    const models = (await adapter.listModels(AbortSignal.timeout(20_000))).filter((m) => makesPictures(m.capabilities));
     const model = models.find((m) => m.modelId === modelId) ?? models[0];
     if (!model) throw new Error(`${draft.name} has no image models to try.`);
     const fit = fitParams(model.capabilities, { size: 'small' });

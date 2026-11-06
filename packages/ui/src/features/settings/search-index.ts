@@ -7,7 +7,7 @@ import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
 import { identityProvidersOffered } from '../auth/sign-in.ts';
 import { desktop, isMac } from '../../lib/platform.ts';
-import { auditLogOffered, imageGenerationOffered, usageLimitsOffered, videoGenerationOffered } from '../../lib/queries.ts';
+import { audioGenerationOffered, auditLogOffered, imageGenerationOffered, usageLimitsOffered, videoGenerationOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
 
@@ -88,6 +88,30 @@ export const SETTINGS_INDEX = [
     description: 'What makes your videos, unless you name another when you ask. A model that makes video from a picture only needs one to start from.',
     keywords: ['video generation', 'clips', 'animation', 'server default'],
     available: () => videoGenerationOffered(),
+  },
+  {
+    id: 'prefs.models.speech',
+    page: 'general',
+    label: 'Default speech model',
+    description: 'What reads text aloud for you, unless you name another when you ask. Each model has its own voices.',
+    keywords: ['text to speech', 'tts', 'voice', 'read aloud', 'narration', 'server default'],
+    available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'prefs.models.music',
+    page: 'general',
+    label: 'Default music model',
+    description: 'What makes your songs and background music, unless you name another when you ask.',
+    keywords: ['music generation', 'songs', 'lyrics', 'instrumental', 'server default'],
+    available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'prefs.models.sound',
+    page: 'general',
+    label: 'Default sound effects model',
+    description: 'What makes your sound effects and ambience, unless you name another when you ask.',
+    keywords: ['sound effects', 'sfx', 'foley', 'ambience', 'server default'],
+    available: () => audioGenerationOffered(),
   },
   {
     id: 'notifications.taskFinished',
@@ -373,6 +397,14 @@ export const SETTINGS_INDEX = [
     description: 'Videos each model made, how many seconds of video that is and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one.',
     keywords: ['video generation', 'clips', 'seconds', 'cost', 'estimate', 'models'],
     available: () => videoGenerationOffered(),
+  },
+  {
+    id: 'usage.audio',
+    page: 'usage',
+    label: 'Sounds',
+    description: 'Speech, music and sound effects each model made, how long they are in all, the characters read out and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one.',
+    keywords: ['audio generation', 'speech', 'tts', 'music', 'sound effects', 'characters', 'seconds', 'cost', 'estimate', 'models'],
+    available: () => audioGenerationOffered(),
   },
   {
     id: 'usage.prices',
@@ -725,29 +757,29 @@ export const SETTINGS_INDEX = [
     id: 'imageProviders.detect',
     page: 'image-providers',
     label: 'Found on this computer',
-    description: 'Image servers answering on their default ports here.',
-    keywords: ['auto-detect', 'scan', 'comfyui', 'forge', 'automatic1111', 'swarmui', 'invokeai', 'localai', 'koboldcpp', 'local'],
+    description: 'Image and sound servers answering on their default ports here.',
+    keywords: ['auto-detect', 'scan', 'comfyui', 'forge', 'automatic1111', 'swarmui', 'invokeai', 'localai', 'koboldcpp', 'kokoro', 'speaches', 'local'],
   },
   {
     id: 'imageProviders.list',
     page: 'image-providers',
-    label: 'Image and video providers',
-    description: 'Where images and videos are made, separate from the providers of text models.',
-    keywords: ['image generation', 'video generation', 'pictures', 'clips', 'comfyui', 'workflows', 'health', 'gpu'],
+    label: 'Image, video and audio providers',
+    description: 'Where images, videos and sounds are made, separate from the providers of text models.',
+    keywords: ['image generation', 'video generation', 'audio generation', 'pictures', 'clips', 'speech', 'music', 'comfyui', 'workflows', 'health', 'gpu'],
   },
   {
     id: 'imageProviders.add',
     page: 'image-providers',
-    label: 'Add image or video provider',
-    description: 'Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai. The video ones are listed with their own names.',
-    keywords: ['connect', 'api key', 'base url', 'endpoint', 'comfyui', 'forge', 'automatic1111', 'openai', 'gemini', 'stability', 'black forest labs', 'fal', 'replicate', 'openrouter', 'xai', 'test image'],
+    label: 'Add image, video or audio provider',
+    description: 'Connect a local server such as ComfyUI, Forge or Kokoro, a cloud service such as OpenAI, Google Gemini or ElevenLabs, or a service with many models such as OpenRouter or fal.ai. The video and audio ones are listed with their own names.',
+    keywords: ['connect', 'api key', 'base url', 'endpoint', 'comfyui', 'forge', 'automatic1111', 'openai', 'gemini', 'stability', 'black forest labs', 'fal', 'replicate', 'openrouter', 'xai', 'elevenlabs', 'kokoro', 'text to speech', 'tts', 'music', 'test image'],
   },
   {
     id: 'imageModels.list',
     page: 'image-providers',
-    label: 'Image and video models',
-    description: 'Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler, or for video its usual length, frame rate and resolution. The text model reads the description when it chooses.',
-    keywords: ['hide', 'favorite', 'visibility', 'description', 'tuning', 'steps', 'guidance', 'cfg', 'sampler', 'scheduler', 'video', 'length', 'seconds', 'fps', 'resolution'],
+    label: 'Image, video and audio models',
+    description: 'Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler, for video its usual length, frame rate and resolution, or for sound its usual voice and length. The text model reads the description when it chooses.',
+    keywords: ['hide', 'favorite', 'visibility', 'description', 'tuning', 'steps', 'guidance', 'cfg', 'sampler', 'scheduler', 'video', 'length', 'seconds', 'fps', 'resolution', 'voice', 'speech', 'music'],
   },
   {
     id: 'models.defaults.image',
@@ -763,6 +795,30 @@ export const SETTINGS_INDEX = [
     description: 'What makes videos unless a person chooses another or names one when they ask.',
     keywords: ['server default', 'system default', 'video generation'],
     available: () => videoGenerationOffered(),
+  },
+  {
+    id: 'models.defaults.speech',
+    page: 'image-providers',
+    label: 'Default speech model for everyone',
+    description: 'What reads text aloud unless a person chooses another or names one when they ask.',
+    keywords: ['server default', 'system default', 'text to speech', 'tts', 'voice'],
+    available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'models.defaults.music',
+    page: 'image-providers',
+    label: 'Default music model for everyone',
+    description: 'What makes music unless a person chooses another or names one when they ask.',
+    keywords: ['server default', 'system default', 'music generation', 'songs'],
+    available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'models.defaults.sound',
+    page: 'image-providers',
+    label: 'Default sound effects model for everyone',
+    description: 'What makes sound effects unless a person chooses another or names one when they ask.',
+    keywords: ['server default', 'system default', 'sound effects', 'sfx'],
+    available: () => audioGenerationOffered(),
   },
   {
     id: 'imageGeneration.enabled',
@@ -823,6 +879,38 @@ export const SETTINGS_INDEX = [
     description: 'Counts videos with a known or estimated cost. Local servers cost nothing here.',
     keywords: ['limit', 'cap', 'quota', 'budget', 'dollars', 'money', 'cost', 'clips'],
     available: () => videoGenerationOffered(),
+  },
+  {
+    id: 'imageGeneration.audioEnabled',
+    page: 'image-providers',
+    label: 'Let models make sounds',
+    description: 'Off: conversations don’t get the sound tool, whichever providers are set up. Images and videos are not affected.',
+    keywords: ['turn off', 'disable', 'speech', 'tts', 'music', 'sound effects', 'generate audio'],
+    available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'imageGeneration.maxAudioPerTurn',
+    page: 'image-providers',
+    label: 'Sounds per turn',
+    description: 'How many sounds one reply can make: speech, music and effects together. The default is 6, enough for a short dialogue made line by line.',
+    keywords: ['limit', 'cap', 'budget', 'prompt injection', 'speech', 'music'],
+    available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'imageGeneration.maxAudioPerUserPerDay',
+    page: 'image-providers',
+    label: 'Sounds per person per day',
+    description: 'Counted across all of a person’s conversations, including deleted ones.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'accounts', 'speech', 'music'],
+    available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'imageGeneration.maxAudioSpendPerUserPerDayUsd',
+    page: 'image-providers',
+    label: 'Sound spend per person per day',
+    description: 'Counts sounds with a known or estimated cost. Local servers cost nothing here.',
+    keywords: ['limit', 'cap', 'quota', 'budget', 'dollars', 'money', 'cost', 'speech', 'music'],
+    available: () => audioGenerationOffered(),
   },
   {
     id: 'models.defaults.chat',

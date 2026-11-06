@@ -70,6 +70,8 @@ export interface TurnFacts {
   imageModels?: string;
   /** The video models a session with GenerateVideo can use, one per line. */
   videoModels?: string;
+  /** The sound models a session with GenerateAudio can use, with their voices. */
+  audioModels?: string;
   /** How full the context window was at the last request, from 0 to 1. */
   contextFill: number;
   /** Code: the repository as it is now, read only when it hasn't been announced. */
@@ -154,6 +156,10 @@ export async function turnNote(facts: TurnFacts, prior: NoteState, history: read
   if (facts.videoModels !== undefined) {
     if (prior.videoModels !== facts.videoModels) note('video-models', { list: escapeTags(facts.videoModels) });
     set('videoModels', facts.videoModels);
+  }
+  if (facts.audioModels !== undefined) {
+    if (prior.audioModels !== facts.audioModels) note('audio-models', { list: escapeTags(facts.audioModels) });
+    set('audioModels', facts.audioModels);
   }
 
   if (facts.ultracode) {

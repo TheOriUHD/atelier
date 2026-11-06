@@ -5,7 +5,7 @@ import { SETTINGS_PAGES, settingsPage, visiblePages } from './pages.ts';
 
 describe('the Settings list', () => {
   // The nav column is 192px: its rows are one line, and "Keyboard shortcuts" (18) wrapped on every system. Fifteen is
-  // what "Image providers" needed (the page is "Image & video" now); a longer name needs a shorter word (e2e/settings.web.spec.ts measures the real thing).
+  // what "Image providers" needed (the page is "Media" now); a longer name needs a shorter word (e2e/settings.web.spec.ts measures the real thing).
   it('names every page in at most 15 characters, so it fits on one line', () => {
     for (const page of SETTINGS_PAGES) expect(page.label.length, page.label).toBeLessThanOrEqual(15);
   });

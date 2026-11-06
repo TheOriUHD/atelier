@@ -61,7 +61,7 @@ describe('videoFraction', () => {
 describe('videoFailure', () => {
   it('says plainly why there is no clip', () => {
     expect(videoFailure('GenerateVideo failed: The video model refused this: policy. That is final: tell the person, and don\'t reword the prompt to get past it.')).toEqual({ kind: 'refused', text: 'The video model refused this: policy.' });
-    expect(videoFailure('No video model is available. An admin adds one in Settings › Image & video.')).toMatchObject({ kind: 'setup' });
+    expect(videoFailure('No video model is available. An admin adds one in Settings › Media.')).toMatchObject({ kind: 'setup' });
     expect(videoFailure('Stopped.')).toEqual({ kind: 'stopped', text: 'Stopped before it finished.' });
     expect(videoFailure('')).toEqual({ kind: 'failed', text: 'The video could not be made.' });
     expect(videoFailure("That's the limit of 2 videos in one turn. Stop here and tell the person; they can ask for more in their next message.").text).toBe("That's the limit of 2 videos in one turn.");

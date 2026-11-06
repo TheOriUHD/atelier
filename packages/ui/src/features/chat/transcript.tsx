@@ -22,6 +22,7 @@ import { AreaPreview } from '../images/area-preview.tsx';
 import { ChangeAreaProvider } from '../images/change-area.tsx';
 import { SessionImagesProvider } from '../images/session-images.tsx';
 import { GeneratedVideos } from './generated-videos.tsx';
+import { GeneratedAudio } from './generated-audio.tsx';
 import { ZoomableImage } from './images.tsx';
 import { CopyButton } from './copy-button.tsx';
 import { ReadAloudButton } from './read-aloud.tsx';
@@ -426,6 +427,10 @@ const AssistantTurn = memo(function AssistantTurn({
           const step = stepView(item.ref, results, run);
           return step.kind === 'tool' ? <GeneratedVideos key={item.ref.key} step={step} waiting={status === 'waiting'} /> : null;
         }
+        case 'audio': {
+          const step = stepView(item.ref, results, run);
+          return step.kind === 'tool' ? <GeneratedAudio key={item.ref.key} step={step} waiting={status === 'waiting'} /> : null;
+        }
         case 'artifact': {
           const result = results.get(item.ref.part.id);
           return (
@@ -460,7 +465,7 @@ const AssistantTurn = memo(function AssistantTurn({
   // Where the turn begins and ends, for the column's spacing: a turn of calls and thinking is one muted line; a reply
   // that can be copied or retried is followed by the row of its actions, which only exists then.
   const isLine = (item: (typeof items)[number]) => item.kind === 'activity' || item.kind === 'thinking';
-  const replied = items.some((item) => item.kind === 'text' || item.kind === 'artifact' || item.kind === 'visual' || item.kind === 'image' || item.kind === 'video');
+  const replied = items.some((item) => item.kind === 'text' || item.kind === 'artifact' || item.kind === 'visual' || item.kind === 'image' || item.kind === 'video' || item.kind === 'audio');
   const showActions = !running && replied;
   const rowFirst = items[0] && isLine(items[0]) ? 'line' : undefined;
   const rowLast = showActions ? 'actions' : items.at(-1) && isLine(items.at(-1)!) ? 'line' : undefined;

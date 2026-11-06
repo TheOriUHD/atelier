@@ -1,22 +1,24 @@
-/** Images (Chat sidebar): everything the person's conversations made, pictures and videos, newest first, searchable by prompt. */
+/** Images (Chat sidebar): everything the person's conversations made, pictures, videos and sounds, newest first, searchable by prompt. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
-import { Image as ImageIcon, Play, Search } from 'lucide-react';
-import type { GeneratedImage } from '@atelier/protocol';
+import { AudioLines, Image as ImageIcon, Music, Play, Search, Speech } from 'lucide-react';
+import type { AudioKind, GeneratedImage } from '@atelier/protocol';
 import { Button, Icon, SegmentedControl, Select, Spinner, TextField, type SelectOption } from '../../components/ui/index.ts';
 import { useOpenSettings } from '../../app/navigation.ts';
 import { blobUrl } from '../../lib/platform.ts';
 import { keys, useAccount, useImageGeneration, useImageModels } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useDebounced } from '../chat/composer-menu.tsx';
-import { ImageViewer, isVideo } from './image-viewer.tsx';
+import { KIND_LABELS, soundLabel } from '../chat/audio-view.ts';
+import { loadPeaks, placeholderPeaks, resample } from '../chat/waveform.ts';
+import { ImageViewer, isSound, isVideo } from './image-viewer.tsx';
 import { justified } from './justified.ts';
 
 const PAGE = 48;
 const SEARCH_DEBOUNCE_MS = 250;
 const ALL_MODELS = 'all';
-type Kind = 'all' | 'image' | 'video';
+type Kind = 'all' | 'image' | 'video' | 'audio';
 
 /** "0:06": a clip's length on its tile. */
 const clock = (s: number) => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`;
@@ -60,10 +62,11 @@ export function ImagesPage() {
   const items = useMemo(() => list.data?.pages.flatMap((p) => p.items), [list.data]);
   const total = list.data?.pages[0]?.totalBytes;
   const filtering = !!query || ref !== ALL_MODELS || kind !== 'all';
-  // Told apart only for those who have videos or can make them: for everyone else the page is the Images page it always was.
-  const hasVideos = !!models?.some((m) => m.capabilities.output === 'video') || !!items?.some(isVideo) || kind !== 'all';
+  // Told apart only for those who have videos or sounds or can make them: for everyone else the page is the Images page it always was.
+  const hasVideos = !!models?.some((m) => m.capabilities.output === 'video') || !!items?.some(isVideo) || kind === 'video';
+  const hasSounds = !!models?.some((m) => m.capabilities.output === 'audio') || !!items?.some(isSound) || kind === 'audio';
 
-  const noun = kind === 'video' ? 'videos' : kind === 'image' ? 'images' : hasVideos ? 'images or videos' : 'images';
+  const noun = kind === 'video' ? 'videos' : kind === 'image' ? 'images' : kind === 'audio' ? 'sounds' : hasVideos && hasSounds ? 'images, videos or sounds' : hasVideos ? 'images or videos' : hasSounds ? 'images or sounds' : 'images';
 
   // Images from a provider that has since been removed can still be filtered by.
   const options = useMemo<SelectOption[]>(() => {
@@ -87,7 +90,7 @@ export function ImagesPage() {
                 <Icon icon={Search} className="pointer-events-none absolute top-2 left-2.5 text-fg-muted" />
                 <TextField aria-label="Search by prompt" placeholder="Search by prompt" value={typed} onChange={(e) => setTyped(e.target.value)} className="pl-8" />
               </div>
-              {hasVideos && (
+              {(hasVideos || hasSounds) && (
                 <SegmentedControl<Kind>
                   aria-label="Show"
                   value={kind}
@@ -95,7 +98,8 @@ export function ImagesPage() {
                   items={[
                     { value: 'all', label: 'All' },
                     { value: 'image', label: 'Images' },
-                    { value: 'video', label: 'Videos' },
+                    ...(hasVideos ? [{ value: 'video' as const, label: 'Videos' }] : []),
+                    ...(hasSounds ? [{ value: 'audio' as const, label: 'Sounds' }] : []),
                   ]}
                 />
               )}
@@ -140,12 +144,15 @@ function ImageGrid({ images, onOpen }: { images: readonly GeneratedImage[]; onOp
     return () => observer.disconnect();
   }, []);
   const room = width || FALLBACK_WIDTH;
-  const tiles = useMemo(() => justified(images, room, { rowHeight: room < PHONE_WIDTH ? 132 : 216, gap: GAP }), [images, room]);
+  // A sound has no picture, and so no shape: its tile is a little wider than tall, room for its words and its waveform.
+  const tiles = useMemo(() => justified(images.map((image) => (isSound(image) ? SOUND_TILE : image)), room, { rowHeight: room < PHONE_WIDTH ? 132 : 216, gap: GAP }), [images, room]);
   return (
     <ul ref={grid} aria-label="Images" className="mt-6 flex flex-wrap" style={{ gap: GAP }}>
       {images.map((image, i) => (
         <li key={image.blob + image.createdAt} style={tiles[i]}>
-          {isVideo(image) ? (
+          {isSound(image) ? (
+            <SoundTile image={image} onOpen={() => onOpen(i)} />
+          ) : isVideo(image) ? (
             <button type="button" aria-label={`Play video: ${image.prompt}`} onClick={() => onOpen(i)} className="relative block size-full cursor-pointer overflow-hidden rounded-lg bg-fill-ghost-hover outline-none focus-ring">
               {/* The first frame stands in as the picture; nothing plays until the viewer opens. */}
               <video src={`${blobUrl(image.blob)}#t=0.001`} aria-hidden="true" tabIndex={-1} muted playsInline preload="metadata" className="pointer-events-none size-full object-cover" />
@@ -162,6 +169,55 @@ function ImageGrid({ images, onOpen }: { images: readonly GeneratedImage[]; onOp
         </li>
       ))}
     </ul>
+  );
+}
+
+const SOUND_TILE = { width: 16, height: 10 };
+const SOUND_ICONS: Record<AudioKind, typeof Speech> = { speech: Speech, music: Music, sound: AudioLines };
+
+/** A sound's tile: what it is, its words or description, and its waveform once it is on screen. */
+function SoundTile({ image, onOpen }: { image: GeneratedImage; onOpen(): void }) {
+  const kind = image.audioKind ?? 'speech';
+  const button = useRef<HTMLButtonElement>(null);
+  const [peaks, setPeaks] = useState<number[] | null>(null);
+  // Decoded only once the tile is near the screen: a page of sounds shouldn't decode them all on arrival.
+  useEffect(() => {
+    const element = button.current;
+    if (!element) return;
+    let live = true;
+    const load = () => void loadPeaks(blobUrl(image.blob)).then((p) => live && setPeaks(p));
+    if (typeof IntersectionObserver === 'undefined') {
+      load();
+      return () => {
+        live = false;
+      };
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return;
+      observer.disconnect();
+      load();
+    }, { rootMargin: '400px' });
+    observer.observe(element);
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
+  }, [image.blob]);
+  const bars = resample(peaks ?? placeholderPeaks(image.blob, 40).map(() => 0.16), 40);
+  return (
+    <button ref={button} type="button" aria-label={`Play ${KIND_LABELS[kind].toLowerCase()}: ${image.prompt}`} onClick={onOpen} className="flex size-full cursor-pointer flex-col justify-between gap-2 overflow-hidden rounded-lg bg-fill-ghost-hover p-3 text-left outline-none focus-ring hover:bg-fill-ghost-selected">
+      <span className="flex min-w-0 items-center gap-1.5 text-footnote text-fg-secondary">
+        <Icon icon={SOUND_ICONS[kind]} size="sm" className="shrink-0 text-fg-muted" />
+        <span className="truncate">{soundLabel(kind, image.voice?.includes(':') ? undefined : image.voice)}</span>
+      </span>
+      <span className="line-clamp-3 min-h-0 text-body text-fg">{image.prompt}</span>
+      <span aria-hidden="true" className="flex h-7 shrink-0 items-center gap-[2px]">
+        {bars.map((h, i) => (
+          <span key={i} className="min-w-0 flex-1 rounded-full bg-line-stronger transition-[height] duration-(--at-duration-slow) ease-out" style={{ height: `${Math.max(10, h * 100)}%` }} />
+        ))}
+        {image.seconds !== undefined && <span className="ml-2 shrink-0 text-footnote text-fg-muted tabular-nums">{clock(image.seconds)}</span>}
+      </span>
+    </button>
   );
 }
 

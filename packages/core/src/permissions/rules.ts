@@ -29,7 +29,7 @@ export interface ToolCall {
 
 /** Rule tool names that cover several tools, as in Claude Code. */
 const FAMILIES: Record<string, string[]> = {
-  Edit: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'SaveImage', 'SaveVideo'],
+  Edit: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'SaveImage', 'SaveVideo', 'SaveAudio'],
   Read: ['Read', 'Glob', 'Grep'],
   Agent: ['Agent', 'Task'],
   Task: ['Agent', 'Task'],

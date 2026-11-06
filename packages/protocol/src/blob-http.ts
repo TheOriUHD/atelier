@@ -1,13 +1,13 @@
 /**
  * How a stored file is served to a page (ARCHITECTURE §23): the one policy behind the web server's `/api/blobs/<hash>` and the
- * desktop app's `atelier-blob://` protocol, so the two can't drift apart. Only common picture and video types render
+ * desktop app's `atelier-blob://` protocol, so the two can't drift apart. Only common picture, video and sound types render
  * inline; everything else is a download. Every answer is sandboxed and `nosniff`, so a file can never run as a page.
  * Videos need byte ranges to play and to seek, so `Range` is answered with `206`, in pieces of at most `RANGE_CHUNK_BYTES`
  * (a player asks for more as it needs it; nothing has to read a whole 500 MB file into memory to start playing).
  */
 
-/** Types a page may show inline. A video must be MP4 or WebM, the containers `checkVideo` lets in. */
-export const INLINE_BLOB_TYPES = /^(?:image\/(?:png|jpeg|gif|webp|avif)|video\/(?:mp4|webm))$/;
+/** Types a page may show inline. A video must be MP4 or WebM, the containers `checkVideo` lets in; a sound one of the formats `checkAudio` does. */
+export const INLINE_BLOB_TYPES = /^(?:image\/(?:png|jpeg|gif|webp|avif)|video\/(?:mp4|webm)|audio\/(?:mpeg|wav|ogg|flac|mp4|aac|webm))$/;
 
 /** The most one `206` carries. */
 export const RANGE_CHUNK_BYTES = 16 * 1024 * 1024;

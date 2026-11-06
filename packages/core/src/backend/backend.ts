@@ -62,12 +62,13 @@ import { importClaudeCode } from '../mcp/import.ts';
 import { McpManager } from '../mcp/manager.ts';
 import { PersonalConnectorError, PersonalConnectors } from '../mcp/personal.ts';
 import { assertPublicHost } from '../tools/address-guard.ts';
-import { downloadImage, downloadVideo } from '../images/download.ts';
+import { downloadAudio, downloadImage, downloadVideo } from '../images/download.ts';
 import { createImageAdapter } from '../images/index.ts';
 import { generatedImagesFor } from '../images/library.ts';
 import { ImageProviderRegistry } from '../images/registry.ts';
 import { ImageService, type ImageSessionFacts } from '../images/service.ts';
 import { VideoService } from '../images/video-service.ts';
+import { AudioService } from '../images/audio-service.ts';
 import { openSocket } from '../images/socket.ts';
 import { connectorContext } from '../permissions/engine.ts';
 import { hostRunnerBinary } from '../workspaces/runner-client.ts';
@@ -983,6 +984,26 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     log: (message, error) => platform.logger.error(message, error),
   });
+  const sounds = new AudioService({
+    registry: imageRegistry,
+    blobs,
+    files,
+    db,
+    settings: () => settings.effective,
+    session: async (id) => {
+      const row = await sessions.getRow(id);
+      if (!row) throw new Error(`Session ${id} not found`);
+      return imageFacts(row);
+    },
+    preferred: async (userId, kind) => (userId ? (await prefs.get(userId)).models[kind] : undefined),
+    isAdmin: async (userId) => !userId || (await accounts.get(userId)).role === 'admin',
+    turnStart: async (id) => (db.$client.prepare(`SELECT COALESCE(MAX(created_at), 0) AS at FROM messages WHERE session_id = ? AND role = 'user'`).get(id) as { at: number }).at,
+    // As for images and video: a person's own server's URL goes to their computer, and tests point hosted URLs at a local fake.
+    download: (url, signal, through) => downloadAudio(through ? { fetch: through, allowPrivate: true } : { fetch: httpFetch, allowPrivate: !!platform.env.ATELIER_IMAGE_DOWNLOAD_PRIVATE }, url, signal),
+    recordUsage: ({ providerId, modelId, sessionId, userId, mode, seconds, chars, costUsd, costEstimated, durationMs }) => {
+      void db.insert(usageEvents).values({ id: newId(), ts: Date.now(), userId, providerId, modelId, sessionId, mode, input: 0, output: 0, durationMs, costUsd, costEstimated, audios: 1, audioSeconds: seconds, audioChars: chars }).catch((e: unknown) => platform.logger.error('recording sound usage failed', e));
+    },
+  });
 
   const chat = new ChatService({
     limits: { admit: (userId) => limits.admit(userId), check: (userId) => limits.check(userId), warnings: (userId) => limits.warnings(userId) },
@@ -996,6 +1017,11 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       generate: (input, ctx) => videos.generate(input, ctx),
       available: (session) => videos.available(imageFacts(session)),
       modelList: (session) => videos.modelList(imageFacts(session)),
+    },
+    audio: {
+      generate: (input, ctx) => sounds.generate(input, ctx),
+      available: (session) => sounds.available(imageFacts(session)),
+      modelList: (session) => sounds.modelList(imageFacts(session)),
     },
     usage: usageSource,
     search,
@@ -1481,6 +1507,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       auditLog: !local,
       usageLimits: true,
       videoGeneration: true,
+      audioGeneration: true,
     }),
 
     // ---------------------------------------------------------------- sign-in
@@ -1765,6 +1792,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       // Nothing holds the test picture; the admin who asked for it sees it.
       blobAccess.grant(me(ctx).id, image.blob);
       return image;
+    },
+    'imageProviders.trySound': async ({ draft, modelId }, ctx) => {
+      const sound = await sounds.trySound(draft, modelId);
+      // As for the test picture: nothing holds it, and the admin who asked for it plays it.
+      blobAccess.grant(me(ctx).id, sound.blob);
+      return sound;
     },
     'imageProviders.save': async (draft) => {
       const existing = settings.effective.imageProviders.find((p) => p.id === draft.id);

@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Cloud, Image as ImageIcon, Plus, Server, X } from 'lucide-react';
+import { AudioLines, ChevronRight, Cloud, Image as ImageIcon, Plus, Server, X } from 'lucide-react';
 import type { ImageModelInfo, ImagePreset, ImageProviderConfig, ImageProviderDraft } from '@atelier/protocol';
 import { Button, Dialog, DialogClose, DialogContent, Field, Icon, IconButton, Select, Spinner, Switch, TextField, toast, type SelectOption } from '../../components/ui/index.ts';
 import { blobUrl, openExternal } from '../../lib/platform.ts';
-import { keys, useSettings } from '../../lib/queries.ts';
+import { keys, makesAudio, makesPictures, makesVideo, useSettings } from '../../lib/queries.ts';
+import { SoundPlayer } from '../chat/generated-audio.tsx';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import {
@@ -194,8 +195,9 @@ export function ImageProviderWizard({ open, onOpenChange, existing }: ImageProvi
                 onHiddenChange={(m, value) => setHidden((h) => new Map(h).set(m.ref, value))}
               />
             )}
-            {models.some((m) => m.capabilities.output !== 'video') && <TestImage key={tested.run} draft={toImageDraft(form)} preset={form.preset} models={models.filter((m) => m.capabilities.output !== 'video')} />}
-            {models.length > 0 && models.every((m) => m.capabilities.output === 'video') && (
+            {models.some(makesPictures) && <TestImage key={tested.run} draft={toImageDraft(form)} preset={form.preset} models={models.filter(makesPictures)} />}
+            {models.some(makesAudio) && <TestSound key={`sound-${tested.run}`} draft={toImageDraft(form)} preset={form.preset} models={models.filter(makesAudio)} />}
+            {models.length > 0 && models.every(makesVideo) && (
               <p className="mt-4 rounded-xl border border-line bg-fill-control p-4 text-footnote text-fg-secondary">
                 There is no test clip: a video takes minutes and costs real money, so the check above, which lists the models with your key, is all this does. The first video is made when someone asks for one in a chat.
               </p>
@@ -375,6 +377,54 @@ type TryState =
   | { state: 'failed'; message: string };
 
 /** One small real image. It can cost money, so only this button ever asks for it. */
+type SoundTry = { state: 'idle' } | { state: 'running' } | { state: 'failed'; message: string } | { state: 'done'; sound: { blob: string; mime: string; seconds: number | null; kind: 'speech' | 'music' | 'sound'; text: string; durationMs: number } };
+
+/** One short real sound: a sentence in the model's usual voice, or a few seconds of music or an effect. */
+function TestSound({ draft, preset, models }: { draft: ImageProviderDraft; preset: ImagePreset; models: ImageModelInfo[] }) {
+  const [modelId, setModelId] = useState(() => (models.find((m) => !m.hidden) ?? models[0]!).modelId);
+  const [result, setResult] = useState<SoundTry>({ state: 'idle' });
+  const make = async () => {
+    setResult({ state: 'running' });
+    try {
+      setResult({ state: 'done', sound: await rpc().call('imageProviders.trySound', { draft, modelId }) });
+    } catch (e) {
+      setResult({ state: 'failed', message: describeError(e).message });
+    }
+  };
+  return (
+    <section aria-label="Test sound" className="mt-4 flex flex-col gap-3 rounded-xl border border-line bg-fill-control p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        {models.length > 1 && (
+          <Field label="Model" className="min-w-40 flex-1">
+            <Select variant="field" options={models.map((m) => ({ value: m.modelId, label: m.displayName }))} value={modelId} onValueChange={setModelId} />
+          </Field>
+        )}
+        <Button leadingIcon={AudioLines} loading={result.state === 'running'} aria-describedby="sound-test-note" onClick={() => void make()}>
+          Make a test sound
+        </Button>
+      </div>
+      <p id="sound-test-note" className="text-footnote text-fg-secondary">
+        {mayCostMoney(preset) ? `This is a real request to ${preset.label} and may cost money: one sentence, or a few seconds of music.` : 'Makes one sentence, or a few seconds of music. The first one takes longer while the model loads.'}
+      </p>
+      <div aria-live="polite">
+        {result.state === 'running' && (
+          <p className="flex items-center gap-2 text-body text-fg-secondary">
+            <Spinner />
+            Making a sound…
+          </p>
+        )}
+        {result.state === 'failed' && <p className="text-body text-danger-text">{result.message}</p>}
+        {result.state === 'done' && (
+          <figure className="flex flex-col gap-2">
+            <SoundPlayer sound={{ id: '', blob: result.sound.blob, mime: result.sound.mime, prompt: result.sound.text, kind: 'audio', audioKind: result.sound.kind, ...(result.sound.seconds !== null ? { seconds: result.sound.seconds } : {}) }} />
+            <figcaption className="text-footnote text-fg-secondary tabular-nums">Made in {seconds(result.sound.durationMs)}</figcaption>
+          </figure>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function TestImage({ draft, preset, models }: { draft: ImageProviderDraft; preset: ImagePreset; models: ImageModelInfo[] }) {
   const [modelId, setModelId] = useState(() => (models.find((m) => !m.hidden) ?? models[0]!).modelId);
   const [result, setResult] = useState<TryState>({ state: 'idle' });

@@ -17,7 +17,7 @@ otherwise, never retries a failed clip by itself (a second job would be billed a
 
 ## Add a video provider
 
-Open **Settings › Admin › Image & video**. **Add** lists every service; the video ones say so in their name. A service that
+Open **Settings › Admin › Media**. **Add** lists every service; the video ones say so in their name. A service that
 makes both pictures and clips (ComfyUI and SwarmUI) is one provider, and its video models appear among its models.
 
 **Test** checks that the service answers and lists its models. It doesn't make a test clip: that would cost money and take
@@ -76,7 +76,7 @@ haven't asked for less motion. Point at it for **Open larger**, **Download**, **
 
 Making a video touches nothing but the provider, so Chat, Auto and Bypass run it without asking, Ask mode asks first, and
 Plan mode doesn't make videos. Each turn can make at most 2 (an admin can change it from 1 to 20). Admins can also limit
-videos and spending per person per day under **Settings › Admin › Image & video**; those limits are separate from the ones for
+videos and spending per person per day under **Settings › Admin › Media**; those limits are separate from the ones for
 images. **Let models make videos** switches the tool off without touching images.
 
 In Code and Cowork the assistant can save a clip to your folder with **SaveVideo**. It's a file change like any other: it
@@ -117,7 +117,7 @@ Prompts and the pictures you start from go to the provider you chose.
 
 | What you see | What to do |
 |---|---|
-| **No video model is available** | An admin adds a video provider under **Settings › Admin › Image & video**. |
+| **No video model is available** | An admin adds a video provider under **Settings › Admin › Media**. |
 | **makes video only from a picture** | Attach or generate a picture first, then ask to animate it. |
 | The provider refused the prompt | That's the provider's filter, and it's final. The assistant won't reword it to get past it. |
 | **isn't an MP4 or WebM** | The service sent back something else. Atelier only keeps those two containers. |

@@ -1,12 +1,15 @@
 /**
- * An image or video from the Images page in the `Lightbox` (a video in the `VideoLightbox`), with what made it and the way
- * back to its conversation. Stepping goes to the next of the same kind: a picture's viewer zooms, and a video's plays.
+ * An image, video or sound from the Images page in the `Lightbox` (a video in the `VideoLightbox`, a sound in a dialog with
+ * its player), with what made it and the way back to its conversation. Stepping goes to the next of the same kind: a
+ * picture's viewer zooms, and a video's plays.
  */
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Download, ImagePlus, MessageCircle, Paintbrush } from 'lucide-react';
 import type { GeneratedImage } from '@atelier/protocol';
-import { Button, Icon, IconButton, Lightbox, VideoLightbox, toast } from '../../components/ui/index.ts';
+import { Button, Dialog, DialogContent, Icon, IconButton, Lightbox, VideoLightbox, toast } from '../../components/ui/index.ts';
+import { soundFileName, soundLabel, type ShownSound } from '../chat/audio-view.ts';
+import { SoundDetails, SoundPlayer } from '../chat/generated-audio.tsx';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
 import { shortDate } from '../../lib/dates.ts';
 import { blobUrl, saveBlob } from '../../lib/platform.ts';
@@ -25,10 +28,14 @@ export interface ImageViewerProps {
 }
 
 export const isVideo = (image: Pick<GeneratedImage, 'kind'>) => image.kind === 'video';
+export const isSound = (image: Pick<GeneratedImage, 'kind'>) => image.kind === 'audio';
+
+type ItemKind = 'image' | 'video' | 'audio';
+const kindOf = (image: Pick<GeneratedImage, 'kind'>): ItemKind => image.kind ?? 'image';
 
 /** The items of one kind with where each sits in the whole list, and which of them is `index`. */
-function ofKind(images: readonly GeneratedImage[], index: number | null, video: boolean) {
-  const at = images.flatMap((image, i) => (isVideo(image) === video ? [i] : []));
+function ofKind(images: readonly GeneratedImage[], index: number | null, kind: ItemKind) {
+  const at = images.flatMap((image, i) => (kindOf(image) === kind ? [i] : []));
   const sub = index === null ? -1 : at.indexOf(index);
   return { items: at.map((i) => images[i]!), at, shown: sub >= 0 ? sub : null };
 }
@@ -40,8 +47,10 @@ export function ImageViewer({ images, index, onIndexChange }: ImageViewerProps) 
   // The image being marked stays through the editor's fade, and the lightbox is closed behind it.
   const [marking, setMarking] = useState<{ image: GeneratedImage; open: boolean } | null>(null);
   const area = marking?.image;
-  const pictures = ofKind(images, index, false);
-  const clips = ofKind(images, index, true);
+  const pictures = ofKind(images, index, 'image');
+  const clips = ofKind(images, index, 'video');
+  const sounds = ofKind(images, index, 'audio');
+  const sound = sounds.shown !== null ? sounds.items[sounds.shown] : undefined;
   const leave = () => onIndexChange(null);
   return (
     <>
@@ -84,6 +93,17 @@ export function ImageViewer({ images, index, onIndexChange }: ImageViewerProps) 
         detailsOpen={detailsOpen}
         onDetailsOpenChange={setDetailsOpen}
       />
+      <Dialog open={!!sound} onOpenChange={(open) => !open && leave()}>
+        {sound && (
+          <DialogContent title={soundLabel(sound.audioKind ?? 'speech', undefined)} width={560}>
+            <div className="flex flex-col gap-5">
+              <SoundPlayer key={sound.blob} sound={sound as ShownSound} size="lg" />
+              <SoundDetails sound={sound as ShownSound} />
+              <SoundLinks image={sound} onLeave={leave} />
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
       {marking && area?.sessionId && area.sessionMode && (
         <AreaEditor
           open={marking.open}
@@ -97,6 +117,30 @@ export function ImageViewer({ images, index, onIndexChange }: ImageViewerProps) 
         />
       )}
     </>
+  );
+}
+
+/** Under a sound's details: when it was made, the way back to its conversation, and its file. */
+function SoundLinks({ image, onLeave }: { image: GeneratedImage; onLeave(): void }) {
+  const download = () => void saveBlob(image.blob, soundFileName(image as ShownSound)).catch((e: unknown) => toast.error(describeError(e).message));
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-footnote text-fg-muted">Made {shortDate(image.createdAt)}</p>
+      {image.sessionId && image.sessionMode && (
+        <Link
+          to={SESSION_ROUTE[image.sessionMode]}
+          params={{ sessionId: image.sessionId }}
+          onClick={onLeave}
+          className="flex min-h-11 items-center gap-2 rounded-lg px-2 text-fg-secondary outline-none focus-ring hover:bg-fill-ghost-hover hover:text-fg"
+        >
+          <Icon icon={MessageCircle} className="shrink-0" />
+          <span className="min-w-0 truncate">{sessionTitle({ title: image.sessionTitle ?? '', mode: image.sessionMode })}</span>
+        </Link>
+      )}
+      <Button leadingIcon={Download} onClick={download}>
+        Download
+      </Button>
+    </div>
   );
 }
 

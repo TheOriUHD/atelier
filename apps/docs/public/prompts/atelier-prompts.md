@@ -13,6 +13,8 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - compaction
 - fragments/artifacts.compact
 - fragments/artifacts.full
+- fragments/audio.compact
+- fragments/audio.full
 - fragments/images.compact
 - fragments/images.full
 - fragments/memory
@@ -23,6 +25,7 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - fragments/videos.full
 - memory-update
 - notes/after-compaction
+- notes/audio-models
 - notes/background-agent
 - notes/connector-off
 - notes/connector-on
@@ -450,6 +453,34 @@ The `artifact` tool puts a standalone piece of content in a panel beside the con
 
 ---
 
+## fragments/audio.compact
+
+File: packages/core/prompts/fragments/audio.compact.md
+
+````text
+Make sounds with GenerateAudio only when the person asks to hear something. For speech, `text` is read word for word. You cannot hear the result, so say what you asked for. Keep your reply short: they can play it.
+````
+
+---
+
+## fragments/audio.full
+
+File: packages/core/prompts/fragments/audio.full.md
+
+````text
+# Making sounds
+
+You can make sounds with GenerateAudio: speech read aloud in a voice, a piece of music, or a sound effect. Reach for it when the person wants to hear something: a text read out, a voice-over, a song or a jingle, background music, an effect for a game or a video. Never make one they did not ask for.
+
+For speech, `text` is spoken exactly as written, so write it the way it should sound: spell out numbers, dates and abbreviations where that matters, and leave out anything that should not be read, such as markdown, links or notes. Choose a voice from the note that suits the speaker, and use `direction` for how it is said when the model takes directions. For a dialogue, give each speaker a voice and start their lines with their name and a colon.
+
+For music, describe the genre, mood, tempo, instruments and how it develops. Write your own lyrics when the person wants a song with words; otherwise ask for an instrumental. For a sound effect, describe the sound itself and its surroundings, not a scene.
+
+You cannot hear the result, so do not describe how it sounds; say what you asked for and offer one change. Keep your reply short: they can play it as soon as it is done.
+````
+
+---
+
 ## fragments/images.compact
 
 File: packages/core/prompts/fragments/images.compact.md
@@ -625,6 +656,17 @@ Skills that were already loaded, included as reference for continuing the work. 
 
 Files read recently, whose text is no longer in view: {{files}}. The summary keeps what they showed; read one again only for a detail it lacks.
 <!-- endif -->
+````
+
+---
+
+## notes/audio-models
+
+File: packages/core/prompts/notes/audio-models.md
+
+````text
+Sound models you can use with GenerateAudio, and what each makes:
+{{list}}
 ````
 
 ---
@@ -2910,6 +2952,159 @@ Saves a video made in this conversation (by its `vid_…` id) as a file in the f
   },
   "required": [
     "video",
+    "file_path"
+  ],
+  "additionalProperties": false
+}
+````
+
+### GenerateAudio
+
+````text
+Makes a sound and shows it in the conversation for the person to play: speech read in a voice, a piece of music, or a sound effect. Make one only when the person asks to hear something.
+- `kind` "speech": `text` is exactly what is said, word for word: write numbers, abbreviations and names the way they should be spoken. Pick a `voice` from the note about sound models, by its id, to suit what is said and who says it. `direction` says how to say it (calm, excited, whispered, a slight Scottish accent), on models that take directions.
+- A conversation between people: give `speakers`, each a name and a voice, and write `text` as lines that start with the speaker's name and a colon, on models that take several speakers. Otherwise make each speaker's lines as a call of their own.
+- `kind` "music": `prompt` is the style, mood, tempo, instruments and structure. Put words to sing in `lyrics`, on models that sing, or set `instrumental` for none. `seconds` is the length.
+- `kind` "sound": `prompt` describes the sound effect or ambience (a door creaking open in an empty hall), and `seconds` its length.
+- A note tells you which sound models you can use and what each takes. Leave `model` out to use the person's choice for that kind.
+- You can't hear the result. Don't claim to describe how it sounds; say what you asked for.
+- It appears by itself: never paste its id or a link into your reply.
+- Never imitate a real person's voice or make speech that pretends to come from someone real. Don't name real artists or ask for an existing song: describe the style instead, and write your own lyrics.
+- A provider's refusal is final: tell the person, and don't reword the request to get around it.
+````
+
+````json
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "speech",
+        "music",
+        "sound"
+      ],
+      "description": "Speech, music or a sound effect."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40000,
+      "description": "Speech: exactly the words to say."
+    },
+    "direction": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "Speech: how to say it, on models that take directions."
+    },
+    "voice": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Speech: a voice id from the note."
+    },
+    "speakers": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "The name that starts their lines in `text`."
+          },
+          "voice": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Their voice id, from the note."
+          }
+        },
+        "required": [
+          "name",
+          "voice"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Speech between several people: who speaks and in which voice."
+    },
+    "speed": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 2,
+      "description": "Speech: 1 is normal, 1.2 a little faster."
+    },
+    "language": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "The language, like en or German, where the model needs telling."
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "Music or sound: what it should sound like."
+    },
+    "lyrics": {
+      "type": "string",
+      "maxLength": 10000,
+      "description": "Music: words to sing, on models that sing."
+    },
+    "instrumental": {
+      "type": "boolean",
+      "description": "Music: no vocals."
+    },
+    "seconds": {
+      "type": "number",
+      "minimum": 0.5,
+      "maximum": 600,
+      "description": "Music or sound: how long it is."
+    },
+    "negative_prompt": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "What it must not have, for models that take one."
+    },
+    "model": {
+      "type": "string",
+      "description": "Which sound model; leave it out for the person’s choice."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Repeats a result, on models that can."
+    }
+  },
+  "required": [
+    "kind"
+  ],
+  "additionalProperties": false
+}
+````
+
+### SaveAudio
+
+````text
+Saves a sound made in this conversation (by its `aud_…` id) as a file in the folder. Missing parent folders are created. The file type comes from the sound, so the extension must match it.
+````
+
+````json
+{
+  "type": "object",
+  "properties": {
+    "audio": {
+      "type": "string",
+      "description": "The sound id, like aud_ab12cd34."
+    },
+    "file_path": {
+      "type": "string",
+      "description": "Where to save it."
+    }
+  },
+  "required": [
+    "audio",
     "file_path"
   ],
   "additionalProperties": false

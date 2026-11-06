@@ -89,8 +89,8 @@ describe('blobResponse', () => {
 });
 
 describe('INLINE_BLOB_TYPES', () => {
-  it('lists the pictures and the two video containers, and nothing else', () => {
-    for (const ok of ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'video/mp4', 'video/webm']) expect(INLINE_BLOB_TYPES.test(ok)).toBe(true);
-    for (const bad of ['image/svg+xml', 'video/quicktime', 'video/mp4; codecs=avc1', 'video/', 'text/html', 'audio/mp4']) expect(INLINE_BLOB_TYPES.test(bad)).toBe(false);
+  it('lists the pictures, the two video containers and the sound formats, and nothing else', () => {
+    for (const ok of ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/mp4', 'audio/aac', 'audio/webm']) expect(INLINE_BLOB_TYPES.test(ok)).toBe(true);
+    for (const bad of ['image/svg+xml', 'video/quicktime', 'video/mp4; codecs=avc1', 'video/', 'text/html', 'audio/x-wav', 'audio/midi', 'audio/', 'audio/mpeg; x=1']) expect(INLINE_BLOB_TYPES.test(bad)).toBe(false);
   });
 });

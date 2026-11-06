@@ -382,6 +382,10 @@ export const usageEvents = sqliteTable(
     /** Clips generated, and their seconds in all. */
     videos: integer('videos').notNull().default(0),
     videoSeconds: real('video_seconds').notNull().default(0),
+    /** Sounds generated, their seconds in all, and for speech the characters read out. */
+    audios: integer('audios').notNull().default(0),
+    audioSeconds: real('audio_seconds').notNull().default(0),
+    audioChars: integer('audio_chars').notNull().default(0),
     /** The cost comes from a price list, not from the service. These rows outlive `generated_images`, so they say so themselves. */
     costEstimated: integer('cost_estimated', { mode: 'boolean' }).notNull().default(false),
   },
@@ -436,9 +440,9 @@ export const generatedImages = sqliteTable(
     costUsd: real('cost_usd'),
     costEstimated: integer('cost_estimated', { mode: 'boolean' }).notNull().default(false),
     durationMs: integer('duration_ms'),
-    /** `video` for a clip (mime is then mp4 or webm, width and height its frame). The table keeps its name: a second one would need every list, limit and cleanup twice. */
-    kind: text('kind', { enum: ['image', 'video'] }).notNull().default('image'),
-    /** A clip's length and frame rate, as its file says. */
+    /** `video` for a clip (mime is then mp4 or webm, width and height its frame), `audio` for a sound (width and height 0). The table keeps its name: a second one would need every list, limit and cleanup twice. */
+    kind: text('kind', { enum: ['image', 'video', 'audio'] }).notNull().default('image'),
+    /** A clip's or a sound's length, and a clip's frame rate, as its file says. */
     mediaSeconds: real('media_seconds'),
     fps: real('fps'),
     audio: integer('audio', { mode: 'boolean' }),

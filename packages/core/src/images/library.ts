@@ -1,6 +1,6 @@
-/** The person's generated images, for the Images page. Temporary chats stay out of it. */
+/** The person's generated images, clips and sounds, for the Images page. Temporary chats stay out of it. */
 import { and, desc, eq, lt, sql, type SQL } from 'drizzle-orm';
-import { imageId, modelRef, videoId, parseModelRef, type GeneratedImage } from '@atelier/protocol';
+import { audioId, imageId, modelRef, videoId, parseModelRef, type AudioKind, type GeneratedImage } from '@atelier/protocol';
 import type { Db } from '../store/db.ts';
 import { generatedImages, sessions } from '../store/schema.ts';
 
@@ -8,8 +8,8 @@ export interface LibraryQuery {
   before?: number;
   query?: string;
   ref?: string;
-  /** Only pictures or only clips. */
-  kind?: 'image' | 'video';
+  /** Only pictures, only clips or only sounds. */
+  kind?: 'image' | 'video' | 'audio';
   limit: number;
 }
 
@@ -45,8 +45,9 @@ export function generatedImagesFor(db: Db, userId: string, { before, query, ref,
   const total = db.select({ bytes: sql<number>`coalesce(sum(${generatedImages.size}), 0)` }).from(generatedImages).where(mine).get();
   return {
     items: page.map(({ image: g, title, mode }) => ({
-      id: g.kind === 'video' ? videoId(g.blob) : imageId(g.blob),
+      id: g.kind === 'video' ? videoId(g.blob) : g.kind === 'audio' ? audioId(g.blob) : imageId(g.blob),
       ...(g.kind === 'video' ? { kind: 'video' as const, ...(g.mediaSeconds !== null ? { seconds: g.mediaSeconds } : {}), ...(g.fps !== null ? { fps: g.fps } : {}), ...(g.audio !== null ? { audio: g.audio } : {}) } : {}),
+      ...(g.kind === 'audio' ? soundFacts(g.params, g.mediaSeconds) : {}),
       blob: g.blob,
       mime: g.mime,
       width: g.width,
@@ -66,5 +67,23 @@ export function generatedImagesFor(db: Db, userId: string, { before, query, ref,
     })),
     next: rows.length > limit ? (edge ?? null) : null,
     totalBytes: total?.bytes ?? 0,
+  };
+}
+
+/** What a sound's stored parameters say about it, for its tile and its details. */
+function soundFacts(params: Record<string, unknown>, seconds: number | null): Pick<GeneratedImage, 'kind' | 'audioKind' | 'seconds' | 'voice' | 'direction' | 'lyrics'> {
+  const text = (key: string) => (typeof params[key] === 'string' && params[key] ? (params[key] as string) : undefined);
+  const kind = text('audioKind') as AudioKind | undefined;
+  const speakers = Array.isArray(params.speakers) ? (params.speakers as { name?: unknown; voice?: unknown }[]).map((s) => `${String(s.name)}: ${String(s.voice)}`).join(', ') : undefined;
+  const voice = speakers || text('voiceName') || text('voice');
+  const direction = text('direction');
+  const lyrics = text('lyrics');
+  return {
+    kind: 'audio',
+    ...(kind ? { audioKind: kind } : {}),
+    ...(seconds !== null ? { seconds } : {}),
+    ...(voice ? { voice } : {}),
+    ...(direction ? { direction } : {}),
+    ...(lyrics ? { lyrics } : {}),
   };
 }

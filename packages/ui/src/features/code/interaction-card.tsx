@@ -314,8 +314,13 @@ function permissionTitle(request: PermissionRequest, root: string | null): strin
     }
     case 'GenerateVideo':
       return `Allow ${who} to make a video? It can take minutes and cost more than an image.`;
+    case 'GenerateAudio': {
+      const kind = str(input.kind);
+      return `Allow ${who} to make ${kind === 'music' ? 'music' : kind === 'sound' ? 'a sound effect' : 'speech'}?`;
+    }
     case 'SaveImage':
     case 'SaveVideo':
+    case 'SaveAudio':
       return `Allow ${who} to save ${displayPath(str(input.file_path), root)}?`;
     case 'ComputerAction':
       return `Allow ${who} to use your computer?`;
@@ -372,6 +377,17 @@ function CallPreview({ request }: { request: PermissionRequest }) {
           {str(input.model) && <p className="text-footnote text-fg-muted">With {str(input.model)}</p>}
         </div>
       );
+    case 'GenerateAudio': {
+      // Speech shows the words it will say, and in which voice; music and sound what was asked for.
+      const speech = str(input.kind) !== 'music' && str(input.kind) !== 'sound';
+      const with_ = [str(input.voice) && `in the voice ${str(input.voice)}`, str(input.model) && `with ${str(input.model)}`].filter(Boolean).join(', ');
+      return (
+        <div className="flex flex-col gap-1.5">
+          <p className={cn(box, 'font-sans')}>{speech ? str(input.text) : str(input.prompt)}</p>
+          {with_ && <p className="text-footnote text-fg-muted">{with_.charAt(0).toUpperCase() + with_.slice(1)}</p>}
+        </div>
+      );
+    }
     case 'ComputerAction':
       // Each step as it says it, with what it would type or press spelled out: that is what is approved.
       return (

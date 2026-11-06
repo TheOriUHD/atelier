@@ -371,7 +371,7 @@ describe('videos in usage', () => {
 
 describe('usage data', () => {
   it('counts every token a request processed and the cost of the priced ones', () => {
-    expect(totals(ROWS)).toEqual({ requests: 6, input: 1500, output: 700, cacheRead: 8000, cacheWrite: 500, tokens: 10_700, images: 0, videos: 0, videoSeconds: 0, cost: expect.closeTo(0.043), estimated: 0, priced: 4, unpriced: 2 });
+    expect(totals(ROWS)).toEqual({ requests: 6, input: 1500, output: 700, cacheRead: 8000, cacheWrite: 500, tokens: 10_700, images: 0, videos: 0, videoSeconds: 0, audios: 0, audioSeconds: 0, cost: expect.closeTo(0.043), estimated: 0, priced: 4, unpriced: 2 });
   });
 
   it('lists every day of the period in local time, oldest first, quiet days at zero', () => {

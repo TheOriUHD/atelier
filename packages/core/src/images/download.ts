@@ -6,6 +6,8 @@
 import { sniffMime, type ImageMime } from '../providers/images.ts';
 import { resolvePublicHost, type Lookup, type PinnedInit } from '../tools/address-guard.ts';
 import { readCapped } from '../tools/web-fetch.ts';
+import type { AudioMime } from '@atelier/protocol';
+import { checkAudio, MAX_AUDIO_BYTES } from './audio.ts';
 import { checkVideo, MAX_VIDEO_BYTES, type VideoMime } from './video.ts';
 
 export const MAX_IMAGE_BYTES = 64 * 1024 * 1024;
@@ -37,6 +39,7 @@ export function checkImage(bytes: Uint8Array): ImageMime {
 const KINDS = {
   image: { noun: 'an image', max: MAX_IMAGE_BYTES, limit: 'The image is larger than 64 MB.' },
   video: { noun: 'a video', max: MAX_VIDEO_BYTES, limit: `The video is larger than ${MAX_VIDEO_BYTES / 1024 / 1024} MB.` },
+  sound: { noun: 'a sound', max: MAX_AUDIO_BYTES, limit: `The sound is larger than ${MAX_AUDIO_BYTES / 1024 / 1024} MB.` },
 } as const;
 
 /** The one guarded fetch behind both downloads: a public host, no credentials, redirects checked one by one, a size cap. */
@@ -76,4 +79,15 @@ export interface DownloadedVideo {
 export async function downloadVideo(deps: DownloadDeps, url: string, signal: AbortSignal): Promise<DownloadedVideo> {
   const bytes = await fetchGuarded(deps, url, signal, 'video');
   return { bytes, mime: checkVideo(bytes) };
+}
+
+export interface DownloadedAudio {
+  bytes: Uint8Array;
+  mime: AudioMime;
+}
+
+/** A finished sound from where a hosted service left it, held to the same rules as an image. */
+export async function downloadAudio(deps: DownloadDeps, url: string, signal: AbortSignal): Promise<DownloadedAudio> {
+  const bytes = await fetchGuarded(deps, url, signal, 'sound');
+  return { bytes, mime: checkAudio(bytes) };
 }

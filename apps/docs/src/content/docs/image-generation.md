@@ -13,7 +13,7 @@ provider, Atelier sends models exactly what it sent before.
 
 ## Add an image provider
 
-Open **Settings › Admin › Image & video**. Servers running on this computer on their usual port show under **Found on
+Open **Settings › Admin › Media**. Servers running on this computer on their usual port show under **Found on
 this computer**, one click from added. **Add** lists every service.
 
 After you add one, **Test** checks that it answers and lists its models. **Make a test image** makes one small real
@@ -131,7 +131,7 @@ ComfyUI restarts.
 **Settings › Usage** shows images and what they cost. A cost a service reports is exact; otherwise it comes from a list of
 prices and shows as an estimate. You can set your own price per model.
 
-Admins can set limits under **Settings › Admin › Image & video**: images per turn, and images or spending per person per
+Admins can set limits under **Settings › Admin › Media**: images per turn, and images or spending per person per
 day. They can also hide a model from other accounts, which stops anyone else using it, even by name.
 
 ## Where images are kept

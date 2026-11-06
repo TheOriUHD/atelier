@@ -24,6 +24,9 @@ see are hidden in the app.
 | **Start with the model I used last** | The model you pick in a conversation is the one the next new conversation starts with. Turn it off to always start with the one chosen above. |
 | **Default image model** *(only where it works)* | What makes your images, unless you pick another in a conversation or name one when you ask. |
 | **Default video model** *(only where it works)* | What makes your videos, unless you name another when you ask. A model that makes video from a picture only needs one to start from. |
+| **Default speech model** *(only where it works)* | What reads text aloud for you, unless you name another when you ask. Each model has its own voices. |
+| **Default music model** *(only where it works)* | What makes your songs and background music, unless you name another when you ask. |
+| **Default sound effects model** *(only where it works)* | What makes your sound effects and ambience, unless you name another when you ask. |
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |
 
@@ -91,6 +94,7 @@ see are hidden in the app.
 | **Your limits** *(only where it works)* | What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats, Cowork tasks and Code sessions, including deleted ones. A cost limit counts only requests to models with a price. |
 | **Limits by person** *(admins only, only where it works)* | Everyone’s usage against their limits, with who is near or at one. Edit a person’s limits here or under Admin › Limits. |
 | **Videos** *(only where it works)* | Videos each model made, how many seconds of video that is and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
+| **Sounds** *(only where it works)* | Speech, music and sound effects each model made, how long they are in all, the characters read out and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
 | **Prices** *(admins only)* | Dollars per million tokens, per model, in place of the provider’s list price (Anthropic and OpenAI models without one here use it). A price counts for requests made after it is set. |
 
 ## Settings › Code
@@ -174,18 +178,21 @@ Admins only.
 | **Detected on this machine** | Local servers on their default ports and API keys in the environment. |
 | **Add provider** | Connect Ollama, llama.cpp, LM Studio, Anthropic, OpenAI, GitHub Copilot, OpenRouter, a ChatGPT plan or any OpenAI-compatible endpoint. |
 
-## Settings › Admin › Image & video
+## Settings › Admin › Media
 
 Admins only.
 
 | Setting | What it does |
 |---|---|
-| **Found on this computer** | Image servers answering on their default ports here. |
-| **Image and video providers** | Where images and videos are made, separate from the providers of text models. |
-| **Add image or video provider** | Connect a local server such as ComfyUI or Forge, a cloud service such as OpenAI or Google Gemini, or a service with many models such as OpenRouter or fal.ai. The video ones are listed with their own names. |
-| **Image and video models** | Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler, or for video its usual length, frame rate and resolution. The text model reads the description when it chooses. |
+| **Found on this computer** | Image and sound servers answering on their default ports here. |
+| **Image, video and audio providers** | Where images, videos and sounds are made, separate from the providers of text models. |
+| **Add image, video or audio provider** | Connect a local server such as ComfyUI, Forge or Kokoro, a cloud service such as OpenAI, Google Gemini or ElevenLabs, or a service with many models such as OpenRouter or fal.ai. The video and audio ones are listed with their own names. |
+| **Image, video and audio models** | Hide models, mark favorites, say what each is good at and set its steps, guidance, sampler and scheduler, for video its usual length, frame rate and resolution, or for sound its usual voice and length. The text model reads the description when it chooses. |
 | **Default image model for everyone** | What makes images unless a person or a conversation chooses another. |
 | **Default video model for everyone** *(only where it works)* | What makes videos unless a person chooses another or names one when they ask. |
+| **Default speech model for everyone** *(only where it works)* | What reads text aloud unless a person chooses another or names one when they ask. |
+| **Default music model for everyone** *(only where it works)* | What makes music unless a person chooses another or names one when they ask. |
+| **Default sound effects model for everyone** *(only where it works)* | What makes sound effects unless a person chooses another or names one when they ask. |
 | **Let models make images** | Off: conversations don’t get the tool, whichever providers are set up. |
 | **Images per turn** | How many images one reply can make, so text on a web page can’t run up a bill. |
 | **Images per person per day** | Counted across all of a person’s conversations, including deleted ones. |
@@ -194,6 +201,10 @@ Admins only.
 | **Videos per turn** *(only where it works)* | How many videos one reply can make. A video takes minutes and costs far more than an image, so the default is 2. |
 | **Videos per person per day** *(only where it works)* | Counted across all of a person’s conversations, including deleted ones. |
 | **Video spend per person per day** *(only where it works)* | Counts videos with a known or estimated cost. Local servers cost nothing here. |
+| **Let models make sounds** *(only where it works)* | Off: conversations don’t get the sound tool, whichever providers are set up. Images and videos are not affected. |
+| **Sounds per turn** *(only where it works)* | How many sounds one reply can make: speech, music and effects together. The default is 6, enough for a short dialogue made line by line. |
+| **Sounds per person per day** *(only where it works)* | Counted across all of a person’s conversations, including deleted ones. |
+| **Sound spend per person per day** *(only where it works)* | Counts sounds with a known or estimated cost. Local servers cost nothing here. |
 
 ## Settings › Admin › Models
 

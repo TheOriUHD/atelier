@@ -18,7 +18,7 @@ const MAX_PREVIEW_CHARS = 16_000_000;
 const MAX_PREVIEW_PIXELS = 4_000_000;
 
 /** Reports progress at a pace the connection and the page can take, and keeps previews small. */
-export function createProgressReporter(ctx: Pick<ToolContext, 'emit' | 'messageId' | 'callId'>, shape: Pick<ImageProgress, 'width' | 'height' | 'count' | 'kind' | 'seconds'>) {
+export function createProgressReporter(ctx: Pick<ToolContext, 'emit' | 'messageId' | 'callId'>, shape: Pick<ImageProgress, 'width' | 'height' | 'count' | 'kind' | 'seconds' | 'audioKind'>) {
   let sent = 0;
   let previewSent = 0;
   let preview: ImageProgress['preview'];

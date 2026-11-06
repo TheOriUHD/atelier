@@ -21,7 +21,7 @@ export function usageSummary(db: Db, opts: { userId: string | null; days: number
       `SELECT date((ts - ?) / 1000, 'unixepoch') AS day, provider_id AS providerId, model_id AS modelId, COALESCE(mode, 'chat') AS mode,
               COUNT(*) AS requests, SUM(input) AS input, SUM(output) AS output, SUM(cache_read) AS cacheRead, SUM(cache_write) AS cacheWrite,
               SUM(reasoning) AS reasoning, SUM(cost_usd) AS costUsd, COUNT(*) - COUNT(cost_usd) AS unpriced, AVG(tokens_per_second) AS tokensPerSecond, COUNT(tokens_per_second) AS timed,
-              SUM(images) AS images, SUM(videos) AS videos, SUM(video_seconds) AS videoSeconds, SUM(CASE WHEN cost_estimated THEN cost_usd ELSE 0 END) AS estimatedUsd
+              SUM(images) AS images, SUM(videos) AS videos, SUM(video_seconds) AS videoSeconds, SUM(audios) AS audios, SUM(audio_seconds) AS audioSeconds, SUM(audio_chars) AS audioChars, SUM(CASE WHEN cost_estimated THEN cost_usd ELSE 0 END) AS estimatedUsd
        FROM usage_events WHERE ts >= ? AND (? IS NULL OR user_id = ?)
        GROUP BY day, provider_id, model_id, mode ORDER BY day, provider_id, model_id, mode`,
     )
@@ -33,7 +33,7 @@ const MESSAGES = `FROM messages m JOIN sessions s ON s.id = m.session_id
   WHERE s.user_id = ? AND s.mode = ? AND s.parent_session_id IS NULL AND m.role IN ('user', 'assistant') AND m.kind = 'normal' AND m.created_at >= ?`;
 const LOCAL_DAY = `date((m.created_at - ?) / 1000, 'unixepoch')`;
 
-/** The stats card for `mode` over the last `days` days, or all time. A sub-agent's tokens count for its parent session; image and video rows have none, so they stay out. */
+/** The stats card for `mode` over the last `days` days, or all time. A sub-agent's tokens count for its parent session; image, video and sound rows have none, so they stay out. */
 export function statsSummary(db: Db, opts: { userId: string; mode: Mode; days: number | null; timezoneOffset: number; now?: number }): StatsSummary {
   const now = opts.now ?? Date.now();
   const offsetMs = opts.timezoneOffset * 60_000;
@@ -53,7 +53,7 @@ export function statsSummary(db: Db, opts: { userId: string; mode: Mode; days: n
     .prepare(
       `SELECT e.provider_id || '/' || e.model_id AS ref, SUM(e.input + e.cache_read + e.cache_write + e.output) AS tokens, COUNT(*) AS requests
        FROM usage_events e JOIN sessions s ON s.id = e.session_id JOIN sessions r ON r.id = COALESCE(s.parent_session_id, s.id)
-       WHERE r.user_id = ? AND r.mode = ? AND e.ts >= ? AND e.images = 0 AND e.videos = 0 GROUP BY ref ORDER BY tokens DESC, ref`,
+       WHERE r.user_id = ? AND r.mode = ? AND e.ts >= ? AND e.images = 0 AND e.videos = 0 AND e.audios = 0 GROUP BY ref ORDER BY tokens DESC, ref`,
     )
     .all(...scope, from) as StatsSummary['models'];
   return {

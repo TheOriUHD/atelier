@@ -54,6 +54,28 @@ const VIDEO_PRICES: readonly (readonly [RegExp, ImagePrice])[] = [
   [/^gemini-omni/, { bySecond: { '720p': 0.1 } }],
 ];
 
+/**
+ * List prices for sound, read on the vendors' own pages on 2026-11-06. Speech is by the character where the vendor counts
+ * that, and by the second of sound made otherwise (a token price turned into seconds at the vendor's own rate of tokens
+ * per second). Services that report what a call cost never use these, nor does a subscription that counts credits.
+ */
+const AUDIO_PRICES: readonly (readonly [RegExp, ImagePrice])[] = [
+  [/^tts-1-hd/, { perMillionChars: 30 }],
+  [/^tts-1/, { perMillionChars: 15 }],
+  [/^gpt-4o-mini-tts/, { perSecond: 0.00025 }],
+];
+
+export function listAudioPrice(modelId: string): ImagePrice | null {
+  return AUDIO_PRICES.find(([match]) => match.test(modelId))?.[1] ?? null;
+}
+
+/** What a sound costs under `price`: by the characters read out for speech, else by its seconds; null when the price covers neither. */
+export function audioCost(price: ImagePrice, facts: { seconds?: number | undefined; chars?: number | undefined }): number | null {
+  if (price.perMillionChars !== undefined && facts.chars !== undefined) return Math.round((price.perMillionChars * facts.chars) / 1e6 * 1e6) / 1e6;
+  if (price.perSecond !== undefined && facts.seconds !== undefined) return Math.round(price.perSecond * facts.seconds * 1e6) / 1e6;
+  return null;
+}
+
 export function listVideoPrice(modelId: string): ImagePrice | null {
   return VIDEO_PRICES.find(([match]) => match.test(modelId))?.[1] ?? null;
 }

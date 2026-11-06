@@ -43,7 +43,7 @@ import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, ProviderStatus, ProviderType } from '../models.ts';
-import { DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
+import { AudioKind, DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
 import {
@@ -279,6 +279,8 @@ export const contract = {
     'imageProviders.test': { input: ImageProviderDraft, output: z.object({ status: ProviderStatus, models: z.array(ImageModelInfo) }) },
     /** Makes one small real image, so a person sees it works. It can cost money, so only a click asks for it. */
     'imageProviders.tryImage': { input: z.object({ draft: ImageProviderDraft, modelId: z.string().optional() }), output: z.object({ blob: z.string(), mime: z.string(), width: z.number(), height: z.number(), durationMs: z.number() }) },
+    /** One short real sound from a sound model of the draft: a sentence for speech, a few seconds of music or an effect. */
+    'imageProviders.trySound': { input: z.object({ draft: ImageProviderDraft, modelId: z.string().optional() }), output: z.object({ blob: z.string(), mime: z.string(), seconds: z.number().nullable(), kind: AudioKind, text: z.string(), durationMs: z.number() }) },
     'imageProviders.save': { input: ImageProviderDraft, output: ImageProviderConfig },
     'imageProviders.remove': { input: Id, output: Ok },
     'imageProviders.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(ProviderStatus) },
@@ -288,7 +290,7 @@ export const contract = {
     'imageModels.list': { input: Empty, output: z.array(ImageModelInfo) },
     /** The person's generated images, newest first; `before` is the `createdAt` of the last one so far. */
     'generatedImages.list': {
-      input: z.object({ before: z.number().optional(), query: z.string().max(200).optional(), ref: z.string().optional(), kind: z.enum(['image', 'video']).optional(), limit: z.number().int().min(1).max(100).optional() }),
+      input: z.object({ before: z.number().optional(), query: z.string().max(200).optional(), ref: z.string().optional(), kind: z.enum(['image', 'video', 'audio']).optional(), limit: z.number().int().min(1).max(100).optional() }),
       output: z.object({ items: z.array(GeneratedImage), next: z.number().nullable(), totalBytes: z.number() }),
     },
     /**
@@ -841,6 +843,7 @@ export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNam
   'imageProviders.detect',
   'imageProviders.test',
   'imageProviders.tryImage',
+  'imageProviders.trySound',
   'imageProviders.save',
   'imageProviders.remove',
   'imageProviders.refresh',

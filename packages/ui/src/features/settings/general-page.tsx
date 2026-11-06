@@ -1,8 +1,8 @@
 import { useMemo, useReducer } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
-import type { UserPrefs } from '@atelier/protocol';
+import type { AudioKind, UserPrefs } from '@atelier/protocol';
 import { SegmentedControl, Select, Switch, type SegmentedControlItem } from '../../components/ui/index.ts';
-import { makesVideo, useImageGeneration, useImageModels, useModels, useSettings, useVideoGeneration } from '../../lib/queries.ts';
+import { makesAudio, makesPictures, makesVideo, useAudioGeneration, useImageGeneration, useImageModels, useModels, useSettings, useVideoGeneration } from '../../lib/queries.ts';
 import { notificationsBlocked } from '../work/notifications.ts';
 import { isUnavailable, ModelSelect } from './model-select.tsx';
 import type { SettingId } from './search-index.ts';
@@ -46,6 +46,7 @@ export function GeneralPage() {
   const chatFont = usePref<Appearance['chatFont']>(['appearance', 'chatFont']);
   const images = useImageGeneration();
   const videos = useVideoGeneration();
+  const audio = useAudioGeneration();
   return (
     <>
       <SettingsSection title="Appearance">
@@ -70,6 +71,13 @@ export function GeneralPage() {
         <RememberModelRow />
         {images && <DefaultImageModelRow />}
         {videos && <DefaultVideoModelRow />}
+        {audio && (
+          <>
+            <DefaultSoundModelRow kind="speech" />
+            <DefaultSoundModelRow kind="music" />
+            <DefaultSoundModelRow kind="sound" />
+          </>
+        )}
       </SettingsSection>
       <SettingsSection title="Notifications">
         <NotificationRow id="notifications.taskFinished" field="taskFinished" />
@@ -135,8 +143,8 @@ function DefaultImageModelRow() {
   const { data: models = [] } = useImageModels();
   const { settings } = useSettings();
   const providerNames = useMemo(() => new Map(settings?.imageProviders?.map((p) => [p.id, p.name])), [settings?.imageProviders]);
-  // Video models are listed beside the pictures' and have a row of their own.
-  const visible = models.filter((m) => !m.hidden && !makesVideo(m));
+  // Video and sound models are listed beside the pictures' and have rows of their own.
+  const visible = models.filter((m) => !m.hidden && makesPictures(m));
   if (!settings?.imageGeneration?.enabled || (visible.length === 0 && !setting.value)) return null;
   const server = visible.find((m) => m.ref === settings?.models.defaults.image) ?? visible[0];
   const named = server ? ` (${server.displayName})` : '';
@@ -161,6 +169,26 @@ function DefaultVideoModelRow() {
   const warning = isUnavailable(setting.value, visible) ? `This model is no longer available. Your videos use the server default${named} until you choose another.` : null;
   return (
     <SettingRow id="prefs.models.video" setting={setting} error={warning}>
+      {(label) => <ModelSelect {...label} setting={setting} unsetLabel={`Server default${named}`} models={visible} providerNames={providerNames} />}
+    </SettingRow>
+  );
+}
+
+const SOUND_NOUNS: Record<AudioKind, string> = { speech: 'Your speech', music: 'Your music', sound: 'Your sound effects' };
+
+/** The same for each kind of sound: a row only once some model makes it, as most servers have no model for some kinds. */
+function DefaultSoundModelRow({ kind }: { kind: AudioKind }) {
+  const setting = usePref<string | undefined>(['models', kind]);
+  const { data: models = [] } = useImageModels();
+  const { settings } = useSettings();
+  const providerNames = useMemo(() => new Map(settings?.imageProviders?.map((p) => [p.id, p.name])), [settings?.imageProviders]);
+  const visible = models.filter((m) => !m.hidden && makesAudio(m) && !!m.capabilities.audio?.kinds.includes(kind));
+  if (!settings?.imageGeneration?.enabled || settings.imageGeneration.audioEnabled === false || (visible.length === 0 && !setting.value)) return null;
+  const server = visible.find((m) => m.ref === settings.models.defaults[kind]) ?? visible[0];
+  const named = server ? ` (${server.displayName})` : '';
+  const warning = isUnavailable(setting.value, visible) ? `This model is no longer available. ${SOUND_NOUNS[kind]} use the server default${named} until you choose another.` : null;
+  return (
+    <SettingRow id={`prefs.models.${kind}`} setting={setting} error={warning}>
       {(label) => <ModelSelect {...label} setting={setting} unsetLabel={`Server default${named}`} models={visible} providerNames={providerNames} />}
     </SettingRow>
   );

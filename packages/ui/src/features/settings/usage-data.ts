@@ -13,8 +13,9 @@ export const tokensOf = (r: Pick<UsageRow, 'input' | 'output' | 'cacheRead' | 'c
 /** Image rows count images and dollars: they have no tokens, and a local image with no price isn't a request missing one. */
 export const isImageRow = (r: Pick<UsageRow, 'images'>) => (r.images ?? 0) > 0;
 export const isVideoRow = (r: Pick<UsageRow, 'videos'>) => (r.videos ?? 0) > 0;
-/** Pictures and clips have no tokens: neither is a request to a text model. */
-export const isMediaRow = (r: Pick<UsageRow, 'images' | 'videos'>) => isImageRow(r) || isVideoRow(r);
+export const isAudioRow = (r: Pick<UsageRow, 'audios'>) => (r.audios ?? 0) > 0;
+/** Pictures, clips and sounds have no tokens: none is a request to a text model. */
+export const isMediaRow = (r: Pick<UsageRow, 'images' | 'videos' | 'audios'>) => isImageRow(r) || isVideoRow(r) || isAudioRow(r);
 
 export interface UsageTotals {
   /** Requests to text models; images are counted apart. */
@@ -28,6 +29,9 @@ export interface UsageTotals {
   videos: number;
   /** Seconds of video in all. */
   videoSeconds: number;
+  /** Sounds, and their seconds in all. */
+  audios: number;
+  audioSeconds: number;
   /** Of the priced requests, images and videos. */
   cost: number;
   /** How much of `cost` comes from a price list rather than from the service. */
@@ -38,7 +42,7 @@ export interface UsageTotals {
 }
 
 export function totals(rows: readonly UsageRow[]): UsageTotals {
-  const t: UsageTotals = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0, images: 0, videos: 0, videoSeconds: 0, cost: 0, estimated: 0, priced: 0, unpriced: 0 };
+  const t: UsageTotals = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0, images: 0, videos: 0, videoSeconds: 0, audios: 0, audioSeconds: 0, cost: 0, estimated: 0, priced: 0, unpriced: 0 };
   for (const r of rows) {
     t.cost += r.costUsd ?? 0;
     t.estimated += r.estimatedUsd ?? 0;
@@ -46,6 +50,8 @@ export function totals(rows: readonly UsageRow[]): UsageTotals {
       t.images += r.images ?? 0;
       t.videos += r.videos ?? 0;
       t.videoSeconds += r.videoSeconds ?? 0;
+      t.audios += r.audios ?? 0;
+      t.audioSeconds += r.audioSeconds ?? 0;
       t.priced += r.requests - r.unpriced;
       continue;
     }
@@ -184,6 +190,35 @@ export function byVideoModel(rows: readonly UsageRow[]): VideoModelUsage[] {
     models.set(ref, m);
   }
   return [...models.values()].sort((a, b) => b.videos - a.videos);
+}
+
+export interface AudioModelUsage {
+  ref: string;
+  providerId: string;
+  modelId: string;
+  sounds: number;
+  seconds: number;
+  /** Characters read out, for speech. */
+  chars: number;
+  cost: number | null;
+  estimated: number;
+}
+
+/** One entry per sound model, most sounds first. */
+export function byAudioModel(rows: readonly UsageRow[]): AudioModelUsage[] {
+  const models = new Map<string, AudioModelUsage>();
+  for (const r of rows) {
+    if (!isAudioRow(r)) continue;
+    const ref = `${r.providerId}/${r.modelId}`;
+    const m = models.get(ref) ?? { ref, providerId: r.providerId, modelId: r.modelId, sounds: 0, seconds: 0, chars: 0, cost: null, estimated: 0 };
+    m.sounds += r.audios!;
+    m.seconds += r.audioSeconds ?? 0;
+    m.chars += r.audioChars ?? 0;
+    m.estimated += r.estimatedUsd ?? 0;
+    if (r.costUsd !== null) m.cost = (m.cost ?? 0) + r.costUsd;
+    models.set(ref, m);
+  }
+  return [...models.values()].sort((a, b) => b.sounds - a.sounds);
 }
 
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });

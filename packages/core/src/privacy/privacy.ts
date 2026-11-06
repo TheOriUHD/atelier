@@ -82,11 +82,11 @@ export function blobUses(message: Message, ordinal: number): BlobUse[] {
   return uses;
 }
 
-const MIME_EXTENSIONS: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/avif': 'avif', 'application/pdf': 'pdf', 'text/plain': 'txt', 'text/markdown': 'md' };
+const MIME_EXTENSIONS: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/avif': 'avif', 'application/pdf': 'pdf', 'text/plain': 'txt', 'text/markdown': 'md', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a' };
 const extensionOf = (mime: string) => MIME_EXTENSIONS[mime] ?? (/^[a-z]+\/([a-z0-9]+)/.exec(mime)?.[1] ?? 'bin');
 const safeName = (name: string) => [...name.replace(/[\\/:*?"<>|]/g, '_')].filter((c) => c.charCodeAt(0) >= 32).join('').trim().slice(0, 100) || 'file';
-/** Pictures and PDFs are compressed already; storing them as they are saves the time. */
-const compressible = (mime: string) => !/^(image\/|video\/|application\/(pdf|zip))/.test(mime);
+/** Pictures, clips, sounds and PDFs are compressed already; storing them as they are saves the time. A WAV isn't. */
+const compressible = (mime: string) => mime === 'audio/wav' || !/^(image\/|video\/|audio\/|application\/(pdf|zip))/.test(mime);
 
 /**
  * Everything the person has, as a zip written chunk by chunk: every conversation with its full message tree (JSON) and its

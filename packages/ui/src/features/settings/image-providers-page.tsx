@@ -1,8 +1,8 @@
-/** Settings › Admin › Image & video (ARCHITECTURE §23): where images and videos are made, which models people get, and the limits. */
+/** Settings › Admin › Media (ARCHITECTURE §23): where images, videos and sounds are made, which models people get, and the limits. */
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Cloud, MoreHorizontal, Pencil, Plus, RefreshCw, Server, SlidersHorizontal, Star, Trash2, Workflow } from 'lucide-react';
-import type { DetectedImageServer, ImageModelInfo, ImageModelOverride, ImageProviderConfig, ProviderStatus, Settings } from '@atelier/protocol';
+import type { AudioKind, DetectedImageServer, ImageModelInfo, ImageModelOverride, ImageProviderConfig, ProviderStatus, Settings, VideoDurations } from '@atelier/protocol';
 import {
   Badge,
   Button,
@@ -19,7 +19,7 @@ import {
   cn,
   toast,
 } from '../../components/ui/index.ts';
-import { keys, makesVideo, useImageModels, useImageProviderStatus, useSettings, useVideoGeneration } from '../../lib/queries.ts';
+import { keys, makesAudio, makesPictures, makesVideo, useAudioGeneration, useImageModels, useImageProviderStatus, useSettings, useVideoGeneration } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { ImageModelDialog } from './image-model-dialog.tsx';
 import { detectedDraft, presetFor } from './image-provider-form.ts';
@@ -242,10 +242,18 @@ function ImageModelsSection() {
   }, [models]);
   const fallback = useSetting<string | undefined>(['models', 'defaults', 'image']);
   const videoFallback = useSetting<string | undefined>(['models', 'defaults', 'video']);
+  const speechFallback = useSetting<string | undefined>(['models', 'defaults', 'speech']);
+  const musicFallback = useSetting<string | undefined>(['models', 'defaults', 'music']);
+  const soundFallback = useSetting<string | undefined>(['models', 'defaults', 'sound']);
+  const sounds: Record<AudioKind, ReturnType<typeof useSetting<string | undefined>>> = { speech: speechFallback, music: musicFallback, sound: soundFallback };
   const videos = useVideoGeneration();
-  // Pictures and clips each have a default: a picture model can't make a clip, nor the other way round.
-  const visible = models.filter((m) => !m.hidden && !makesVideo(m));
+  const audio = useAudioGeneration();
+  // Pictures, clips and each kind of sound have a default: a picture model can't make a clip or a song, nor the other way round.
+  const visible = models.filter((m) => !m.hidden && makesPictures(m));
   const visibleVideos = models.filter((m) => !m.hidden && makesVideo(m));
+  const ofKind = (kind: AudioKind) => models.filter((m) => !m.hidden && makesAudio(m) && !!m.capabilities.audio?.kinds.includes(kind));
+  const defaults: Defaults = { image: fallback.value, video: videoFallback.value, speech: speechFallback.value, music: musicFallback.value, sound: soundFallback.value };
+  const makeDefault = (model: ImageModelInfo, kind?: AudioKind) => void (kind ? sounds[kind] : makesVideo(model) ? videoFallback : fallback).set(model.ref);
   const entry = settingEntry('imageModels.list');
   return (
     <SettingsSection id="imageModels.list" title={entry.label} description={entry.description}>
@@ -257,12 +265,24 @@ function ImageModelsSection() {
           {(label) => <ModelSelect {...label} setting={videoFallback} unsetLabel="First available model" models={visibleVideos} providerNames={providerNames} />}
         </SettingRow>
       )}
+      {audio &&
+        AUDIO_KINDS.map(({ kind, noun }) => {
+          const list = ofKind(kind);
+          const setting = sounds[kind];
+          // A row only once there is something to choose: most servers will never have a model for sound effects.
+          if (list.length === 0 && !setting.value) return null;
+          return (
+            <SettingRow key={kind} id={`models.defaults.${kind}`} setting={setting} error={isUnavailable(setting.value, list) ? `This model is no longer available. ${noun} use the first available model until you choose another.` : null}>
+              {(label) => <ModelSelect {...label} setting={setting} unsetLabel="First available model" models={list} providerNames={providerNames} />}
+            </SettingRow>
+          );
+        })}
       {groups.length === 0 ? (
-        <p className="py-3 text-body text-fg-muted">Models appear here once an image or video provider is connected.</p>
+        <p className="py-3 text-body text-fg-muted">Models appear here once an image, video or audio provider is connected.</p>
       ) : (
         <div className="mt-3 flex flex-col gap-6">
           {groups.map(([providerId, group]) => (
-            <ImageModelTable key={providerId} label={providerNames.get(providerId) ?? providerId} models={group} defaultRef={fallback.value} defaultVideoRef={videoFallback.value} onMakeDefault={(model) => void (makesVideo(model) ? videoFallback : fallback).set(model.ref)} />
+            <ImageModelTable key={providerId} label={providerNames.get(providerId) ?? providerId} models={group} defaults={defaults} onMakeDefault={makeDefault} />
           ))}
         </div>
       )}
@@ -276,7 +296,23 @@ const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_176px_32px_44px_32px] items-cente
 /** Past this many a table gets a search box: a ComfyUI folder can hold dozens of checkpoints. */
 const SEARCH_FROM = 10;
 
-function ImageModelTable({ label, models, defaultRef, defaultVideoRef, onMakeDefault }: { label: string; models: ImageModelInfo[]; defaultRef: string | undefined; defaultVideoRef: string | undefined; onMakeDefault(model: ImageModelInfo): void }) {
+/** Each kind of sound, and what its default's warning calls the things it makes. */
+const AUDIO_KINDS: readonly { kind: AudioKind; noun: string; label: string }[] = [
+  { kind: 'speech', noun: 'Speech and voice-overs', label: 'speech' },
+  { kind: 'music', noun: 'Songs and music', label: 'music' },
+  { kind: 'sound', noun: 'Sound effects', label: 'sound effects' },
+];
+
+type Defaults = Record<'image' | 'video' | AudioKind, string | undefined>;
+
+/** The kinds this model is the default for: a sound model may be the default for speech and for effects at once. */
+function defaultFor(model: ImageModelInfo, defaults: Defaults): ('image' | 'video' | AudioKind)[] {
+  if (makesAudio(model)) return (model.capabilities.audio?.kinds ?? []).filter((k) => defaults[k] === model.ref);
+  const kind = makesVideo(model) ? 'video' : 'image';
+  return defaults[kind] === model.ref ? [kind] : [];
+}
+
+function ImageModelTable({ label, models, defaults, onMakeDefault }: { label: string; models: ImageModelInfo[]; defaults: Defaults; onMakeDefault(model: ImageModelInfo, kind?: AudioKind): void }) {
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
   const shown = models.filter((m) => !query || `${m.displayName} ${m.modelId}`.toLowerCase().includes(query));
@@ -303,7 +339,7 @@ function ImageModelTable({ label, models, defaultRef, defaultVideoRef, onMakeDef
           </span>
         </div>
         {shown.map((m) => (
-          <ImageModelRow key={m.ref} model={m} isDefault={m.ref === (makesVideo(m) ? defaultVideoRef : defaultRef)} onMakeDefault={() => onMakeDefault(m)} />
+          <ImageModelRow key={m.ref} model={m} defaultFor={defaultFor(m, defaults)} onMakeDefault={(kind) => onMakeDefault(m, kind)} />
         ))}
       </div>
       {shown.length === 0 && <p className="py-6 text-center text-body text-fg-muted">No matching models.</p>}
@@ -332,7 +368,8 @@ const FAMILY_LABELS: Record<string, string> = {
   'z-image': 'Z-Image',
 };
 
-function ImageModelRow({ model, isDefault, onMakeDefault }: { model: ImageModelInfo; isDefault: boolean; onMakeDefault(): void }) {
+function ImageModelRow({ model, defaultFor, onMakeDefault }: { model: ImageModelInfo; defaultFor: readonly string[]; onMakeDefault(kind?: AudioKind): void }) {
+  const isDefault = defaultFor.length > 0;
   const hidden = useOverride(model.ref, 'hidden');
   const favorite = useOverride(model.ref, 'favorite');
   const [editing, setEditing] = useState(false);
@@ -347,13 +384,26 @@ function ImageModelRow({ model, isDefault, onMakeDefault }: { model: ImageModelI
       <div role="cell" className={cn('min-w-0 px-2', isHidden && 'opacity-60')}>
         <div className="flex items-center gap-2">
           <span className="truncate text-body text-fg">{name}</span>
-          {isDefault && <Badge tone="accent">Default</Badge>}
+          {isDefault && <Badge tone="accent">{caps.audio && caps.audio.kinds.length > 1 ? `Default for ${defaultFor.map((k) => AUDIO_KINDS.find((a) => a.kind === k)?.label ?? k).join(' and ')}` : 'Default'}</Badge>}
         </div>
         {name !== model.modelId && <p className="truncate font-mono text-caption text-fg-muted">{model.modelId}</p>}
         {model.description && <p className="truncate text-footnote text-fg-muted">{model.description}</p>}
       </div>
       <div role="cell" className="flex flex-wrap gap-1 max-md:hidden">
-        {caps.video ? (
+        {caps.audio ? (
+          <>
+            {caps.audio.kinds.map((k) => (
+              <Badge key={k} tone="accent">
+                {k === 'speech' ? 'Speech' : k === 'music' ? 'Music' : 'Sound effects'}
+              </Badge>
+            ))}
+            {caps.audio.voices && caps.audio.voices.length > 1 && <Badge>{caps.audio.voices.length} voices</Badge>}
+            {caps.audio.maxSpeakers && caps.audio.maxSpeakers > 1 && <Badge>Dialogue</Badge>}
+            {caps.audio.direction && <Badge>Directions</Badge>}
+            {caps.audio.lyrics && <Badge>Lyrics</Badge>}
+            {caps.audio.durations && <Badge>{durationLabel(caps.audio.durations)}</Badge>}
+          </>
+        ) : caps.video ? (
           <>
             <Badge tone="accent">Video</Badge>
             <Badge>{lengthLabel(caps.video)}</Badge>
@@ -383,9 +433,17 @@ function ImageModelRow({ model, isDefault, onMakeDefault }: { model: ImageModelI
             <MenuItem icon={SlidersHorizontal} onClick={() => setEditing(true)}>
               Description and tuning…
             </MenuItem>
-            <MenuItem icon={Star} disabled={isDefault} onClick={onMakeDefault}>
-              Make default
-            </MenuItem>
+            {caps.audio && caps.audio.kinds.length > 1 ? (
+              caps.audio.kinds.map((k) => (
+                <MenuItem key={k} icon={Star} disabled={defaultFor.includes(k)} onClick={() => onMakeDefault(k)}>
+                  Make default for {AUDIO_KINDS.find((a) => a.kind === k)?.label ?? k}
+                </MenuItem>
+              ))
+            ) : (
+              <MenuItem icon={Star} disabled={isDefault} onClick={() => onMakeDefault(caps.audio?.kinds[0])}>
+                Make default
+              </MenuItem>
+            )}
           </MenuContent>
         </Menu>
         <ImageModelDialog model={model} open={editing} onOpenChange={setEditing} />
@@ -397,9 +455,29 @@ function ImageModelRow({ model, isDefault, onMakeDefault }: { model: ImageModelI
 /** "4 to 8 s", "6 s", "1 to 15 s": the lengths a video model makes, for its row. */
 function lengthLabel(video: NonNullable<ImageModelInfo['capabilities']['video']>): string {
   if (video.fixedLength) return 'Its own length';
-  const { durations } = video;
+  return durationLabel(video.durations);
+}
+
+/** "4–8 s", "6 s", "3–600 s": a list or range of lengths in a few characters. */
+function durationLabel(durations: VideoDurations): string {
   const [low, high] = durations.kind === 'list' ? [Math.min(...durations.seconds), Math.max(...durations.seconds)] : [durations.min, durations.max];
-  return low === high ? `${low} s` : `${low}–${high} s`;
+  const show = (s: number) => (s >= 120 && s % 60 === 0 ? `${s / 60} min` : `${s} s`);
+  return low === high ? show(low) : high >= 120 ? `${show(low)}–${show(high)}` : `${low}–${high} s`;
+}
+
+function AudioGenerationRows() {
+  const enabled = useSetting<boolean | undefined>(['imageGeneration', 'audioEnabled']);
+  return (
+    <>
+      {/* Absent means on, for settings saved before sound existed. */}
+      <SettingRow id="imageGeneration.audioEnabled" setting={enabled}>
+        {(label) => <Switch {...label} checked={enabled.value !== false} onCheckedChange={(on) => void enabled.set(on)} />}
+      </SettingRow>
+      <LimitRow id="imageGeneration.maxAudioPerTurn" field="maxAudioPerTurn" problem="Enter a whole number from 1 to 50." parse={(text) => wholeNumber(text, 50)} unit="sounds" fallback="6" />
+      <LimitRow id="imageGeneration.maxAudioPerUserPerDay" field="maxAudioPerUserPerDay" problem="Enter a whole number, or leave it empty for no limit." parse={(text) => wholeNumber(text, Number.MAX_SAFE_INTEGER)} unit="sounds" />
+      <LimitRow id="imageGeneration.maxAudioSpendPerUserPerDayUsd" field="maxAudioSpendPerUserPerDayUsd" problem="Enter dollars, or leave it empty for no limit." parse={dollars} unit="dollars" />
+    </>
+  );
 }
 
 function VideoGenerationRows() {
@@ -420,8 +498,9 @@ function VideoGenerationRows() {
 function ImageGenerationSection() {
   const enabled = useSetting<boolean>(['imageGeneration', 'enabled']);
   const videos = useVideoGeneration();
+  const audio = useAudioGeneration();
   return (
-    <SettingsSection title="Image and video generation">
+    <SettingsSection title={audio ? 'Image, video and audio generation' : 'Image and video generation'}>
       <SettingRow id="imageGeneration.enabled" setting={enabled}>
         {(label) => <Switch {...label} checked={enabled.value} onCheckedChange={(on) => void enabled.set(on)} />}
       </SettingRow>
@@ -429,6 +508,7 @@ function ImageGenerationSection() {
       <LimitRow id="imageGeneration.maxImagesPerUserPerDay" field="maxImagesPerUserPerDay" problem="Enter a whole number, or leave it empty for no limit." parse={(text) => wholeNumber(text, Number.MAX_SAFE_INTEGER)} unit="images" />
       <LimitRow id="imageGeneration.maxSpendPerUserPerDayUsd" field="maxSpendPerUserPerDayUsd" problem="Enter dollars, or leave it empty for no limit." parse={dollars} unit="dollars" />
       {videos && <VideoGenerationRows />}
+      {audio && <AudioGenerationRows />}
     </SettingsSection>
   );
 }

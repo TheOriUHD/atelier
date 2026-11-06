@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import type { ImageModelInfo, SessionSummary } from '@atelier/protocol';
 import { toast } from '../../components/ui/index.ts';
-import { makesVideo, useImageModels, usePrefs, useSettings } from '../../lib/queries.ts';
+import { makesPictures, useImageModels, usePrefs, useSettings } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 
 export interface ImageModelChoice {
@@ -45,8 +45,8 @@ export function imageModelSubtitle(m: ImageModelInfo): string | undefined {
 /** Hidden models are an admin's to keep from the picker, their own included. */
 function useVisibleImageModels(): ImageModelInfo[] {
   const { data } = useImageModels();
-  // Video models share the list; the composer's picker is for pictures.
-  return useMemo(() => (data ?? []).filter((m) => !m.hidden && !makesVideo(m)), [data]);
+  // Video and sound models share the list; the composer's picker is for pictures.
+  return useMemo(() => (data ?? []).filter((m) => !m.hidden && makesPictures(m)), [data]);
 }
 
 /** The models by provider and by computer, favorites first and then by order and name, as the text picker groups them. */

@@ -253,6 +253,10 @@ export const UsageRow = z.object({
   /** Videos generated, and their seconds in all. */
   videos: z.number().optional(),
   videoSeconds: z.number().optional(),
+  /** Sounds generated, their seconds in all, and the characters read out for speech. */
+  audios: z.number().optional(),
+  audioSeconds: z.number().optional(),
+  audioChars: z.number().optional(),
   /** How much of `costUsd` comes from a price list rather than from the service. */
   estimatedUsd: z.number().optional(),
   /** Averaged over the `timed` requests that reported a speed. */
@@ -628,5 +632,7 @@ export const AppInfo = z.object({
   usageLimits: z.boolean().optional(),
   /** This backend can generate video too, and serves it in ranges. */
   videoGeneration: z.boolean().optional(),
+  /** This backend can generate speech, music and sound effects, and plays them from its blobs. */
+  audioGeneration: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;
