@@ -6,7 +6,7 @@
  * model and the payer: the host's models are the host's to pay for (a guest's use counts against what the host shares),
  * a guest's own models are theirs. The folder, its tools and their approvals stay the host's either way.
  */
-import { parsePeerModelRef, type OutboxMessage, type ParticipantRole } from '@atelier/protocol';
+import { parsePeerModelRef, type OutboxMessage, type Part, type ParticipantRole } from '@atelier/protocol';
 
 /** A participant as a turn needs them (coop/service.ts `ParticipantInfo`). */
 export interface TurnParticipant {
@@ -81,3 +81,27 @@ export const keptOnStop = (items: readonly OutboxMessage[], by: string | null, h
 
 /** Only the author takes a waiting message back, or sends it now; the host may too. */
 export const mayHandle = (item: OutboxMessage, by: string | null, hostId: string | null, byRole: ParticipantRole | null): boolean => byRole === 'host' || wrote(item, by, hostId);
+
+/** Permission modes from the strictest; a guest's turn runs at the host's mode or Accept edits, whichever is stricter. */
+const STRICTNESS = ['plan', 'default', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
+type Mode = (typeof STRICTNESS)[number];
+
+/**
+ * The mode a guest's turn runs at: never the host's Auto or Bypass, which trust the host's own requests. Edits inside the
+ * folder go through (Rewind undoes them); commands, the network and anything outside the folder ask the host.
+ */
+export function guestMode(hostMode: Mode): Mode {
+  return STRICTNESS.indexOf(hostMode) <= STRICTNESS.indexOf('acceptEdits') ? hostMode : 'acceptEdits';
+}
+
+/** How long a question waits in co-op for the person who may answer it before it is denied by itself. */
+export const COOP_QUESTION_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * What a guest's message may carry: Atelier writes its own notes (context parts), so a guest's message keeps only the
+ * kinds the server writes again from what they point at (a quote, a marked area). Anything else could pass for a note.
+ */
+export const guestParts = (parts: readonly Part[]): Part[] => parts.filter((p) => p.type !== 'context' || p.notice?.kind === 'quote' || p.notice?.kind === 'area');
+
+/** The tag that opens each person's message in a shared session, added after their text is escaped (unforgeable). */
+export const senderTag = (name: string, host: boolean): string => `<sender name="${name.replaceAll('"', "'").replace(/[<>&]/g, '')}"${host ? ' role="host"' : ''}/>`;

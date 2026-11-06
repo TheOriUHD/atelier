@@ -1199,10 +1199,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     extensions: (session) => extensionsFor(session.userId, session.mode === 'chat' ? null : session.workspaceId),
     // A sub-agent uses the connectors its parent session has on.
-    mcpTools: async (session) => {
+    mcpTools: async (session, connectorUser) => {
       const off = connectorsOff((session.parentSessionId && (await sessions.getRow(session.parentSessionId))) || session);
-      // The shared connectors, then the person's own (on a server), switched off for the session the same way.
-      const [shared, own] = await Promise.all([mcp.tools(off), session.userId && platform.surface === 'web' ? personal.tools(session.userId, off) : []]);
+      // The shared connectors, then the person's own (on a server), switched off for the session the same way. In co-op the
+      // own ones are the turn's person's (chat-service.ts `toolsFor`).
+      const ownerOfOwn = connectorUser === undefined ? session.userId : connectorUser;
+      const [shared, own] = await Promise.all([mcp.tools(off), ownerOfOwn && platform.surface === 'web' ? personal.tools(ownerOfOwn, off) : []]);
       return [...shared, ...own];
     },
     ...(platform.computer
@@ -2225,7 +2227,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const { as } = await sessionFor(sessionId, ctx, 'chat.respond');
       // Co-op: a question is answered by whoever owns what is at risk (its approver), or a guest the host trusts.
       if (as && !(await chat.mayRespond(sessionId, interactionId, as))) throw appError('forbidden', 'This one is for someone else to answer.');
-      if (!chat.respond(sessionId, interactionId, answer)) throw appError('not_waiting', 'This question was already answered or the response stopped.');
+      if (!chat.respond(sessionId, interactionId, answer, as)) throw appError('not_waiting', 'This question was already answered or the response stopped.');
       return { ok: true as const };
     },
     'chat.changePreview': async ({ sessionId, interactionId }, ctx) => {
