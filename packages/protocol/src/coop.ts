@@ -106,3 +106,48 @@ export function parsePeerModelRef(ref: string): { keyId: string; ref: string } |
 /** A co-op session mirrored on a guest's own backend has this id prefix (`coop_<roomId>_<host session id>`). */
 export const COOP_MIRROR_PREFIX = 'coop_';
 export const isCoopMirror = (sessionId: string): boolean => sessionId.startsWith(COOP_MIRROR_PREFIX);
+
+/**
+ * An invite link: `https://atelierhq.dev/join#v1.<roomId>.<secret>.<meta>` (or the same fragment on `atelier://join`).
+ * The fragment never reaches a server: the relay sees the room id only when a guest connects, and never the secret.
+ * `meta` is what the join card shows before anything connects: the host's name, the session's title and mode.
+ */
+export interface InviteMeta {
+  hostName: string;
+  title: string;
+  mode: 'chat' | 'work' | 'code';
+}
+
+const b64url = {
+  encode: (text: string) => btoa(String.fromCharCode(...new TextEncoder().encode(text))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, ''),
+  decode: (text: string) => new TextDecoder().decode(Uint8Array.from(atob(text.replaceAll('-', '+').replaceAll('_', '/')), (c) => c.charCodeAt(0))),
+};
+
+export const INVITE_BASE = 'https://atelierhq.dev/join';
+
+/** The fragment of an invite (after `#`), from a link in either form or the bare fragment. */
+export function inviteFragment(invite: string): string {
+  const hash = invite.indexOf('#');
+  return (hash >= 0 ? invite.slice(hash + 1) : invite).trim();
+}
+
+/** The parts of an invite's fragment; null when it isn't one. */
+export function parseInviteFragment(invite: string): { roomId: string; secret: string; meta: InviteMeta | null } | null {
+  const [version, roomId, secret, meta] = inviteFragment(invite).split('.');
+  if (version !== 'v1' || !roomId || !secret || !/^[A-Za-z0-9_-]+$/.test(roomId) || !/^[A-Za-z0-9_-]+$/.test(secret)) return null;
+  let parsed: InviteMeta | null = null;
+  if (meta) {
+    try {
+      const value = JSON.parse(b64url.decode(meta)) as Partial<InviteMeta>;
+      if (typeof value.hostName === 'string' && typeof value.title === 'string' && (value.mode === 'chat' || value.mode === 'work' || value.mode === 'code'))
+        parsed = { hostName: value.hostName.slice(0, 80), title: value.title.slice(0, 200), mode: value.mode };
+    } catch {
+      parsed = null;
+    }
+  }
+  return { roomId, secret, meta: parsed };
+}
+
+export function makeInviteUrl(roomId: string, secret: string, meta: InviteMeta): string {
+  return `${INVITE_BASE}#v1.${roomId}.${secret}.${b64url.encode(JSON.stringify(meta))}`;
+}
