@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./device": "./src/device.ts"
+    "./device": "./src/device.ts",
+    "./coop": "./src/coop/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",
