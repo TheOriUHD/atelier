@@ -956,9 +956,11 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
     else if (type === FRAME_HELLO3) this.#hello3(link, slot, state, handshake.attempt, handshake.message);
   }
 
+  /**
+   * A guest's first message. A session the slot already has stays until the new handshake completes: only the guest
+   * can complete it (it needs the invite's key), and a replayed first message (anyone can send one) changes nothing.
+   */
   #hello1(link: RelayLink, slot: number, state: SlotState, attempt: number, message: Uint8Array): void {
-    const old = this.#peers.get(slot);
-    if (old) this.#endPeer(old, 'rejoined');
     if (state.timer) clearTimeout(state.timer);
     state.handshake = null;
     const handshake = new HandshakeState({ initiator: false, staticKey: this.#options.staticKey, psk: this.#options.psk, prologue: prologue(this.roomId) });
@@ -966,7 +968,9 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
       handshake.readMessage(message);
       link.post(handshakeFrame([slot], FRAME_HELLO2, attempt, handshake.writeMessage()));
     } catch {
-      return this.kick(slot, CloseCode.refused);
+      // Garbage, or another room's handshake. Refused, unless the slot has a working session to keep.
+      if (!this.#peers.has(slot)) this.kick(slot, CloseCode.refused);
+      return;
     }
     state.handshake = handshake;
     state.attempt = attempt;
@@ -990,10 +994,16 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
     try {
       hello = readHello(handshake.readMessage(message));
     } catch {
-      // The guest doesn't have this room's invite (or has an old one): tell it, so it stops trying.
-      return this.kick(slot, CloseCode.refused);
+      hello = null;
     }
-    if (!hello) return this.kick(slot, CloseCode.refused);
+    if (!hello) {
+      // The guest doesn't have this room's invite (or has an old one): tell it, so it stops trying. With a working
+      // session on the slot, this wasn't that guest (whose invite works), so the session stays.
+      if (!this.#peers.has(slot)) this.kick(slot, CloseCode.refused);
+      return;
+    }
+    const old = this.#peers.get(slot);
+    if (old) this.#endPeer(old, 'rejoined');
     const peer = new Peer(
       () => this.#link,
       (s) => this.kick(s, CloseCode.removed),

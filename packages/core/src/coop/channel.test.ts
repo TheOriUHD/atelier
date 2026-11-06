@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WebSocket } from 'ws';
 import {
   createRoom,
   decodeKey,
@@ -18,6 +19,7 @@ import {
   type StaticKey,
 } from './channel.ts';
 import { fingerprint, makeInvite, newInviteSecret, pskFromSecret } from './invite.ts';
+import { HandshakeState } from './noise.ts';
 import { startCoopRelay, type StandaloneCoopRelay } from './relay-node.ts';
 
 const MiB = 1024 * 1024;
@@ -309,6 +311,68 @@ describe('co-op channels through the Node relay', () => {
     expect(await atHost).toEqual(payload);
     // 2 MB at 2 MiB/s after a 256 KiB burst (the client's half of the room's): most of a second.
     expect(Date.now() - started).toBeGreaterThan(600);
+  });
+
+  it('speaks the documented frames, and keeps a session through a replayed first message', async () => {
+    const room = await hostRoom();
+    const key = generateStaticKey();
+    const ws = new WebSocket(`${relay.url.replace('http', 'ws')}/v1/rooms/${room.roomId}?role=guest`);
+    cleanup.push(() => ws.terminate());
+    const binary: Uint8Array[] = [];
+    let wake: (() => void) | null = null;
+    ws.on('message', (data, isBinary) => {
+      if (!isBinary) return;
+      binary.push(new Uint8Array(data as Buffer));
+      wake?.();
+    });
+    const next = async () => {
+      while (!binary.length) await new Promise<void>((resolve) => (wake = resolve));
+      return binary.shift()!;
+    };
+    await new Promise((resolve) => ws.once('open', resolve));
+    const frame = (type: number, attempt: number, message: Uint8Array) => {
+      const out = Buffer.alloc(5 + message.length);
+      out[0] = type;
+      out.writeUInt32LE(attempt, 1);
+      out.set(message, 5);
+      return out;
+    };
+    const handshake = new HandshakeState({ initiator: true, staticKey: key, psk: room.psk, prologue: new TextEncoder().encode(`atelier coop v1\n${room.roomId}`) });
+    const first = frame(1, 7, handshake.writeMessage());
+    ws.send(first);
+    const second = await next();
+    expect([second[0], Buffer.from(second).readUInt32LE(1)]).toEqual([2, 7]);
+    handshake.readMessage(second.subarray(5));
+    const peerEvent = once<[PeerChannel]>(room.host, 'peer');
+    ws.send(frame(3, 7, handshake.writeMessage(Buffer.from(JSON.stringify({ name: 'By hand', version: '1' })))));
+    const [peer] = await peerEvent;
+    expect(peer.hello.name).toBe('By hand');
+    const transport = handshake.split();
+    // The host's confirmation: [4][nonce 0][the plaintext [0], encrypted].
+    const confirm = await next();
+    expect([confirm[0], Buffer.from(confirm).readBigUInt64LE(1)]).toEqual([4, 0n]);
+    expect(transport.receive.decrypt(confirm.subarray(9))).toEqual(Uint8Array.of(0));
+
+    // Anyone (the relay, say) can send the first message again: the session stays.
+    let left = false;
+    room.host.on('peer-left', () => (left = true));
+    ws.send(first);
+    expect((await next())[0]).toBe(2);
+    // A one-chunk message through the session: [1][flags][id][index][count] and the JSON.
+    const json = Buffer.from(JSON.stringify({ still: 'here' }));
+    const plain = Buffer.alloc(14 + json.length);
+    plain[0] = 1;
+    plain.writeUInt32LE(1, 2);
+    plain.writeUInt32LE(0, 6);
+    plain.writeUInt32LE(1, 10);
+    plain.set(json, 14);
+    const nonce = Buffer.alloc(8);
+    nonce.writeBigUInt64LE(BigInt(transport.send.nonce));
+    const message = nextMessage(peer);
+    ws.send(Buffer.concat([Uint8Array.of(4), nonce, transport.send.encrypt(plain)]));
+    expect(await message).toEqual({ still: 'here' });
+    expect(left).toBe(false);
+    expect(peer.open).toBe(true);
   });
 
   it('refuses what JSON or the size limit cannot carry', async () => {
