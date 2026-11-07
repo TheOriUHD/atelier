@@ -214,6 +214,45 @@ receive messages. To stop two sessions from driving each other in circles, a cha
 nobody in between is held after 3 turns, and one conversation may start at most 5 turns by itself in a row; after that the
 message waits for you.
 
+## Co-op
+
+*(next release)* In a [co-op](/co-op/) session, other people make the agent act in the host's session: on the host's computer, in the
+host's folder.
+
+**What guests get.**
+- A guest reaches that one session through a narrow set of calls, each checked against their part in it (**Can chat**
+  or **Can watch**). They can't reach the host's other sessions, settings, terminal, other files, connectors or
+  memory.
+- A guest from another computer never signs in to the host's Atelier. Their computer is admitted to the session only.
+- The files they see are the session's own changes and attachments.
+
+**What guests' turns may do.**
+- A guest's turns get none of the host's standing **Always allow** rules, and never run in Auto or Bypass: at most
+  **Accept edits**, so commands, network access and anything outside the folder ask the host.
+- **Trust with approvals** lets a guest answer those questions. Treat it like handing them your keyboard: a trusted
+  guest who approves a command runs it on your computer.
+- Each message reaches the model with its writer's name, so the model can tell people apart. A guest's message can't
+  pass as the host's or as Atelier's own notes. Telling the model what to do is still what a guest's message does, so
+  only the host's answers approve actions.
+
+**Guests' own models and connectors.**
+- A guest who answers with their own model gets the session's requests on their computer, sent to their provider:
+  what the session reads, the host's files included. The host agrees to it with **Guests' own models read what the
+  session reads**.
+- A host's computer could misuse a guest's model, so the guest's computer runs only the models the guest chose, under
+  their own limits.
+- A guest's lent connectors run only calls that guest allowed, one at a time.
+
+**Invites and the relay.**
+- The invite link's secret is in the part after `#`, which browsers don't send to servers. Anyone with the link can ask
+  to join for 24 hours; a new link replaces it.
+- The host lets each person in after comparing three emoji from the encrypted handshake. Matching emoji mean nobody
+  sits in between.
+- The relay passes encrypted traffic and can't read it. It can see who connects when, and could block the connection.
+
+**Removing someone.** It stops their turn, drops what they queued and what they were asked, stops the background work
+started for them, closes their connection and forgets their device. They keep what they already saw.
+
 ## Memory and sensitive topics
 
 Memory is per person and stays in your account. **Include sensitive topics in memory** (health, religious beliefs and the
@@ -406,6 +445,8 @@ not a filter: a determined person or a model that follows instructions poorly ca
 - **Unsigned Windows builds** on first install, and Windows and Linux builds being less exercised than macOS.
 - **Other people with access to the same server** beyond what [Accounts](/accounts/) describes: admins decide what every
   model is told, and the host's operator can read everything.
+- **People you invite to a co-op session** beyond what [Co-op](#co-op) describes: they see everything in that
+  session, and what you approve for them runs on your computer.
 
 ## Reporting a security problem
 

@@ -50,7 +50,9 @@ own (`sbx000`, `sbx001`, …); see [the chat sandbox](/self-hosting/#the-chat-sa
 | `ATELIER_SANDBOX_SLOTS` | `256` | How many accounts the sandbox can hold, 1 to 9999. Set the same number on the `atelier` service and, as an environment variable, on the `sandbox` service, then recreate both. | `512` |
 | `ATELIER_SANDBOX_USER` | unset | For a sandbox container you built yourself, without the account users: every account logs in as this one user and shares its folders. Leave it unset with the Compose file's sandbox. | `dev` |
 
-## Server and desktop: co-op *(next release)*
+## Server and desktop: co-op
+
+*(next release)*
 
 | Variable | Applies to | Default | Meaning | Example |
 |---|---|---|---|---|
