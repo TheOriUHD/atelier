@@ -4,6 +4,15 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Co-op: work in one session together.** Click **Co-op** in a session's header and send the invite link. The people you let in work in the same conversation and the same folder: up to four in all, each writing their own messages and watching every reply as it's written. There is no account. The host lets each person in after comparing three emoji with them; someone let in before comes back without asking. Between two computers, the apps meet through an end-to-end encrypted relay at `coop.atelierhq.dev`, which can't read what passes and keeps nothing. On a team server, the host adds teammates instead, and nothing leaves the server.
+  - **Whose models answer you** is each person's choice: the host's, while the host shares them, with a daily limit per guest in requests and dollars; or their own providers and plans, which run on their own computer with their own keys.
+  - **Turns:** a message sent during someone else's turn waits as yours, or joins that turn if you choose. Stop keeps others' waiting messages. Retry and edits run as whoever clicked.
+  - **The host's computer stays the host's.** In a guest's turn, commands and anything outside the folder ask the host, whatever the permission mode. Questions nobody answers within 5 minutes are declined. **Trust with approvals** lets a guest answer them. A guest can lend their own connectors to their turns, and each call then asks them.
+  - **Nothing personal in a shared session:** no memory, personalization or project context, and no tools that reach outside the session.
+  - **More together:** ask for a **second opinion** from another model, beside the first answer. Name a model with `@` for one message. Put **reactions** on messages. Turn on the **navigator**: your model looks over each edit in the others' turns. In Code, start a **parallel track**: an agent works on a task for you in its own git worktree, and the host merges its branch.
+  - **Ending:** guests keep a copy of the conversation when co-op ends, unless the host switches that off. The host's computer stays awake while co-op is on.
+  - **Your own relay:** a self-hosted server can run its own relay (`ATELIER_SERVE_COOP_RELAY=1`), and `ATELIER_COOP_RELAY` points desktops at it, or switches co-op between computers off.
+
 ## [0.4.4] — 2026-11-07
 
 - **GLM and DeepSeek through Mistral show their replies:** these models, which Mistral hosts for their makers, can send their reasoning the way OpenAI-style servers do, and Atelier's Mistral provider only read Mistral's own format. A reply could then show nothing at all while the model worked until its output limit. Atelier now reads every common form, and no longer sends their earlier reasoning back as Mistral's thinking.
