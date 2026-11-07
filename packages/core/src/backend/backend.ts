@@ -539,6 +539,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       ...(chatgpt ? { chatgpt } : {}),
       chatgptChat: platform.chatgptChat,
       copilot,
+      log: (message: string) => platform.logger.info(message),
     },
     // A server reaches people's own model servers and ChatGPT windows through their desktops.
     ...(platform.surface === 'web' ? { personal: personalAccess } : {}),

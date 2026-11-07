@@ -52,26 +52,31 @@ const M = 1_048_576;
 const K256 = 262_144;
 
 /**
- * What `/v1/models` doesn't say: names, output limits and how each model reasons. From docs.mistral.ai's model cards and
- * reasoning guide, 2026-11-06. A listed model that isn't here still works, with what its card says.
+ * What `/v1/models` doesn't say: names, output limits and how each model reasons. The `reasoning_effort` values each
+ * model takes and the output limits were checked against Mistral's API on 2026-11-07 (a value a model doesn't take is a
+ * 400: GLM 5.3 refuses medium, Large 4 refuses none and max, Medium 3.5 and Small 4 take only none and high). Mistral's
+ * own `name` for Medium 3.5 is `mistral-medium-latest` (`mistral-medium-3-5` and `mistral-vibe-cli-latest` are aliases).
+ * A listed model that isn't here still works, with what its card says.
  */
 const CATALOG: Record<string, MistralEntry> = {
-  'mistral-large-4': entry('Mistral Large 4', M, 131_072, true, { kind: 'levels', levels: ['low', 'medium', 'high'] }),
-  'mistral-medium-3-5': entry('Mistral Medium 3.5', K256, 65_536, true, TOGGLE),
-  'mistral-medium-2604': entry('Mistral Medium 3.5', K256, 65_536, true, TOGGLE),
-  'mistral-small-2603': entry('Mistral Small 4', K256, 65_536, true, TOGGLE),
+  'mistral-large-4': entry('Mistral Large 4', M, 262_144, true, { kind: 'levels', levels: ['low', 'medium', 'high'] }),
+  'mistral-medium-latest': entry('Mistral Medium 3.5', K256, 131_072, true, TOGGLE),
+  'mistral-medium-3-5': entry('Mistral Medium 3.5', K256, 131_072, true, TOGGLE),
+  'mistral-medium-2604': entry('Mistral Medium 3.5', K256, 131_072, true, TOGGLE),
+  'mistral-small-2603': entry('Mistral Small 4', K256, 131_072, true, TOGGLE),
   'mistral-large-2512': entry('Mistral Large 3', K256, 65_536, true, NONE),
   'ministral-14b-2512': entry('Ministral 3 14B', K256, 32_768, true, NONE),
   'ministral-8b-2512': entry('Ministral 3 8B', K256, 32_768, true, NONE),
   'ministral-3b-2512': entry('Ministral 3 3B', K256, 32_768, true, NONE),
   'codestral-2508': entry('Codestral', 131_072, 32_768, false, NONE),
   // The models Vibe itself uses: Medium 3.5 for the main one.
-  'mistral-vibe-cli-latest': entry('Mistral Vibe', K256, 65_536, true, TOGGLE),
+  'mistral-vibe-cli-latest': entry('Mistral Vibe', K256, 131_072, true, TOGGLE),
   'mistral-vibe-cli-fast': entry('Mistral Vibe Fast', K256, 32_768, true, TOGGLE),
   'zai-glm-5-3': entry('GLM 5.3', M, 131_072, false, { kind: 'levels', levels: ['low', 'high', 'max'] }),
+  'glm-5-2': entry('GLM 5.2', M, 131_072, false, { kind: 'levels', levels: ['low', 'medium', 'high', 'max'] }),
   'zai-glm-5-3-flash': entry('GLM 5.3 Flash', M, 131_072, true, { kind: 'levels', levels: ['low', 'high', 'max'] }),
-  // It reasons by itself; the values it takes aren't published, so none is sent.
-  'deepseek-v4-1-flash': entry('DeepSeek V4.1 Flash', M, 131_072, true, NONE),
+  // It reasons by itself when no level is sent; it refuses medium.
+  'deepseek-v4-1-flash': entry('DeepSeek V4.1 Flash', M, 131_072, true, { kind: 'levels', levels: ['low', 'high', 'max'] }),
   'voxtral-small-2507': entry('Voxtral Small', 32_768, 8192, false, NONE),
 };
 
@@ -129,13 +134,11 @@ function thinkingChunk(part: Extract<Part, { type: 'thinking' }>): Chunk {
 export interface MistralModelFacts {
   /** The model reads PDFs (its card says vision). */
   pdf: boolean;
-  /** Earlier thinking goes back as `thinking` chunks: only Mistral's own models are known to take them (default true). */
+  /**
+   * Earlier thinking goes back as `thinking` chunks (default true). A model that reasons takes it, GLM included, as
+   * Mistral's own Vibe sends it; a model without reasoning refuses it, as after a switch from one that reasons.
+   */
   thinking?: boolean;
-}
-
-/** The models Mistral hosts for others (GLM, DeepSeek): served as their makers built them, streamed OpenAI-style. */
-export function hostedForOthers(model: string): boolean {
-  return /^(zai-|glm-|deepseek)/.test(model);
 }
 
 async function userContent(parts: readonly Part[], deps: AdapterDeps, facts: MistralModelFacts): Promise<Content> {
@@ -337,16 +340,59 @@ export async function vibeBudget(instance: ProviderInstance, deps: AdapterDeps, 
   return { usedPercent: Math.max(0, used), resetsAt: Number.isFinite(resets) ? resets : null, ...(plan ? { plan } : {}), ...(overage ? { overage } : {}) };
 }
 
+/**
+ * What a reply looked like, without a word of it: which fields and chunk types came, how much text and thinking, the
+ * tool calls and their ids, how it ended. Logged when a reply fails or shows nothing, so Copy diagnostics can say what
+ * Mistral sent.
+ */
+class ReplyOutline {
+  events = 0;
+  readonly fields = new Set<string>();
+  readonly chunks = new Set<string>();
+  text = 0;
+  thinking = 0;
+  callPieces = 0;
+  nullIds = 0;
+
+  constructor(
+    private readonly instance: ProviderInstance,
+    private readonly request: ChatRequest,
+    private readonly body: Record<string, unknown>,
+  ) {}
+
+  see(delta: Record<string, unknown>): void {
+    this.events++;
+    for (const key of Object.keys(delta)) this.fields.add(key);
+    const content = delta.content;
+    if (typeof content === 'string') this.chunks.add(content ? 'string' : 'empty string');
+    for (const item of arr(content)) this.chunks.add(typeof item === 'string' ? 'string' : (str(rec(item).type) ?? 'untyped'));
+    for (const call of arr(delta.tool_calls)) {
+      this.callPieces++;
+      if (rec(call).id === 'null' || rec(call).id === null) this.nullIds++;
+    }
+  }
+
+  line(how: string, extra = ''): string {
+    const sent = `effort=${String(this.body.reasoning_effort ?? '-')} max_tokens=${String(this.body.max_tokens ?? '-')} tools=${arr(this.body.tools).length} messages=${arr(this.body.messages).length}`;
+    const got = `events=${this.events} fields=[${[...this.fields].join(',')}] content=[${[...this.chunks].join(',')}] text=${this.text} thinking=${this.thinking} tool_call_pieces=${this.callPieces} null_ids=${this.nullIds}`;
+    return `mistral ${this.request.model} (${this.instance.type}): ${how}; sent ${sent}; got ${got}${extra ? `; ${extra}` : ''}`;
+  }
+}
+
 async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, request: ChatRequest, known: Known): AsyncGenerator<StreamEvent> {
-  const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf, thinking: !hostedForOthers(request.model) });
+  const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf, thinking: known.reasoning.kind !== 'none' });
+  const body = mistralBody(request, messages, known.reasoning);
+  const outline = new ReplyOutline(instance, request, body);
   const res = await deps.fetch(apiUrl(instance.baseUrl, '/v1/chat/completions'), {
     method: 'POST',
     headers: jsonHeaders(instance, bearer(instance)),
-    body: JSON.stringify(mistralBody(request, messages, known.reasoning)),
+    body: JSON.stringify(body),
     signal: request.signal,
   });
   if (!res.ok || !res.body) {
-    yield { type: 'finish', reason: 'error', error: res.ok ? classifyError(instance, null, '', 'empty response body') : await mistralHttpError(res, instance) };
+    const error = res.ok ? classifyError(instance, null, '', 'empty response body') : await mistralHttpError(res, instance);
+    deps.log?.(outline.line(`HTTP ${res.status}`, `error=${error.code}: ${error.message.slice(0, 500)}`));
+    yield { type: 'finish', reason: 'error', error };
     return;
   }
 
@@ -362,28 +408,46 @@ async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, reques
     } catch {
       continue; // `[DONE]`
     }
-    if (chunk.object === 'error' || chunk.error !== undefined) {
+    // A stream error is an object of its own (`"error": null` on an ordinary chunk is no error).
+    if (chunk.object === 'error' || (chunk.error !== undefined && chunk.error !== null)) {
       const error = isRecord(chunk.error) ? chunk.error : chunk;
       const message = str(error.message) || mistralErrorMessage(JSON.stringify(error)) || 'stream error';
       const code = num(error.code) ?? num(error.raw_status_code);
+      deps.log?.(outline.line('error in the stream', `error=${String(code ?? '-')} ${str(error.type) ?? ''}: ${message.slice(0, 500)}`));
       yield { type: 'finish', reason: 'error', error: classifyError(instance, code !== undefined && code >= 400 && code < 600 ? code : null, str(error.type) ?? '', message) };
       return;
     }
     if (isRecord(chunk.usage)) usage = mapUsage(chunk.usage);
     const choice = rec(arr(chunk.choices)[0]);
     const delta = rec(choice.delta);
-    for (const text of deltaReasoning(delta)) yield { type: 'thinking', delta: text };
+    outline.see(delta);
+    for (const text of deltaReasoning(delta)) {
+      outline.thinking += text.length;
+      yield { type: 'thinking', delta: text };
+    }
     const content = delta.content;
-    if (typeof content === 'string' && content) yield { type: 'text', delta: content };
+    if (typeof content === 'string' && content) {
+      outline.text += content.length;
+      yield { type: 'text', delta: content };
+    }
     for (const item of arr(content)) {
       if (typeof item === 'string') {
-        if (item) yield { type: 'text', delta: item };
+        if (item) {
+          outline.text += item.length;
+          yield { type: 'text', delta: item };
+        }
         continue;
       }
       const piece = rec(item);
-      if (piece.type === 'text' && str(piece.text)) yield { type: 'text', delta: str(piece.text)! };
+      if (piece.type === 'text' && str(piece.text)) {
+        outline.text += str(piece.text)!.length;
+        yield { type: 'text', delta: str(piece.text)! };
+      }
       if (piece.type === 'thinking' || piece.type === 'reasoning' || piece.type === 'reasoning_text') {
-        for (const text of thinkingTexts(piece)) yield { type: 'thinking', delta: text };
+        for (const text of thinkingTexts(piece)) {
+          outline.thinking += text.length;
+          yield { type: 'thinking', delta: text };
+        }
         signature = str(piece.signature) ?? signature;
       }
     }
@@ -391,17 +455,31 @@ async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, reques
     finishReason = str(choice.finish_reason) ?? finishReason;
   }
 
+  const sawTool = calls.size > 0;
+  const usageNote = usage ? `usage in=${usage.input} out=${usage.output}${usage.reasoning ? ` reasoning=${usage.reasoning}` : ''}` : 'no usage';
   // Without a finish reason or usage the stream was cut off; the guard reports it.
-  if (finishReason === undefined && usage === undefined) return;
+  if (finishReason === undefined && usage === undefined) {
+    deps.log?.(outline.line('the stream ended with no finish reason and no usage'));
+    return;
+  }
   if (finishReason === 'error') {
+    deps.log?.(outline.line('finish_reason error', usageNote));
     yield { type: 'finish', reason: 'error', error: classifyError(instance, null, 'error', 'Mistral stopped the reply with an error') };
     return;
   }
-  const sawTool = calls.size > 0;
+  // GLM, which Mistral hosts for others, ends a reply that ran out of room in the middle of a tool call with
+  // `tool_calls`, not `length`, and that call's input stops mid-JSON (seen on Mistral's API, 2026-11-07; Mistral's own
+  // models say `length`). A lenient parse would run a Write with half its file. Such a reply was cut off: the loop runs
+  // none of its calls and asks for them again, a large Write split up.
+  const usedAll = usage !== undefined && typeof body.max_tokens === 'number' && usage.output >= body.max_tokens;
+  const cutOff = finishReason !== 'length' && finishReason !== 'model_length' && (usedAll || calls.cutOff());
+  if ((outline.text === 0 && !sawTool) || cutOff || finishReason === undefined || finishReason === 'length' || finishReason === 'model_length') {
+    deps.log?.(outline.line(`finish_reason ${finishReason ?? 'none'}${cutOff ? ', but the output limit was reached: cut off' : ''}${outline.text === 0 && !sawTool ? ', nothing to show' : ''}`, usageNote));
+  }
   yield* calls.finish();
   if (signature) yield { type: 'thinking_replay', data: { signature } };
   if (usage) yield { type: 'usage', usage };
-  yield { type: 'finish', reason: stopReason(finishReason, sawTool) };
+  yield { type: 'finish', reason: cutOff ? 'max_tokens' : stopReason(finishReason, sawTool) };
 }
 
 export function createMistralAdapter(instance: ProviderInstance, deps: AdapterDeps): ProviderAdapter {

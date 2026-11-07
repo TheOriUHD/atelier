@@ -13,6 +13,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { crc32, deflateSync } from 'node:zlib';
 import { describe, expect, it, type TestContext } from 'vitest';
 import type { Message, Part, ProviderType } from '@atelier/protocol';
 import { createAdapter } from './index.ts';
@@ -42,8 +43,26 @@ const fileEnv: Record<string, string> = envFile
   : {};
 const env = (name: string): string | undefined => process.env[name] || fileEnv[name] || undefined;
 
-// 1×1 red PNG for the image round trip.
-const RED_PIXEL = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+// A 64×64 red PNG for the image round trip (a single pixel reads as white to some models, Mistral Small 4 among them).
+const RED_PIXEL = redPng(64);
+
+function redPng(size: number): Uint8Array {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(size * 3, Buffer.from([255, 0, 0]))]);
+  const pixels = deflateSync(Buffer.concat(Array.from({ length: size }, () => row)));
+  return new Uint8Array(Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', pixels), chunk('IEND', Buffer.alloc(0))]));
+}
 
 function adapter(type: ProviderType, baseUrl: string, apiKey?: string): ProviderAdapter {
   return createAdapter(
@@ -175,6 +194,21 @@ for (const t of targets) {
         if (ev.type === 'finish' && ev.error) throw new Error(`${ev.error.code}: ${ev.error.message}`);
       }
       expect(text.join('')).toContain('Paris');
+    }));
+
+    // GLM on Mistral ends a reply that ran out of room mid-call with `tool_calls` and the call's input cut off.
+    it.skipIf(t.type !== 'mistral' && t.type !== 'mistral-vibe')('reports GLM’s reply that ran out of room in a tool call as cut off', live_(async () => {
+      const tool = { name: 'write', description: 'Write a file.', inputSchema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } };
+      const ask = userMessage([{ type: 'text', text: 'Create a complete Minecraft shader pack for Iris with soft sun shadows, wavy water with reflections, volumetric clouds and bloom. Write every file with the write tool.' }]);
+      const events: StreamEvent[] = [];
+      const limit = 600;
+      for await (const ev of live().stream({ model: 'zai-glm-5-3-flash', system: [{ text: 'You are a coding agent. Use the write tool to create files.' }], messages: [ask], tools: [tool], effort: 'low', maxOutputTokens: limit, signal: AbortSignal.timeout(120_000) })) events.push(ev);
+      const finish = events.find((e) => e.type === 'finish');
+      const used = events.flatMap((e) => (e.type === 'usage' ? [e.usage.output] : [])).at(-1) ?? 0;
+      expect(finish?.type === 'finish' && finish.error).toBeFalsy();
+      // Every token of the limit used: cut off, whatever Mistral called it. Otherwise each call came whole.
+      if (used >= limit) expect(finish?.type === 'finish' && finish.reason).toBe('max_tokens');
+      else for (const e of events) if (e.type === 'tool_call_end') expect((e.input as { content?: unknown }).content).toBeTypeOf('string');
     }));
 
     it.skipIf(t.type !== 'mistral-vibe')('reads the plan’s allowance', live_(async () => {

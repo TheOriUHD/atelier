@@ -159,4 +159,9 @@ export interface AdapterDeps {
   chatgptChat?: import('./chatgpt-chat.ts').ChatGptChatPort;
   /** The GitHub Copilot provider needs it; every backend has it. */
   copilot?: CopilotPort;
+  /**
+   * The backend's log, for an outline of a reply that failed or showed nothing: its shape, never its words (Copy
+   * diagnostics carries the end of the log).
+   */
+  log?: (message: string) => void;
 }

@@ -1272,6 +1272,31 @@ describe('effort and Ultracode', () => {
     expect(contextOf((await repo.history(session))[0]!)).toEqual([]);
   });
 
+  it('gives a turn on a Mistral model that reasons the model’s own output limit, since its reasoning counts toward it', async () => {
+    const requests: ChatRequest[] = [];
+    let current: ModelInfo = leveled;
+    let type: ProviderAdapter['type'] = 'mistral-vibe';
+    const chat = service({ resolve: async () => ({ adapter: { ...echoAdapter(requests), type }, info: current }) });
+    const turn = async (model: ModelInfo, effort: string | null) => {
+      current = model;
+      const s = await repo.create({ mode: 'code', effort });
+      await chat.send(s.id, [{ type: 'text', text: 'Hi' }]);
+      await chat.settle(s.id);
+      return requests.filter((r) => !isTitle(r)).at(-1)!.maxOutputTokens;
+    };
+    const glm: ModelInfo = { ...leveled, contextLength: 1_048_576, maxOutput: 131_072, effortLevels: ['low', 'high', 'max'] };
+    // GLM reasons past 32k at Medium on a big task: the reply would be cut off before it wrote anything.
+    expect(await turn(glm, 'medium')).toBe(131_072);
+    expect(await turn(glm, 'low')).toBe(131_072);
+    type = 'mistral';
+    expect(await turn(glm, 'high')).toBe(131_072);
+    // A Mistral model without reasoning keeps the usual caps.
+    expect(await turn({ ...glm, capabilities: { ...glm.capabilities, reasoning: 'none' } }, 'medium')).toBe(32_000);
+    // Other providers keep them too.
+    type = 'openai-compatible';
+    expect(await turn(glm, 'medium')).toBe(32_000);
+  });
+
   it('asks for orchestrated, checked work on the first Ultracode turn; its sub-agents work at Extra and hear nothing of it', async () => {
     const requests: ChatRequest[] = [];
     const adapter: ProviderAdapter = {
