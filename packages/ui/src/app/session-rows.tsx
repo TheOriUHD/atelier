@@ -16,8 +16,10 @@ import {
   Plus,
   SlidersVertical,
   Trash2,
+  LogOut,
+  Users,
 } from 'lucide-react';
-import type { SessionStatus, SessionSummary, SidebarView } from '@atelier/protocol';
+import { isCoopMirror, type SessionStatus, type SessionSummary, type SidebarView } from '@atelier/protocol';
 import {
   Button,
   ConfirmDialog,
@@ -51,6 +53,24 @@ import { NameDialog } from './name-dialog.tsx';
 import { ENVIRONMENT_LABELS, arrangeSessions, environmentHint, type ListedGroup } from './sidebar-view.ts';
 import { SessionMenuContent } from './session-menu.tsx';
 import { useCodeSplit } from './split-nav.ts';
+
+/**
+ * A co-op session's people glyph: its accessible label, and the row's hint ("with Ada", or "on Ada’s computer" for a
+ * session that runs on the host's computer and is mirrored here). Null for a session nobody shares.
+ */
+export function coopLabel(session: Pick<SessionSummary, 'id' | 'coop'>): { label: string; hint: string; host: string | null } | null {
+  const c = session.coop;
+  if (!c && !isCoopMirror(session.id)) return null;
+  if (c?.role === 'host') {
+    const others = Math.max(0, c.participants - 1);
+    const hint = others === 0 ? 'co-op, nobody joined yet' : `co-op with ${others} ${others === 1 ? 'other' : 'others'}`;
+    return { label: hint.charAt(0).toUpperCase() + hint.slice(1), hint, host: null };
+  }
+  const host = c?.hostName ?? 'the host';
+  const where = c?.mirror || isCoopMirror(session.id) ? `on ${host}’s computer` : `with ${host}`;
+  const hint = c?.ended ? `${where}, co-op ended` : where;
+  return { label: c?.ended ? `Co-op ended, ${where}` : `Co-op ${where}`, hint, host };
+}
 
 /** Nav and session row: 32 tall, r8, 14px. TanStack Link marks the current route with data-status="active". */
 export const rowClass =
@@ -120,12 +140,16 @@ export function SessionRow({
   );
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const { data: projects } = useProjects();
   // The task lists (Code, Cowork) file sessions under the person's groups and open their folders elsewhere.
   const { data: groups } = useGroups({ enabled: !chat });
   const { data: workspaces } = useWorkspaces();
   const [namingGroup, setNamingGroup] = useState(false);
   const running = !showsStatus && (session.status === 'running' || session.status === 'waiting');
+  const coop = coopLabel(session);
+  // A guest's session is the host's to rename, file and delete: its menu only leaves it (or, ended, removes it).
+  const guest = !!session.coop && session.coop.role !== 'host';
 
   const update = (patch: { pinned?: boolean; projectId?: string | null }) =>
     rpc()
@@ -135,7 +159,7 @@ export function SessionRow({
   return (
     <>
       <Tooltip
-        content={`${sessionTitle(session)} · ${relativeTime(session.updatedAt)}`}
+        content={[sessionTitle(session), coop?.hint, relativeTime(session.updatedAt)].filter(Boolean).join(' · ')}
         side="right"
         disabled={menuOpen}
       >
@@ -158,7 +182,7 @@ export function SessionRow({
         >
           <RowLead>{lead}</RowLead>
           <span className="min-w-0 flex-1 truncate">{sessionTitle(session)}</span>
-          {(session.produced || running) && (
+          {(session.produced || running || coop) && (
             <span
               className={cn(
                 'flex shrink-0 items-center gap-1.5 pr-1.5',
@@ -166,6 +190,12 @@ export function SessionRow({
                 menuOpen && 'hidden',
               )}
             >
+              {coop && (
+                <span className="flex min-w-0 items-center gap-1 text-footnote text-fg-muted">
+                  <Icon icon={Users} label={coop.label} className="size-3.5 shrink-0" />
+                  {coop.host && <span aria-hidden className="max-w-20 truncate">{coop.host}</span>}
+                </span>
+              )}
               {session.produced && (
                 <Icon
                   icon={FileText}
@@ -192,7 +222,19 @@ export function SessionRow({
               <Icon icon={MoreHorizontal} />
             </MenuTrigger>
             {/* Clicks in the portalled menu bubble through the React tree to the row link; don't let them open the chat. */}
-            {chat ? (
+            {guest ? (
+              <MenuContent align="start" anchor={anchor} className="w-56" onClick={(e) => e.preventDefault()}>
+                {session.coop?.ended ? (
+                  <MenuItem icon={Trash2} danger onClick={() => setDeleting(true)}>
+                    Remove from sidebar
+                  </MenuItem>
+                ) : (
+                  <MenuItem icon={LogOut} danger onClick={() => setLeaving(true)}>
+                    Leave
+                  </MenuItem>
+                )}
+              </MenuContent>
+            ) : chat ? (
               <MenuContent align="start" anchor={anchor} className="w-56" onClick={(e) => e.preventDefault()}>
                 <MenuItem
                   icon={session.pinnedAt ? PinOff : Pin}
@@ -242,6 +284,19 @@ export function SessionRow({
         </Link>
       </Tooltip>
       <RenameDialog session={session} open={renaming} onOpenChange={setRenaming} />
+      {guest && (
+        <ConfirmDialog
+          open={leaving}
+          onOpenChange={setLeaving}
+          title={`Leave ${session.coop!.hostName}’s session?`}
+          description="You need a new invite to come back."
+          confirmLabel="Leave"
+          onConfirm={async () => {
+            await rpc().call('coop.leave', { sessionId: session.id });
+            if (active) void navigate({ to: MODE_HOME[session.mode] });
+          }}
+        />
+      )}
       <NameDialog
         open={namingGroup}
         onOpenChange={setNamingGroup}
@@ -256,8 +311,9 @@ export function SessionRow({
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
-        title={`Delete ${sessionNoun(session)}?`}
-        description={`“${sessionTitle(session)}” and its artifacts will be deleted. This can’t be undone.`}
+        title={guest ? 'Remove from sidebar?' : `Delete ${sessionNoun(session)}?`}
+        description={guest ? `Co-op in “${sessionTitle(session)}” ended. It goes from your sidebar.` : `“${sessionTitle(session)}” and its artifacts will be deleted. This can’t be undone.`}
+        {...(guest ? { confirmLabel: 'Remove' } : {})}
         onConfirm={async () => {
           await rpc().call('sessions.delete', { id: session.id });
           if (active) void navigate({ to: MODE_HOME[session.mode] });

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { Navigate, useNavigate, useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { GitBranch, Rows3 } from 'lucide-react';
-import type { GitStatus, PermissionMode, SessionSummary, TranscriptView, WorkspaceSummary } from '@atelier/protocol';
+import { isCoopMirror, type GitStatus, type PermissionMode, type SessionSummary, type TranscriptView, type WorkspaceSummary } from '@atelier/protocol';
 import { Icon, IconButton, Menu, MenuContent, MenuGroup, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuTrigger, Spinner, cn, toast } from '../../components/ui/index.ts';
 import { draftKeys } from '../../lib/drafts.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
@@ -60,9 +60,15 @@ import { canServePages, pageUrl } from './workspace-pages.ts';
 import { ContextButton } from './context-popover.tsx';
 import { formatTokenCount } from './live-context.ts';
 import { LiveStatus } from './live-status.tsx';
+import { CoopButton } from '../coop/coop-button.tsx';
+import { CoopContext, mayAnswer, useCoop } from '../coop/coop.ts';
+import { CoopBanner, CoopTyping, coopCommands, coopContextNote, coopReadOnly, useGuestModel } from '../coop/coop-notices.tsx';
+import { CoopModelChip, useAnswerModels } from '../coop/coop-models.tsx';
 
 /** A web browser can't frame arbitrary sites: the Browser pane is the desktop app's. */
 const AVAILABLE: readonly PaneId[] = surface === 'desktop' ? PANES : PANES.filter((p) => p !== 'browser');
+/** A co-op guest's panes: the folder, its terminal and side chats are the host's (the Diff pane shows the session's own changes). */
+const GUEST_PANES: readonly PaneId[] = AVAILABLE.filter((p) => p === 'diff' || p === 'tasks' || p === 'plan' || p === 'artifact');
 /** Panes with their own toggle in the header; the others open from More. */
 const TOGGLED = new Set<PaneId>(['terminal', 'diff', 'browser', 'files']);
 
@@ -108,7 +114,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   const composer = useRef<ComposerHandle>(null);
   const { data: models } = useModels();
   const { data: workspaces } = useWorkspaces();
-  const attachments = useAttachments(draftKeys.session(sessionId));
+  const attachments = useAttachments(draftKeys.session(sessionId), isCoopMirror(sessionId) ? sessionId : undefined);
   const { ref: scroller, atBottom, followSmooth, onScroll } = useFollowScroll(live);
   // This session's own pick; until then, the person's default (Settings › Code).
   const { prefs } = usePrefs();
@@ -134,6 +140,13 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   const [pickedMode, setPickedMode] = useState<PermissionMode | null>(null);
   const mode = useEffectiveMode(pickedMode ?? session?.permissionMode ?? null);
   const keepAwake = useKeepAwake();
+  const coop = useCoop(live);
+  const guest = coop.shared && !coop.isHost;
+  const guestModel = useGuestModel(coop);
+  const answerModels = useAnswerModels(coop).flatMap((g) => g.models);
+  // On a guest's own computer a background task's output isn't one of the calls that reach the host.
+  const mirror = isCoopMirror(sessionId);
+  const panes = guest ? GUEST_PANES.filter((p) => !mirror || p !== 'tasks') : AVAILABLE;
 
   // The panes: as this device left them for this session, tiled into what the window has room for.
   const body = useRef<HTMLDivElement>(null);
@@ -266,7 +279,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
       .finally(() => setPickedMode((m) => (m === permissionMode ? null : m)));
   };
 
-  const sending = useSessionSend({ sessionId, busy, outbox: live.outbox, attachments, composer, follow: followSmooth });
+  const sending = useSessionSend({ sessionId, busy, outbox: live.outbox, attachments, composer, follow: followSmooth, coop });
   const imageReference = useImageReference(attachments, composer);
 
   const renderPane = (frame: PaneFrameState) => {
@@ -274,7 +287,8 @@ function CodeSession({ sessionId }: { sessionId: string }) {
       case 'terminal':
         return <TerminalPane frame={frame} workspace={workspace} commands={terminalCommands} folders={terminalFolders} />;
       case 'diff':
-        return <DiffPane frame={frame} workspace={workspace} sessionId={sessionId} />;
+        // A guest reads the session's own changes through the host (any workspace id does on a guest's own computer).
+        return <DiffPane frame={frame} workspace={workspace} sessionId={sessionId} {...(guest ? { guest: { workspaceId: session?.workspaceId ?? 'coop' } } : {})} />;
       case 'browser':
         return <BrowserPane frame={frame} pages={browserPages} />;
       case 'files':
@@ -311,6 +325,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   // A pane in fullscreen takes the whole session (the transcript stays mounted, out of sight), never more than that.
   const fullscreen = docked && !sheet && layout.maximized !== null;
   return (
+    <CoopContext.Provider value={coop}>
     <WorkspaceRoot.Provider value={workspace?.root ?? null}>
       <TranscriptSession.Provider value={sessionId}>
       <OpenWorkspaceFile.Provider value={workspaceId ? openFile : null}>
@@ -318,10 +333,12 @@ function CodeSession({ sessionId }: { sessionId: string }) {
           <ArtifactPaneContext.Provider value={artifactCards}>
             <RunInTerminal.Provider value={workspace?.available ? runInTerminal : null}>
             <div className="flex min-h-0 flex-1 flex-col">
-              <SessionHeader session={session}>
+              <SessionHeader session={session} coopButton={false}>
                 {workspace && <WorkspaceInfo session={session ?? undefined} workspace={workspace} git={git} onShowChanges={() => openPane('diff')} />}
+                {/* The Co-op button leads the header's right-hand controls. */}
+                {session ? <CoopButton session={session} className="ml-auto" /> : <span className="ml-auto" />}
                 <Menu>
-                  <MenuTrigger render={<IconButton icon={Rows3} label={`Transcript view: ${TRANSCRIPT_VIEWS.find((v) => v.value === view)!.label}`} size="sm" className="app-no-drag ml-auto text-fg-secondary" />} />
+                  <MenuTrigger render={<IconButton icon={Rows3} label={`Transcript view: ${TRANSCRIPT_VIEWS.find((v) => v.value === view)!.label}`} size="sm" className="app-no-drag text-fg-secondary" />} />
                   <MenuContent className="w-56">
                     <MenuGroup>
                       <MenuLabel>Transcript view</MenuLabel>
@@ -337,11 +354,11 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                 </Menu>
                 <PaneButtons
                   open={open}
-                  available={AVAILABLE}
+                  available={panes}
                   onToggle={togglePane}
                   onOpen={(pane) => (pane === 'tasks' ? sessionTasks.open() : openPane(pane))}
                   runningTasks={running}
-                  keepAwake={surface === 'desktop' ? { on: keepAwake.sessions.includes(sessionId), set: (on) => keepAwake.set(sessionId, on) } : null}
+                  keepAwake={surface === 'desktop' && !guest ? { on: keepAwake.sessions.includes(sessionId), set: (on) => keepAwake.set(sessionId, on) } : null}
                   buttonRef={buttonRef}
                 />
               </SessionHeader>
@@ -366,10 +383,11 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                                 status={<LiveStatus sessionId={sessionId} />}
                                 outbox={sending.actions}
                                 footer={
-                                  (live.pending || running > 0) && (
+                                  (live.pending || (running > 0 && panes.includes('tasks'))) && (
                                     <>
-                                      {live.pending && <NeedsInput />}
-                                      {running > 0 && <RunningTasksChip count={running} onOpen={() => sessionTasks.open()} />}
+                                      {/* Someone else's ask (co-op) is theirs: the docked card says whose. */}
+                                      {live.pending && mayAnswer(live.pending, coop) && <NeedsInput />}
+                                      {running > 0 && panes.includes('tasks') && <RunningTasksChip count={running} onOpen={() => sessionTasks.open()} />}
                                     </>
                                   )
                                 }
@@ -378,6 +396,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                           </TranscriptDetail.Provider>
                         )}
                       </div>
+                      {coop.shared && <CoopTyping live={live} coop={coop} />}
                       {!atBottom && <ScrollToBottom onClick={followSmooth} working={live.session?.status === 'running'} />}
                       <SelectionReply container={scroller} onReply={(text) => {
                 attachments.addQuote(text);
@@ -388,21 +407,26 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                       <TodoWidget todos={live.todos} running={busy} />
                       <PlanLimitWarning provider={providerType} providerId={model?.providerId} busy={busy} />
                       <UsageLimitWarning warning={live.limitWarning} />
+                      <CoopBanner coop={coop} live={live} />
                       <Composer
                         ref={composer}
                         variant="reply"
                         suggestion={live.suggestion}
                         draftKey={draftKeys.session(sessionId)}
                         compact
-                        connectors={connectors}
-                        imageModel={imageModel}
+                        connectors={guest ? undefined : connectors}
+                        imageModel={guest ? undefined : imageModel}
                         autoFocus
                         attachments={attachments}
-                        model={model}
+                        model={guest ? guestModel : model}
+                        anyModel={guest}
+                        readOnly={coopReadOnly(coop)}
+                        answerModels={answerModels}
+                        onTyping={coop.shared ? coop.typing : undefined}
                         streaming={busy}
                         placeholder="Type / for commands"
                         workspaceId={workspaceId}
-                        commands={[
+                        commands={coopCommands(coop, [
                           compactCommand(sessionId),
                           loopCommand(sessionId, () => sessionTasks.open()),
                           clearCommand(() => void navigate({ to: '/code', search: workspace ? { workspace: workspace.id } : {} })),
@@ -412,16 +436,16 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                             openPane('side');
                             sideChats.start(question);
                           }),
-                        ]}
+                        ])}
                         dock={live.pending && <InteractionCard key={live.pending.id} sessionId={sessionId} pending={live.pending} docked onOpenPlan={() => openPane('plan')} />}
                         onSubmit={sending.send}
                         onStop={sending.stop}
-                        onKeyDown={(e) => switchesMode(e) && setMode(nextMode(mode))}
-                        footerStart={<PermissionModePicker value={mode} onChange={setMode} />}
-                        footerCenter={smallWindow(live.context?.limit ?? model?.contextLength)}
+                        onKeyDown={(e) => !guest && switchesMode(e) && setMode(nextMode(mode))}
+                        footerStart={guest ? undefined : <PermissionModePicker value={mode} onChange={setMode} />}
+                        footerCenter={guest ? undefined : smallWindow(live.context?.limit ?? model?.contextLength)}
                         footerEnd={
                           <>
-                            <ModelPicker
+                            {guest ? <CoopModelChip coop={coop} open={pickingModel} onOpenChange={setPickingModel} /> : <ModelPicker
                               open={pickingModel}
                               onOpenChange={setPickingModel}
                               model={model}
@@ -432,8 +456,8 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                               inSession
                               sessionId={sessionId}
                               thinking={session?.thinking}
-                            />
-                            <ContextButton sessionId={sessionId} busy={busy} provider={providerType} providerId={model?.providerId} />
+                            />}
+                            <ContextButton sessionId={sessionId} busy={busy} provider={providerType} providerId={model?.providerId} note={coopContextNote(coop, guestModel, live.context?.used)} canCompact={!guest} />
                           </>
                         }
                       />
@@ -485,6 +509,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
       </OpenWorkspaceFile.Provider>
     </TranscriptSession.Provider>
     </WorkspaceRoot.Provider>
+    </CoopContext.Provider>
   );
 }
 

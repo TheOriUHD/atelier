@@ -33,6 +33,7 @@ import { DiffCard, placedEditRows, writeRows, type DiffRow } from './inline-diff
 import { displayPath, languageOf } from './paths.ts';
 import { planComments, revisionMessage, usePlanComments } from './plan-comments.ts';
 import { WorkspaceRoot, actionWords, asRecord, computerActions, str, summarize } from './tool-cards.tsx';
+import { countdown, mayAnswer, reportError, useCoopView, useNow, type CoopView } from '../coop/coop.ts';
 
 type Respond = (answer: PermissionAnswer | QuestionAnswer | ElicitationAnswer) => void;
 
@@ -53,6 +54,7 @@ export function InteractionCard({
   onOpenPlan?: () => void;
 }) {
   const [sending, setSending] = useState(false);
+  const coop = useCoopView();
   const respond: Respond = (answer) => {
     setSending(true);
     rpc()
@@ -61,12 +63,13 @@ export function InteractionCard({
         // Answered from another window, or the run stopped: the card goes away with the next session event.
         if (errorCode(e) === 'not_waiting') return;
         setSending(false);
-        toast.error(describeError(e).message);
+        reportError(sessionId, e);
       });
   };
   const request = pending.payload as PermissionRequest;
-  const card =
-    pending.kind === 'question' ? (
+  const card = !mayAnswer(pending, coop) ? (
+      <WaitingForApprover pending={pending} coop={coop} />
+    ) : pending.kind === 'question' ? (
       <QuestionCard request={pending.payload as QuestionRequest} sending={sending} respond={respond} />
     ) : pending.kind === 'elicitation' ? (
       <ElicitationCard request={pending.payload as ElicitationRequest} sending={sending} respond={respond} />
@@ -327,9 +330,44 @@ function permissionTitle(request: PermissionRequest, root: string | null): strin
     case 'OpenApp':
       return `Allow ${who} to open ${str(input.app) || 'an app'}?`;
     default:
-      return `Allow ${who} to use ${request.toolName}?`;
+      return `Allow ${who} to use ${lentTool(request.toolName) ?? request.toolName}?`;
   }
 }
+
+/**
+ * Co-op: a guest's own connector, lent to their turns in someone else's session, reaches the host as
+ * `coop_<keyId>__<tool>` and asks its owner. The tool's own name, or null for any other tool.
+ */
+export function lentTool(toolName: string): string | null {
+  return /^coop_[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*?__(.+)$/.exec(toolName)?.[1] ?? null;
+}
+
+/**
+ * Co-op: what the run waits on is someone else's to answer (whoever owns what is at risk). Read-only, with how long
+ * it waits for them before it is denied by itself.
+ */
+function WaitingForApprover({ pending, coop }: { pending: PendingInteraction; coop: CoopView }) {
+  const root = useContext(WorkspaceRoot);
+  const docked = useContext(Docked);
+  const approver = coop.person(pending.approver ?? coop.hostId).name;
+  const now = useNow(pending.expiresAt ? 1000 : null);
+  const request = pending.payload as PermissionRequest;
+  const what = pending.kind === 'permission' ? permissionTitle(request, root) : pending.kind === 'question' ? `${APP.name} asked a question.` : 'A connector asks for input.';
+  const ends = pending.kind === 'permission' ? 'denied' : 'skipped';
+  return (
+    <section aria-label={`Waiting for ${approver} to approve`} className={cn('flex flex-col gap-2 px-4 py-3.5', !docked && 'rounded-2xl inset-ring inset-ring-line')}>
+      <h3 className="text-section-heading text-fg">Waiting for {approver} to approve…</h3>
+      <p className="text-body break-words text-fg-secondary">{what}</p>
+      {pending.kind === 'permission' && request.toolName !== 'ExitPlanMode' && <CallPreview request={request} />}
+      {pending.expiresAt !== undefined && (
+        <p className="text-footnote text-fg-muted tabular-nums">
+          {pending.expiresAt > now ? `${ends === 'denied' ? 'Denied' : 'Skipped'} in ${countdown(pending.expiresAt, now)} unless ${approver} answers.` : `No answer from ${approver}: it’s ${ends}.`}
+        </p>
+      )}
+    </section>
+  );
+}
+
 
 /** An Edit's or Write's change as the card shows it, numbered (with the lines around it) once the backend said where an Edit lands. */
 function fileChange(request: PermissionRequest): { path: string; rows: DiffRow[]; numbered: boolean } | null {
@@ -405,7 +443,7 @@ function CallPreview({ request }: { request: PermissionRequest }) {
     default: {
       // A connector's tool shows every argument: approving it approves all of them.
       const { verb, target } = summarize({ name: request.toolName, input }, null, root);
-      return <pre className={box}>{target && !request.toolName.startsWith('mcp__') ? `${verb} ${target}` : JSON.stringify(input, null, 2)}</pre>;
+      return <pre className={box}>{target && !request.toolName.startsWith('mcp__') && !lentTool(request.toolName) ? `${verb} ${target}` : JSON.stringify(input, null, 2)}</pre>;
     }
   }
 }
@@ -419,13 +457,18 @@ function CallPreview({ request }: { request: PermissionRequest }) {
  */
 function PermissionPrompt({ sessionId, interactionId, request, sending, respond }: { sessionId: string; interactionId: string; request: PermissionRequest; sending: boolean; respond: Respond }) {
   const root = useContext(WorkspaceRoot);
+  const coop = useCoopView();
+  // Co-op: a guest's approval holds for this session at most (the host's rules are the host's to set), and one of
+  // their own connectors' calls asks them.
+  const guest = coop.shared && !coop.isHost;
+  const lent = lentTool(request.toolName);
   const inProject = root !== null;
   const rememberable = !request.warning && request.suggestedRule !== '';
   const rule = <code className="font-mono text-caption">{request.suggestedRule}</code>;
   const run = (answer: PermissionAnswer) => !sending && respond(answer);
   const deny = () => run({ behavior: 'deny' });
   const once = () => run({ behavior: 'allow' });
-  const always = () => run({ behavior: 'allow', remember: inProject ? 'project' : 'always' });
+  const always = () => run({ behavior: 'allow', remember: guest ? 'session' : inProject ? 'project' : 'always' });
   const onceDigit = rememberable ? 3 : 2;
   const why = useDenyReason((message) => run({ behavior: 'deny', message }), sending);
   const [wholeFile, setWholeFile] = useState(false);
@@ -442,7 +485,8 @@ function PermissionPrompt({ sessionId, interactionId, request, sending, respond 
           <Action label="Deny with reason…" caps={['R']} aria-expanded={why.open} disabled={sending} onClick={why.toggle} />
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {rememberable && (
+          {rememberable && guest && <Action label="Allow for this session" caps={['2', SHIFT, MOD, ENTER]} disabled={sending} onClick={always} />}
+          {rememberable && !guest && (
             <SplitAction
               menuLabel="Where to always allow"
               main={<Action label="Always allow" caps={['2', SHIFT, MOD, ENTER]} disabled={sending} onClick={always} className="rounded-r-none" />}
@@ -479,6 +523,7 @@ function PermissionPrompt({ sessionId, interactionId, request, sending, respond 
         letters: change ? { f: () => setWholeFile(true) } : undefined,
       })}
     >
+      {lent && <p className="text-footnote text-fg-muted">Your connector</p>}
       {reason && <p className="line-clamp-3 text-body break-words text-fg-secondary">{reason}</p>}
       <CallPreview request={request} />
       {/* "Bash needs your approval." says nothing the card doesn't: only a reason with something in it is shown. */}

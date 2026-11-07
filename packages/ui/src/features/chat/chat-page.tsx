@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from '@tanstack/react-router';
+import { isCoopMirror } from '@atelier/protocol';
 import { Spinner, cn, toast } from '../../components/ui/index.ts';
 import { draftKeys } from '../../lib/drafts.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
@@ -27,6 +28,9 @@ import { useSessionResearch } from './research.ts';
 import { useAttachments } from './use-attachments.ts';
 import { SideChatPanel, btwCommand, useSideChatPanel, useSideChats } from './side-chat.tsx';
 import { TemporaryBar } from './temporary.tsx';
+import { CoopContext, useCoop } from '../coop/coop.ts';
+import { CoopBanner, CoopTyping, coopCommands, coopContextNote, coopReadOnly, useGuestModel } from '../coop/coop-notices.tsx';
+import { CoopModelChip, useAnswerModels } from '../coop/coop-models.tsx';
 
 export function ChatPage() {
   const { sessionId } = useParams({ from: '/chat/$sessionId' });
@@ -35,7 +39,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const { data: models } = useModels();
   const [pickingModel, setPickingModel] = useState(false);
-  const attachments = useAttachments(live.session?.temporary ? undefined : draftKeys.session(sessionId));
+  const attachments = useAttachments(live.session?.temporary ? undefined : draftKeys.session(sessionId), isCoopMirror(sessionId) ? sessionId : undefined);
   const { ref: scroller, atBottom, followSmooth, onScroll } = useFollowScroll(live);
   const session = live.session;
   const connectors = useSessionConnectors(session);
@@ -49,12 +53,16 @@ export function ChatPage() {
   const sideChats = useSideChats(sessionId);
   const sidePanel = useSideChatPanel(sessionId);
   const temporary = !!session?.temporary;
+  const coop = useCoop(live);
+  const guest = coop.shared && !coop.isHost;
+  const guestModel = useGuestModel(coop);
+  const answerModels = useAnswerModels(coop).flatMap((g) => g.models);
 
   const fail = (e: unknown) => toast.error(describeError(e).message);
   const update = (patch: { model?: string }) => void rpc().call('sessions.update', { id: sessionId, ...patch }).catch(fail);
 
   const composer = useRef<ComposerHandle>(null);
-  const sending = useSessionSend({ sessionId, busy: streaming, outbox: live.outbox, attachments, composer, follow: followSmooth });
+  const sending = useSessionSend({ sessionId, busy: streaming, outbox: live.outbox, attachments, composer, follow: followSmooth, coop });
   const imageReference = useImageReference(attachments, composer);
 
   if (live.status === 'error')
@@ -65,6 +73,7 @@ export function ChatPage() {
     );
 
   return (
+    <CoopContext.Provider value={coop}>
     <div className="relative flex min-h-0 flex-1">
       {/* The chat column keeps the space left of the artifact panel, with 8px gaps around the panel. */}
       {/* Narrow screens: the panel covers the column instead. */}
@@ -90,11 +99,12 @@ export function ChatPage() {
                     live={live}
                     status={<LiveStatus sessionId={sessionId} withActivity />}
                     outbox={sending.actions}
-                    footer={temporary ? undefined : <CoworkOffer sessionId={sessionId} messages={live.messages} running={streaming || live.outbox.length > 0} />}
+                    footer={temporary || guest ? undefined : <CoworkOffer sessionId={sessionId} messages={live.messages} running={streaming || live.outbox.length > 0} />}
                   />
                 </ComposerImages.Provider>
               )}
             </div>
+            {coop.shared && <CoopTyping live={live} coop={coop} />}
             {!atBottom && <ScrollToBottom onClick={followSmooth} working={live.session?.status === 'running'} />}
             <SelectionReply container={scroller} onReply={(text) => {
                 attachments.addQuote(text);
@@ -104,19 +114,24 @@ export function ChatPage() {
           <div className="pr-6 pb-2 pl-8 max-md:px-4">
             <PlanLimitWarning provider={providerType} providerId={model?.providerId} busy={streaming} />
             <UsageLimitWarning warning={live.limitWarning} />
+            <CoopBanner coop={coop} live={live} />
             <Composer
               ref={composer}
               variant="reply"
               draftKey={temporary ? undefined : draftKeys.session(sessionId)}
               temporary={temporary}
-              connectors={connectors}
-              research={research}
-              imageModel={imageModel}
+              connectors={guest ? undefined : connectors}
+              research={guest ? undefined : research}
+              imageModel={guest ? undefined : imageModel}
               autoFocus
               attachments={attachments}
-              model={model}
+              model={guest ? guestModel : model}
+              anyModel={guest}
+              readOnly={coopReadOnly(coop)}
+              answerModels={answerModels}
+              onTyping={coop.shared ? coop.typing : undefined}
               streaming={streaming}
-              commands={[
+              commands={coopCommands(coop, [
                 clearCommand(() =>
                   void (temporary ? navigate({ to: '/', search: { temporary: true } }) : session?.projectId ? navigate({ to: '/projects/$projectId', params: { projectId: session.projectId } }) : navigate({ to: '/' })),
                 ),
@@ -126,15 +141,15 @@ export function ChatPage() {
                   sidePanel.setOpen(true);
                   sideChats.start(question);
                 }),
-              ]}
+              ])}
               dock={live.pending && <InteractionCard key={live.pending.id} sessionId={sessionId} pending={live.pending} docked />}
               onSubmit={sending.send}
               onStop={sending.stop}
               footerCenter={temporary ? 'Deleted when you leave · AI can make mistakes.' : 'AI can make mistakes.'}
               footerEnd={
                 <>
-                  <ContextButton sessionId={sessionId} busy={streaming} provider={providerType} providerId={model?.providerId} simple />
-                  <ModelPicker
+                  <ContextButton sessionId={sessionId} busy={streaming} provider={providerType} providerId={model?.providerId} simple note={coopContextNote(coop, guestModel, live.context?.used)} />
+                  {guest ? <CoopModelChip coop={coop} open={pickingModel} onOpenChange={setPickingModel} /> : <ModelPicker
                     open={pickingModel}
                     onOpenChange={setPickingModel}
                     model={model}
@@ -145,7 +160,7 @@ export function ChatPage() {
                     inSession
                     sessionId={sessionId}
                     thinking={session?.thinking}
-                  />
+                  />}
                 </>
               }
             />
@@ -155,5 +170,6 @@ export function ChatPage() {
       {artifact && <ArtifactPanel state={artifact} summary={live.artifacts[artifact.artifactId]} />}
       {sidePanel.open && !artifact && <SideChatPanel chats={sideChats} panel={sidePanel} />}
     </div>
+    </CoopContext.Provider>
   );
 }

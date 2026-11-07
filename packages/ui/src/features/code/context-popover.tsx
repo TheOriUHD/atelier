@@ -56,7 +56,25 @@ export function useOpenUsage(close: () => void) {
  * hosted API shows what the session cost. `simple` (Chat and Cowork): the window is one plain bar, with no breakdown
  * and no Compact session (they summarize older messages on their own).
  */
-export function ContextButton({ sessionId, busy, provider = null, providerId, simple = false }: { sessionId: string; busy: boolean; provider?: ProviderType | null; providerId?: string | undefined; simple?: boolean }) {
+export function ContextButton({
+  sessionId,
+  busy,
+  provider = null,
+  providerId,
+  simple = false,
+  note,
+  canCompact = true,
+}: {
+  sessionId: string;
+  busy: boolean;
+  provider?: ProviderType | null;
+  providerId?: string | undefined;
+  simple?: boolean;
+  /** A line under the bar (co-op: a guest's own model reads only the newest part of a long conversation). */
+  note?: string | undefined;
+  /** Compact session is the session owner's (a co-op guest has none). */
+  canCompact?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const openUsage = useOpenUsage(() => setOpen(false));
   const live = useThrottledLive(sessionId, liveContext, 150);
@@ -87,6 +105,8 @@ export function ContextButton({ sessionId, busy, provider = null, providerId, si
         providerId={providerId}
         simple={simple}
         busy={busy}
+        note={note}
+        canCompact={canCompact}
         onCompact={() => {
           setOpen(false);
           compactSession(sessionId);
@@ -123,6 +143,8 @@ function ContextPopover({
   providerId,
   simple,
   busy,
+  note,
+  canCompact = true,
   onCompact,
   onOpenUsage,
 }: {
@@ -132,6 +154,8 @@ function ContextPopover({
   providerId: string | undefined;
   simple: boolean;
   busy: boolean;
+  note?: string | undefined;
+  canCompact?: boolean;
   onCompact(): void;
   onOpenUsage(): void;
 }) {
@@ -147,6 +171,7 @@ function ContextPopover({
         <WindowHeading titleId={titleId} used={context.used} limit={context.limit} />
         <PlainBar fraction={context.used / context.limit} />
         <p className="text-body text-fg-secondary">Older messages are summarized automatically when it fills up.</p>
+        {note && <p className="text-footnote text-fg-muted">{note}</p>}
         <UsageSection provider={provider} providerId={providerId} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
       </PopoverContent>
     );
@@ -161,6 +186,7 @@ function ContextPopover({
       <div className="flex h-1.5 shrink-0 overflow-hidden rounded-full bg-fill-control" aria-hidden="true">
         {rows.map((r) => r.tokens > 0 && <span key={r.label} className={r.color} style={{ width: `${(r.tokens / context.limit) * 100}%` }} />)}
       </div>
+      {note && <p className="text-footnote text-fg-muted">{note}</p>}
       {expanded && (
         <div id={detailsId} className="flex flex-col gap-3">
           <table className="w-full text-body tabular-nums">
@@ -202,9 +228,11 @@ function ContextPopover({
       )}
       <div className="flex items-center justify-between gap-3">
         <span className="text-body text-fg-secondary">{left > 0 ? `${formatTokenCount(left)} until auto-compact` : 'Compacts before the next request'}</span>
-        <Button size="sm" disabled={busy} onClick={onCompact}>
-          Compact session
-        </Button>
+        {canCompact && (
+          <Button size="sm" disabled={busy} onClick={onCompact}>
+            Compact session
+          </Button>
+        )}
       </div>
       <UsageSection provider={provider} providerId={providerId} sessionCost={usage?.costUsd ?? null} onOpenUsage={onOpenUsage} />
     </PopoverContent>

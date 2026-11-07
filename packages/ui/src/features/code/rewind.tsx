@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { History } from 'lucide-react';
-import { messageText, type Message } from '@atelier/protocol';
+import { isCoopMirror, messageText, type Message } from '@atelier/protocol';
 import { Button, Dialog, DialogContent, DialogFooter, cn, toast } from '../../components/ui/index.ts';
 import { resetFromSnapshot } from '../../lib/live-session.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
@@ -16,7 +16,8 @@ export const checkpointsKey = (sessionId: string) => ['checkpoints', sessionId] 
 
 /** The person's messages whose turns changed files, with those files. */
 export function useCheckpoints(sessionId: string) {
-  return useQuery({ queryKey: checkpointsKey(sessionId), queryFn: () => rpc().call('checkpoints.list', { sessionId }) });
+  // A co-op session on someone else's computer has no Rewind here: it is the host's.
+  return useQuery({ queryKey: checkpointsKey(sessionId), queryFn: () => rpc().call('checkpoints.list', { sessionId }), enabled: !isCoopMirror(sessionId) });
 }
 
 export function rewindCommand(open: () => void): SlashCommand {

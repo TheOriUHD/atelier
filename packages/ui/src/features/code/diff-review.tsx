@@ -48,7 +48,21 @@ export function compareOptions({ repo, branch, defaultBranch }: { repo: boolean;
   ];
 }
 
-export function DiffPane({ frame, workspace, sessionId }: { frame: PaneFrameState; workspace: WorkspaceSummary | undefined; sessionId: string }) {
+/**
+ * `guest`: a co-op guest's view, where the folder is the host's: only the session's own changes, read-only, through
+ * the workspace id the session names (any id on a guest's own computer, which asks the host).
+ */
+export function DiffPane({ frame, workspace, sessionId, guest }: { frame: PaneFrameState; workspace: WorkspaceSummary | undefined; sessionId: string; guest?: { workspaceId: string } }) {
+  if (guest)
+    return (
+      <PaneFrame frame={frame} title="Diff">
+        <DiffView workspaceId={guest.workspaceId} sessionId={sessionId} compare="session" showFiles sessionOnly />
+      </PaneFrame>
+    );
+  return <FolderDiffPane frame={frame} workspace={workspace} sessionId={sessionId} />;
+}
+
+function FolderDiffPane({ frame, workspace, sessionId }: { frame: PaneFrameState; workspace: WorkspaceSummary | undefined; sessionId: string }) {
   const qc = useQueryClient();
   const usable = workspace?.available ? workspace : null;
   const git = useGitStatus(usable?.id);
@@ -127,16 +141,17 @@ function statusOf(diff: FileDiff): GitFileStatus['status'] {
 }
 
 /** The git bar and the diff for one compare: the pane's body. */
-export function DiffView({ workspaceId, sessionId, compare = 'head', showFiles = false }: { workspaceId: string; sessionId?: string; compare?: DiffCompare; showFiles?: boolean }) {
-  const git = useGitStatus(workspaceId);
+export function DiffView({ workspaceId, sessionId, compare = 'head', showFiles = false, sessionOnly = false }: { workspaceId: string; sessionId?: string; compare?: DiffCompare; showFiles?: boolean; sessionOnly?: boolean }) {
+  // A co-op guest reads the session's changes and nothing else of the folder: no git status, no staging or rejecting.
+  const git = useGitStatus(sessionOnly ? null : workspaceId);
   const diff = useWorkspaceDiff(workspaceId, compare, sessionId);
   const action = useGitAction(workspaceId);
   const parsed = useMemo(() => parseUnifiedDiff(diff.data?.diff ?? ''), [diff.data]);
 
   const error = git.error ?? diff.error;
   if (error) return <PaneMessage error>{describeError(error).message}</PaneMessage>;
-  if (git.data === undefined || !diff.data) return <Spinner label="Loading changes" className="m-4 text-fg-muted" />;
-  const status = git.data;
+  if ((!sessionOnly && git.data === undefined) || !diff.data) return <Spinner label="Loading changes" className="m-4 text-fg-muted" />;
+  const status = sessionOnly ? null : (git.data ?? null);
   const byPath = new Map(parsed.map((f) => [f.path, f]));
   // Against HEAD, git status says what changed (untracked and conflicted files too); otherwise the diff does.
   const changed: Changed[] =
@@ -147,7 +162,7 @@ export function DiffView({ workspaceId, sessionId, compare = 'head', showFiles =
   const staged = stageable.filter((f) => f.staged);
   const stage = (paths: string[], next: boolean) => void action.run('stage', () => rpc().call('git.stage', { workspaceId, paths, staged: next }));
   // Rejecting reverses a hunk in the working tree: only for diffs that end there.
-  const rejectable = compare === 'head' || compare === 'session';
+  const rejectable = !sessionOnly && (compare === 'head' || compare === 'session');
 
   return (
     <>
@@ -179,6 +194,29 @@ export function DiffView({ workspaceId, sessionId, compare = 'head', showFiles =
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * A unified diff read-only (a co-op track's branch): the changed files and each one's card, as the Diff pane shows them,
+ * with nothing to stage or reject.
+ */
+export function DiffText({ diff, truncated, showFiles = true }: { diff: string; truncated: boolean; showFiles?: boolean }) {
+  const parsed = useMemo(() => parseUnifiedDiff(diff), [diff]);
+  const action = useGitAction('');
+  const changed: Changed[] = parsed.map((d) => ({ path: d.path, status: statusOf(d), staged: null, diff: d }));
+  if (changed.length === 0) return <PaneMessage>No changes to show</PaneMessage>;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex h-6 items-center px-3 text-footnote text-fg-muted">
+        {changed.length} changed {changed.length === 1 ? 'file' : 'files'}
+      </div>
+      {showFiles && changed.length > 1 && <FileList files={changed} />}
+      {changed.map((f) => (
+        <FileCard key={f.path} workspaceId="" file={f} action={action} rejectable={false} onStage={() => {}} />
+      ))}
+      {truncated && <PaneMessage>The diff is too large to show in full.</PaneMessage>}
+    </div>
   );
 }
 

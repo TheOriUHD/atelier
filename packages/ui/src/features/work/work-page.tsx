@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import type { BackgroundTask, Todo, WorkspaceSummary } from '@atelier/protocol';
+import { isCoopMirror, type BackgroundTask, type Todo, type WorkspaceSummary } from '@atelier/protocol';
 import { Spinner, cn, toast } from '../../components/ui/index.ts';
 import { draftKeys } from '../../lib/drafts.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
@@ -38,6 +38,9 @@ import { FilePreview } from './file-preview.tsx';
 import { latestRun, openAction, outputFiles, saveFile, type OutputFile } from './output-files.ts';
 import { TaskProgressList } from './task-progress.tsx';
 import { SideChatPanel, btwCommand, useSideChatPanel, useSideChats } from '../chat/side-chat.tsx';
+import { CoopContext, useCoop } from '../coop/coop.ts';
+import { CoopBanner, CoopTyping, coopCommands, coopContextNote, coopReadOnly, useGuestModel } from '../coop/coop-notices.tsx';
+import { CoopModelChip, useAnswerModels } from '../coop/coop-models.tsx';
 
 /** Code's tool cards, every one closed to its summary line. */
 function WorkActivity({ steps, live }: { steps: ActivityStepView[]; live?: boolean }) {
@@ -56,7 +59,7 @@ export function WorkPage() {
   const navigate = useNavigate();
   const { data: models } = useModels();
   const { data: workspaces } = useWorkspaces();
-  const attachments = useAttachments(draftKeys.session(sessionId));
+  const attachments = useAttachments(draftKeys.session(sessionId), isCoopMirror(sessionId) ? sessionId : undefined);
   const { ref: scroller, atBottom, followSmooth, onScroll } = useFollowScroll(live);
   const [pickingModel, setPickingModel] = useState(false);
   const [preview, setPreview] = useState<OutputFile | null>(null);
@@ -74,6 +77,10 @@ export function WorkPage() {
   const sessionTasks = useMemo(() => ({ tasks: live.tasks }), [live.tasks]);
   const sideChats = useSideChats(sessionId);
   const sidePanel = useSideChatPanel(sessionId);
+  const coop = useCoop(live);
+  const guest = coop.shared && !coop.isHost;
+  const guestModel = useGuestModel(coop);
+  const answerModels = useAnswerModels(coop).flatMap((g) => g.models);
 
   // Tools change files: after each round of results, when a background command or sub-agent ends and when a reply ends,
   // previews show the new contents.
@@ -94,7 +101,7 @@ export function WorkPage() {
   };
 
   const composer = useRef<ComposerHandle>(null);
-  const sending = useSessionSend({ sessionId, busy, outbox: live.outbox, attachments, composer, follow: followSmooth });
+  const sending = useSessionSend({ sessionId, busy, outbox: live.outbox, attachments, composer, follow: followSmooth, coop });
   const imageReference = useImageReference(attachments, composer);
 
   if (live.status === 'error')
@@ -119,6 +126,7 @@ export function WorkPage() {
     );
 
   return (
+    <CoopContext.Provider value={coop}>
     <WorkspaceRoot.Provider value={root}>
       <TranscriptSession.Provider value={sessionId}>
       <SessionTasks.Provider value={sessionTasks}>
@@ -152,6 +160,7 @@ export function WorkPage() {
                       </>
                     )}
                   </div>
+                  {coop.shared && <CoopTyping live={live} coop={coop} />}
                   {!atBottom && <ScrollToBottom onClick={followSmooth} working={live.session?.status === 'running'} />}
                   <SelectionReply container={scroller} onReply={(text) => {
                 attachments.addQuote(text);
@@ -161,19 +170,24 @@ export function WorkPage() {
                 <div className="pr-6 pb-5 pl-8 max-md:px-4">
                   <PlanLimitWarning provider={providerType} providerId={model?.providerId} busy={busy} />
                   <UsageLimitWarning warning={live.limitWarning} />
+                  <CoopBanner coop={coop} live={live} />
                   <Composer
                     ref={composer}
                     variant="reply"
                     suggestion={live.suggestion}
                     draftKey={draftKeys.session(sessionId)}
-                    connectors={connectors}
-                    imageModel={imageModel}
+                    connectors={guest ? undefined : connectors}
+                    imageModel={guest ? undefined : imageModel}
                     autoFocus
                     attachments={attachments}
-                    model={model}
+                    model={guest ? guestModel : model}
+                    anyModel={guest}
+                    readOnly={coopReadOnly(coop)}
+                    answerModels={answerModels}
+                    onTyping={coop.shared ? coop.typing : undefined}
                     streaming={busy}
                     workspaceId={workspace?.available ? workspace.id : null}
-                    commands={[
+                    commands={coopCommands(coop, [
                       loopCommand(sessionId, () => listLoops(live.tasks)),
                       clearCommand(() => void navigate({ to: '/work', search: workspace ? { workspace: workspace.id } : {} })),
                       modelCommand(() => setPickingModel(true)),
@@ -182,14 +196,14 @@ export function WorkPage() {
                         sidePanel.setOpen(true);
                         sideChats.start(question);
                       }),
-                    ]}
+                    ])}
                     dock={live.pending && <InteractionCard key={live.pending.id} sessionId={sessionId} pending={live.pending} docked />}
                     onSubmit={sending.send}
                     onStop={sending.stop}
                     footerEnd={
                       <>
-                        <ContextButton sessionId={sessionId} busy={busy} provider={providerType} providerId={model?.providerId} simple />
-                        <ModelPicker
+                        <ContextButton sessionId={sessionId} busy={busy} provider={providerType} providerId={model?.providerId} simple note={coopContextNote(coop, guestModel, live.context?.used)} />
+                        {guest ? <CoopModelChip coop={coop} open={pickingModel} onOpenChange={setPickingModel} /> : <ModelPicker
                           open={pickingModel}
                           onOpenChange={setPickingModel}
                           model={model}
@@ -200,7 +214,7 @@ export function WorkPage() {
                           inSession
                           sessionId={sessionId}
                           thinking={session?.thinking}
-                        />
+                        />}
                       </>
                     }
                   />
@@ -216,6 +230,7 @@ export function WorkPage() {
       </SessionTasks.Provider>
       </TranscriptSession.Provider>
     </WorkspaceRoot.Provider>
+    </CoopContext.Provider>
   );
 }
 

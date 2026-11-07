@@ -14,6 +14,7 @@ import { CoworkHome } from '../features/work/cowork-home.tsx';
 import { ArtifactsPage } from '../features/artifacts/artifacts-page.tsx';
 import { ImagesPage } from '../features/images/images-page.tsx';
 import { CUSTOMIZE_TABS, CustomizePage, type CustomizeSearch } from '../features/customize/customize-page.tsx';
+import { JoinPage } from '../features/coop/join-page.tsx';
 
 /** Overlays addressable from any page: `?settings=providers&row=providers.add`. */
 export interface RootSearch {
@@ -69,6 +70,11 @@ const customizeRoute = createRoute({
     ...(search.mode === 'code' ? { mode: 'code' as const } : {}),
   }),
 });
+/**
+ * A co-op invite (`#/join/v1.<room>.<secret>.<meta>`): the desktop app lands here from `atelier://join#…` links
+ * (apps/desktop/src/main.ts sets the hash), and so does a link pasted into the address.
+ */
+const joinRoute = createRoute({ getParentRoute: () => rootRoute, path: '/join/$fragment', component: JoinPage, remountDeps: ({ params }) => params.fragment });
 // The sign-in gate handles invite links; someone already signed in just lands at home.
 const inviteRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -90,6 +96,7 @@ const routeTree = rootRoute.addChildren([
   artifactsRoute,
   imagesRoute,
   customizeRoute,
+  joinRoute,
   inviteRoute,
 ]);
 

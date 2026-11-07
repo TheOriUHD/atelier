@@ -1,10 +1,10 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react';
-import { ArrowUp, CornerDownLeft, FileText, Paperclip, Square, Telescope, TriangleAlert, X } from 'lucide-react';
+import { ArrowUp, Bot, CornerDownLeft, FileText, Paperclip, Square, Telescope, TriangleAlert, X } from 'lucide-react';
 import type { McpServerStatus, ModelInfo } from '@atelier/protocol';
 import { Badge, Button, Dialog, DialogContent, Icon, Lightbox, Spinner, Tooltip, cn } from '../../components/ui/index.ts';
 import { blobUrl, saveBlob } from '../../lib/platform.ts';
 import { pressIs, useShortcut } from '../../lib/shortcuts.ts';
-import { useComposerMenu, type SlashCommand } from './composer-menu.tsx';
+import { useComposerMenu, type ModelMention, type SlashCommand } from './composer-menu.tsx';
 import { leadingCommand } from './command-text.tsx';
 import { PlusMenu } from './plus-menu.tsx';
 import type { ImageModelChoice } from './image-model.ts';
@@ -32,7 +32,8 @@ export interface ComposerProps {
   attachments: Attachments;
   model: ModelInfo | undefined;
   streaming: boolean;
-  onSubmit(text: string): void;
+  /** `answerWith`: co-op, the model the person named for this message with `@` (`host:<ref>` or `own:<ref>`). */
+  onSubmit(text: string, options?: { answerWith?: string }): void;
   onStop?(): void;
   /** Built-in `/` commands; skills and custom commands come from the backend. */
   commands?: SlashCommand[];
@@ -69,6 +70,14 @@ export interface ComposerProps {
    * Tab puts it in. Typing anything, or putting it in, sets it aside until the next one.
    */
   suggestion?: string | null;
+  /** Co-op: called as the person types (the page tells the others, at most every 2 s). */
+  onTyping?(): void;
+  /** Co-op: the box can't send (co-op ended, or the person watches); this says why, in its place. */
+  readOnly?: string | null;
+  /** Co-op guests: the host's backend picks the model, so sending doesn't wait for one here. */
+  anyModel?: boolean;
+  /** Co-op: the models `@` offers to answer one message (whose they are in `group`). */
+  answerModels?: readonly ModelMention[];
 }
 
 export interface ConnectorSwitches {
@@ -106,8 +115,14 @@ export function Composer({
   dock,
   temporary,
   suggestion,
+  onTyping,
+  readOnly,
+  anyModel = false,
+  answerModels,
 }: ComposerProps) {
   const [text, setText] = useDraft(draftKey);
+  // Co-op: the model this message asked for with `@`, until it is sent or removed.
+  const [answerWith, setAnswerWith] = useState<ModelMention | null>(null);
   // Offered whenever the box is empty, until the next message is sent (the backend then drops it).
   const suggested = suggestion && text === '' && !streaming ? suggestion : null;
   const [caret, setCaret] = useState(0);
@@ -128,7 +143,7 @@ export function Composer({
     mention: (path) => replace(`${text.trim() ? `${text.replace(/\s+$/, '')} ` : ''}@${path} `, Number.MAX_SAFE_INTEGER),
     focus: () => input.current?.focus(),
   }));
-  const menu = useComposerMenu({ text, caret, commands, workspaceId, onChange: replace });
+  const menu = useComposerMenu({ text, caret, commands, workspaceId, ...(answerModels?.length ? { models: answerModels, onModel: setAnswerWith } : {}), onChange: replace });
 
   useLayoutEffect(() => {
     const el = input.current;
@@ -164,7 +179,7 @@ export function Composer({
   const mirror = useRef<HTMLDivElement>(null);
   const command = /^\/(\S+)\s*([\s\S]*)$/.exec(text);
   const builtIn = command ? commands.find((c) => c.run && c.name === command[1]) : undefined;
-  const canSend = !!model && !attachments.uploading && (text.trim().length > 0 || attachments.items.some((a) => a.status === 'ready'));
+  const canSend = (!!model || anyModel) && !attachments.uploading && (text.trim().length > 0 || attachments.items.some((a) => a.status === 'ready'));
 
   const submit = () => {
     if (builtIn) {
@@ -174,8 +189,10 @@ export function Composer({
     }
     // While the agent works the message is sent all the same: it waits for the agent's next step (or Send now).
     if (!canSend) return;
-    onSubmit(text.trim());
+    if (answerWith) onSubmit(text.trim(), { answerWith: answerWith.value });
+    else onSubmit(text.trim());
     setText('');
+    setAnswerWith(null);
   };
 
   const attachButton = (
@@ -215,6 +232,17 @@ export function Composer({
     </>
   );
 
+  if (readOnly)
+    return (
+      <div className="relative mx-auto flex w-full max-w-(--at-layout-composer-width-chat) flex-col gap-2">
+        {/* What the run waits on stays in sight for someone who watches: whose it is to answer. */}
+        {dock && <div className="max-h-[60vh] overflow-y-auto rounded-composer bg-raised shadow-composer">{dock}</div>}
+        <div role="status" className="flex min-h-12 items-center justify-center rounded-composer bg-fill-ghost-hover px-4 py-3 text-center text-body text-fg-secondary">
+          {readOnly}
+        </div>
+      </div>
+    );
+
   return (
     <div className={cn('relative mx-auto w-full', variant === 'new' ? 'max-w-(--at-layout-composer-width-new-chat)' : 'max-w-(--at-layout-composer-width-chat)')}>
       {menu.menu}
@@ -227,6 +255,24 @@ export function Composer({
       >
         {dock && <div className="max-h-[60vh] overflow-y-auto border-b border-line">{dock}</div>}
         <div className={cn('flex flex-col', compact ? 'p-1' : 'p-2')}>
+        {answerWith && (
+          <div className="flex px-1.5 pt-1">
+            <span className="flex h-6 max-w-full items-center gap-1.5 rounded-md bg-interactive-subtle pr-0.5 pl-2 text-control-sm text-interactive-text">
+              <Icon icon={Bot} size="sm" className="shrink-0" />
+              <span className="min-w-0 truncate">
+                {answerWith.label} <span className="opacity-70">· {answerWith.group}</span>
+              </span>
+              <button
+                type="button"
+                aria-label={`Don’t ask ${answerWith.label}`}
+                onClick={() => setAnswerWith(null)}
+                className="flex size-5 shrink-0 items-center justify-center rounded-xs outline-none focus-ring hover:bg-interactive/15"
+              >
+                <Icon icon={X} size="sm" className="size-3" />
+              </button>
+            </span>
+          </div>
+        )}
         {(attachments.items.length > 0 || attachments.quotes.length > 0) && (
           <div className="flex gap-2 overflow-x-auto p-1.5 pb-2">
             {attachments.quotes.map((q, i) => (
@@ -265,6 +311,7 @@ export function Composer({
             onChange={(e) => {
               setText(e.target.value);
               setCaret(e.target.selectionStart);
+              if (e.target.value.trim()) onTyping?.();
             }}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
             onScroll={(e) => {

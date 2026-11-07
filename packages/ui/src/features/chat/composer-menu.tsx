@@ -1,11 +1,12 @@
 /**
  * The composer's suggestion menus (design/components.md › SlashMenu, MentionMenu). `/` at the start lists the
  * built-in commands, then the skills and custom commands people may start; `@` in a Code composer lists the
- * workspace's files. ↑/↓ move the highlight, Enter or Tab picks, Esc closes.
+ * workspace's files, and in a co-op session first the models the person may name for this one message.
+ * ↑/↓ move the highlight, Enter or Tab picks, Esc closes.
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { File, ScrollText, SquareSlash, type LucideIcon } from 'lucide-react';
+import { Bot, File, ScrollText, SquareSlash, type LucideIcon } from 'lucide-react';
 import { Icon, cn } from '../../components/ui/index.ts';
 import { keys } from '../../lib/queries.ts';
 import { rpc } from '../../lib/rpc.ts';
@@ -34,6 +35,22 @@ export function filterCommands(commands: readonly SlashCommand[], query: string)
 export function mentionAt(text: string, caret: number): { start: number; query: string } | null {
   const m = /(?:^|\s)@(\S*)$/.exec(text.slice(0, caret));
   return m ? { start: caret - m[1]!.length - 1, query: m[1]! } : null;
+}
+
+/** A model a co-op message can name to answer it (`@`): `value` is what `answerWith` takes. */
+export interface ModelMention {
+  value: string;
+  label: string;
+  description: string;
+  /** Whose models it is among ("Ada’s models", "Your models"). */
+  group: string;
+  disabled: boolean;
+}
+
+/** Models whose name or group has what was typed after `@`. */
+export function filterModels(models: readonly ModelMention[], query: string): ModelMention[] {
+  const q = query.toLowerCase();
+  return models.filter((m) => !m.disabled && (m.label.toLowerCase().includes(q) || m.value.toLowerCase().includes(q) || m.group.toLowerCase().includes(q)));
 }
 
 interface Item {
@@ -67,6 +84,8 @@ export function useComposerMenu({
   caret,
   commands,
   workspaceId,
+  models = [],
+  onModel,
   onChange,
 }: {
   text: string;
@@ -74,11 +93,14 @@ export function useComposerMenu({
   commands: readonly SlashCommand[];
   /** Scopes skills and commands to the workspace, and turns on `@` file mentions. */
   workspaceId: string | null | undefined;
+  /** Co-op: the models `@` offers for this one message; picking one takes the `@…` out of the text. */
+  models?: readonly ModelMention[];
+  onModel?(model: ModelMention): void;
   onChange(text: string, caret: number): void;
 }) {
   const id = useId();
   const slash = /^\/(\S*)$/.exec(text)?.[1];
-  const mention = workspaceId && slash === undefined ? mentionAt(text, caret) : null;
+  const mention = (workspaceId || (models.length > 0 && onModel)) && slash === undefined ? mentionAt(text, caret) : null;
   const query = useDebounced(mention?.query ?? null, MENTION_DEBOUNCE_MS);
   // Esc hides the menu until the text changes.
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -120,8 +142,23 @@ export function useComposerMenu({
         </>
       ),
     }));
-  } else if (mention && query !== null && files.data) {
-    items = files.data.map((path) => ({
+  } else if (mention && query !== null && (files.data || !workspaceId)) {
+    const named = onModel ? filterModels(models, mention.query) : [];
+    items = named.map((m) => ({
+      icon: Bot,
+      title: `${m.label} · ${m.group}`,
+      pick: () => {
+        onChange(`${text.slice(0, mention.start)}${text.slice(caret)}`.replace(/^\s+/, ''), mention.start);
+        onModel!(m);
+      },
+      row: (
+        <>
+          <span className="shrink-0 text-fg">{m.label}</span>
+          <span className="min-w-0 flex-1 truncate text-fg-muted">{m.group}</span>
+        </>
+      ),
+    }));
+    items = items.concat((files.data ?? []).map((path) => ({
       icon: File,
       title: path,
       pick: () => onChange(`${text.slice(0, mention.start)}@${path} ${text.slice(caret)}`, mention.start + path.length + 2),
@@ -131,10 +168,10 @@ export function useComposerMenu({
           <span className="text-fg">{path.slice(path.lastIndexOf('/') + 1)}</span>
         </span>
       ),
-    }));
+    })));
   }
 
-  const open = trigger !== null && dismissed !== text && (items.length > 0 || (!!mention && files.data !== undefined && query !== null));
+  const open = trigger !== null && dismissed !== text && (items.length > 0 || (!!mention && !!workspaceId && files.data !== undefined && query !== null));
   const highlight = highlighted.trigger === trigger ? Math.min(highlighted.index, Math.max(items.length - 1, 0)) : 0;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -154,7 +191,7 @@ export function useComposerMenu({
   const menu = open && (
     <SuggestionList
       id={id}
-      label={slash !== undefined ? 'Commands' : 'Files'}
+      label={slash !== undefined ? 'Commands' : workspaceId ? 'Files' : 'Models'}
       wide={slash === undefined}
       items={items}
       highlight={highlight}

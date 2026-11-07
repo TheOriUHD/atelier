@@ -29,7 +29,11 @@ import { ReadAloudButton } from './read-aloud.tsx';
 import { modelSubtitle, useModelGroups } from './models.ts';
 import { MessageTime } from './message-time.tsx';
 import { AgentNotice, MessageNotice, MovedNotice } from '../code/tool-cards.tsx';
-import { Outbox, type OutboxActions } from './outbox.tsx';
+import { AuthorLabel, Outbox, type OutboxActions } from './outbox.tsx';
+import type { Reaction } from '../coop/coop-reactions.tsx';
+import { reportError, turnOwner, useCoopView, type CoopView } from '../coop/coop.ts';
+import { SecondOpinion, answerWithName } from '../coop/coop-models.tsx';
+import { ReactButton, ReactionPills } from '../coop/coop-reactions.tsx';
 import { groupTurns, isStreaming, stepView, toolResults, turnItems, type ActivityStepView, type PartRef } from './turns.ts';
 
 /** How a run of tool calls (and the thinking between them) is shown: Chat summarizes it, Code shows a card per call. */
@@ -58,6 +62,8 @@ export function Transcript({
   /** What the waiting messages' buttons do (messages sent while the agent works). */
   outbox?: OutboxActions;
 }) {
+  const coop = useCoopView();
+  const { data: models } = useModels();
   const turns = groupTurns(live.messages);
   const running = live.session?.status === 'running';
   const busy = running || live.session?.status === 'waiting';
@@ -69,6 +75,9 @@ export function Transcript({
   // Two running indicators on screen at once look cheap: only the lowest one is drawn.
   const column = useRef<HTMLDivElement>(null);
   useLowestIndicatorOnly(column);
+  // Co-op: whom the running turn is for, and what the viewer may do with the conversation's history.
+  const turnFor = coop.shared && busy ? turnOwner(live.messages, coop.hostId) : null;
+  const may = coopMay(coop);
 
   return (
     <ChangeAreaProvider sessionId={sessionId}>
@@ -80,16 +89,19 @@ export function Transcript({
             key={turn.message.id}
             sessionId={sessionId}
             message={turn.message}
-            siblings={live.siblings[turn.message.id]}
+            siblings={may.branch ? live.siblings[turn.message.id] : undefined}
             disabled={busy}
             editing={editing === turn.message.id}
             onEditing={setEditing}
-            onRewind={rewind?.messageIds.has(turn.message.id) ? rewind.onRewind : undefined}
+            onRewind={may.rewind && rewind?.messageIds.has(turn.message.id) ? rewind.onRewind : undefined}
+            {...userMessageCoop(coop, turn.message, may)}
+            reactions={coop.shared ? live.reactions?.[turn.message.id] : undefined}
+            askedFor={coop.shared && turn.message.answerWith ? answerWithName(turn.message.answerWith, models, coop.state?.hostModels) : undefined}
           />
         ) : turn.kind === 'assistant' ? (
           <AssistantTurn
             key={turn.messages[0]!.id}
-            asked={editable(turns[i - 1])}
+            asked={mayEditAsked(coop, may, turns[i - 1]) ? editable(turns[i - 1]) : undefined}
             onEditing={setEditing}
             sessionId={sessionId}
             messages={turn.messages}
@@ -100,8 +112,13 @@ export function Transcript({
             toolInputs={turn === last ? live.toolInputs : NONE}
             toolOutput={turn === last ? live.toolOutput : NONE}
             toolProgress={turn === last ? live.toolProgress : undefined}
-            siblings={live.siblings[turn.messages[0]!.id]}
+            siblings={may.branch ? live.siblings[turn.messages[0]!.id] : undefined}
             activity={activity}
+            forName={assistantFor(coop, turn.messages, turns[i - 1])}
+            retryable={may.retry}
+            retryWith={may.retryWith}
+            secondOpinion={coop.shared && may.retry}
+            reactions={coop.shared ? live.reactions?.[replyId(turn.messages)] : undefined}
             last={turn === last}
             // The dots of an empty reply wait for the run to say more; when the line below says what it waits for, they would be a second one.
             placeholder={!status && live.queued === null && !live.compacting}
@@ -126,7 +143,7 @@ export function Transcript({
         ) : (
           running && last?.kind !== 'assistant' && <Waiting label="Waiting for the reply" phase={live.phase} />
         ))}
-      {outbox && <Outbox items={live.outbox} actions={outbox} />}
+      {outbox && <Outbox items={live.outbox} actions={outbox} turnFor={turnFor} />}
       {footer}
       {live.session?.status === 'interrupted' && last && (
         <div className="flex items-center gap-3 text-body text-fg-muted">
@@ -143,6 +160,45 @@ export function Transcript({
 }
 
 const NONE: Record<string, string> = {};
+
+/** The message of an assistant turn that reactions go on: its last reply. */
+const replyId = (messages: readonly Message[]) => (messages.findLast((m) => m.role === 'assistant') ?? messages[0]!).id;
+
+/**
+ * What a co-op participant may do with the conversation (packages/core/src/coop/rules.ts): everyone who can chat
+ * retries and edits their own messages, as themselves; switching branches, rewinding and retrying with another model
+ * (which changes the session's model) are the host's. A viewer only reads.
+ */
+function coopMay(coop: CoopView) {
+  const host = !coop.shared || coop.isHost;
+  const chat = host || (coop.role !== 'viewer' && !coop.ended);
+  return { branch: host, rewind: host, retryWith: host, retry: chat, edit: chat };
+}
+
+/** A user message's author in a shared session, and whether the viewer may edit it (their own; the host any). */
+function userMessageCoop(coop: CoopView, message: Message, may: ReturnType<typeof coopMay>): { authorName?: string; authorAvatar?: string | null; editable: boolean; retryable: boolean } {
+  if (!coop.shared) return { editable: true, retryable: true };
+  const who = coop.person(message.author);
+  // Separate strings, not an object: the message is memoized on its props.
+  return { authorName: who.me ? 'You' : who.name, authorAvatar: who.avatar, editable: may.edit && (coop.isHost || who.me), retryable: may.retry };
+}
+
+/** Whether the viewer may edit the message a reply answers (a refusal offers it): their own, or the host any. */
+function mayEditAsked(coop: CoopView, may: ReturnType<typeof coopMay>, before: ReturnType<typeof groupTurns>[number] | undefined): boolean {
+  if (!may.edit) return false;
+  return !coop.shared || coop.isHost || (before?.kind === 'user' && coop.person(before.message.author).me);
+}
+
+/** "for Ben": whom an assistant turn answered, in a shared session, when it isn't the viewer. */
+function assistantFor(coop: CoopView, messages: readonly Message[], before: ReturnType<typeof groupTurns>[number] | undefined): string | undefined {
+  if (!coop.shared) return undefined;
+  const own = messages.find((m) => m.role === 'assistant' && m.author)?.author;
+  const asked = before?.kind === 'user' && !before.message.parts.every((p) => p.type === 'context') ? (before.message.author ?? coop.hostId) : undefined;
+  const id = own ?? asked;
+  if (!id) return undefined;
+  const who = coop.person(id);
+  return who.me ? undefined : who.name;
+}
 
 
 /** Thinking dots until the reply starts; with a local model, what its server is doing meanwhile. */
@@ -164,13 +220,13 @@ const editable = (turn: ReturnType<typeof groupTurns>[number] | undefined) =>
 function carryOn(sessionId: string) {
   return rpc()
     .call('chat.continue', { sessionId })
-    .catch((e: unknown) => toast.error(describeError(e).message));
+    .catch((e: unknown) => reportError(sessionId, e));
 }
 
 function retry(sessionId: string, messageId: string) {
   return rpc()
     .call('chat.retry', { sessionId, messageId })
-    .catch((e: unknown) => toast.error(describeError(e).message));
+    .catch((e: unknown) => reportError(sessionId, e));
 }
 
 /** The same question answered again by another model, as a new version of the reply; the conversation goes on with it. */
@@ -198,6 +254,12 @@ const UserMessage = memo(function UserMessage({
   editing,
   onEditing,
   onRewind,
+  authorName,
+  authorAvatar = null,
+  editable: canEdit = true,
+  retryable: canRetry = true,
+  reactions,
+  askedFor,
 }: {
   sessionId: string;
   message: Message;
@@ -208,6 +270,15 @@ const UserMessage = memo(function UserMessage({
   onEditing(messageId: string | null): void;
   /** Set when the message's turn changed files (Code). */
   onRewind: ((messageId: string) => void) | undefined;
+  /** Co-op: who wrote it, named above the bubble. */
+  authorName?: string | undefined;
+  authorAvatar?: string | null | undefined;
+  /** Co-op: the viewer may edit it (their own message; the host any), and retry its reply. */
+  editable?: boolean;
+  retryable?: boolean;
+  /** Co-op: the emoji on it, and the model it named to answer it (`@`). */
+  reactions?: readonly Reaction[] | undefined;
+  askedFor?: string | undefined;
 }) {
   const text = messageText(message.parts);
   const files = message.parts.filter((p) => p.type === 'image' || p.type === 'document');
@@ -240,6 +311,7 @@ const UserMessage = memo(function UserMessage({
 
   return (
     <div className="group/msg flex flex-col items-end gap-1" data-last={editing ? undefined : 'actions'}>
+      {authorName && <AuthorLabel name={authorName} avatar={authorAvatar} {...(askedFor ? { detail: `asked for ${askedFor}` } : {})} />}
       {notice?.kind === 'loop' && (
         <Badge aria-label={`Sent by a loop, run ${notice.run}`} className="gap-1">
           <Icon icon={Repeat} className="size-3" />
@@ -281,13 +353,15 @@ const UserMessage = memo(function UserMessage({
           </div>
         )
       )}
+      {!editing && <ReactionPills sessionId={sessionId} messageId={message.id} reactions={reactions} align="end" />}
       {!editing && (
         <Actions>
+          <ReactButton sessionId={sessionId} messageId={message.id} reactions={reactions} />
           <MessageTime at={message.createdAt} className="mr-1" />
           <BranchSwitcher sessionId={sessionId} messageId={message.id} siblings={siblings} disabled={disabled} />
           {onRewind && <IconButton icon={History} label="Rewind to here" size="xs" disabled={disabled} onClick={() => onRewind(message.id)} />}
-          <IconButton icon={RotateCcw} label="Retry" size="xs" disabled={disabled} onClick={() => void retry(sessionId, message.id)} />
-          <IconButton icon={Pencil} label="Edit" size="xs" disabled={disabled} onClick={() => onEditing(message.id)} />
+          {canRetry && <IconButton icon={RotateCcw} label="Retry" size="xs" disabled={disabled} onClick={() => void retry(sessionId, message.id)} />}
+          {canEdit && <IconButton icon={Pencil} label="Edit" size="xs" disabled={disabled} onClick={() => onEditing(message.id)} />}
           <CopyButton text={text} />
         </Actions>
       )}
@@ -363,6 +437,14 @@ interface AssistantTurnProps {
   phase: RunPhase | null;
   /** The running turn's start (the person's message), on the last turn only. */
   turnSince: number | undefined;
+  /** Co-op: whom this turn answered, when it isn't the viewer ("for Ben"). */
+  forName?: string | undefined;
+  /** Co-op: the viewer may retry it (as themselves), and retry it with another model (the host). */
+  retryable?: boolean;
+  retryWith?: boolean;
+  /** Co-op: offers a second opinion from another model the viewer may use, and the emoji on the reply. */
+  secondOpinion?: boolean;
+  reactions?: readonly Reaction[] | undefined;
 }
 
 /** Re-renders only when one of its own messages (or the live state it reads) changes, not on every delta of the session. */
@@ -388,6 +470,11 @@ const AssistantTurn = memo(function AssistantTurn({
   placeholder,
   phase,
   turnSince,
+  forName,
+  retryable = true,
+  retryWith = true,
+  secondOpinion = false,
+  reactions,
 }: AssistantTurnProps) {
   const { data: models } = useModels();
   const results = toolResults(messages);
@@ -449,7 +536,7 @@ const AssistantTurn = memo(function AssistantTurn({
             <MessageError
               key={`${item.message.id}:error`}
               error={item.message.error!}
-              onRetry={item.message.error!.retryable === false ? undefined : () => void retry(sessionId, first.id)}
+              onRetry={!retryable || item.message.error!.retryable === false ? undefined : () => void retry(sessionId, first.id)}
             />
           );
         case 'refusal':
@@ -457,7 +544,7 @@ const AssistantTurn = memo(function AssistantTurn({
             <ProviderStopped
               key={`${item.message.id}:refusal`}
               onEdit={asked && !running ? () => onEditing(asked) : undefined}
-              onRetry={running ? undefined : () => void retry(sessionId, first.id)}
+              onRetry={running || !retryable ? undefined : () => void retry(sessionId, first.id)}
             />
           );
       }
@@ -472,6 +559,7 @@ const AssistantTurn = memo(function AssistantTurn({
 
   return (
     <div className="group/msg flex flex-col" data-first={rowFirst} data-last={rowLast}>
+      {forName && <span className="mb-1 text-caption text-fg-muted">for {forName}</span>}
       <div className={cn('flex flex-col', ITEM_GAPS)}>
         {items.map((item) => (
           // `empty:hidden`: a thinking block with nothing to show renders nothing, and must not leave its gap.
@@ -481,14 +569,17 @@ const AssistantTurn = memo(function AssistantTurn({
         ))}
         {placeholder && running && items.length === 0 && <Waiting label="Thinking" phase={phase} />}
       </div>
+      {!running && <ReactionPills sessionId={sessionId} messageId={final.id} reactions={reactions} />}
       {showActions && (
         <Actions align="start">
           <CopyButton text={text} />
+          <ReactButton sessionId={sessionId} messageId={final.id} reactions={reactions} />
+          {secondOpinion && <SecondOpinion sessionId={sessionId} messageId={first.id} />}
           <ReadAloudButton id={final.id} text={text} />
-          <IconButton icon={RotateCcw} label="Retry" size="xs" onClick={() => void retry(sessionId, first.id)} />
+          {retryable && <IconButton icon={RotateCcw} label="Retry" size="xs" onClick={() => void retry(sessionId, first.id)} />}
           <BranchSwitcher sessionId={sessionId} messageId={first.id} siblings={siblings} disabled={false} />
           <MessageTime at={final.createdAt} className="ml-1" />
-          <RetryWith sessionId={sessionId} messageId={first.id} model={model} />
+          {retryWith ? <RetryWith sessionId={sessionId} messageId={first.id} model={model} /> : model && <span className="ml-1 text-caption text-fg-muted">{model.displayName}</span>}
           {model && final.usage?.tokensPerSecond ? <span className="text-caption text-fg-muted">· {final.usage.tokensPerSecond.toFixed(1)} tok/s</span> : null}
         </Actions>
       )}

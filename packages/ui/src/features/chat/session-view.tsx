@@ -12,6 +12,8 @@ import { useSplitCell } from '../../lib/split-cell.tsx';
 import { isLocal } from '../auth/screen-lock.ts';
 import { usePrefs } from '../../lib/queries.ts';
 import { sessionNoun, sessionTitle } from '../../lib/sessions.ts';
+import { CoopButton } from '../coop/coop-button.tsx';
+import { useCoopView } from '../coop/coop.ts';
 import type { SlashCommand } from './composer-menu.tsx';
 
 /** How long a smooth scroll to the bottom keeps the reader's own scroll events from ending the following. */
@@ -137,8 +139,14 @@ export function modelCommand(openPicker: () => void): SlashCommand {
   return { name: 'model', description: 'Choose the model', icon: Box, run: openPicker };
 }
 
-/** 48px header: the title menu (pin, rename, delete), then `children` (Code adds the workspace and pane toggle). */
-export function SessionHeader({ session, children }: { session: SessionSummary | null; children?: ReactNode }) {
+/**
+ * 48px header: the title menu (pin, rename, delete), then `children` (Code adds the workspace and pane toggle), then the
+ * Co-op button at the end (`coopButton={false}`: the page places it itself). A co-op guest's title is only the title:
+ * renaming, pinning and deleting the session are the host's.
+ */
+export function SessionHeader({ session, children, coopButton = true }: { session: SessionSummary | null; children?: ReactNode; coopButton?: boolean }) {
+  const coop = useCoopView();
+  const guest = coop.shared && !coop.isHost;
   const sidebarHidden = useSidebarHidden();
   const { prefs } = usePrefs();
   const navigate = useNavigate();
@@ -155,7 +163,13 @@ export function SessionHeader({ session, children }: { session: SessionSummary |
         sidebarHidden && (!cell || cell.first) && (trafficLightInset ? 'pl-[112px]' : 'pl-11'),
       )}
     >
-      {session && (
+      {session && guest && (
+        <span className="flex h-7 max-w-[min(480px,60%)] min-w-0 items-center gap-1.5 px-2 text-body text-fg">
+          <span className="truncate">{sessionTitle(session)}</span>
+          <span className="shrink-0 text-footnote text-fg-muted">· {coop.hostName}</span>
+        </span>
+      )}
+      {session && !guest && (
         <Menu>
           <MenuTrigger className="app-no-drag flex h-7 max-w-[min(480px,60%)] min-w-0 items-center gap-1 rounded-md px-2 text-body text-fg outline-none focus-ring hover:bg-fill-ghost-hover data-popup-open:bg-fill-ghost-hover">
             <span className="truncate">{sessionTitle(session)}</span>
@@ -179,6 +193,7 @@ export function SessionHeader({ session, children }: { session: SessionSummary |
         </Menu>
       )}
       {children}
+      {session && coopButton && <CoopButton session={session} className="ml-auto" />}
       {cell && <IconButton icon={X} label="Close split view" size="sm" className="app-no-drag text-fg-secondary" onClick={cell.close} />}
       {session && (
         <>
