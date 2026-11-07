@@ -7,13 +7,14 @@
  * may leave memory while its sockets stay open. What it needs after waking is in storage (the room's record) and in
  * each socket's attachment (its connection); `ping` is answered by the runtime without waking it.
  *
- * Nothing here looks inside data frames or logs them, nor tokens or URLs (they carry the host token).
+ * Nothing here looks inside data frames or logs them, nor host tokens (a host sends its token in `Authorization`).
  */
 /* global WebSocketPair, WebSocketRequestResponsePair -- the Workers runtime's */
 import { bearer, CloseCode, hashToken, isRoomId, newHostToken, newRoomId, parseJoin, PING, PONG, Room as RoomState, roomPath } from '../../../packages/core/src/coop/relay-protocol.ts';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const fail = (status, error) => json({ error }, status);
+const BAD_JOIN = 'Say ?role=guest, or ?role=host with the host token in an Authorization header.';
 
 /** A rate limiting binding (wrangler.toml), per address; without one (a test, a copy without it) nothing is limited. */
 async function allowed(limiter, key) {
@@ -51,7 +52,7 @@ export default {
     if (!isRoomId(roomId)) return fail(404, 'No such room, or it closed.');
     if (request.method === 'GET') {
       if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') return fail(426, 'Connect with a WebSocket.');
-      if (!parseJoin(url.searchParams)) return fail(400, 'Say ?role=host&token=… or ?role=guest.');
+      if (!parseJoin(url.searchParams, request.headers.get('authorization'))) return fail(400, BAD_JOIN);
       if (!(await allowed(env.JOIN_LIMITER, ip))) return fail(429, 'Too many attempts from this address; wait a minute.');
     } else if (request.method !== 'DELETE') return fail(405, 'Method not allowed.');
     // The room's object gets the caller's address in a header only this Worker sets.
@@ -171,8 +172,8 @@ export class Room {
       await this.finish(room.remove());
       return new Response(null, { status: 204 });
     }
-    const join = parseJoin(url.searchParams);
-    if (!join) return fail(400, 'Say ?role=host&token=… or ?role=guest.');
+    const join = parseJoin(url.searchParams, request.headers.get('authorization'));
+    if (!join) return fail(400, BAD_JOIN);
     const tokenHash = join.token ? await hashToken(join.token) : null;
     const id = crypto.randomUUID();
     const result = room.join({ id, role: join.role, tokenHash, ip: request.headers.get('x-coop-ip') ?? 'unknown' }, Date.now());

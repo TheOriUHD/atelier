@@ -11,7 +11,7 @@
  * guest (or host) it sends to has more than `SLOW_BYTES` waiting in its socket, so a fast sender is slowed down
  * through TCP instead of filling this process's memory.
  *
- * It never logs frame contents, tokens or addresses with tokens in them.
+ * It never logs frame contents or tokens.
  */
 import { createServer, STATUS_CODES, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -223,22 +223,25 @@ export function createCoopRelay(options: CoopRelayOptions = {}): CoopRelay {
     if (sub === null) return false;
     socket.on('error', () => socket.destroy());
     const roomId = roomPath(sub);
-    const request = parseJoin(url.searchParams);
+    const request = parseJoin(url.searchParams, req.headers.authorization);
     if (closing) refuse(socket, 503, 'The relay is shutting down.');
     else if (!roomId) refuse(socket, 404, 'Not found.');
-    else if (!request) refuse(socket, 400, 'Say ?role=host&token=… or ?role=guest.');
-    else if (!joins.allow(clientIp(req), now())) refuse(socket, 429, 'Too many attempts from this address; wait a minute.');
-    else join(req, socket, head, roomId, request);
+    else if (!request) refuse(socket, 400, 'Say ?role=guest, or ?role=host with the host token in an Authorization header.');
+    else {
+      const ip = clientIp(req);
+      if (!joins.allow(ip, now())) refuse(socket, 429, 'Too many attempts from this address; wait a minute.');
+      else join(req, socket, head, roomId, request, ip);
+    }
     return true;
   }
 
-  function join(req: IncomingMessage, socket: Duplex, head: Buffer, roomId: string, request: NonNullable<ReturnType<typeof parseJoin>>): void {
+  function join(req: IncomingMessage, socket: Duplex, head: Buffer, roomId: string, request: NonNullable<ReturnType<typeof parseJoin>>, ip: string): void {
     void (async () => {
       const tokenHash = request.token ? await hashToken(request.token) : null;
       const room = rooms.get(roomId);
       if (!room || room.closed) return refuse(socket, 404, 'No such room, or it closed.');
       const id = `c${++nextConn}`;
-      const result = room.join({ id, role: request.role, tokenHash, ip: clientIp(req) }, now());
+      const result = room.join({ id, role: request.role, tokenHash, ip }, now());
       if (!result.ok) return refuse(socket, result.status, result.reason);
       let upgraded = false;
       // Without verifyClient, ws completes the upgrade synchronously (or destroys a socket that already ended).

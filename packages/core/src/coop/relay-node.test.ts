@@ -69,16 +69,21 @@ describe('the Node co-op relay', () => {
   it('refuses upgrades before they happen, with a status', async () => {
     const r = await relay({ port: 0, limits: { joinsPerMinute: 5 } });
     const { roomId, hostToken } = await room(r);
+    const hostUrl = wsUrl(r, `/v1/rooms/${roomId}?role=host`);
     expect((await connect(wsUrl(r, '/v1/rooms/AAAAAAAAAAAAAAAAAAAAAA?role=guest'))).status).toBe(404);
     expect((await connect(wsUrl(r, `/v1/rooms/${roomId}?role=admin`))).status).toBe(400);
-    expect((await connect(wsUrl(r, `/v1/rooms/${roomId}?role=host&token=${'x'.repeat(43)}`))).status).toBe(403);
-    const host = await connect(wsUrl(r, `/v1/rooms/${roomId}?role=host&token=${hostToken}`));
+    // The host token goes in the Authorization header only: in the URL, even the right one is refused.
+    expect((await connect(wsUrl(r, `/v1/rooms/${roomId}?role=host&token=${hostToken}`))).status).toBe(400);
+    expect((await connect(wsUrl(r, `/v1/rooms/${roomId}?role=host&token=${hostToken}`), { authorization: `Bearer ${hostToken}` })).status).toBe(400);
+    expect((await connect(hostUrl, { authorization: `Bearer ${'x'.repeat(43)}` })).status).toBe(403);
+    expect((await connect(hostUrl)).status).toBe(403);
+    const host = await connect(hostUrl, { authorization: `Bearer ${hostToken}` });
     expect(host.status).toBe(101);
     expect(host.first).toMatchObject({ t: 'welcome', role: 'host', room: roomId, slots: [] });
     host.ws!.close();
-    // Five attempts from this address in the minute (the 404, the 403, the host and two guests; a bad request
+    // Five attempts from this address in the minute (the 404, the two 403s, the host and a guest; a bad request
     // isn't one): the sixth waits.
-    for (let i = 0; i < 2; i++) expect((await connect(wsUrl(r, `/v1/rooms/${roomId}?role=guest`))).status).toBe(101);
+    expect((await connect(wsUrl(r, `/v1/rooms/${roomId}?role=guest`))).status).toBe(101);
     expect((await connect(wsUrl(r, `/v1/rooms/${roomId}?role=guest`))).status).toBe(429);
   });
 
@@ -94,7 +99,7 @@ describe('the Node co-op relay', () => {
   it("answers pings, and routes frames between a guest and the host", async () => {
     const r = await relay();
     const { roomId, hostToken } = await room(r);
-    const host = await connect(wsUrl(r, `/v1/rooms/${roomId}?role=host&token=${hostToken}`));
+    const host = await connect(wsUrl(r, `/v1/rooms/${roomId}?role=host`), { authorization: `Bearer ${hostToken}` });
     const guest = await connect(wsUrl(r, `/v1/rooms/${roomId}?role=guest`));
     expect(guest.first).toMatchObject({ t: 'welcome', role: 'guest', slot: 1, host: true });
     const frames: unknown[] = [];

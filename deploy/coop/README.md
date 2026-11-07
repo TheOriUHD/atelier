@@ -15,10 +15,12 @@ change what they say.
 - It sees room ids, connection times, frame sizes and the callers' addresses (for the per-address limits). It never
   sees an invite's secret (it stays in the link's `#fragment`) or anything said in a room.
 - It keeps, per room: the SHA-256 of the host token, when the room was made and when its host was last connected,
-  and a slot counter. A room's storage is deleted when the host deletes the room, or 24 hours after the host was last
-  connected.
-- It logs nothing. Workers observability is off in `wrangler.toml`: request logs would keep URLs, and a host's
-  WebSocket URL carries its host token.
+  and a slot counter. A room's storage is deleted when the host deletes the room, an hour after it was made if its
+  host never connected, or 24 hours after the host was last connected.
+- The host token never travels in a URL: the host sends it in the `Authorization` header of its WebSocket upgrade
+  (and of a `DELETE`), and a request with a `token` parameter is refused.
+- It logs nothing. Workers observability is off in `wrangler.toml`: request logs would hold callers' addresses and
+  room ids, which the relay doesn't need.
 
 ## Limits
 
@@ -42,7 +44,7 @@ npx wrangler deploy      # the first deploy also applies migration v1 (the Room 
   `coop.atelierhq.dev` from `routes`.
 - The rate limiting `namespace_id`s (4201, 4202) must not be used by another Worker in the account.
 - Check it: `curl https://coop.atelierhq.dev/` answers `Atelier co-op relay`, and
-  `curl -X POST https://coop.atelierhq.dev/v1/rooms` makes a room (it expires in a day).
+  `curl -X POST https://coop.atelierhq.dev/v1/rooms` makes a room (with no host, it closes after an hour).
 
 A later change to the `Room` class's storage needs a new `[[migrations]]` entry; renaming or deleting the class needs
 `renamed_classes` or `deleted_classes`, never an edit of `v1`.

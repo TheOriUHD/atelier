@@ -156,6 +156,24 @@ describe('co-op channels through the Node relay', () => {
     expect(got).toEqual([{ n: 1 }, { n: 2 }, { n: 3 }]);
   });
 
+  it("sends the host token in the upgrade's Authorization header, never in a URL", async () => {
+    const seen: { url: string; authorization: string | undefined }[] = [];
+    const watched = await startCoopRelay({
+      port: 0,
+      clientIp: (req) => {
+        seen.push({ url: req.url ?? '', authorization: req.headers.authorization });
+        return 'test';
+      },
+    });
+    cleanup.push(() => watched.close());
+    const room = await hostRoom(watched.url);
+    await guest(room, 'Ada', { relayUrl: watched.url });
+    const upgrades = seen.filter((s) => s.url.includes('role='));
+    expect(upgrades.map((s) => s.url.replace(room.roomId, '<room>'))).toEqual(['/v1/rooms/<room>?role=host', '/v1/rooms/<room>?role=guest']);
+    expect(upgrades.map((s) => s.authorization)).toEqual([`Bearer ${room.hostToken}`, undefined]);
+    expect(seen.some((s) => s.url.includes(room.hostToken))).toBe(false);
+  });
+
   it('tells the host when a guest leaves, and the other guest carries on', async () => {
     const room = await hostRoom();
     const ada = await guest(room, 'Ada');

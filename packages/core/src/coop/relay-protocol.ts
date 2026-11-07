@@ -10,9 +10,11 @@
  *
  * HTTP (all paths under the relay's base, e.g. `https://coop.atelierhq.dev` or `<server>/api/coop`):
  * - `POST /v1/rooms` → 201 `{ roomId, hostToken }`. `roomId` is 16 random bytes and `hostToken` 32, both base64url.
- * - `GET /v1/rooms/<roomId>?role=host&token=<hostToken>` or `?role=guest`, as a WebSocket upgrade. Refusals come
- *   before the upgrade as HTTP statuses: 400 (bad request), 403 (wrong host token), 404 (no such room, or it closed),
- *   409 (full: 4 participants including the host), 426 (not an upgrade), 429 (too many attempts from this address).
+ * - `GET /v1/rooms/<roomId>?role=host` with `Authorization: Bearer <hostToken>`, or `?role=guest`, as a WebSocket
+ *   upgrade. The token never goes in the URL (logs keep URLs): a `token` parameter is refused. Refusals come before
+ *   the upgrade as HTTP statuses: 400 (bad request), 403 (missing or wrong host token), 404 (no such room, or it
+ *   closed), 409 (full: 4 participants including the host), 426 (not an upgrade), 429 (too many attempts from this
+ *   address).
  * - `DELETE /v1/rooms/<roomId>` with `Authorization: Bearer <hostToken>` → 204, and every socket closes with 4004.
  *
  * Frames on a room's WebSocket:
@@ -34,8 +36,9 @@
  *
  * Limits (`DEFAULT_LIMITS`): 4 participants; per room, a token bucket of 4 MiB/s with 16 MiB of burst over all data
  * frames (frames beyond it wait in order, up to 16 MiB, and the Node relay stops reading the sender meanwhile; past
- * that the sender is closed with 4008); join attempts and room creations per address per minute; a room closes 24 hours
- * after its host was last connected, or when the host deletes it.
+ * that the sender is closed with 4008); join attempts and room creations per address per minute. A room closes an
+ * hour after it was made when its host never connected, 24 hours after the host was last connected once it has, and
+ * whenever the host deletes it.
  *
  * Nothing here looks inside data frames, and nothing may log them: drivers log ids, slots, sizes and codes only.
  */
@@ -70,8 +73,10 @@ export interface RelayLimits {
   joinsPerMinute: number;
   /** Rooms made per address per minute. */
   createsPerMinute: number;
-  /** A room closes this long after its host was last connected. */
+  /** A room closes this long after its host was last connected… */
   roomTtlMs: number;
+  /** …or this long after it was made, when its host never connected. */
+  unclaimedTtlMs: number;
   /** Clients ping this often… */
   pingMs: number;
   /** …and a connection that sent nothing for this long is closed. */
@@ -86,6 +91,7 @@ export const DEFAULT_LIMITS: RelayLimits = {
   joinsPerMinute: 30,
   createsPerMinute: 10,
   roomTtlMs: 24 * 60 * 60 * 1000,
+  unclaimedTtlMs: 60 * 60 * 1000,
   pingMs: 20_000,
   idleMs: 60_000,
 };
@@ -146,8 +152,8 @@ export interface RoomRecord {
   room: string;
   tokenHash: string;
   createdAt: number;
-  /** When the host was last connected; the room's creation until it first is. */
-  hostSeenAt: number;
+  /** When the host was last connected; null until it first is. */
+  hostSeenAt: number | null;
   /** The next slot to try. */
   nextSlot: number;
 }
@@ -314,7 +320,7 @@ export class Room {
   }
 
   static create(room: string, tokenHash: string, now: number, limits?: Partial<RelayLimits>): Room {
-    return new Room({ v: 1, room, tokenHash, createdAt: now, hostSeenAt: now, nextSlot: 1 }, limits, now);
+    return new Room({ v: 1, room, tokenHash, createdAt: now, hostSeenAt: null, nextSlot: 1 }, limits, now);
   }
 
   /** The room as it was, with the connections still open (the Worker after hibernation). */
@@ -358,9 +364,11 @@ export class Room {
     return [...this.#conns.values()].map(({ seenAt: _seenAt, ...info }) => info);
   }
 
-  /** When the room closes by itself: never while the host is connected. */
+  /** When the room closes by itself: never while the host is connected; soon when it never was. */
   expiresAt(): number {
-    return this.#host ? Infinity : this.#record.hostSeenAt + this.#limits.roomTtlMs;
+    if (this.#host) return Infinity;
+    const seen = this.#record.hostSeenAt;
+    return seen === null ? this.#record.createdAt + this.#limits.unclaimedTtlMs : seen + this.#limits.roomTtlMs;
   }
 
   checkToken(tokenHash: string | null | undefined): boolean {
@@ -407,6 +415,8 @@ export class Room {
       const conn: Conn = { id: request.id, role: 'host', slot: 0, ip: request.ip, openedAt: now, seenAt: now };
       this.#conns.set(conn.id, conn);
       this.#host = conn;
+      // The room is claimed: from now on it lasts a day after the host was last here.
+      this.#record.hostSeenAt = now;
       actions.push(this.#text(conn.id, { t: 'welcome', role: 'host', room: this.id, slots: this.slots, limits: this.#wireLimits() }));
       if (!old) for (const guest of this.#guests()) actions.push(this.#text(guest.id, { t: 'host', present: true }));
       return { ok: true, conn: this.#info(conn), actions };
@@ -570,13 +580,15 @@ export class Room {
   }
 }
 
-/** Parses `?role=…&token=…`. */
-export function parseJoin(search: URLSearchParams): { role: Role; token: string | null } | null {
+/**
+ * Reads a join: `?role=guest`, or `?role=host` with the token from `Authorization: Bearer <hostToken>` (null when it is
+ * missing or malformed, which the room refuses with 403). Null for anything else, a `token` in the URL included: it
+ * would end up in logs.
+ */
+export function parseJoin(search: URLSearchParams, authorization: string | null | undefined): { role: Role; token: string | null } | null {
   const role = search.get('role');
-  if (role !== 'host' && role !== 'guest') return null;
-  const token = search.get('token');
-  if (role === 'host' && (!token || !HOST_TOKEN_PATTERN.test(token))) return { role, token: null };
-  return { role, token: role === 'host' ? token : null };
+  if ((role !== 'host' && role !== 'guest') || search.has('token')) return null;
+  return { role, token: role === 'host' ? bearer(authorization) : null };
 }
 
 /** The room id in `/v1/rooms/<id>` (after the relay's base path), or `''` for `/v1/rooms`; null for other paths. */
@@ -586,7 +598,7 @@ export function roomPath(pathname: string): string | null {
   return match[1] ?? '';
 }
 
-/** The bearer token of a `DELETE`. */
+/** The host token in an `Authorization` header (a host's upgrade, a `DELETE`). */
 export function bearer(header: string | null | undefined): string | null {
   const match = /^Bearer\s+(\S+)$/i.exec(header ?? '');
   return match && HOST_TOKEN_PATTERN.test(match[1]!) ? match[1]! : null;

@@ -9,7 +9,7 @@ workers_dev = false
 preview_urls = false
 routes = [{ pattern = "coop.atelierhq.dev", custom_domain = true }]
 
-# Request logs would keep URLs, and a host's WebSocket URL carries its room's host token.
+# The relay keeps no logs: request logs would hold callers' addresses and room ids, which it doesn't need.
 [observability]
 enabled = false
 
