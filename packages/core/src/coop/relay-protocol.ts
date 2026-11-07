@@ -10,9 +10,11 @@
  *
  * HTTP (all paths under the relay's base, e.g. `https://coop.atelierhq.dev` or `<server>/api/coop`):
  * - `POST /v1/rooms` → 201 `{ roomId, hostToken }`. `roomId` is 16 random bytes and `hostToken` 32, both base64url.
- * - `GET /v1/rooms/<roomId>?role=host&token=<hostToken>` or `?role=guest`, as a WebSocket upgrade. Refusals come
- *   before the upgrade as HTTP statuses: 400 (bad request), 403 (wrong host token), 404 (no such room, or it closed),
- *   409 (full: 4 participants including the host), 426 (not an upgrade), 429 (too many attempts from this address).
+ * - `GET /v1/rooms/<roomId>?role=host` with `Authorization: Bearer <hostToken>`, or `?role=guest`, as a WebSocket
+ *   upgrade. The token never goes in the URL (logs keep URLs): a `token` parameter is refused. Refusals come before
+ *   the upgrade as HTTP statuses: 400 (bad request), 403 (missing or wrong host token), 404 (no such room, or it
+ *   closed), 409 (full: 4 participants including the host), 426 (not an upgrade), 429 (too many attempts from this
+ *   address).
  * - `DELETE /v1/rooms/<roomId>` with `Authorization: Bearer <hostToken>` → 204, and every socket closes with 4004.
  *
  * Frames on a room's WebSocket:
@@ -570,13 +572,15 @@ export class Room {
   }
 }
 
-/** Parses `?role=…&token=…`. */
-export function parseJoin(search: URLSearchParams): { role: Role; token: string | null } | null {
+/**
+ * Reads a join: `?role=guest`, or `?role=host` with the token from `Authorization: Bearer <hostToken>` (null when it is
+ * missing or malformed, which the room refuses with 403). Null for anything else, a `token` in the URL included: it
+ * would end up in logs.
+ */
+export function parseJoin(search: URLSearchParams, authorization: string | null | undefined): { role: Role; token: string | null } | null {
   const role = search.get('role');
-  if (role !== 'host' && role !== 'guest') return null;
-  const token = search.get('token');
-  if (role === 'host' && (!token || !HOST_TOKEN_PATTERN.test(token))) return { role, token: null };
-  return { role, token: role === 'host' ? token : null };
+  if ((role !== 'host' && role !== 'guest') || search.has('token')) return null;
+  return { role, token: role === 'host' ? bearer(authorization) : null };
 }
 
 /** The room id in `/v1/rooms/<id>` (after the relay's base path), or `''` for `/v1/rooms`; null for other paths. */
@@ -586,7 +590,7 @@ export function roomPath(pathname: string): string | null {
   return match[1] ?? '';
 }
 
-/** The bearer token of a `DELETE`. */
+/** The host token in an `Authorization` header (a host's upgrade, a `DELETE`). */
 export function bearer(header: string | null | undefined): string | null {
   const match = /^Bearer\s+(\S+)$/i.exec(header ?? '');
   return match && HOST_TOKEN_PATTERN.test(match[1]!) ? match[1]! : null;

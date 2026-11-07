@@ -92,17 +92,19 @@ function relay(limits = {}) {
   const ROOMS = rooms();
   const env = { ROOMS, ...limits };
   const call = (path, init = {}) => worker.fetch(new Request(`https://coop.example.com${path}`, { ...init, headers: { 'cf-connecting-ip': '203.0.113.7', ...init.headers } }), env);
-  const connect = async (path) => {
-    const res = await call(path, { headers: { upgrade: 'websocket' } });
+  const connect = async (path, headers = {}) => {
+    const res = await call(path, { headers: { upgrade: 'websocket', ...headers } });
     return res.status === 101 ? res.webSocket : res.status;
   };
+  /** The host joins with its token in the Authorization header. */
+  const host = (roomId, token) => connect(`/v1/rooms/${roomId}?role=host`, { authorization: `Bearer ${token}` });
   /** Sends a frame from a client, as the runtime delivers it to the room. */
   const send = (roomId, client, data) => ROOMS.object(roomId).instance.webSocketMessage(client.server, typeof data === 'string' ? data : Uint8Array.from(data).buffer);
   const leave = (roomId, client) => {
     client.server.readyState = 3;
     return ROOMS.object(roomId).instance.webSocketClose(client.server, 1000, '', true);
   };
-  return { env, ROOMS, call, connect, send, leave };
+  return { env, ROOMS, call, connect, host, send, leave };
 }
 
 async function made(r) {
@@ -116,8 +118,12 @@ test('makes a room and lets its host in only with the token', async () => {
   const { roomId, hostToken } = await made(r);
   assert.match(roomId, /^[A-Za-z0-9_-]{22}$/);
   assert.match(hostToken, /^[A-Za-z0-9_-]{43}$/);
-  assert.equal(await r.connect(`/v1/rooms/${roomId}?role=host&token=${'x'.repeat(43)}`), 403);
-  const host = await r.connect(`/v1/rooms/${roomId}?role=host&token=${hostToken}`);
+  assert.equal(await r.host(roomId, 'x'.repeat(43)), 403);
+  assert.equal(await r.connect(`/v1/rooms/${roomId}?role=host`), 403);
+  // The token goes in the Authorization header only: in the URL, even the right one is refused.
+  assert.equal(await r.connect(`/v1/rooms/${roomId}?role=host&token=${hostToken}`), 400);
+  assert.equal(await r.connect(`/v1/rooms/${roomId}?role=host&token=${hostToken}`, { authorization: `Bearer ${hostToken}` }), 400);
+  const host = await r.host(roomId, hostToken);
   assert.equal(host.received[0].t, 'welcome');
   assert.deepEqual(host.received[0].slots, []);
   // Pings are answered by the runtime, without waking the room.
@@ -129,7 +135,7 @@ test('routes frames between guests and the host by slot, and tells each about th
   const { roomId, hostToken } = await made(r);
   const guest = await r.connect(`/v1/rooms/${roomId}?role=guest`);
   assert.deepEqual(guest.received[0], { t: 'welcome', role: 'guest', room: roomId, slot: 1, host: false, limits: guest.received[0].limits });
-  const host = await r.connect(`/v1/rooms/${roomId}?role=host&token=${hostToken}`);
+  const host = await r.host(roomId, hostToken);
   assert.deepEqual(host.received[0].slots, [1]);
   assert.deepEqual(guest.received.at(-1), { t: 'host', present: true });
   await r.send(roomId, guest, [5, 6]);
@@ -143,7 +149,7 @@ test('routes frames between guests and the host by slot, and tells each about th
 test('picks a room up again after hibernation, from its storage and its sockets', async () => {
   const r = relay();
   const { roomId, hostToken } = await made(r);
-  const host = await r.connect(`/v1/rooms/${roomId}?role=host&token=${hostToken}`);
+  const host = await r.host(roomId, hostToken);
   const guest = await r.connect(`/v1/rooms/${roomId}?role=guest`);
   r.ROOMS.evict(roomId);
   await r.send(roomId, guest, [1]);
@@ -156,7 +162,7 @@ test('picks a room up again after hibernation, from its storage and its sockets'
 test('lets the host remove a guest, and keeps a removed socket out of the room after hibernation', async () => {
   const r = relay();
   const { roomId, hostToken } = await made(r);
-  const host = await r.connect(`/v1/rooms/${roomId}?role=host&token=${hostToken}`);
+  const host = await r.host(roomId, hostToken);
   const guest = await r.connect(`/v1/rooms/${roomId}?role=guest`);
   // Closing, but not closed yet: the runtime would still list it.
   guest.server.close = function (code, reason) {
@@ -206,7 +212,7 @@ test('closes a room 24 hours after its host left, on the alarm', async () => {
   const r = relay();
   const { roomId, hostToken } = await made(r);
   const o = r.ROOMS.object(roomId);
-  const host = await r.connect(`/v1/rooms/${roomId}?role=host&token=${hostToken}`);
+  const host = await r.host(roomId, hostToken);
   const guest = await r.connect(`/v1/rooms/${roomId}?role=guest`);
   const left = Date.now();
   await r.leave(roomId, host);

@@ -17,8 +17,10 @@ change what they say.
 - It keeps, per room: the SHA-256 of the host token, when the room was made and when its host was last connected,
   and a slot counter. A room's storage is deleted when the host deletes the room, or 24 hours after the host was last
   connected.
-- It logs nothing. Workers observability is off in `wrangler.toml`: request logs would keep URLs, and a host's
-  WebSocket URL carries its host token.
+- The host token never travels in a URL: the host sends it in the `Authorization` header of its WebSocket upgrade
+  (and of a `DELETE`), and a request with a `token` parameter is refused.
+- It logs nothing. Workers observability is off in `wrangler.toml`: request logs would hold callers' addresses and
+  room ids, which the relay doesn't need.
 
 ## Limits
 

@@ -248,10 +248,16 @@ describe('relay helpers', () => {
   });
 
   it('reads join requests, paths and bearer tokens', () => {
-    expect(parseJoin(new URLSearchParams(`role=host&token=${token}`))).toEqual({ role: 'host', token });
-    expect(parseJoin(new URLSearchParams('role=host&token=short'))).toEqual({ role: 'host', token: null });
-    expect(parseJoin(new URLSearchParams(`role=guest&token=${token}`))).toEqual({ role: 'guest', token: null });
-    expect(parseJoin(new URLSearchParams('role=admin'))).toBeNull();
+    const host = new URLSearchParams('role=host');
+    expect(parseJoin(host, `Bearer ${token}`)).toEqual({ role: 'host', token });
+    expect(parseJoin(host, 'Bearer short')).toEqual({ role: 'host', token: null });
+    expect(parseJoin(host, null)).toEqual({ role: 'host', token: null });
+    expect(parseJoin(new URLSearchParams('role=guest'), `Bearer ${token}`)).toEqual({ role: 'guest', token: null });
+    expect(parseJoin(new URLSearchParams('role=admin'), null)).toBeNull();
+    // The token never travels in the URL: a request that puts it there is refused, with or without the header.
+    expect(parseJoin(new URLSearchParams(`role=host&token=${token}`), null)).toBeNull();
+    expect(parseJoin(new URLSearchParams(`role=host&token=${token}`), `Bearer ${token}`)).toBeNull();
+    expect(parseJoin(new URLSearchParams('role=guest&token='), null)).toBeNull();
     expect(roomPath('/v1/rooms')).toBe('');
     expect(roomPath('/v1/rooms/abc')).toBe('abc');
     expect(roomPath('/v1/rooms/abc/')).toBe('abc');

@@ -175,11 +175,11 @@ export const DEFAULT_TIMING: CoopTiming = {
 
 const baseUrl = (relayUrl: string) => relayUrl.replace(/\/+$/, '');
 
-function socketUrl(relayUrl: string, roomId: string, role: 'host' | 'guest', token?: string): string {
+/** A room's WebSocket address. The host's token goes in a header (`RelayLink.open`), never here: logs keep URLs. */
+function socketUrl(relayUrl: string, roomId: string, role: 'host' | 'guest'): string {
   const url = new URL(`${baseUrl(relayUrl)}/v1/rooms/${roomId}`);
   url.protocol = url.protocol === 'https:' ? 'wss:' : url.protocol === 'http:' ? 'ws:' : url.protocol;
   url.searchParams.set('role', role);
-  if (token) url.searchParams.set('token', token);
   return url.toString();
 }
 
@@ -263,9 +263,9 @@ class RelayLink {
     this.#timing = timing;
   }
 
-  static open(url: string, timing: CoopTiming, handlers: LinkHandlers): Promise<RelayLink> {
+  static open(url: string, timing: CoopTiming, handlers: LinkHandlers, headers: Record<string, string> = {}): Promise<RelayLink> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(url, { perMessageDeflate: false, maxPayload: MAX_HOST_FRAME, handshakeTimeout: timing.connectMs });
+      const ws = new WebSocket(url, { headers, perMessageDeflate: false, maxPayload: MAX_HOST_FRAME, handshakeTimeout: timing.connectMs });
       const link = new RelayLink(ws, timing);
       let opened = false;
       let failure: CoopError | null = null;
@@ -866,14 +866,19 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
 
   async #connect(): Promise<void> {
     const welcomed = new Promise<boolean>((resolve) => (this.#welcomed = () => resolve(true)));
-    const link = await RelayLink.open(socketUrl(this.#options.relayUrl, this.roomId, 'host', this.#options.hostToken), this.#timing, {
-      opened: (opened) => {
-        if (!this.#closed) this.#link = opened;
+    const link = await RelayLink.open(
+      socketUrl(this.#options.relayUrl, this.roomId, 'host'),
+      this.#timing,
+      {
+        opened: (opened) => {
+          if (!this.#closed) this.#link = opened;
+        },
+        text: (from, message) => this.#text(from, message),
+        binary: (from, data) => this.#binary(from, data),
+        closed: (from, code) => this.#closedLink(from, code),
       },
-      text: (from, message) => this.#text(from, message),
-      binary: (from, data) => this.#binary(from, data),
-      closed: (from, code) => this.#closedLink(from, code),
-    });
+      { authorization: `Bearer ${this.#options.hostToken}` },
+    );
     if (this.#closed) return link.close();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const ok = await Promise.race([welcomed, link.ended.then(() => false), new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), this.#timing.handshakeMs)))]);
