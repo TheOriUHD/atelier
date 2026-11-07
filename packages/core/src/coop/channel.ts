@@ -192,7 +192,10 @@ function statusError(status: number): CoopError {
   return new CoopError('network', `The co-op relay answered ${status}.`);
 }
 
-/** Makes a room on the relay: the host keeps `hostToken` (it lets it in, and deletes the room). */
+/**
+ * Makes a room on the relay: the host keeps `hostToken` (it lets it in, and deletes the room). A room the host never
+ * connects to closes after an hour.
+ */
 export async function createRoom(relayUrl: string, init: { signal?: AbortSignal } = {}): Promise<{ roomId: string; hostToken: string }> {
   let res: Response;
   try {

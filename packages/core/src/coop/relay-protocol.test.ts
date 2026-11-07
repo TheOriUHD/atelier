@@ -175,23 +175,49 @@ describe('a co-op room', () => {
     expect(r.heldUntil(T0)).toBeNull();
   });
 
-  it('closes 24 hours after the host was last connected, and not while it is', () => {
-    const day = DEFAULT_LIMITS.roomTtlMs;
+  it('closes an hour after it was made when its host never connected', () => {
+    const hour = DEFAULT_LIMITS.unclaimedTtlMs;
+    expect(hour).toBe(60 * 60 * 1000);
     const r = room();
-    expect(r.expiresAt()).toBe(T0 + day);
-    join(r, 'h', 'host', T0 + 10);
+    expect(r.record.hostSeenAt).toBeNull();
+    expect(r.expiresAt()).toBe(T0 + hour);
+    // A guest waiting for the host doesn't keep the room: the hour counts from when it was made.
+    join(r, 'a', 'guest', T0 + 30 * 60 * 1000);
+    r.touch('a', T0 + hour - 1);
+    expect(r.tick(T0 + hour - 1)).toEqual([]);
+    // Still unclaimed after hibernation: the record says the host never came.
+    const again = Room.restore(r.record, r.connections, T0 + hour - 1);
+    expect(again.expiresAt()).toBe(T0 + hour);
+    again.touch('a', T0 + hour);
+    const expired = again.tick(T0 + hour);
+    expect(closes(expired)).toEqual([{ to: 'a', code: CloseCode.roomClosed }]);
+    expect(expired.at(-1)).toEqual({ type: 'closed' });
+    expect(again.join({ id: 'h', role: 'host', tokenHash, ip: 'x' }, T0 + hour)).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('closes 24 hours after the host was last connected once it has, and not while it is', () => {
+    const day = DEFAULT_LIMITS.roomTtlMs;
+    const hour = DEFAULT_LIMITS.unclaimedTtlMs;
+    const r = room();
+    // A host that comes just before the hour is up claims the room, and the hour no longer applies.
+    const came = T0 + hour - 10;
+    join(r, 'h', 'host', came);
     expect(r.expiresAt()).toBe(Infinity);
-    join(r, 'a', 'guest', T0 + 10);
-    r.disconnect('h', T0 + 1000);
-    expect(r.expiresAt()).toBe(T0 + 1000 + day);
+    expect(r.record.hostSeenAt).toBe(came);
+    join(r, 'a', 'guest', came);
+    r.touch('a', T0 + hour + 1);
+    expect(r.tick(T0 + hour + 1)).toEqual([]);
+    const left = T0 + hour + 1000;
+    r.disconnect('h', left);
+    expect(r.expiresAt()).toBe(left + day);
     // The guest keeps pinging; the room stays until the day is over.
-    r.touch('a', T0 + 1000 + day - 1);
-    expect(r.tick(T0 + 1000 + day - 1)).toEqual([]);
-    const expired = r.tick(T0 + 1000 + day);
+    r.touch('a', left + day - 1);
+    expect(r.tick(left + day - 1)).toEqual([]);
+    const expired = r.tick(left + day);
     expect(closes(expired)).toEqual([{ to: 'a', code: CloseCode.roomClosed }]);
     expect(expired.at(-1)).toEqual({ type: 'closed' });
     expect(r.closed).toBe(true);
-    expect(r.join({ id: 'h', role: 'host', tokenHash, ip: 'x' }, T0 + 1000 + day)).toMatchObject({ ok: false, status: 404 });
+    expect(r.join({ id: 'h', role: 'host', tokenHash, ip: 'x' }, left + day)).toMatchObject({ ok: false, status: 404 });
   });
 
   it('closes when the host deletes it', () => {

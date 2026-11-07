@@ -36,8 +36,9 @@
  *
  * Limits (`DEFAULT_LIMITS`): 4 participants; per room, a token bucket of 4 MiB/s with 16 MiB of burst over all data
  * frames (frames beyond it wait in order, up to 16 MiB, and the Node relay stops reading the sender meanwhile; past
- * that the sender is closed with 4008); join attempts and room creations per address per minute; a room closes 24 hours
- * after its host was last connected, or when the host deletes it.
+ * that the sender is closed with 4008); join attempts and room creations per address per minute. A room closes an
+ * hour after it was made when its host never connected, 24 hours after the host was last connected once it has, and
+ * whenever the host deletes it.
  *
  * Nothing here looks inside data frames, and nothing may log them: drivers log ids, slots, sizes and codes only.
  */
@@ -72,8 +73,10 @@ export interface RelayLimits {
   joinsPerMinute: number;
   /** Rooms made per address per minute. */
   createsPerMinute: number;
-  /** A room closes this long after its host was last connected. */
+  /** A room closes this long after its host was last connected… */
   roomTtlMs: number;
+  /** …or this long after it was made, when its host never connected. */
+  unclaimedTtlMs: number;
   /** Clients ping this often… */
   pingMs: number;
   /** …and a connection that sent nothing for this long is closed. */
@@ -88,6 +91,7 @@ export const DEFAULT_LIMITS: RelayLimits = {
   joinsPerMinute: 30,
   createsPerMinute: 10,
   roomTtlMs: 24 * 60 * 60 * 1000,
+  unclaimedTtlMs: 60 * 60 * 1000,
   pingMs: 20_000,
   idleMs: 60_000,
 };
@@ -148,8 +152,8 @@ export interface RoomRecord {
   room: string;
   tokenHash: string;
   createdAt: number;
-  /** When the host was last connected; the room's creation until it first is. */
-  hostSeenAt: number;
+  /** When the host was last connected; null until it first is. */
+  hostSeenAt: number | null;
   /** The next slot to try. */
   nextSlot: number;
 }
@@ -316,7 +320,7 @@ export class Room {
   }
 
   static create(room: string, tokenHash: string, now: number, limits?: Partial<RelayLimits>): Room {
-    return new Room({ v: 1, room, tokenHash, createdAt: now, hostSeenAt: now, nextSlot: 1 }, limits, now);
+    return new Room({ v: 1, room, tokenHash, createdAt: now, hostSeenAt: null, nextSlot: 1 }, limits, now);
   }
 
   /** The room as it was, with the connections still open (the Worker after hibernation). */
@@ -360,9 +364,11 @@ export class Room {
     return [...this.#conns.values()].map(({ seenAt: _seenAt, ...info }) => info);
   }
 
-  /** When the room closes by itself: never while the host is connected. */
+  /** When the room closes by itself: never while the host is connected; soon when it never was. */
   expiresAt(): number {
-    return this.#host ? Infinity : this.#record.hostSeenAt + this.#limits.roomTtlMs;
+    if (this.#host) return Infinity;
+    const seen = this.#record.hostSeenAt;
+    return seen === null ? this.#record.createdAt + this.#limits.unclaimedTtlMs : seen + this.#limits.roomTtlMs;
   }
 
   checkToken(tokenHash: string | null | undefined): boolean {
@@ -409,6 +415,8 @@ export class Room {
       const conn: Conn = { id: request.id, role: 'host', slot: 0, ip: request.ip, openedAt: now, seenAt: now };
       this.#conns.set(conn.id, conn);
       this.#host = conn;
+      // The room is claimed: from now on it lasts a day after the host was last here.
+      this.#record.hostSeenAt = now;
       actions.push(this.#text(conn.id, { t: 'welcome', role: 'host', room: this.id, slots: this.slots, limits: this.#wireLimits() }));
       if (!old) for (const guest of this.#guests()) actions.push(this.#text(guest.id, { t: 'host', present: true }));
       return { ok: true, conn: this.#info(conn), actions };

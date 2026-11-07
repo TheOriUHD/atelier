@@ -208,6 +208,38 @@ test('deletes a room with its token, closing every socket', async () => {
   assert.equal((await del(hostToken)).status, 404);
 });
 
+test('closes a room whose host never connected an hour after it was made, and not one whose host did', async () => {
+  const hour = 60 * 60 * 1000;
+  const r = relay();
+  const before = Date.now();
+  const unclaimed = await made(r);
+  const claimed = await made(r);
+  const after = Date.now();
+  const o = r.ROOMS.object(unclaimed.roomId);
+  // The new room's alarm is its hour.
+  assert.ok(o.ctx.alarm >= before + hour && o.ctx.alarm <= after + hour);
+  const waiting = await r.connect(`/v1/rooms/${unclaimed.roomId}?role=guest`);
+  const realNow = Date.now;
+  try {
+    Date.now = () => after + 50 * 60 * 1000;
+    const host = await r.host(claimed.roomId, claimed.hostToken);
+    await r.leave(claimed.roomId, host);
+    Date.now = () => after + hour + 10;
+    o.pings.set(waiting.server, new Date(Date.now()));
+    await o.instance.alarm();
+    assert.equal(waiting.closed.code, 4004);
+    assert.equal(o.storage.size, 0);
+    // The other room's host came at 50 minutes: it lasts a day from when the host left.
+    const other = r.ROOMS.object(claimed.roomId);
+    await other.instance.alarm();
+    assert.equal(other.storage.size, 1);
+    assert.ok(other.ctx.alarm >= after + 50 * 60 * 1000 + 24 * hour);
+    assert.notEqual(typeof (await r.connect(`/v1/rooms/${claimed.roomId}?role=guest`)), 'number');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 test('closes a room 24 hours after its host left, on the alarm', async () => {
   const r = relay();
   const { roomId, hostToken } = await made(r);
