@@ -139,6 +139,10 @@ Read, Write, Edit, Glob, Grep and Bash, plus a task list, questions to you, sub-
 
 Cowork works through a longer task in a folder and leaves the files it makes there. Pick a folder, describe the task and watch its steps beside the conversation. It ends with cards for the files it wrote, and a system notification tells you when it finishes, fails or needs you while you are in another window.
 
+### Co-op
+
+Work in one session with up to three other people: the same conversation and folder, everyone writing and watching the agent work. Send a link and let each person in after comparing three emoji; there is no account. Each person answers with the host's models (within a daily limit the host sets) or their own, which run on their own computer. The host approves what touches their computer. Ask another model for a second opinion, let one look over every edit as navigator, or give an agent a parallel track in its own git worktree. Between computers, co-op passes through an end-to-end encrypted relay that can't read it; on a team server it needs nothing from outside. See [Co-op](https://docs.atelierhq.dev/co-op/).
+
 ### Extensible, and compatible with Claude Code
 
 Atelier reads many of Claude Code's files where they already are, so a project set up for Claude Code mostly works as it is. [What is and isn't supported](https://docs.atelierhq.dev/claude-code-compatibility/) is in the docs.
@@ -171,7 +175,7 @@ Atelier reads many of Claude Code's files where they already are, so a project s
 
 ## What Atelier won't do
 
-- It isn't a hosted service. There is no Atelier cloud: you run it, and you hold the data.
+- It isn't a hosted service: you run it, and you hold the data. Co-op between two computers passes through an encrypted relay, which can't read it and keeps nothing.
 - The web server never runs commands on its own machine. Code in a browser works through a desktop app's folders (lent over the device link) or a GitHub codespace.
 - It doesn't make a weak model strong. Small local models can struggle with tools; per-model overrides help (see [FAQ](#faq)), but quality is the model's.
 - Auto mode isn't a security boundary. It reduces prompts but doesn't replace review of sensitive work.
