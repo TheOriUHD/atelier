@@ -619,6 +619,9 @@ function buildMenu(): void {
       submenu: [
         { label: 'New Chat', accelerator: accelerator('new-chat'), click: () => sendMenu('new-chat') },
         { label: 'New Temporary Chat', accelerator: accelerator('new-temporary-chat'), click: () => sendMenu('new-temporary-chat') },
+        { type: 'separator' as const },
+        // For a link that didn't open Atelier by itself: paste it.
+        { label: 'Join a Co-op Session…', click: () => sendMenu('join-coop') },
         // Only the built-in backend has a screen lock; a server's sign-in is its own.
         ...(connection?.mode === 'local' ? [{ type: 'separator' as const }, { label: 'Lock Atelier', accelerator: accelerator('lock'), click: () => sendMenu('lock') }] : []),
         ...(isMac ? [] : [{ label: 'Settings…', accelerator: accelerator('settings'), click: () => sendMenu('settings') }, { type: 'separator' as const }, { role: 'quit' as const }]),

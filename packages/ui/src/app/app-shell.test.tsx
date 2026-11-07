@@ -8,7 +8,17 @@ import { AppShell } from './app-shell.tsx';
 vi.mock('@tanstack/react-router', () => ({ Outlet: () => null }));
 vi.mock('../lib/appearance.ts', () => ({ useAppearance: () => {} }));
 vi.mock('../lib/narrow.ts', () => ({ useNarrow: () => false }));
-const state = vi.hoisted(() => ({ prefs: undefined as unknown, ui: { toggleSidebar: () => {}, setPaletteOpen: (_open: boolean) => {} } }));
+const state = vi.hoisted(() => ({
+  prefs: undefined as unknown,
+  ui: { toggleSidebar: () => {}, setPaletteOpen: (_open: boolean) => {}, joinCoopOpen: false, setJoinCoopOpen: (_open: boolean) => {} },
+  desktop: null as null | { onMenu(handler: (command: string) => void): () => void; setShortcuts(): void },
+}));
+vi.mock('../lib/platform.ts', async (importOriginal) => {
+  const actual = await importOriginal<object>();
+  return Object.defineProperty({ ...actual }, 'desktop', { get: () => state.desktop, enumerable: true });
+});
+vi.mock('../features/workspaces/lend-scratch.tsx', () => ({ LendScratchHost: () => null }));
+vi.mock('../features/coop/join-link-dialog.tsx', () => ({ JoinLinkDialog: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Join a co-op session" /> : null) }));
 vi.mock('../lib/queries.ts', () => ({ useLiveQueries: () => {}, usePrefs: () => ({ prefs: state.prefs }) }));
 vi.mock('../lib/ui-store.ts', () => ({ useUi: (select: (s: typeof state.ui) => unknown) => select(state.ui) }));
 vi.mock('../features/settings/settings-overlay.tsx', () => ({ SettingsOverlay: () => null }));
@@ -24,6 +34,8 @@ vi.mock('./navigation.ts', () => ({ useMode: () => 'chat', useNewChat: () => () 
 
 beforeEach(() => {
   state.prefs = undefined;
+  state.desktop = null;
+  state.ui.joinCoopOpen = false;
   vi.restoreAllMocks();
 });
 
@@ -55,5 +67,17 @@ describe('the app shell', () => {
     expect(sidebar).not.toHaveBeenCalled();
     press('j');
     expect(palette).toHaveBeenCalledWith(true);
+  });
+
+  it('opens “Join a co-op session” from the desktop app’s File menu', () => {
+    let menu: (command: string) => void = () => {};
+    state.desktop = { onMenu: (handler) => ((menu = handler), () => {}), setShortcuts: () => {} };
+    const open = vi.spyOn(state.ui, 'setJoinCoopOpen');
+    const { rerender } = render(<AppShell />);
+    act(() => menu('join-coop'));
+    expect(open).toHaveBeenCalledWith(true);
+    state.ui.joinCoopOpen = true;
+    rerender(<AppShell />);
+    expect(screen.getByRole('dialog', { name: 'Join a co-op session' })).toBeTruthy();
   });
 });
