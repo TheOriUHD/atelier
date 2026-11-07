@@ -100,8 +100,8 @@ describe('co-op host across computers', () => {
   it('a guest knocks, is let in after the host sees their fingerprint, and then acts as themselves', async () => {
     const ben = guest('key-ben');
     const welcome = await ben.client.call('coop.hello', hello());
-    expect(welcome).toMatchObject({ admitted: false, hostName: 'Ada', title: 'Shader', fingerprint: ['🐙', '🌵', '🎈'] });
-    expect(host.port.knocking(sessionId)).toEqual([{ id: keyIdOf('key-ben'), name: 'Ben', fingerprint: ['🐙', '🌵', '🎈'] }]);
+    expect(welcome).toMatchObject({ admitted: false, hostName: 'Ada', title: 'Shader', fingerprint: ['🐙', '🌵', '🎈', '🚀'] });
+    expect(host.port.knocking(sessionId)).toEqual([{ id: keyIdOf('key-ben'), name: 'Ben', fingerprint: ['🐙', '🌵', '🎈', '🚀'] }]);
     // Nothing before the host lets them in.
     await refused(ben.client.call('chat.send', { parts: [{ type: 'text', text: 'hi' }] }), 'forbidden');
     await refused(ben.client.call('coop.subscribe', {}), 'forbidden');
@@ -260,5 +260,17 @@ describe('co-op host across computers', () => {
     await settle();
     expect(fifth.events.map((e) => e.name)).not.toContain('admitted');
     expect((await coop.list(sessionId)).length).toBe(4);
+  });
+
+  it('a guest’s connection that closes after the host shut down changes nothing (the database may be gone)', async () => {
+    const ben = guest('key-ben');
+    await ben.client.call('coop.hello', hello());
+    await host.admit(sessionId, keyIdOf('key-ben'), true);
+    await settle();
+    const presence = vi.spyOn(coop, 'presence');
+    await host.shutdown();
+    ben.pair.drop();
+    await settle();
+    expect(presence).not.toHaveBeenCalled();
   });
 });

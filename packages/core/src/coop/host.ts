@@ -153,6 +153,8 @@ export const keyIdOf = (staticKey: string): string => createHash('sha256').updat
 
 export class CoopHost {
   private readonly rooms = new Map<string, Room>();
+  /** After `shutdown`: channels that close late (the relay tells them a moment after) change nothing. */
+  private stopped = false;
 
   constructor(private readonly deps: CoopHostDeps) {}
 
@@ -271,6 +273,7 @@ export class CoopHost {
 
   /** Atelier quits: the links to the relay close, the rooms stay (guests see the host away until it is back). */
   async shutdown(): Promise<void> {
+    this.stopped = true;
     for (const r of this.rooms.values()) {
       if (r.lapse) clearTimeout(r.lapse);
       await r.room.close().catch(() => undefined);
@@ -549,7 +552,8 @@ export class CoopHost {
       if (r.knocks.get(keyId)?.peer === channel) r.knocks.delete(keyId);
       // A guest who came back on a new channel keeps it: only this channel's guest goes.
       if (r.guests.get(participantId)?.channel === channel) r.guests.delete(participantId);
-      void this.deps.coop.presence(sessionId);
+      if (this.stopped) return;
+      this.deps.coop.presence(sessionId).catch((error: unknown) => this.deps.log('co-op presence failed', error));
       this.deps.stateChanged(sessionId);
     });
   }
