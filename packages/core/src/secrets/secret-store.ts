@@ -108,7 +108,8 @@ export class SecretStore {
 
   /** Resolves a `${secret:<id>}` written in settings. A person's own secrets never resolve there, whoever wrote the setting. */
   forSettings(id: string): Promise<string | undefined> {
-    return isPersonalSecret(id) ? Promise.resolve(undefined) : this.get(id);
+    // Co-op's keys (the device key, room tokens) are never anyone's to put in a setting.
+    return isPersonalSecret(id) || id.startsWith('coop-') ? Promise.resolve(undefined) : this.get(id);
   }
 
   async has(id: string): Promise<boolean> {

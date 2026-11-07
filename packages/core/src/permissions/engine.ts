@@ -29,6 +29,11 @@ export interface PermissionContext extends MatchContext {
   isReadOnly(tool: string): boolean;
   /** Whether the session offers a tool, so a refusal points only to tools it has (sub-agents lack ExitPlanMode); every tool when absent. */
   offers?(tool: string): boolean;
+  /**
+   * Co-op: a guest's turn, or one a guest's message joined (agent/coop-turns.ts). Edits to what configures git, shells,
+   * editors or the agent itself ask the host even in Accept edits: such an edit can make the host's computer run commands.
+   */
+  guest?: boolean;
 }
 
 export interface Decision {
@@ -145,7 +150,10 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   }
 
   if ((ctx.isReadOnly(call.name) && !connector) || PLAN_TOOLS.has(call.name)) return warned({ behavior: 'allow', reason: 'Read-only.' });
-  if (ctx.mode === 'acceptEdits' && EDIT_TOOLS.has(call.name)) return { behavior: 'allow', reason: 'Accept edits mode.' };
+  if (ctx.mode === 'acceptEdits' && EDIT_TOOLS.has(call.name)) {
+    const target = ctx.guest ? protectedTarget(call) : null;
+    return target ? { behavior: 'ask', reason: `${call.name} changes ${target}, which configures tools or the agent itself: the host approves that.` } : { behavior: 'allow', reason: 'Accept edits mode.' };
+  }
   if (auto && EDIT_TOOLS.has(call.name)) {
     const target = protectedTarget(call);
     return target ? { behavior: 'review', reason: `${call.name} changes ${target}, which configures tools or the agent itself.` } : { behavior: 'allow', reason: 'Auto mode: an edit in the workspace.' };

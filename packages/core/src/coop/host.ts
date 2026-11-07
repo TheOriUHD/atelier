@@ -99,6 +99,11 @@ export interface CoopHostDeps {
 const INVITE_TTL_MS = 24 * 3600_000;
 /** At most four people in a co-op session, the host included. */
 const MAX_PEOPLE = 4;
+/** What one guest may store on the host's computer in a day: files and bytes (attachments). */
+const UPLOADS_PER_DAY = 100;
+const UPLOAD_BYTES_PER_DAY = 200 * 1024 * 1024;
+/** The most one message of a guest's may hold, as JSON (its files are uploads, counted above). */
+const MAX_MESSAGE_JSON = 1_000_000;
 
 interface Knock {
   id: string;
@@ -118,6 +123,8 @@ interface Guest {
   server: RpcServerConnection<typeof CoopContract>;
   admitted: boolean;
   subscribed: boolean;
+  /** Today's uploads: the UTC day, how many, how many bytes. */
+  uploads?: { day: string; files: number; bytes: number };
   /** Co-op ended: who they were, for the copy they may still fetch before their channel closes. */
   farewell?: ParticipantInfo;
 }
@@ -339,7 +346,11 @@ export class CoopHost {
       if (p.role === 'viewer') throw appError('forbidden', 'You’re watching this session.');
       return p;
     };
+    const sized = (parts: Part[]) => {
+      if (JSON.stringify(parts).length > MAX_MESSAGE_JSON) throw appError('invalid_request', 'That message is too long: attach long text as a file instead.');
+    };
     const ownBlobs = async (parts: Part[]) => {
+      sized(parts);
       for (const p of parts) if ((p.type === 'image' || p.type === 'document') && !(await this.deps.sessionHasBlob(sessionId, p.blob))) throw appError('forbidden', 'Attach files through the session.');
     };
     const refusals = async <T>(action: () => Promise<T>): Promise<T> => {
@@ -347,7 +358,7 @@ export class CoopHost {
         return await action();
       } catch (e) {
         if (e instanceof Error && /^Only (its author|your own)/.test(e.message)) throw appError('forbidden', e.message);
-        if (e instanceof Error && /^(That isn’t a model|That model is a guest|The host doesn’t share|The host hasn’t agreed|That emoji isn’t|Ask for a second opinion|Message not found)/.test(e.message)) throw appError('invalid_request', e.message);
+        if (e instanceof Error && /^(That isn’t a model|That model is a guest|The host doesn’t share|The host hasn’t agreed|That emoji isn’t|Ask for a second opinion|Message not found|You have \d+ messages waiting)/.test(e.message)) throw appError('invalid_request', e.message);
         throw e;
       }
     };
@@ -522,6 +533,12 @@ export class CoopHost {
       },
       'files.upload': async ({ name, mime, dataBase64 }) => {
         await editor();
+        // A guest's files are stored on the host's computer: so much a day, no more.
+        const day = new Date(this.now()).toISOString().slice(0, 10);
+        const used = guest!.uploads?.day === day ? guest!.uploads : { day, files: 0, bytes: 0 };
+        const bytes = Math.floor((dataBase64.length * 3) / 4);
+        if (used.files >= UPLOADS_PER_DAY || used.bytes + bytes > UPLOAD_BYTES_PER_DAY) throw appError('rate_limited', 'You’ve attached as much as a guest may today. It starts again tomorrow.');
+        guest!.uploads = { day, files: used.files + 1, bytes: used.bytes + bytes };
         return this.deps.upload(sessionId, { name, mime, bytes: new Uint8Array(Buffer.from(dataBase64, 'base64')) });
       },
     };

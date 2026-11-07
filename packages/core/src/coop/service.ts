@@ -59,6 +59,8 @@ export interface CoopDeps {
   /** Accounts with a window on the session right now. */
   watchers(sessionId: string): Set<string>;
   relay?: CoopRelayPort;
+  /** The host's models a guest may pick from while the host shares them. */
+  hostModels?(hostUserId: string): Promise<{ ref: string; displayName: string }[]>;
   now?(): number;
 }
 
@@ -234,6 +236,8 @@ export class CoopService {
     const row = await this.participants.get(sessionId, participantId);
     if (!row || row.leftAt !== null) return null;
     await this.participants.remove(sessionId, participantId, this.now());
+    // Their model no longer looks over anyone's edits.
+    if ((await this.settings(sessionId)).navigator === participantId) await this.updateSettings(sessionId, { navigator: null });
     if (row.userId) this.deps.changed(sessionId, [row.userId]);
     await this.presence(sessionId);
     return row;
@@ -272,6 +276,11 @@ export class CoopService {
     return null;
   }
 
+  private async hostModelsOf(sessionId: string): Promise<{ ref: string; displayName: string }[]> {
+    const row = await this.deps.sessionRow(sessionId);
+    return row?.userId ? ((await this.deps.hostModels?.(row.userId).catch(() => [])) ?? []) : [];
+  }
+
   /** The co-op state as one viewer sees it. */
   async state(sessionId: string, viewer: ParticipantInfo): Promise<CoopState | null> {
     const room = await this.room(sessionId);
@@ -289,6 +298,7 @@ export class CoopService {
       hostAway: false,
       ended: room.endedAt !== null,
       sharedUse: !host && viewer.models === 'host' ? await this.sharedUse(sessionId, viewer.id) : null,
+      ...(!host && this.deps.hostModels && (await this.settings(sessionId)).shareModels ? { hostModels: await this.hostModelsOf(sessionId) } : {}),
     };
   }
 }

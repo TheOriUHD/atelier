@@ -22,7 +22,11 @@ const Empty = z.object({});
 export const CoopHello = z.object({
   name: z.string().min(1).max(80),
   /** A small image as a data URL. */
-  avatar: z.string().max(90_000).nullable(),
+  avatar: z
+    .string()
+    .max(90_000)
+    .regex(/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/)
+    .nullable(),
   models: ModelsChoice,
   /** Their own model's ref on their computer, when they answer with their own. */
   model: z.string().max(300).nullable(),

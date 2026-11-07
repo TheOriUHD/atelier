@@ -260,7 +260,7 @@ interface Connection {
 }
 
 /** What co-op refuses a person, said to them as it is (agent/coop-turns.ts answerWithProblem, chat-service.ts). */
-const COOP_REFUSALS = /^(That isn’t a model|That model is a guest|The host doesn’t share|The host hasn’t agreed|Asking for a model by name|That emoji isn’t|Ask for a second opinion)/;
+const COOP_REFUSALS = /^(That isn’t a model|That model is a guest|The host doesn’t share|The host hasn’t agreed|Asking for a model by name|That emoji isn’t|Ask for a second opinion|You have \d+ messages waiting)/;
 
 /** Said when a shared connector at a loopback address can't be reached: on a server that address is the server itself. */
 const LOOPBACK_ON_SERVER =
@@ -409,6 +409,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     emit: (sessionId, event) => chat.notify(sessionId, event),
     changed: (sessionId, userIds) => void notifyParticipants(sessionId, userIds),
     watchers: (sessionId) => new Set([...connections].flatMap((c) => (c.subscriptions.has(sessionId) && c.auth ? [c.auth.user.id] : []))),
+    // A guest picks from the host's own visible models while the host shares them (never another guest's).
+    hostModels: async (userId) => ((await registry.listModels?.(userId)) ?? []).filter((m) => !m.hidden && m.available !== false).map((m) => ({ ref: m.ref, displayName: m.displayName })),
     // Desktops: guests from other computers, through the relay (set up once the chat service exists, below).
     relay: {
       invite: (sessionId) => coopHost?.port.invite(sessionId) ?? null,
@@ -1784,7 +1786,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const user = await accounts.get(userId).catch(() => null);
         // A small avatar goes along as a data URL; a large one stays home.
         const info = user?.avatar ? await blobs.info(user.avatar).catch(() => undefined) : undefined;
-        const avatar = info && info.size <= 60_000 ? `data:${info.mime};base64,${Buffer.from(await blobs.read(info.sha256)).toString('base64')}` : null;
+        const avatar = info && info.size <= 60_000 && /^image\/(png|jpeg|webp|gif)$/.test(info.mime) ? `data:${info.mime};base64,${Buffer.from(await blobs.read(info.sha256)).toString('base64')}` : null;
         return { name: (await prefs.get(userId).catch(() => null))?.callMe.trim() || user?.name || 'Guest', avatar };
       },
       version: APP.version,
