@@ -50,6 +50,13 @@ own (`sbx000`, `sbx001`, …); see [the chat sandbox](/self-hosting/#the-chat-sa
 | `ATELIER_SANDBOX_SLOTS` | `256` | How many accounts the sandbox can hold, 1 to 9999. Set the same number on the `atelier` service and, as an environment variable, on the `sandbox` service, then recreate both. | `512` |
 | `ATELIER_SANDBOX_USER` | unset | For a sandbox container you built yourself, without the account users: every account logs in as this one user and shares its folders. Leave it unset with the Compose file's sandbox. | `dev` |
 
+## Server and desktop: co-op *(next release)*
+
+| Variable | Applies to | Default | Meaning | Example |
+|---|---|---|---|---|
+| `ATELIER_COOP_RELAY` | Desktop | `https://coop.atelierhq.dev` | The relay [co-op](/co-op/) between computers goes through. The host and every guest must use the same one. Empty switches co-op between computers off on this computer. A team server's co-op needs no relay. | `https://atelier.example.com/api/coop` |
+| `ATELIER_SERVE_COOP_RELAY` | Server | unset | `1` runs a co-op relay on this server at `/api/coop`, for desktops that set `ATELIER_COOP_RELAY` to it. It passes encrypted traffic it can't read. Behind a reverse proxy, set `ATELIER_TRUSTED_PROXIES` so its limits count each person's address, not the proxy's. | `1` |
+
 ## Server and desktop: updates
 
 | Variable | Applies to | Default | Meaning | Example |
