@@ -40,7 +40,7 @@ async function fileAppears(path: string, ms: number): Promise<string> {
 test('co-op between two computers through the relay', async () => {
   test.setTimeout(30 * 60_000);
   await mkdir(exchange, { recursive: true });
-  const relay = process.env.ATELIER_COOP_RELAY ? { ATELIER_COOP_RELAY: process.env.ATELIER_COOP_RELAY } : {};
+  const relay: Record<string, string> = process.env.ATELIER_COOP_RELAY ? { ATELIER_COOP_RELAY: process.env.ATELIER_COOP_RELAY } : {};
   let app: ElectronApplication | null = null;
   try {
     if (role === 'host') {
