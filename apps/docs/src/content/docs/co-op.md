@@ -41,7 +41,8 @@ Click the invite link someone sent you. It opens a page at `atelierhq.dev/join` 
 the page sends nothing anywhere. The join card says whose session it is, that it runs on their computer, and what
 you share. Choose what answers your messages, then click **Join** and wait for the host to let you in.
 
-If the link doesn't open Atelier, open Atelier yourself and paste the link into **Join a co-op session…**.
+If the link doesn't open Atelier (a Linux AppImage, for example, can't register it), open Atelier yourself and paste
+the link into **More › Join a co-op session…** in the sidebar, or the same command in the command palette.
 
 To join a session on another computer you need the desktop app in **Run on this computer** mode. A desktop signed in
 to a server joins co-op sessions on that server only.
