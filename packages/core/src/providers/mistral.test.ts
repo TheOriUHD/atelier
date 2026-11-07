@@ -342,6 +342,66 @@ describe('Mistral replies', () => {
   });
 });
 
+describe('a GLM reply that ran out of room in a tool call', () => {
+  // As Mistral's API sends it (2026-11-07): `tool_calls`, every token of the limit used, the last call's input cut off.
+  const cutStream = (completion: number) =>
+    sseOf([
+      chunk({ content: [{ type: 'thinking', thinking: [{ type: 'text', text: 'Plan the pack.' }], closed: true }] }),
+      chunk({ content: '', tool_calls: [{ id: 'chatcmpl-tool-1', type: 'function', function: { name: 'Write', arguments: '{"file_path":"a.txt","content":"one"}' }, index: 0 }] }),
+      chunk({ content: '', tool_calls: [{ id: 'chatcmpl-tool-2', type: 'function', function: { name: 'Write', arguments: '{"file_path":"shaders/water.fsh","content":"#version 120\\nvoid main() {' }, index: 1 }] }),
+      last({ content: '' }, 'tool_calls', { prompt_tokens: 200, completion_tokens: completion }),
+    ]);
+
+  it('is reported cut off, so none of its calls runs with half a file', async () => {
+    const { adapter } = setup('mistral-vibe', cutStream(1200));
+    const events = await collect(adapter.stream(chatRequest({ model: 'zai-glm-5-3-flash', maxOutputTokens: 1200 })));
+    expect(finishOf(events).reason).toBe('max_tokens');
+  });
+
+  it('is reported cut off when the limit was used, even with every call’s input complete', async () => {
+    const whole = sseOf([chunk({ content: '', tool_calls: [{ id: 'c', type: 'function', function: { name: 'Write', arguments: '{"file_path":"a.txt","content":"one"}' }, index: 0 }] }), last({}, 'tool_calls', { prompt_tokens: 9, completion_tokens: 500 })]);
+    const { adapter } = setup('mistral-vibe', whole);
+    expect(finishOf(await collect(adapter.stream(chatRequest({ model: 'zai-glm-5-3-flash', maxOutputTokens: 500 })))).reason).toBe('max_tokens');
+  });
+
+  it('is an ordinary tool-call ending when the calls are whole and the limit wasn’t reached', async () => {
+    const whole = sseOf([chunk({ content: '', tool_calls: [{ id: 'c', type: 'function', function: { name: 'Write', arguments: '{"file_path":"a.txt","content":"one"}' }, index: 0 }] }), last({}, 'tool_calls', { prompt_tokens: 9, completion_tokens: 40 })]);
+    const { adapter } = setup('mistral-vibe', whole);
+    const events = await collect(adapter.stream(chatRequest({ model: 'zai-glm-5-3-flash', maxOutputTokens: 1200 })));
+    expect(finishOf(events).reason).toBe('tool_use');
+  });
+});
+
+describe('Mistral models as the API lists them on 2026-11-07', () => {
+  const instance = providerInstance('mistral-vibe', BASE, API_KEY);
+
+  it('knows Medium 3.5 under the name Mistral gives it now, mistral-medium-latest', () => {
+    const medium = mistralModel(instance, card('mistral-medium-latest', { aliases: ['mistral-medium-3-5', 'mistral-vibe-cli-latest'] }, { reasoning: true }))!;
+    expect(medium).toMatchObject({ displayName: 'Mistral Medium 3.5', maxOutput: 131_072, capabilities: { reasoning: 'toggle' } });
+  });
+
+  it('knows GLM 5.2, Large 4’s output limit and DeepSeek’s levels', () => {
+    expect(mistralModel(instance, card('glm-5-2', { aliases: ['zai-glm-5-2'], max_context_length: 1_048_576 }, { reasoning: true, vision: false }))).toMatchObject({ displayName: 'GLM 5.2', effortLevels: ['low', 'medium', 'high', 'max'] });
+    expect(mistralModel(instance, card('mistral-large-4', { max_context_length: 1_048_576 }, { reasoning: true }))!.maxOutput).toBe(262_144);
+    expect(mistralModel(instance, card('deepseek-v4-1-flash-1017', { max_context_length: 1_048_576 }, { reasoning: true }))!.effortLevels).toEqual(['low', 'high', 'max']);
+  });
+
+  it('sends each model only the efforts the API takes (medium goes to GLM 5.3 and DeepSeek as low)', async () => {
+    const { adapter, calls } = setup('mistral-vibe');
+    const effortFor = async (model: string, effort: ChatRequest['effort']) => {
+      await collect(adapter.stream(chatRequest({ model, effort })));
+      return sent(calls).reasoning_effort;
+    };
+    expect(await effortFor('zai-glm-5-3-flash', 'medium')).toBe('low');
+    expect(await effortFor('deepseek-v4-1-flash-1017', 'medium')).toBe('low');
+    expect(await effortFor('deepseek-v4-1-flash-1017', 'max')).toBe('max');
+    expect(await effortFor('glm-5-2', 'medium')).toBe('medium');
+    expect(await effortFor('mistral-large-4', 'max')).toBe('high');
+    expect(await effortFor('mistral-medium-latest', 'medium')).toBe('high');
+    expect(await effortFor('mistral-medium-latest', undefined)).toBe('none');
+  });
+});
+
 describe('Mistral reply outlines in the log', () => {
   const logged = (stream: string | ((call: { body: unknown }) => Response), model = 'zai-glm-5-3-flash') => {
     const lines: string[] = [];

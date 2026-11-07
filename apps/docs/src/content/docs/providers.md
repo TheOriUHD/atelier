@@ -197,19 +197,23 @@ only in the key and in how use is paid.
   charges 1.1 times its prices there, and not every model or feature is offered there.
 - **Key:** required, from Mistral's console (console.mistral.ai/api-keys; the form's **Open Mistral’s console** button opens
   it). Mistral's free plan also gives a key, with low limits, after a phone check; Mistral may train on what is sent
-  with it. *(next release)*
+  with it.
 - **What Atelier asks:** `/v1/models` for the model list and health, `/v1/chat/completions` for replies. Mistral refuses
   fields it doesn't know, so requests carry only Mistral's own.
 - **Models:** one entry per model. Mistral lists a model under each of its names (`mistral-small-latest` as well as
   `mistral-small-2603`); Atelier folds them into the model. Retired models and models that can't chat are left out, and
   context is the window Mistral's list gives. Atelier knows the names, output limits and reasoning of Mistral Large 4,
-  Mistral Medium 3.5, Mistral Small 4, Mistral Large 3, Ministral 3 14B, 8B and 3B, Codestral, GLM 5.3 and GLM 5.3 Flash
-  (hosted by Mistral), DeepSeek V4.1 Flash, Voxtral Small, and the Vibe models **Mistral Vibe** and **Mistral Vibe Fast**.
+  Mistral Medium 3.5 (which Mistral lists as `mistral-medium-latest`), Mistral Small 4, Mistral Large 3, Ministral 3 14B,
+  8B and 3B, Codestral, GLM 5.3, GLM 5.3 Flash and GLM 5.2 (hosted by Mistral), DeepSeek V4.1 Flash and Voxtral Small.
   Mistral has deprecated Medium 3.5 (retiring on 30 April 2027) and Large 3. A model Atelier doesn't know still works with
   what Mistral's list says about it; if it reasons, it gets High only.
-- **Effort:** levels on Large 4 (Low, Medium, High), GLM 5.3 and GLM 5.3 Flash (Low, High, Max); a **Thinking** switch on
-  Medium 3.5, Small 4 and the Vibe models. DeepSeek V4.1 Flash reasons by itself and is sent no setting. See
-  [Effort](/effort/).
+- **Effort:** levels on Large 4 (Low, Medium, High), GLM 5.3 and GLM 5.3 Flash (Low, High, Max), GLM 5.2 (Low, Medium,
+  High, Max) and DeepSeek V4.1 Flash (Low, High, Max; with no level it reasons by itself); a **Thinking** switch on
+  Medium 3.5 and Small 4. An effort a model doesn't take goes as the nearest lower one it does (Medium as Low on GLM).
+  See [Effort](/effort/).
+- **Output limit:** Mistral counts reasoning toward a reply's output limit, so a turn on a model that reasons may use the
+  model's whole limit (131,072 tokens, 262,144 on Large 4), within the room the context has left. A reply that reaches it
+  is continued; none of the tool calls in it runs, also when Mistral ends it as an ordinary tool call, as it does for GLM.
 - **Thinking:** streamed and shown, and sent back with the reply on later turns, as Mistral asks.
 - **Tools:** native, or prompted for a model Mistral lists without function calling. Call ids from another provider, in a
   conversation that switched to Mistral, are mapped to the nine-letter ids Mistral takes.
@@ -231,8 +235,8 @@ against the plan's Vibe allowance instead of being priced per token. Everything 
 
 Atelier doesn't use Vibe's own sign-in: you create the key and paste it.
 
-- **Models:** the ones Mistral lists for the key, among them **Mistral Vibe** (`mistral-vibe-cli-latest`, Medium 3.5
-  underneath) and **Mistral Vibe Fast**.
+- **Models:** the ones Mistral lists for the key. Vibe's own models are listed as the models they are:
+  `mistral-vibe-cli-latest` is Medium 3.5, `mistral-vibe-cli-fast` is Small 4.
 - **Past the allowance** requests wait for the next billing period, unless pay-as-you-go is on in Mistral's console; then
   they are charged. A refused request ends the turn with "*Name* usage limit reached: … The plan's Vibe allowance starts
   again at the next billing period, or turn on pay-as-you-go in Mistral's console."

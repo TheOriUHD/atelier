@@ -2949,7 +2949,11 @@ export class ChatService {
     const effort = this.resolveEffort(session, info);
     // A thinking switch or a model without levels sends High or nothing for Ultracode, and still works as it.
     const ultracode = shownEffort(session.effort as Effort | null, info, session.mode, this.effortOptions(session)) === 'ultracode';
-    const maxOutputTokens = Math.min(info.maxOutput, outputCap(ultracode ? 'ultracode' : effort));
+    // Mistral counts a reply's reasoning toward its output limit, and its reasoning models (GLM above all) can reason
+    // past 32k tokens before they write a word: the reply is then cut off with nothing in it. Vibe, Mistral's own
+    // client, sets no limit there; a turn gets the model's own maximum (within the room the context has left, below).
+    const reasoningIsOutput = (model.adapter.type === 'mistral' || model.adapter.type === 'mistral-vibe') && info.capabilities.reasoning !== 'none';
+    const maxOutputTokens = reasoningIsOutput ? info.maxOutput : Math.min(info.maxOutput, outputCap(ultracode ? 'ultracode' : effort));
     const limit = info.contextLength;
     return {
       sessionId: session.id,

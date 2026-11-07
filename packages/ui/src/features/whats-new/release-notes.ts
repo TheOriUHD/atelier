@@ -19,6 +19,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.5.2',
+    intro: 'Mistral’s models, GLM above all, work through long coding tasks instead of stopping or saving half-written files.',
+    highlights: [
+      {
+        icon: Cloud,
+        title: 'GLM no longer saves half a file',
+        body: 'When GLM ran out of room in the middle of writing a file, Mistral ended the reply as if the file were complete, and Atelier saved half of it; the model then wrote it again and ran out again. Such a reply is now taken as cut off: nothing in it runs, and the model is asked to send it again, split up.',
+      },
+      {
+        icon: Gauge,
+        title: 'Room to think',
+        body: 'Mistral counts a model’s reasoning toward its output limit, and GLM can reason tens of thousands of tokens on a bigger task before it writes anything. A turn on a Mistral model that reasons now gets the model’s own limit, as Mistral’s Vibe does, so such replies are no longer cut off with nothing in them.',
+      },
+    ],
+    also: ['Mistral Medium 3.5 shows under its name again (Mistral lists it as mistral-medium-latest now), and GLM 5.2 and DeepSeek’s effort levels are known.', 'Each Mistral model gets only the reasoning efforts its API takes, checked against it.', 'A Mistral reply that fails or shows nothing leaves an outline in the log for Copy diagnostics, without the words of the conversation.'],
+  },
+  {
     version: '0.5.1',
     intro: 'Co-op guests file the session in their own sidebar and follow its sub-agents and tracks.',
     highlights: [

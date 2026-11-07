@@ -215,6 +215,19 @@ export class ToolCallMerger {
     }
   }
 
+  /** Whether a call's arguments stop before their JSON ends: a reply cut off in the middle of it. */
+  cutOff(): boolean {
+    return [...this.calls.values()].some((call) => {
+      if (call.args.trim() === '') return false;
+      try {
+        JSON.parse(call.args);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+  }
+
   *finish(): Generator<StreamEvent> {
     for (const index of [...this.calls.keys()].sort((a, b) => a - b)) {
       const call = this.calls.get(index)!;
