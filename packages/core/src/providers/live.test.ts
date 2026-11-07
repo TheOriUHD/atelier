@@ -1,6 +1,6 @@
 /**
  * Live smoke tests against real endpoints. Skipped unless configured, through the environment or a
- * gitignored `.env.local` at the repo root:
+ * gitignored `.env.local` at the repo root (in a git worktree, the main checkout's, since worktrees have none):
  *   ANTHROPIC_API_KEY  [ATELIER_LIVE_ANTHROPIC_MODEL=claude-haiku-5-5]
  *   OPENAI_API_KEY     [ATELIER_LIVE_OPENAI_MODEL=gpt-5-mini]
  *   ATELIER_LIVE_OLLAMA_URL        [ATELIER_LIVE_OLLAMA_MODEL, else the first listed]
@@ -10,15 +10,28 @@
  *   MISTRAL_VIBE_API_KEY  [ATELIER_LIVE_MISTRAL_VIBE_MODEL=mistral-vibe-cli-latest] (a Vibe key: spends the plan's allowance)
  * Keys are only passed to the adapters; nothing here prints them.
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it, type TestContext } from 'vitest';
 import type { Message, Part, ProviderType } from '@atelier/protocol';
 import { createAdapter } from './index.ts';
 import type { ProviderAdapter, StreamEvent } from './types.ts';
 
-const envFile = join(import.meta.dirname, '../../../../.env.local');
-const fileEnv: Record<string, string> = existsSync(envFile)
+/** This checkout's `.env.local`, else the main checkout's (where the keys live) when this runs in a git worktree. */
+function findEnvFile(): string | null {
+  const here = join(import.meta.dirname, '../../../../.env.local');
+  if (existsSync(here)) return here;
+  try {
+    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8' }).trim();
+    const main = join(dirname(common), '.env.local');
+    return existsSync(main) ? main : null;
+  } catch {
+    return null;
+  }
+}
+const envFile = findEnvFile();
+const fileEnv: Record<string, string> = envFile
   ? Object.fromEntries(
       readFileSync(envFile, 'utf8')
         .split('\n')
