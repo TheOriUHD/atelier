@@ -1,6 +1,10 @@
 /**
- * Noise_XXpsk3_25519_ChaChaPoly_SHA256 (the Noise Protocol Framework, revision 34) on `node:crypto` alone: the
+ * Noise_XXpsk3_25519_AESGCM_SHA256 (the Noise Protocol Framework, revision 34) on `node:crypto` alone: the
  * handshake co-op peers run through the relay, so the relay forwards bytes it can't read.
+ *
+ * AES-GCM rather than ChaChaPoly because the desktop app's backend runs on Electron's Node, whose BoringSSL has no
+ * `chacha20-poly1305` cipher. Everything here must work there as well as on plain Node (OpenSSL): AES-256-GCM,
+ * SHA-256 and HMAC, X25519 key objects. `crypto-allowlist.test.ts` fails on anything else.
  *
  *   XXpsk3:
  *     -> e
@@ -16,10 +20,12 @@
  */
 import { createCipheriv, createDecipheriv, createHash, createHmac, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, type KeyObject } from 'node:crypto';
 
-export const PROTOCOL_NAME = 'Noise_XXpsk3_25519_ChaChaPoly_SHA256';
+export const PROTOCOL_NAME = 'Noise_XXpsk3_25519_AESGCM_SHA256';
+/** The one cipher this uses (Noise's AESGCM is AES-256-GCM with a 128-bit tag). */
+export const CIPHER = 'aes-256-gcm';
 /** Noise's limit for any one message, handshake or transport. */
 export const MAX_NOISE_MESSAGE = 65_535;
-/** Poly1305's tag on every encrypted payload. */
+/** GCM's tag on every encrypted payload. */
 export const TAG_LENGTH = 16;
 /** X25519 keys, the pre-shared key and SHA-256 output are all this long. */
 export const KEY_LENGTH = 32;
@@ -108,11 +114,11 @@ function hkdf(chainingKey: Uint8Array, input: Uint8Array, outputs: 2 | 3): Uint8
   return outputs === 2 ? [first, second] : [first, second, hmac(temp, second, Uint8Array.of(3))];
 }
 
-/** ChaChaPoly's nonce: 32 bits of zeros, then the counter as a 64-bit little-endian number. */
-function chachaNonce(n: number): Buffer {
+/** AESGCM's nonce (spec §12.4): 32 bits of zeros, then the counter as a 64-bit big-endian number. */
+export function gcmNonce(n: number): Buffer {
   const nonce = Buffer.alloc(12);
-  nonce.writeUInt32LE(n % 2 ** 32, 4);
-  nonce.writeUInt32LE(Math.floor(n / 2 ** 32), 8);
+  nonce.writeUInt32BE(Math.floor(n / 2 ** 32), 4);
+  nonce.writeUInt32BE(n % 2 ** 32, 8);
   return nonce;
 }
 
@@ -151,8 +157,8 @@ export class CipherState {
   encryptWithAd(ad: Uint8Array, plaintext: Uint8Array): Uint8Array {
     if (!this.#key) return new Uint8Array(plaintext);
     if (this.#n >= MAX_NONCE) throw new NoiseError('nonce', 'This session has used all its nonces.');
-    const cipher = createCipheriv('chacha20-poly1305', this.#key, chachaNonce(this.#n), { authTagLength: TAG_LENGTH });
-    cipher.setAAD(ad, { plaintextLength: plaintext.length });
+    const cipher = createCipheriv(CIPHER, this.#key, gcmNonce(this.#n), { authTagLength: TAG_LENGTH });
+    cipher.setAAD(ad);
     const body = cipher.update(plaintext);
     cipher.final();
     const out = new Uint8Array(body.length + TAG_LENGTH);
@@ -167,9 +173,9 @@ export class CipherState {
     if (!this.#key) return new Uint8Array(ciphertext);
     if (this.#n >= MAX_NONCE) throw new NoiseError('nonce', 'This session has used all its nonces.');
     if (ciphertext.length < TAG_LENGTH) throw new NoiseError('short', 'The message is too short to be encrypted.');
-    const decipher = createDecipheriv('chacha20-poly1305', this.#key, chachaNonce(this.#n), { authTagLength: TAG_LENGTH });
+    const decipher = createDecipheriv(CIPHER, this.#key, gcmNonce(this.#n), { authTagLength: TAG_LENGTH });
     decipher.setAuthTag(ciphertext.subarray(ciphertext.length - TAG_LENGTH));
-    decipher.setAAD(ad, { plaintextLength: ciphertext.length - TAG_LENGTH });
+    decipher.setAAD(ad);
     let plaintext: Buffer;
     try {
       plaintext = Buffer.concat([decipher.update(ciphertext.subarray(0, ciphertext.length - TAG_LENGTH)), decipher.final()]);

@@ -1,7 +1,8 @@
+import { createDecipheriv } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CipherState, generateKeyPair, HandshakeState, keyPairFromPrivate, MAX_NOISE_MESSAGE, NoiseError, PROTOCOL_NAME, type KeyPair } from './noise.ts';
+import { CipherState, gcmNonce, generateKeyPair, HandshakeState, keyPairFromPrivate, MAX_NOISE_MESSAGE, NoiseError, PROTOCOL_NAME, type KeyPair } from './noise.ts';
 
 interface Vector {
   protocol_name: string;
@@ -31,7 +32,7 @@ function pair(options: { guestPsk?: Uint8Array; hostPsk?: Uint8Array; guestProlo
   return { guest, host, guestKey, hostKey };
 }
 
-describe('Noise_XXpsk3_25519_ChaChaPoly_SHA256', () => {
+describe(PROTOCOL_NAME, () => {
   it('has the fixture for its exact protocol name', () => {
     expect(vectors.length).toBeGreaterThan(0);
     for (const vector of vectors) expect(vector.protocol_name).toBe(PROTOCOL_NAME);
@@ -175,6 +176,21 @@ describe('Noise_XXpsk3_25519_ChaChaPoly_SHA256', () => {
     expect(h.receive.decrypt(message)).toEqual(text('the real message'));
     // A replayed message is refused once the nonce moved on.
     expect(() => h.receive.decrypt(message)).toThrow(expect.objectContaining({ code: 'decrypt' }));
+  });
+
+  it("builds AESGCM's nonce as Noise says: four zero bytes, then the counter big-endian", () => {
+    expect(gcmNonce(0).toString('hex')).toBe('000000000000000000000000');
+    expect(gcmNonce(1).toString('hex')).toBe('000000000000000000000001');
+    expect(gcmNonce(0x0102_0304).toString('hex')).toBe('000000000000000001020304');
+    expect(gcmNonce(2 ** 32 + 5).toString('hex')).toBe('000000000000000100000005');
+    // A message at a counter above 32 bits opens with plain AES-256-GCM under that nonce.
+    const key = new Uint8Array(32).fill(9);
+    const send = new CipherState(key);
+    send.setNonce(2 ** 32 + 5);
+    const sealed = send.encrypt(text('far along'));
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from('000000000000000100000005', 'hex'), { authTagLength: 16 });
+    decipher.setAuthTag(sealed.subarray(-16));
+    expect(Buffer.concat([decipher.update(sealed.subarray(0, -16)), decipher.final()]).toString()).toBe('far along');
   });
 
   it('decrypts a later message after lost ones when told its nonce', () => {

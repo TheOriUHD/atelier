@@ -2,8 +2,9 @@
 
 The relay at `coop.atelierhq.dev` lets two to four people work in one Atelier session that lives on the host's
 computer. Hosts and guests are usually at home behind NAT, so everyone dials out to the relay and it forwards bytes
-between them. Each guest runs its own Noise handshake with the host inside those bytes, so the relay can't read or
-change what they say.
+between them. Each guest runs its own Noise handshake with the host inside those bytes
+(`Noise_XXpsk3_25519_AESGCM_SHA256`, `packages/core/src/coop/noise.ts`), so the relay can't read or change what they
+say. The relay itself does no encryption and doesn't need to know the protocol.
 
 - `src/index.js`: the Worker, with a Durable Object `Room` per room (the WebSocket Hibernation API: a room with
   nothing happening leaves memory and its sockets stay open; pings are answered without waking it).
