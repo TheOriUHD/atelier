@@ -358,7 +358,9 @@ async function preflight({ version, tag, args, done = {} }) {
     const r = await exec('ssh', [...SSH, host, 'echo ok'], { check: false });
     need(r.code === 0 && r.out.includes('ok'), `Can't log in to the ${name} build machine "${host}" over ssh.`);
   }
-  if (!skip('mac')) {
+  // Signing and notarizing happen in the Mac build: once it is done (a re-run after a failure elsewhere), a locked Mac
+  // can't hold up the rest.
+  if (!skip('mac') && !done['build:mac']) {
     const ids = (await exec('security', ['find-identity', '-v', '-p', 'codesigning'], { check: false })).out;
     need(/Developer ID Application/.test(ids), 'No "Developer ID Application" certificate in the keychain: the macOS apps cannot be signed.');
     const notary = await exec('xcrun', ['notarytool', 'history', '--keychain-profile', process.env.APPLE_KEYCHAIN_PROFILE ?? 'atelier-notary'], { check: false });
