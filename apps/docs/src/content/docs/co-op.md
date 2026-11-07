@@ -80,7 +80,10 @@ falls back to the host's models.
 The host's folder, terminal and computer are the host's. In a guest's turn:
 
 - Everything that would ask the host asks the host, in every mode: the host's **Always allow** rules, Auto mode and
-  Bypass don't apply to guests' turns. A guest's turn edits files at most as far as **Accept edits** would.
+  Bypass don't apply to guests' turns. A guest's turn edits files at most as far as **Accept edits** would, and an edit
+  to what configures git, shells, editors or the agent (`.git/`, `.claude/`, `.atelier/`, `.vscode/`, shell startup
+  files and the like) asks the host even then.
+- A guest's message that joins the host's turn (**Join this turn**) makes the rest of that turn a guest's turn too.
 - The question shows **Waiting for Ada to approve…** to everyone else. Nobody answers it within 5 minutes: it is
   declined, and the agent is told.
 - **Trust with approvals** lets a guest answer these questions in the host's place, for this session only. They can't

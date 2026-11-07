@@ -228,7 +228,11 @@ host's folder.
 
 **What guests' turns may do.**
 - A guest's turns get none of the host's standing **Always allow** rules, and never run in Auto or Bypass: at most
-  **Accept edits**, so commands, network access and anything outside the folder ask the host.
+  **Accept edits**, so commands, network access and anything outside the folder ask the host. Edits to files that make
+  tools run things (`.git/hooks`, `.claude/`, `.atelier/`, `.vscode/`, shell startup files) ask the host too.
+- A guest's message that joins the host's running turn turns the rest of it, and the sub-agents it starts, into a
+  guest's turn.
+- A guest from another computer may attach up to 100 files or 200 MB a day, and queue up to 20 messages.
 - **Trust with approvals** lets a guest answer those questions. Treat it like handing them your keyboard: a trusted
   guest who approves a command runs it on your computer.
 - Each message reaches the model with its writer's name, so the model can tell people apart. A guest's message can't
