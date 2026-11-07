@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, Cloud, FileDiff, Film, FolderInput, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,33 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.5.0',
+    intro: 'Co-op: work in one session with up to three other people, each writing and watching the agent work. There is no account.',
+    highlights: [
+      {
+        icon: Users,
+        title: 'Work in one session together',
+        body: 'Click Co-op in a session’s header and send the invite link. The people you let in work in the same conversation and the same folder: each writes their own messages and sees every reply as it is written. You let each person in after comparing four emoji with them. Between two computers the apps meet through an encrypted relay that can’t read what passes; on a team server you add teammates instead.',
+      },
+      {
+        icon: Bot,
+        title: 'Your models or theirs',
+        body: 'Each person picks whose models answer them: the host’s, within a daily limit the host sets, or their own providers and plans, which run on their own computer with their own keys.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'The host’s computer stays the host’s',
+        body: 'In a guest’s turn, commands, anything outside the folder and edits to files that make tools run things ask the host, whatever the permission mode. Questions nobody answers within 5 minutes are declined. A shared session carries no memory, personalization or project context.',
+      },
+      {
+        icon: GitBranch,
+        title: 'More together',
+        body: 'Ask another model for a second opinion beside the first answer, name a model with @ for one message, and react to messages. A navigator can look over every edit in the others’ turns, and in Code an agent can work on a parallel track in its own git worktree, which the host merges.',
+      },
+    ],
+    also: ['Guests keep a copy of the conversation when co-op ends, unless the host switches that off.', 'The host’s computer stays awake while co-op is on.', 'A server you run yourself can run its own co-op relay.'],
+  },
   {
     version: '0.4.4',
     intro: 'A fix for GLM and DeepSeek through Mistral.',

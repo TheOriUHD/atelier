@@ -52,8 +52,6 @@ own (`sbx000`, `sbx001`, …); see [the chat sandbox](/self-hosting/#the-chat-sa
 
 ## Server and desktop: co-op
 
-*(next release)*
-
 | Variable | Applies to | Default | Meaning | Example |
 |---|---|---|---|---|
 | `ATELIER_COOP_RELAY` | Desktop | `https://coop.atelierhq.dev` | The relay [co-op](/co-op/) between computers goes through. The host and every guest must use the same one. Empty switches co-op between computers off on this computer. A team server's co-op needs no relay. | `https://atelier.example.com/api/coop` |

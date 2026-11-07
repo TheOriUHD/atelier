@@ -3,10 +3,6 @@ title: Co-op
 description: "Work in one session with up to three other people: the same conversation, the same folder, each typing and watching the agent work. Everyone answers with the host's models or their own. No account."
 ---
 
-:::note
-Co-op is new in the next release. *(next release)*
-:::
-
 With co-op, up to four people work in one Chat, Cowork or Code session together. Everyone sees every reply as it is
 written and every change as it lands, writes their own messages, and picks which model answers them.
 

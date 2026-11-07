@@ -216,7 +216,7 @@ message waits for you.
 
 ## Co-op
 
-*(next release)* In a [co-op](/co-op/) session, other people make the agent act in the host's session: on the host's computer, in the
+In a [co-op](/co-op/) session, other people make the agent act in the host's session: on the host's computer, in the
 host's folder.
 
 **What guests get.**
