@@ -23,7 +23,7 @@ export interface NewParticipant {
   model?: string | null;
 }
 
-export type ParticipantPatch = Partial<Pick<ParticipantRow, 'name' | 'avatar' | 'role' | 'models' | 'model' | 'trusted' | 'pinnedAt' | 'groupId' | 'archivedAt' | 'finishedUnseenAt'>>;
+export type ParticipantPatch = Partial<Pick<ParticipantRow, 'name' | 'avatar' | 'role' | 'models' | 'model' | 'trusted' | 'title' | 'pinnedAt' | 'groupId' | 'archivedAt' | 'finishedUnseenAt'>>;
 
 export class ParticipantRepo {
   constructor(private readonly db: Db) {}

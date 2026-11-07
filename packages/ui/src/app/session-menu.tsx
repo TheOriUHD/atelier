@@ -1,9 +1,10 @@
 /**
  * The menu of a Code or Cowork session in the sidebar (design/components.md › Sidebar): open it elsewhere, pin, mark
  * unread, rename, fork, file it under a group, archive, delete. Its keys work while it is open: the letter beside an
- * item, and the numbers in the submenus.
+ * item, and the numbers in the submenus. In someone else's co-op session the filing is the guest's own (only they see
+ * it), there is no fork, and the last item leaves the session (or, once co-op ended, removes it).
  */
-import { Archive, ArchiveRestore, Check, CopyPlus, EyeOff, FolderTree, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, CopyPlus, EyeOff, FolderTree, LogOut, Pencil, Pin, PinOff, Trash2 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import type { KeyboardEvent } from 'react';
 import type { SessionGroup, SessionSummary, WorkspaceSummary } from '@atelier/protocol';
@@ -23,6 +24,8 @@ interface Props {
   onRename(): void;
   onDelete(): void;
   onNewGroup(): void;
+  /** Someone else's co-op session: Leave instead of Delete (Remove from sidebar once it ended), and no Fork. */
+  onLeave?(): void;
   close(): void;
   /** Where it opens instead of at the ⋯ button (a right-click's pointer). */
   anchor?: MenuContentProps['anchor'];
@@ -30,7 +33,7 @@ interface Props {
 
 const NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-export function SessionMenuContent({ session, workspace, groups, onRename, onDelete, onNewGroup, close, anchor }: Props) {
+export function SessionMenuContent({ session, workspace, groups, onRename, onDelete, onNewGroup, onLeave, close, anchor }: Props) {
   const navigate = useNavigate();
   const fail = (e: unknown) => void toast.error(describeError(e).message);
   const update = (patch: { pinned?: boolean; groupId?: string | null; archived?: boolean; unread?: boolean }) =>
@@ -39,6 +42,9 @@ export function SessionMenuContent({ session, workspace, groups, onRename, onDel
       .catch(fail);
   const unread = !!session.finishedUnseen;
   const archived = session.archivedAt != null;
+  const guest = !!session.coop && session.coop.role !== 'host';
+  const ended = !!session.coop?.ended;
+  const last = guest && !ended && onLeave ? onLeave : onDelete;
 
   const fork = () =>
     void rpc()
@@ -102,9 +108,9 @@ export function SessionMenuContent({ session, workspace, groups, onRename, onDel
           p: () => update({ pinned: !session.pinnedAt }),
           u: () => (unread ? markRead() : update({ unread: true })),
           r: onRename,
-          f: fork,
+          ...(guest ? {} : { f: fork }),
           a: () => update({ archived: !archived }),
-          d: onDelete,
+          d: last,
         })
       }
     >
@@ -143,9 +149,11 @@ export function SessionMenuContent({ session, workspace, groups, onRename, onDel
       <MenuItem icon={Pencil} shortcut="R" onClick={onRename}>
         Rename
       </MenuItem>
-      <MenuItem icon={CopyPlus} shortcut="F" onClick={fork}>
-        Fork
-      </MenuItem>
+      {!guest && (
+        <MenuItem icon={CopyPlus} shortcut="F" onClick={fork}>
+          Fork
+        </MenuItem>
+      )}
       <MenuSeparator />
       <MenuSubmenu label="Move to group" icon={FolderTree} onKeyDown={(e) => keyed(e, numbered(groups.map((g) => file(g))))}>
         {groups.map((g, i) => (
@@ -172,9 +180,15 @@ export function SessionMenuContent({ session, workspace, groups, onRename, onDel
       <MenuItem icon={archived ? ArchiveRestore : Archive} shortcut="A" onClick={() => update({ archived: !archived })}>
         {archived ? 'Unarchive' : 'Archive'}
       </MenuItem>
-      <MenuItem icon={Trash2} danger shortcut="D" onClick={onDelete}>
-        Delete
-      </MenuItem>
+      {guest && !ended && onLeave ? (
+        <MenuItem icon={LogOut} danger shortcut="D" onClick={onLeave}>
+          Leave
+        </MenuItem>
+      ) : (
+        <MenuItem icon={Trash2} danger shortcut="D" onClick={onDelete}>
+          {guest ? 'Remove from sidebar' : 'Delete'}
+        </MenuItem>
+      )}
     </MenuContent>
   );
 }

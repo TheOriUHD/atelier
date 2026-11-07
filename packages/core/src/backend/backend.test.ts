@@ -250,6 +250,40 @@ describe('pins', () => {
   });
 });
 
+describe('co-op on a team server: a teammate’s own sidebar', () => {
+  it('a teammate pins, renames, files, archives and marks a shared session for themselves, and nothing of the host’s changes', async () => {
+    const { code: invite } = await client.call('invites.create', { role: 'user' });
+    const bob = connect();
+    const { user } = await bob.call('auth.acceptInvite', { invite, username: 'bob', name: 'Bob', password: 'bob-password', clientKind: 'web' });
+    const session = await client.call('sessions.create', { mode: 'code' });
+    await client.call('sessions.update', { id: session.id, title: 'Shader' });
+    await client.call('coop.start', { sessionId: session.id });
+    await client.call('coop.add', { sessionId: session.id, userIds: [user.id], role: 'editor' });
+    const group = await bob.call('groups.create', { name: 'Friends' });
+    const adasGroup = await client.call('groups.create', { name: 'Ada’s' });
+
+    const mine = await bob.call('sessions.update', { id: session.id, title: 'Our shader', pinned: true, groupId: group.id });
+    expect(mine).toMatchObject({ title: 'Our shader', groupId: group.id, pinnedAt: expect.any(Number), coop: { role: 'editor' } });
+    await bob.call('sessions.update', { id: session.id, unread: true });
+    expect((await bob.call('sessions.list', {})).find((s) => s.id === session.id)).toMatchObject({ title: 'Our shader', finishedUnseen: true });
+    // Ada's session is as she left it.
+    expect((await client.call('sessions.list', {})).find((s) => s.id === session.id)).toMatchObject({ title: 'Shader', pinnedAt: null, groupId: null });
+    // Not Ada's group, and none of the session's own settings.
+    expect(await code(bob.call('sessions.update', { id: session.id, groupId: adasGroup.id }))).toBe('not_found');
+    expect(await code(bob.call('sessions.update', { id: session.id, permissionMode: 'bypassPermissions' }))).toBe('forbidden');
+    expect(await code(bob.call('sessions.update', { id: session.id, title: 'Ours', model: 'x/y' }))).toBe('forbidden');
+    // Ada renaming it leaves Bob's name for it; archiving is his alone.
+    await client.call('sessions.update', { id: session.id, title: 'Water shader' });
+    await bob.call('sessions.update', { id: session.id, archived: true });
+    expect((await bob.call('sessions.list', {})).some((s) => s.id === session.id)).toBe(false);
+    expect((await bob.call('sessions.list', { archived: 'archived' })).find((s) => s.id === session.id)).toMatchObject({ title: 'Our shader' });
+    expect((await client.call('sessions.list', {})).find((s) => s.id === session.id)).toMatchObject({ title: 'Water shader', archivedAt: null });
+    // Deleting his group files it back under no group.
+    await bob.call('groups.delete', { id: group.id });
+    expect((await bob.call('sessions.list', { archived: 'archived' })).find((s) => s.id === session.id)).toMatchObject({ groupId: null });
+  });
+});
+
 describe('artifacts page', () => {
   it('lists the person’s own artifacts across chats, newest first, a page at a time and by type', async () => {
     const { code: invite } = await client.call('invites.create', { role: 'user' });

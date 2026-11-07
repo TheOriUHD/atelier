@@ -301,6 +301,8 @@ export const sessionParticipants = sqliteTable(
     models: text('models', { enum: ['host', 'own'] }).notNull().default('host'),
     model: text('model'),
     trusted: integer('trusted', { mode: 'boolean' }).notNull().default(false),
+    /** Their own name for the session in their sidebar; the host's title when null. */
+    title: text('title'),
     pinnedAt: integer('pinned_at'),
     groupId: text('group_id'),
     archivedAt: integer('archived_at'),
@@ -353,6 +355,12 @@ export const coopMemberships = sqliteTable('coop_memberships', {
   copySessionId: text('copy_session_id'),
   joinedAt: integer('joined_at').notNull(),
   endedAt: integer('ended_at'),
+  /** This person's sidebar: their own name for the session (the host's `title` when null), pinned, group, archived, unread. */
+  localTitle: text('local_title'),
+  pinnedAt: integer('pinned_at'),
+  groupId: text('group_id'),
+  archivedAt: integer('archived_at'),
+  finishedUnseenAt: integer('finished_unseen_at'),
 });
 
 /**

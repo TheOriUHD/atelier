@@ -2,7 +2,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { SessionGroup } from '@atelier/protocol';
 import type { Db } from '../store/db.ts';
-import { sessionGroups, sessions } from '../store/schema.ts';
+import { coopMemberships, sessionGroups, sessionParticipants, sessions } from '../store/schema.ts';
 import { newId } from '../util/ids.ts';
 
 type Row = typeof sessionGroups.$inferSelect;
@@ -42,6 +42,9 @@ export class GroupRepo {
   async delete(userId: string, id: string): Promise<boolean> {
     if (!(await this.get(userId, id))) return false;
     await this.db.update(sessions).set({ groupId: null }).where(eq(sessions.groupId, id));
+    // Co-op sessions they filed there: other people's, as they see them.
+    await this.db.update(sessionParticipants).set({ groupId: null }).where(and(eq(sessionParticipants.groupId, id), eq(sessionParticipants.userId, userId)));
+    await this.db.update(coopMemberships).set({ groupId: null }).where(and(eq(coopMemberships.groupId, id), eq(coopMemberships.userId, userId)));
     await this.db.delete(sessionGroups).where(and(eq(sessionGroups.id, id), eq(sessionGroups.userId, userId)));
     return true;
   }

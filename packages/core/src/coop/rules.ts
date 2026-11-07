@@ -35,8 +35,9 @@ export const COOP_RULES = {
   'files.upload': 'editor',
   // Approvals: who may answer is checked per question (its approver).
   'chat.respond': 'viewer',
+  // Their own sidebar: a guest's name for the session, pinned, group, archived, unread (the handler refuses the rest).
+  'sessions.update': 'viewer',
   // The host's alone: their folder, their settings, the conversation's history and what runs in their name.
-  'sessions.update': 'owner',
   'sessions.move': 'owner',
   'sessions.fork': 'owner',
   'sessions.continueInCowork': 'owner',
