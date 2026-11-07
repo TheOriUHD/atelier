@@ -4,7 +4,7 @@
  */
 import { homedir } from 'node:os';
 import { z } from 'zod';
-import { dirname, join, posix, win32 } from 'node:path';
+import { basename, dirname, join, posix, win32 } from 'node:path';
 import { flavorOfSep, pathOps } from '../paths.ts';
 import {
   accountParticipant,
@@ -44,6 +44,7 @@ import {
   type PermissionMode,
   type RpcServerConnection,
   type SafeguardCategories,
+  type CoopTrack,
   type SessionSummary,
   type Settings,
   type SettingsSnapshot,
@@ -98,7 +99,8 @@ import { lentTools } from '../coop/lent-tools.ts';
 import { relayTransport } from '../coop/transport.ts';
 import { DEFAULT_COOP_RELAY, generateStaticKey, parseStaticKey, serializeStaticKey } from '../coop/channel.ts';
 import { coopAllows } from '../coop/rules.ts';
-import { isSideChat } from '../agent/side-chat.ts';
+import { isSideChat, sideChatTitle } from '../agent/side-chat.ts';
+import { addTrack, mergeTrack, removeTrack, TrackError, trackBranch, trackDiff, type TrackRecord } from '../coop/tracks.ts';
 import { LoopLimitError } from '../agent/loops.ts';
 import { UsageLimits } from '../usage/limits.ts';
 import { sessionUsage, statsSummary, usageSummary } from '../usage/usage.ts';
@@ -1634,6 +1636,94 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     }
   };
 
+  // ---------------------------------------------------------------- co-op parallel tracks (ARCHITECTURE §24)
+  const trackErrors = async <T>(action: () => Promise<T>): Promise<T> => {
+    try {
+      return await action();
+    } catch (e) {
+      if (e instanceof TrackError) throw appError('track_failed', e.message);
+      if (e instanceof WorkspaceError) throw appError('workspace_unavailable', e.message);
+      throw e;
+    }
+  };
+  const trackRow = async (sessionId: string, trackId: string) => {
+    const row = await sessions.getRow(trackId);
+    const record = row?.overrides.coopTrack as TrackRecord | undefined;
+    if (!row || row.parentSessionId !== sessionId || !record) throw appError('not_found', 'That track isn’t here.');
+    return { row, record };
+  };
+  const trackSummary = (row: { id: string; title: string; parentSessionId: string | null }, record: TrackRecord): CoopTrack => ({
+    id: row.id,
+    title: row.title,
+    participantId: record.participantId,
+    branch: record.branch,
+    status: record.state !== 'open' ? record.state : row.parentSessionId && chat.trackWorking(row.parentSessionId, row.id) ? 'working' : 'done',
+    createdAt: record.createdAt,
+  });
+  const setTrack = async (trackId: string, overrides: Record<string, unknown>, record: TrackRecord) => {
+    await sessions.update(trackId, { overrides: { ...overrides, coopTrack: record } });
+  };
+  /** The session's folder, on this backend's own machine: tracks are worktrees beside it in Atelier's data folder. */
+  const trackHome = async (sessionId: string) => {
+    const row = await sessions.getRow(sessionId);
+    if (!row?.userId || !row.workspaceId || row.mode !== 'code') throw appError('unsupported', 'Parallel tracks are for Code sessions with a folder.');
+    const main = await trackErrors(() => workspaceManager.open(row.userId!, row.workspaceId!));
+    if (main.kind !== 'local' || main.deviceId || main.host) throw appError('unsupported', 'Parallel tracks work in a folder on the host’s own computer.');
+    return { row, main, hostUserId: row.userId };
+  };
+  const coopTracks = {
+    start: async (sessionId: string, task: string, by: ParticipantInfo): Promise<CoopTrack> => {
+      const { main, hostUserId } = await trackHome(sessionId);
+      const id = newId();
+      const branch = trackBranch(by.name, id);
+      const path = join(platform.dataDir, 'coop-tracks', `${basename(main.root)}-${id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)}`);
+      const base = await trackErrors(() => addTrack(main, branch, path));
+      const ws = await trackErrors(() => workspaceManager.addLocal(hostUserId, path));
+      if (main.trusted) await workspaceManager.trust(hostUserId, ws.id);
+      const record: TrackRecord = { participantId: by.id, branch, path, workspaceId: ws.id, base, state: 'open', createdAt: Date.now() };
+      const title = `${by.name}’s track: ${sideChatTitle(task)}`;
+      const trackId = await coopAction(() => chat.startTrack(sessionId, { task, title, workspaceId: ws.id, by, track: record as unknown as Record<string, unknown> })).catch(async (e: unknown) => {
+        await removeTrack(main, branch, path).catch(() => undefined);
+        await workspaceManager.remove(hostUserId, ws.id).catch(() => undefined);
+        throw e;
+      });
+      void coop.presence(sessionId);
+      return trackSummary({ id: trackId, title, parentSessionId: sessionId }, record);
+    },
+    list: async (sessionId: string): Promise<CoopTrack[]> =>
+      (await sessions.children(sessionId)).flatMap((row) => (row.overrides.coopTrack ? [trackSummary(row, row.overrides.coopTrack as TrackRecord)] : [])),
+    diff: async (sessionId: string, trackId: string) => {
+      const { row, record } = await trackRow(sessionId, trackId);
+      if (record.state === 'closed') throw appError('not_found', 'That track was closed.');
+      const ws = await trackErrors(() => workspaceManager.open(row.userId!, record.workspaceId));
+      return trackErrors(() => trackDiff(ws, record.base));
+    },
+    merge: async (sessionId: string, trackId: string): Promise<CoopTrack> => {
+      const { row, record } = await trackRow(sessionId, trackId);
+      if (record.state !== 'open') throw appError('invalid_request', record.state === 'merged' ? 'That track is merged already.' : 'That track was closed.');
+      if (chat.trackWorking(sessionId, trackId)) throw appError('invalid_request', 'Its agent is still working: wait for it, or close the track.');
+      const { main, hostUserId } = await trackHome(sessionId);
+      const ws = await trackErrors(() => workspaceManager.open(hostUserId, record.workspaceId));
+      const who = (await coop.participant(sessionId, record.participantId))?.name ?? 'someone who left';
+      const { authorName, authorEmail } = (await prefs.get(hostUserId)).git;
+      await trackErrors(() => mergeTrack(main, ws, record.branch, `${row.title}\n\nA co-op track by ${who}.`, { name: authorName, email: authorEmail }));
+      const merged = { ...record, state: 'merged' as const };
+      await setTrack(trackId, row.overrides, merged);
+      void coop.presence(sessionId);
+      return trackSummary(row, merged);
+    },
+    close: async (sessionId: string, trackId: string): Promise<void> => {
+      const { row, record } = await trackRow(sessionId, trackId);
+      if (record.state === 'closed') return;
+      await chat.stopTrack(sessionId, trackId);
+      const { main, hostUserId } = await trackHome(sessionId);
+      await trackErrors(() => removeTrack(main, record.branch, record.path));
+      await workspaceManager.remove(hostUserId, record.workspaceId).catch(() => undefined);
+      await setTrack(trackId, row.overrides, { ...record, state: 'closed' });
+      void coop.presence(sessionId);
+    },
+  };
+
   // ---------------------------------------------------------------- co-op across computers (ARCHITECTURE §24)
   if (platform.surface === 'desktop') {
     const coopSecrets = {
@@ -1677,6 +1767,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const row = await sessions.getRow(sessionId);
         return files.upload({ ...file, kind: 'upload', userId: row?.userId ?? null, sessionId });
       },
+      tracks: { start: coopTracks.start, list: coopTracks.list, diff: coopTracks.diff },
       keepAwake: (sessionIds) => platform.coopAwake?.(sessionIds),
       stateChanged: (sessionId) => void coop.presence(sessionId),
       log: (message, error) => platform.logger.error(message, error),
@@ -2371,6 +2462,27 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const { as } = await sessionFor(sessionId, ctx, 'chat.send');
       await ownBlobsOnly(parts, ctx);
       return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, answerWith ? { answerWith } : {})) };
+    },
+    'coop.track': async ({ sessionId, task }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'coop.track');
+      return coopTracks.start(sessionId, task, shared(as));
+    },
+    'coop.tracks': async ({ sessionId }, ctx) => {
+      await sessionFor(sessionId, ctx, 'coop.tracks');
+      return coopTracks.list(sessionId);
+    },
+    'coop.trackDiff': async ({ sessionId, trackId }, ctx) => {
+      await sessionFor(sessionId, ctx, 'coop.trackDiff');
+      return coopTracks.diff(sessionId, trackId);
+    },
+    'coop.mergeTrack': async ({ sessionId, trackId }, ctx) => {
+      await sessionOrThrow(sessionId, ctx);
+      return coopTracks.merge(sessionId, trackId);
+    },
+    'coop.closeTrack': async ({ sessionId, trackId }, ctx) => {
+      await sessionOrThrow(sessionId, ctx);
+      await coopTracks.close(sessionId, trackId);
+      return { ok: true as const };
     },
     'chat.secondOpinion': async ({ sessionId, messageId, model }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.secondOpinion');

@@ -2551,6 +2551,63 @@ export class ChatService {
     return { content: [{ type: 'text', text: startedInBackground(task.description, taskId) }] };
   }
 
+  /**
+   * Co-op: a parallel track (ARCHITECTURE §24). An agent for `by` works on `task` in the background, in `workspaceId` (a git
+   * worktree of the session's folder), while the conversation goes on; its end is noted in the main session like a
+   * background sub-agent's, and its changes wait there to be merged. Returns the track's session id.
+   */
+  async startTrack(parentId: string, opts: { task: string; title: string; workspaceId: string; by: TurnParticipant; track: Record<string, unknown> }): Promise<string> {
+    const working = this.backgroundPlaces.get(parentId) ?? 0;
+    if (working >= MAX_BACKGROUND_AGENTS) throw new Error(BACKGROUND_AGENTS_BUSY);
+    const parent = await this.requireSession(parentId);
+    const child = await this.deps.repo.create({
+      mode: parent.mode,
+      userId: parent.userId,
+      projectId: parent.projectId,
+      workspaceId: opts.workspaceId,
+      model: parent.model,
+      effort: parent.effort === 'ultracode' ? ULTRACODE_LEVEL : parent.effort,
+      permissionMode: parent.permissionMode,
+      parentSessionId: parent.id,
+      title: opts.title,
+      overrides: { thinking: parent.overrides.thinking !== false, coopActor: opts.by.id, coopTrack: opts.track },
+    });
+    this.backgroundPlaces.set(parentId, working + 1);
+    const taskId = this.tasks.addAgent(parent.id, { childSessionId: child.id, description: opts.title, background: true });
+    const own = new AbortController();
+    this.agentStops.set(child.id, own);
+    const agents = this.backgroundAgents.get(parent.id) ?? new Map<string, Promise<void>>();
+    this.backgroundAgents.set(parent.id, agents);
+    const ended = this.runChild(child, opts.task, own.signal, undefined, 0)
+      .then((output) => (this.tasks.endAgent(parent.id, taskId, agentStatus(output)), output))
+      .catch((error: unknown): ToolOutput => {
+        this.tasks.endAgent(parent.id, taskId, 'failed');
+        return { content: [{ type: 'text', text: `The track failed: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      })
+      .then((output) => this.noteEnded(parent.id, { taskId, title: opts.title, sessionId: child.id }, output))
+      .catch(() => undefined)
+      .finally(() => {
+        this.agentStops.delete(child.id);
+        this.notices.delete(child.id);
+        this.leaveBackground(parent.id);
+        agents.delete(child.id);
+        if (!agents.size && this.backgroundAgents.get(parent.id) === agents) this.backgroundAgents.delete(parent.id);
+      });
+    agents.set(child.id, ended);
+    return child.id;
+  }
+
+  /** Co-op: whether a track's agent is still working. */
+  trackWorking(parentId: string, trackId: string): boolean {
+    return this.backgroundAgents.get(parentId)?.has(trackId) ?? false;
+  }
+
+  /** Co-op: stops a track's agent (its track is closed). */
+  async stopTrack(parentId: string, trackId: string): Promise<void> {
+    this.agentStops.get(trackId)?.abort();
+    await this.backgroundAgents.get(parentId)?.get(trackId);
+  }
+
   /** Messages a sub-agent got after its last request (during its final reply): it never read them. */
   private takeUnread(childId: string): string[] {
     const pending = this.notices.get(childId) ?? [];

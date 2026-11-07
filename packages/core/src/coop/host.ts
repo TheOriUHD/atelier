@@ -22,6 +22,7 @@ import {
   appError,
   type ArtifactSummary,
   type CoopHello,
+  type CoopTrack,
   type ContextUsage,
   type Handlers,
   type Part,
@@ -76,6 +77,12 @@ export interface CoopHostDeps {
   upload(sessionId: string, file: { name: string; mime: string; bytes: Uint8Array }): Promise<{ id: string; name: string; mime: string; size: number; blob: string; kind: string; tokens: number | null; createdAt: number }>;
   /** Blobs referenced by a message a guest sends must be ones the session already has or they uploaded. */
   sessionHasBlob(sessionId: string, sha256: string): Promise<boolean>;
+  /** Parallel tracks (backend.ts `coopTracks`), absent where the session's folder has none. */
+  tracks?: {
+    start(sessionId: string, task: string, by: ParticipantInfo): Promise<CoopTrack>;
+    list(sessionId: string): Promise<CoopTrack[]>;
+    diff(sessionId: string, trackId: string): Promise<{ diff: string; truncated: boolean; base: string | null }>;
+  };
   /** The sessions with a room open: the computer stays awake for them. */
   keepAwake(sessionIds: string[]): void;
   /** The host's windows should read the co-op state again (someone knocked, came, went). */
@@ -398,6 +405,17 @@ export class CoopHost {
         if (guest?.farewell) throw appError('forbidden', 'Co-op ended for this session.');
         await refusals(() => this.deps.chat.react(sessionId, messageId, emoji, on, p));
         return { ok: true as const };
+      },
+      'coop.track': async ({ task }) => {
+        const p = await editor();
+        if (!this.deps.tracks) throw appError('unsupported', 'Parallel tracks aren’t available here.');
+        return refusals(() => this.deps.tracks!.start(sessionId, task, p));
+      },
+      'coop.tracks': async () => (await self(), this.deps.tracks ? this.deps.tracks.list(sessionId) : []),
+      'coop.trackDiff': async ({ trackId }) => {
+        await self();
+        if (!this.deps.tracks) throw appError('unsupported', 'Parallel tracks aren’t available here.');
+        return this.deps.tracks.diff(sessionId, trackId);
       },
       'coop.navigate': async ({ on }) => {
         const p = await editor();

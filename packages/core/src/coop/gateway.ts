@@ -464,6 +464,12 @@ export class CoopGateway {
       }
       case 'chat.react':
         return this.live(userId, id).call('chat.react', { messageId: String(input.messageId), emoji: String(input.emoji), on: !!input.on });
+      case 'coop.track':
+        return this.live(userId, id).call('coop.track', { task: String(input.task) });
+      case 'coop.tracks':
+        return link.ended || !link.connected ? [] : this.live(userId, id).call('coop.tracks', {});
+      case 'coop.trackDiff':
+        return this.live(userId, id).call('coop.trackDiff', { trackId: String(input.trackId) });
       case 'coop.navigate': {
         const state = await this.live(userId, id).call('coop.navigate', { on: !!input.on });
         link.state = state;

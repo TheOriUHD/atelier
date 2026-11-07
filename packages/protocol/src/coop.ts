@@ -88,6 +88,20 @@ export function parseAnswerWith(value: string | null | undefined): AnswerWith | 
   return m ? { source: m[1] as 'host' | 'own', ref: m[2]! } : null;
 }
 
+/**
+ * A parallel track: an agent working for one person in a git worktree of the session's folder, beside the conversation,
+ * whose changes the host merges (packages/core/src/coop/tracks.ts). `id` is its session.
+ */
+export const CoopTrack = z.object({
+  id: z.string(),
+  title: z.string(),
+  participantId: z.string(),
+  branch: z.string(),
+  status: z.enum(['working', 'done', 'merged', 'closed']),
+  createdAt: z.number(),
+});
+export type CoopTrack = z.infer<typeof CoopTrack>;
+
 /** Emoji people can put on messages in a co-op session. */
 export const REACTIONS = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '🚀'] as const;
 

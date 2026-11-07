@@ -57,6 +57,9 @@ export const COOP_RULES = {
   'coop.typing': 'editor',
   'coop.lend': 'editor',
   'coop.navigate': 'editor',
+  'coop.track': 'editor',
+  'coop.tracks': 'viewer',
+  'coop.trackDiff': 'viewer',
   'chat.secondOpinion': 'editor',
   // Watching is enough to put an emoji on a message.
   'chat.react': 'viewer',
@@ -68,6 +71,8 @@ export const COOP_RULES = {
   'coop.participant': 'owner',
   'coop.remove': 'owner',
   'coop.end': 'owner',
+  'coop.mergeTrack': 'owner',
+  'coop.closeTrack': 'owner',
 } as const satisfies Record<string, CoopAccess>;
 
 export type CoopProcedure = keyof typeof COOP_RULES;

@@ -43,7 +43,7 @@ import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, PlanUsage, ProviderStatus, ProviderType } from '../models.ts';
-import { CoopSettings, CoopState, ModelsChoice } from '../coop.ts';
+import { CoopSettings, CoopState, CoopTrack, ModelsChoice } from '../coop.ts';
 import { AudioKind, DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
@@ -480,7 +480,16 @@ export const contract = {
     'coop.remove': { input: z.object({ sessionId: z.string(), participantId: z.string() }), output: Ok },
     'coop.models': { input: z.object({ sessionId: z.string(), models: ModelsChoice, model: z.string().nullable() }), output: CoopState },
     'coop.typing': { input: z.object({ sessionId: z.string() }), output: Ok },
-    /** A participant's model looks over the agent's edits (navigator), or stops; one at a time. */
+    /** Co-op, Code: an agent works on `task` for the caller in a git worktree of the session's folder (a parallel track). */
+    'coop.track': { input: z.object({ sessionId: z.string(), task: z.string().min(1).max(20_000) }), output: CoopTrack },
+    'coop.tracks': { input: z.object({ sessionId: z.string() }), output: z.array(CoopTrack) },
+    /** What a track changed against where it started. */
+    'coop.trackDiff': { input: z.object({ sessionId: z.string(), trackId: z.string() }), output: z.object({ diff: z.string(), truncated: z.boolean(), base: z.string().nullable() }) },
+    /** The host merges a finished track's branch into the session's folder; a conflict is refused with what conflicts. */
+    'coop.mergeTrack': { input: z.object({ sessionId: z.string(), trackId: z.string() }), output: CoopTrack },
+    /** The host ends a track: its agent stops, its worktree and branch go. */
+    'coop.closeTrack': { input: z.object({ sessionId: z.string(), trackId: z.string() }), output: Ok },
+        /** A participant's model looks over the agent's edits (navigator), or stops; one at a time. */
     'coop.navigate': { input: z.object({ sessionId: z.string(), on: z.boolean() }), output: CoopState },
     /** A guest lends their own connectors to their turns (each call still asks them), or stops. */
     'coop.lend': { input: z.object({ sessionId: z.string(), lend: z.boolean() }), output: Ok },

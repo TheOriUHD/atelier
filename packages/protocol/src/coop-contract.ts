@@ -10,7 +10,7 @@
  * Both run as JSON-RPC over the one channel, each on its own lane (`CoopFrame`).
  */
 import { z } from 'zod';
-import { CoopSettings, CoopState, ModelsChoice, Participant } from './coop.ts';
+import { CoopSettings, CoopState, CoopTrack, ModelsChoice, Participant } from './coop.ts';
 import { ArtifactSummary, ChangePreview, ContextUsage, ElicitationAnswer, PermissionAnswer, QuestionAnswer, RunEvent, SessionSnapshot, SessionUsage } from './domain.ts';
 import { Part } from './messages.ts';
 import { ModelInfo } from './models.ts';
@@ -57,6 +57,9 @@ export const CoopContract = {
     'chat.secondOpinion': { input: z.object({ messageId: z.string(), model: z.string().min(1).max(300) }), output: Ok },
     'chat.react': { input: z.object({ messageId: z.string(), emoji: z.string().min(1).max(16), on: z.boolean() }), output: Ok },
     'coop.navigate': { input: z.object({ on: z.boolean() }), output: CoopState },
+    'coop.track': { input: z.object({ task: z.string().min(1).max(20_000) }), output: CoopTrack },
+    'coop.tracks': { input: Empty, output: z.array(CoopTrack) },
+    'coop.trackDiff': { input: z.object({ trackId: z.string() }), output: z.object({ diff: z.string(), truncated: z.boolean(), base: z.string().nullable() }) },
     'chat.unqueue': { input: z.object({ id: z.string() }), output: z.object({ parts: z.array(Part) }) },
     'chat.sendNow': { input: z.object({ id: z.string() }), output: Ok },
     'chat.stop': { input: Empty, output: Ok },
