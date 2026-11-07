@@ -16,12 +16,23 @@ import { expect, it } from 'vitest';
 import { contract, createMemoryTransportPair, createRpcClient, type Message, type RunEvent } from '@atelier/protocol';
 import { createBackend } from '../backend/backend.ts';
 
+/** The main checkout's folder when this runs in a git worktree, or null (a copy of the code without git, as on the build machine). */
+function mainCheckout(): string | null {
+  try {
+    return dirname(execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim());
+  } catch {
+    return null;
+  }
+}
+
 function envFile(): Record<string, string> {
   let file = join(import.meta.dirname, '../../../../.env.local');
   if (!existsSync(file)) {
-    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: import.meta.dirname, encoding: 'utf8' }).trim();
-    file = join(dirname(common), '.env.local');
+    const main = mainCheckout();
+    if (!main) return {};
+    file = join(main, '.env.local');
   }
+  if (!existsSync(file)) return {};
   return Object.fromEntries(
     readFileSync(file, 'utf8')
       .split('\n')
@@ -46,7 +57,7 @@ it.skipIf(!key || !process.env.LIVE_AGENT)(`a Code turn through ${type} ${model}
     surface: 'desktop',
     configDir: home,
     dataDir: join(home, 'data'),
-    runnerDir: existsSync(runnerDir) ? runnerDir : join(execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim(), '../runner/bin'),
+    runnerDir: existsSync(runnerDir) ? runnerDir : join(mainCheckout() ?? '.', 'runner/bin'),
     cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
     env: { ATELIER_COOP_RELAY: '' },
     logger: { info: (m) => logs.push(`info ${m}`), error: (m, e) => logs.push(`error ${m} ${e instanceof Error ? e.message : String(e ?? '')}`) },
