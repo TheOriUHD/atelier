@@ -19,6 +19,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.5.1',
+    intro: 'Co-op guests file the session in their own sidebar and follow its sub-agents and tracks.',
+    highlights: [
+      {
+        icon: Users,
+        title: 'Your own sidebar in someone else’s session',
+        body: 'Pin a session you joined, rename it, put it in one of your groups, archive it or mark it unread, on a team server and between computers. Only you see it: the session keeps its name and place for the host and the others.',
+      },
+      {
+        icon: GitBranch,
+        title: 'Sub-agents and tracks for everyone',
+        body: 'Guests on another computer open the transcript of a sub-agent or a track, and in Code the Background tasks pane with what runs and a command’s output. Stopping and clearing background tasks is the host’s.',
+      },
+    ],
+    also: ['File › Join a Co-op Session… in the desktop app opens the dialog to paste an invite link.', 'When this computer’s protected storage refuses co-op’s keys, co-op says so instead of “Internal error”.'],
+  },
+  {
     version: '0.5.0',
     intro: 'Co-op: work in one session with up to three other people, each writing and watching the agent work. There is no account.',
     highlights: [
