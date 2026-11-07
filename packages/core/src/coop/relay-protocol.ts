@@ -122,6 +122,8 @@ export const CloseCode = {
   removed: 4010,
   /** The host refused this guest's handshake: a wrong or old invite. */
   refused: 4011,
+  /** The host closed a guest connection that started too many handshakes (it may connect again). */
+  handshakes: 4012,
 } as const;
 
 /** Codes a host may close a guest with. */

@@ -9,6 +9,7 @@ import {
   encodeKey,
   generateStaticKey,
   joinRoom,
+  MAX_HANDSHAKES_PER_MINUTE,
   openHostRoom,
   parseStaticKey,
   serializeStaticKey,
@@ -21,6 +22,7 @@ import {
 import { fingerprint, makeInvite, newInviteSecret, pskFromSecret } from './invite.ts';
 import { HandshakeState } from './noise.ts';
 import { startCoopRelay, type StandaloneCoopRelay } from './relay-node.ts';
+import { CloseCode } from './relay-protocol.ts';
 
 const MiB = 1024 * 1024;
 const timing: Partial<CoopTiming> = { backoff: () => 20, handshakeMs: 3000 };
@@ -82,13 +84,14 @@ interface Room {
   pinned: Set<string>;
 }
 
-async function hostRoom(relayUrl = relay.url): Promise<Room> {
+/** A room whose host accepts its invite's key (`psk`), then `more`. */
+async function hostRoom(relayUrl = relay.url, more: Uint8Array[] = []): Promise<Room> {
   const { roomId, hostToken } = await createRoom(relayUrl);
   const invite = makeInvite(roomId);
   const psk = pskFromSecret(invite.secret);
   const hostKey = generateStaticKey();
   const pinned = new Set<string>();
-  const host = await openHostRoom({ relayUrl, roomId, hostToken, psk, staticKey: hostKey, knownPeers: (key) => pinned.has(encodeKey(key)), timing });
+  const host = await openHostRoom({ relayUrl, roomId, hostToken, psks: [psk, ...more], staticKey: hostKey, knownPeers: (key) => pinned.has(encodeKey(key)), timing });
   cleanup.push(() => host.close());
   return { roomId, hostToken, psk, hostKey, host, pinned };
 }
@@ -257,7 +260,7 @@ describe('co-op channels through the Node relay', () => {
     const reconnected = once(ada.channel, 'reconnected');
     room.host.close();
     // The same host, a new process: same token and key, no sessions.
-    const again = await openHostRoom({ relayUrl: relay.url, roomId: room.roomId, hostToken: room.hostToken, psk: room.psk, staticKey: room.hostKey, timing });
+    const again = await openHostRoom({ relayUrl: relay.url, roomId: room.roomId, hostToken: room.hostToken, psks: [room.psk], staticKey: room.hostKey, timing });
     cleanup.push(() => again.close());
     const [peer] = await once<[PeerChannel]>(again, 'peer');
     await reconnected;
@@ -274,7 +277,7 @@ describe('co-op channels through the Node relay', () => {
     const joining = joinRoom({ relayUrl: relay.url, roomId, psk, staticKey: generateStaticKey(), hello: { name: 'Early', version: '1' }, onStatus: (s) => statuses.push(s), timing });
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(statuses).toEqual(['connecting', 'waiting-for-host']);
-    const host = await openHostRoom({ relayUrl: relay.url, roomId, hostToken, psk, staticKey: generateStaticKey(), timing });
+    const host = await openHostRoom({ relayUrl: relay.url, roomId, hostToken, psks: [psk], staticKey: generateStaticKey(), timing });
     cleanup.push(() => host.close());
     const channel = await joining;
     cleanup.push(() => channel.close());
@@ -329,6 +332,96 @@ describe('co-op channels through the Node relay', () => {
     expect(await atHost).toEqual(payload);
     // 2 MB at 2 MiB/s after a 256 KiB burst (the client's half of the room's): most of a second.
     expect(Date.now() - started).toBeGreaterThan(600);
+  });
+
+  it('accepts each key the host holds, and says which one a guest came in on', async () => {
+    const member = pskFromSecret(newInviteSecret());
+    const room = await hostRoom(relay.url, [member]);
+    const ada = await guest(room, 'Ada');
+    const bob = await guest(room, 'Bob', { psk: member });
+    expect([ada.peer.pskIndex, bob.peer.pskIndex]).toEqual([0, 1]);
+    const atBob = nextMessage(bob.channel);
+    await bob.peer.send('a member');
+    expect(await atBob).toBe('a member');
+    const stranger = joinRoom({ relayUrl: relay.url, roomId: room.roomId, psk: pskFromSecret(newInviteSecret()), staticKey: generateStaticKey(), hello: { name: 'Eve', version: '1' }, timing });
+    await expect(stranger).rejects.toMatchObject({ code: 'refused' });
+    // As many as eight: the last one works like the first.
+    const keys = Array.from({ length: 8 }, () => pskFromSecret(newInviteSecret()));
+    room.host.setPsks(keys);
+    expect((await guest(room, 'Eighth', { psk: keys[7] })).peer.pskIndex).toBe(7);
+    expect(() => room.host.setPsks([...keys, member])).toThrow(TypeError);
+    expect(() => room.host.setPsks([new Uint8Array(16)])).toThrow(TypeError);
+    await expect(openHostRoom({ relayUrl: relay.url, roomId: room.roomId, hostToken: room.hostToken, psks: [...keys, member], staticKey: room.hostKey, timing })).rejects.toThrow(TypeError);
+  });
+
+  it('refuses new handshakes with a key that was taken away, and keeps the session that is up', async () => {
+    const member = pskFromSecret(newInviteSecret());
+    const room = await hostRoom(relay.url, [member]);
+    const ada = await guest(room, 'Ada');
+    expect(ada.peer.pskIndex).toBe(0);
+    // The invite leaked: only the member key stays.
+    room.host.setPsks([member]);
+    const atHost = nextMessage(ada.peer);
+    await ada.channel.send('still in');
+    expect(await atHost).toBe('still in');
+    const atAda = nextMessage(ada.channel);
+    await ada.peer.send('yes');
+    expect(await atAda).toBe('yes');
+    await expect(joinRoom({ relayUrl: relay.url, roomId: room.roomId, psk: room.psk, staticKey: generateStaticKey(), hello: { name: 'Late', version: '1' }, timing })).rejects.toMatchObject({ code: 'refused' });
+    // Ada never got a member key: her next handshake uses the invite's, and is refused.
+    const closed = new Promise((resolve) => ada.channel.onClose(resolve));
+    const left = once<[PeerChannel, string]>(room.host, 'peer-left');
+    ada.channel.dropLinkForTest();
+    expect((await left)[1]).toBe('left');
+    expect(await closed).toBe('refused');
+    expect(room.host.peers).toEqual([]);
+  });
+
+  it('reconnects a guest with the member key it was given, after the invite was withdrawn', async () => {
+    const room = await hostRoom();
+    const ada = await guest(room, 'Ada');
+    // The app layer sends a member key over the channel; here both ends just take it.
+    const member = pskFromSecret(newInviteSecret());
+    room.host.setPsks([room.psk, member]);
+    ada.channel.setPsk(member);
+    expect(() => ada.channel.setPsk(new Uint8Array(31))).toThrow(TypeError);
+    // The session that is up isn't touched.
+    const atHost = nextMessage(ada.peer);
+    await ada.channel.send('after setPsk');
+    expect(await atHost).toBe('after setPsk');
+    room.host.setPsks([member]);
+    const rejoined = once<[PeerChannel]>(room.host, 'peer');
+    const reconnected = once(ada.channel, 'reconnected');
+    ada.channel.dropLinkForTest();
+    const [peer] = await rejoined;
+    await reconnected;
+    expect(peer.pskIndex).toBe(0);
+    expect(peer.remoteStatic).toEqual(ada.key.publicKey);
+    const back = nextMessage(peer);
+    await ada.channel.send('back with the member key');
+    expect(await back).toBe('back with the member key');
+  });
+
+  it('closes a guest connection that keeps starting handshakes', async () => {
+    const room = await hostRoom();
+    const ws = new WebSocket(`${relay.url.replace('http', 'ws')}/v1/rooms/${room.roomId}?role=guest`);
+    cleanup.push(() => ws.terminate());
+    let answers = 0;
+    ws.on('message', (data, isBinary) => isBinary && (data as Buffer)[0] === 2 && answers++);
+    const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)));
+    await new Promise((resolve) => ws.once('open', resolve));
+    const prologue = new TextEncoder().encode(`atelier coop v1\n${room.roomId}`);
+    for (let attempt = 1; attempt <= MAX_HANDSHAKES_PER_MINUTE + 1; attempt++) {
+      const message = new HandshakeState({ initiator: true, staticKey: generateStaticKey(), psk: room.psk, prologue }).writeMessage();
+      const frame = Buffer.alloc(5 + message.length);
+      frame[0] = 1;
+      frame.writeUInt32LE(attempt, 1);
+      frame.set(message, 5);
+      ws.send(frame);
+    }
+    expect(await closed).toBe(CloseCode.handshakes);
+    // Every handshake within the limit got its answer; the one past it got the door.
+    expect(answers).toBe(MAX_HANDSHAKES_PER_MINUTE);
   });
 
   it('speaks the documented frames, and keeps a session through a replayed first message', async () => {
