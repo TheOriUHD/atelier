@@ -25,7 +25,9 @@
  *
  * Every transport message carries its nonce, so a frame the relay drops (the host's link went down for a moment)
  * costs only the messages it was part of, not the session; nonces only go up, so nothing can be replayed. This is
- * what lets a host keep its guests through a relay reconnect: their sessions are still valid when it is back.
+ * what lets a host keep its guests through a relay reconnect: their sessions are still valid when it is back. The
+ * frame's field is the cipher's counter as a number (little-endian here); the receiver hands it to
+ * `CipherState.setNonce`, which builds AES-GCM's own nonce from it (big-endian, noise.ts), so the two never mix.
  *
  * What the app layer does on top: admit a joiner (or not) after showing `hello.name` and the fingerprint, pin the
  * other side's static key, hand an admitted guest its member key over the channel (`setPsk` on the guest, `setPsks`
