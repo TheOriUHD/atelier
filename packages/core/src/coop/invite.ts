@@ -6,7 +6,7 @@
  *   https://atelierhq.dev/join#v1.<roomId>.<secret>[.<meta>]
  *   atelier://join#v1.<roomId>.<secret>[.<meta>]
  *
- * The host lets each joiner in after comparing three emoji with them (`fingerprint`, from the handshake hash both
+ * The host lets each joiner in after comparing four emoji with them (`fingerprint`, from the handshake hash both
  * sides share). After that both pin each other's device keys, and later joins need no comparing.
  */
 import { createHash, hkdfSync, randomBytes } from 'node:crypto';
@@ -113,20 +113,26 @@ export const FINGERPRINT_EMOJI: readonly { emoji: string; name: string }[] = (
   ] as const
 ).map(([emoji, name]) => ({ emoji, name }));
 
-function fingerprintIndexes(handshakeHash: Uint8Array): [number, number, number] {
+/** Four emoji: one entry of `FINGERPRINT_EMOJI` each, so 32 bits of the handshake hash. */
+export type Fingerprint = [string, string, string, string];
+const FINGERPRINT_LENGTH = 4;
+
+function fingerprintIndexes(handshakeHash: Uint8Array): number[] {
   if (handshakeHash.length !== 32) throw new TypeError('A handshake hash is 32 bytes.');
   const digest = createHash('sha256').update(FINGERPRINT_INFO).update(handshakeHash).digest();
-  return [digest[0]!, digest[1]!, digest[2]!];
+  return [...digest.subarray(0, FINGERPRINT_LENGTH)];
 }
 
-/** Three emoji both sides of a handshake show, so the host and the joiner can compare them (24 bits). */
-export function fingerprint(handshakeHash: Uint8Array): [string, string, string] {
-  const [a, b, c] = fingerprintIndexes(handshakeHash);
-  return [FINGERPRINT_EMOJI[a]!.emoji, FINGERPRINT_EMOJI[b]!.emoji, FINGERPRINT_EMOJI[c]!.emoji];
+/**
+ * Four emoji both sides of a handshake show, so the host and the joiner can compare them (32 bits). Someone between
+ * them, with the invite link, would have to find keys whose handshakes give both sides the same four: billions of
+ * tries, while the joiner waits.
+ */
+export function fingerprint(handshakeHash: Uint8Array): Fingerprint {
+  return fingerprintIndexes(handshakeHash).map((i) => FINGERPRINT_EMOJI[i]!.emoji) as Fingerprint;
 }
 
-/** The same three as words, for reading out and for screen readers. */
-export function fingerprintNames(handshakeHash: Uint8Array): [string, string, string] {
-  const [a, b, c] = fingerprintIndexes(handshakeHash);
-  return [FINGERPRINT_EMOJI[a]!.name, FINGERPRINT_EMOJI[b]!.name, FINGERPRINT_EMOJI[c]!.name];
+/** The same four as words, for reading out and for screen readers. */
+export function fingerprintNames(handshakeHash: Uint8Array): Fingerprint {
+  return fingerprintIndexes(handshakeHash).map((i) => FINGERPRINT_EMOJI[i]!.name) as Fingerprint;
 }

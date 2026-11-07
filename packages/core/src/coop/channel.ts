@@ -37,7 +37,7 @@
 import { EventEmitter } from 'node:events';
 import { deflate, inflate } from 'node:zlib';
 import WebSocket from 'ws';
-import { fingerprint as fingerprintOf } from './invite.ts';
+import { fingerprint as fingerprintOf, type Fingerprint } from './invite.ts';
 import { generateKeyPair, HandshakeState, keyPairFromPrivate, NoiseError, TAG_LENGTH, type KeyPair, type TransportState } from './noise.ts';
 import {
   CloseCode,
@@ -691,8 +691,8 @@ export interface PeerChannel {
   readonly remoteStatic: Uint8Array;
   /** `remoteStatic` as base64. */
   readonly remoteKey: string;
-  /** The three emoji to compare with the guest. */
-  readonly fingerprint: [string, string, string];
+  /** The four emoji to compare with the guest. */
+  readonly fingerprint: Fingerprint;
   readonly handshakeHash: Uint8Array;
   readonly hello: CoopHello;
   /** Whether `remoteStatic` is one of `knownPeers`. */
@@ -745,7 +745,7 @@ class Peer implements PeerChannel {
   readonly slot: number;
   readonly remoteStatic: Uint8Array;
   readonly remoteKey: string;
-  readonly fingerprint: [string, string, string];
+  readonly fingerprint: Fingerprint;
   readonly handshakeHash: Uint8Array;
   readonly hello: CoopHello;
   readonly known: boolean;
@@ -1262,7 +1262,7 @@ export class GuestChannel extends EventEmitter<GuestEvents> {
   }
 
   /** This session's emoji (they change with each new handshake). */
-  get fingerprint(): [string, string, string] {
+  get fingerprint(): Fingerprint {
     return fingerprintOf(this.handshakeHash);
   }
 

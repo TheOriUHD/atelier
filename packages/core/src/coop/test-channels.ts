@@ -29,7 +29,7 @@ export function channelPair(opts: { guestKey: string; hostKey?: string; fingerpr
   const g = end();
   const reconnectedHandlers = new Set<() => void>();
   const hostHandlers = new Set<(present: boolean) => void>();
-  const fingerprint = opts.fingerprint ?? ['🐙', '🌵', '🎈'];
+  const fingerprint = opts.fingerprint ?? ['🐙', '🌵', '🎈', '🚀'];
   const deliver = (to: End, message: unknown) => {
     const copy = JSON.parse(JSON.stringify(message)) as unknown;
     setImmediate(() => {

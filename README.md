@@ -141,7 +141,7 @@ Cowork works through a longer task in a folder and leaves the files it makes the
 
 ### Co-op
 
-Work in one session with up to three other people: the same conversation and folder, everyone writing and watching the agent work. Send a link and let each person in after comparing three emoji; there is no account. Each person answers with the host's models (within a daily limit the host sets) or their own, which run on their own computer. The host approves what touches their computer. Ask another model for a second opinion, let one look over every edit as navigator, or give an agent a parallel track in its own git worktree. Between computers, co-op passes through an end-to-end encrypted relay that can't read it; on a team server it needs nothing from outside. See [Co-op](https://docs.atelierhq.dev/co-op/).
+Work in one session with up to three other people: the same conversation and folder, everyone writing and watching the agent work. Send a link and let each person in after comparing four emoji; there is no account. Each person answers with the host's models (within a daily limit the host sets) or their own, which run on their own computer. The host approves what touches their computer. Ask another model for a second opinion, let one look over every edit as navigator, or give an agent a parallel track in its own git worktree. Between computers, co-op passes through an end-to-end encrypted relay that can't read it; on a team server it needs nothing from outside. See [Co-op](https://docs.atelierhq.dev/co-op/).
 
 ### Extensible, and compatible with Claude Code
 

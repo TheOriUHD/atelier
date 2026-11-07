@@ -40,7 +40,7 @@ test('two desktops: invite, compare emoji, let in, write together, and the guest
     await expect(ben.getByText('It runs on Ada’s computer.')).toBeVisible();
     await ben.getByRole('button', { name: 'Join', exact: true }).click();
 
-    // Ada sees Ben knock with three emoji, and Ben sees the same three.
+    // Ada sees Ben knock with four emoji, and Ben sees the same four.
     const knock = ada.getByRole('region', { name: 'Ben wants to join' });
     await expect(knock).toBeVisible({ timeout: 30_000 });
     const emoji = (await knock.getByLabel(/^Fingerprint:/).getAttribute('aria-label'))!.replace('Fingerprint: ', '');

@@ -77,12 +77,12 @@ describe('fingerprints', () => {
     expect(FINGERPRINT_EMOJI.slice(-4).map((e) => e.emoji).join('')).toBe('👻👽🎃🧶');
   });
 
-  it('gives the same three emoji for the same hash, and others for another', () => {
+  it('gives the same four emoji for the same hash, and others for another', () => {
     const hash = new Uint8Array(32).map((_, i) => i);
     expect(fingerprint(hash)).toEqual(fingerprint(new Uint8Array(hash)));
-    // sha256("atelier coop fingerprint v1" ‖ hash) starts 245, 81, 185.
-    expect(fingerprint(hash)).toEqual(['🪑', '🌸', '🎺']);
-    expect(fingerprintNames(hash)).toEqual(['chair', 'cherry blossom', 'trumpet']);
+    // sha256("atelier coop fingerprint v1" ‖ hash) starts 245, 81, 185, 252.
+    expect(fingerprint(hash)).toEqual(['🪑', '🌸', '🎺', '👻']);
+    expect(fingerprintNames(hash)).toEqual(['chair', 'cherry blossom', 'trumpet', 'ghost']);
     expect(fingerprint(new Uint8Array(32))).not.toEqual(fingerprint(hash));
     expect(() => fingerprint(new Uint8Array(16))).toThrow(TypeError);
   });

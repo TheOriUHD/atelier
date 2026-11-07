@@ -250,7 +250,7 @@ host's folder.
 **Invites and the relay.**
 - The invite link's secret is in the part after `#`, which browsers don't send to servers. Anyone with the link can ask
   to join for 24 hours; a new link replaces it.
-- The host lets each person in after comparing three emoji from the encrypted handshake. Matching emoji mean nobody
+- The host lets each person in after comparing four emoji from the encrypted handshake. Matching emoji mean nobody
   sits in between.
 - The relay passes encrypted traffic and can't read it. It can see who connects when, and could block the connection.
 

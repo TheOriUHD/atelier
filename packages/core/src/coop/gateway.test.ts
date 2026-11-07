@@ -58,7 +58,7 @@ beforeEach(async () => {
   const { coop, peer: peerLane } = lanes(pair.host);
   const record = (method: string) => async (input: unknown) => (calls.push({ method, input }), { ok: true as const });
   const handlers = {
-    'coop.hello': async () => ({ admitted: true, participantId: PARTICIPANT, hostName: 'Ada', sessionId: 'host-1', title: 'Shader', mode: 'code', fingerprint: ['🐙', '🌵', '🎈'] }),
+    'coop.hello': async () => ({ admitted: true, participantId: PARTICIPANT, hostName: 'Ada', sessionId: 'host-1', title: 'Shader', mode: 'code', fingerprint: ['🐙', '🌵', '🎈', '🚀'] }),
     'coop.subscribe': async () => ({ session: { id: 'host-1', title: 'Shader', mode: 'code', model: null, effort: null, status: 'idle' }, messages: [], siblings: {}, seq: 7 }) as unknown as SessionSnapshot,
     'coop.unsubscribe': record('coop.unsubscribe'),
     'chat.respond': record('chat.respond'),

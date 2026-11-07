@@ -77,7 +77,7 @@ describe('the join card', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Join' }));
     expect(await screen.findByRole('heading', { name: 'Waiting for Ada to let you in…' })).toBeTruthy();
     expect(screen.getByLabelText('Fingerprint not known yet')).toBeTruthy();
-    expect(screen.getByText(/The same three emoji show on Ada’s screen/)).toBeTruthy();
+    expect(screen.getByText(/The same four emoji show on Ada’s screen/)).toBeTruthy();
 
     state = coopState({ sessionId: guestOf.id, me: 'peer:ben', role: 'editor' });
     await act(async () => emit('sessions.changed', guestOf));
@@ -85,10 +85,10 @@ describe('the join card', () => {
   });
 
   it('shows the fingerprint the join reports, to compare with the host', async () => {
-    joined = { sessionId: guestOf.id, waiting: true, fingerprint: ['🐙', '🌵', '🎈'] } as typeof joined;
+    joined = { sessionId: guestOf.id, waiting: true, fingerprint: ['🐙', '🌵', '🎈', '🚀'] } as typeof joined;
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Join' }));
-    expect(await screen.findByLabelText('Fingerprint: 🐙 🌵 🎈')).toBeTruthy();
+    expect(await screen.findByLabelText('Fingerprint: 🐙 🌵 🎈 🚀')).toBeTruthy();
   });
 
   it('can be called off while waiting, and says so when the host declines', async () => {

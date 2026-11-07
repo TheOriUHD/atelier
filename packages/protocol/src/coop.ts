@@ -116,7 +116,7 @@ export const CoopState = z.object({
   /** An invite link while one is open (the host only); its secret is never shown again once closed. */
   invite: z.object({ url: z.string(), expiresAt: z.number() }).nullable(),
   /** Someone asking to come in (the host only): their name and the fingerprint both sides see. */
-  knocking: z.array(z.object({ id: z.string(), name: z.string(), fingerprint: z.array(z.string()).length(3) })),
+  knocking: z.array(z.object({ id: z.string(), name: z.string(), fingerprint: z.array(z.string()).length(4) })),
   /** Over the relay (desktops) or on this server (accounts). */
   via: z.enum(['relay', 'server']),
   /** The host's computer can't be reached right now (asleep, offline): the session waits for it. */

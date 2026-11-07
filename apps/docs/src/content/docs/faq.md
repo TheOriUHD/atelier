@@ -210,7 +210,7 @@ See [What leaves your machine](/privacy/) and [Updates](/updates/).
 
 ### Does co-op need an account?
 
-No. *(next release)* You send an invite link, and the host lets each person in after comparing three emoji with them.
+No. *(next release)* You send an invite link, and the host lets each person in after comparing four emoji with them.
 On a team server, co-op works between the accounts there and nothing leaves the server. Between two computers, the
 desktop apps meet through a relay at `coop.atelierhq.dev`, which forwards end-to-end encrypted traffic: it sees IP
 addresses, when people connect and how much they send, never what. The relay is in the repository, so you can run

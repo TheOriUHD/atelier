@@ -116,7 +116,7 @@ describe('co-op through the relay', () => {
     await until(() => host.port.knocking(sessionId).length === 1);
     const [knock] = host.port.knocking(sessionId);
     expect(knock).toMatchObject({ name: 'Ben' });
-    expect(knock!.fingerprint).toHaveLength(3);
+    expect(knock!.fingerprint).toHaveLength(4);
 
     await host.admit(sessionId, knock!.id, true);
     const id = peerParticipant(keyIdOf(encodeKey(guestKey.publicKey)));

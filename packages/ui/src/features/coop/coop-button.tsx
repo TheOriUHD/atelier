@@ -355,7 +355,7 @@ function Knock({ knock, onAnswer }: { knock: CoopState['knocking'][number]; onAn
       <p aria-label={`Fingerprint: ${knock.fingerprint.join(' ')}`} className="text-[24px]/[32px] tracking-[0.2em]">
         {knock.fingerprint.join(' ')}
       </p>
-      <p className="text-footnote text-fg-muted">The same three emoji show on {possessive(knock.name)} screen. Compare them, over a call or a chat, before you let them in.</p>
+      <p className="text-footnote text-fg-muted">The same four emoji show on {possessive(knock.name)} screen. Compare them, over a call or a chat, before you let them in.</p>
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" loading={busy === false} disabled={busy !== null} onClick={() => answer(false)}>
           Decline

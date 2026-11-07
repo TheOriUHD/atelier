@@ -25,7 +25,7 @@ Open the session and click **Co-op** (the two-person button) in its header.
 
 1. Click **Copy invite link** and send the link to the people you want to work with, in a chat or by email.
 2. They click it. Atelier opens on their computer with the join card, and they click **Join**.
-3. You see **Ben wants to join** with three emoji. Ben sees the same three. Compare them, by voice or in another
+3. You see **Ben wants to join** with four emoji. Ben sees the same four. Compare them, by voice or in another
    chat, and click **Let in**. If they don't match, someone else is in between: click **Decline**.
 
 **On a team server:** pick people under **Teammates**, choose what they can do, and add them. They see the session in

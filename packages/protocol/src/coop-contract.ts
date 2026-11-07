@@ -43,7 +43,7 @@ export const CoopWelcome = z.object({
   title: z.string(),
   mode: z.enum(['chat', 'work', 'code']),
   /** Both sides show these to compare. */
-  fingerprint: z.array(z.string()).length(3),
+  fingerprint: z.array(z.string()).length(4),
   /** Once let in: their own secret, to come back with after the invite is gone (packages/core/src/coop/host.ts). */
   memberSecret: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
 });

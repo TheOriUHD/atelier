@@ -196,7 +196,7 @@ export class CoopGateway {
     await this.deps.db.insert(coopMemberships).values(link.membership).onConflictDoUpdate({ target: coopMemberships.id, set: { ...link.membership } });
     this.links.set(id, link);
     this.changed(link);
-    // The same three emoji the host sees, to compare with them.
+    // The same four emoji the host sees, to compare with them.
     return { sessionId: id, waiting: !welcome.admitted, fingerprint: [...welcome.fingerprint] };
   }
 

@@ -71,13 +71,13 @@ describe('the host’s Co-op popover', () => {
   });
 
   it('lets in whoever knocks after comparing the fingerprint both sides see, or declines them', async () => {
-    const knock = { id: 'k1', name: 'Ben', fingerprint: ['🐙', '🌵', '🎈'] };
+    const knock = { id: 'k1', name: 'Ben', fingerprint: ['🐙', '🌵', '🎈', '🚀'] };
     resetBackend({ 'app.info': () => appInfo('desktop'), 'coop.admit': () => ({ ok: true }) });
     renderCoop(<CoopButton session={hosting} />, { live: liveState(hosting), state: coopState({ participants: [ADA], knocking: [knock] }) });
     const popover = await open('Co-op: Ben wants to join');
     const card = within(popover).getByRole('region', { name: 'Ben wants to join' });
-    expect(within(card).getByLabelText('Fingerprint: 🐙 🌵 🎈')).toBeTruthy();
-    expect(card.textContent).toContain('The same three emoji show on Ben’s screen');
+    expect(within(card).getByLabelText('Fingerprint: 🐙 🌵 🎈 🚀')).toBeTruthy();
+    expect(card.textContent).toContain('The same four emoji show on Ben’s screen');
     fireEvent.click(within(card).getByRole('button', { name: 'Let in' }));
     await waitFor(() => expect(callsTo('coop.admit')).toEqual([{ sessionId: 's1', knockId: 'k1', allow: true }]));
   });

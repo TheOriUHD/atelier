@@ -227,7 +227,7 @@ function Waiting({ host, fingerprint, onCancel }: { host: string; fingerprint: s
             ))}
           </span>
         )}
-        <p className="text-center text-footnote text-fg-muted">The same three emoji show on {possessive(host)} screen. Compare them over a call or a chat, so you both know it’s you.</p>
+        <p className="text-center text-footnote text-fg-muted">The same four emoji show on {possessive(host)} screen. Compare them over a call or a chat, so you both know it’s you.</p>
       </div>
       <Button className="self-end" onClick={onCancel}>
         Cancel
