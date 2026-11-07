@@ -303,16 +303,81 @@ describe('Mistral replies', () => {
     expect(thinkingOf(events)).toBe('think');
   });
 
-  it('does not send thinking back to the models it hosts for others', async () => {
+  it('sends thinking back to a model that reasons, GLM included (as Vibe does), and never to one that doesn’t', async () => {
     const { adapter, calls } = setup();
     const history = [userText('hi'), message('assistant', [{ type: 'thinking', text: 'private', provider: 'mistral' }, { type: 'text', text: 'Hello' }]), userText('go on')];
-    await collect(adapter.stream(chatRequest({ model: 'zai-glm-5-3-flash', messages: history })));
-    expect((sent(calls).messages as Record<string, unknown>[])[2]).toEqual({ role: 'assistant', content: 'Hello' });
-    await collect(adapter.stream(chatRequest({ model: 'mistral-small-2603', messages: history })));
-    expect((sent(calls).messages as Record<string, unknown>[])[2]!.content).toEqual([
+    const withThinking = [
       { type: 'thinking', thinking: [{ type: 'text', text: 'private' }] },
       { type: 'text', text: 'Hello' },
+    ];
+    for (const model of ['zai-glm-5-3-flash', 'mistral-small-2603', 'mistral-large-4']) {
+      await collect(adapter.stream(chatRequest({ model, messages: history })));
+      expect((sent(calls).messages as Record<string, unknown>[])[2]!.content, model).toEqual(withThinking);
+    }
+    // After a switch to a model without reasoning: Mistral would refuse the thinking.
+    for (const model of ['mistral-large-2512', 'codestral-2508', 'ministral-8b-2512']) {
+      await collect(adapter.stream(chatRequest({ model, messages: history })));
+      expect((sent(calls).messages as Record<string, unknown>[])[2], model).toEqual({ role: 'assistant', content: 'Hello' });
+    }
+  });
+
+  it('gives tool calls whose id is "null" or repeated an id of their own, so their results go to the right call', async () => {
+    const stream = sseOf([
+      chunk({ content: '', tool_calls: [{ index: 0, id: 'null', type: 'function', function: { name: 'Read', arguments: '' } }] }),
+      chunk({ tool_calls: [{ index: 0, id: 'null', function: { arguments: '{"file_path":"a.ts"}' } }] }),
+      chunk({ tool_calls: [{ index: 1, id: 'null', type: 'function', function: { name: 'Read', arguments: '{"file_path":"b.ts"}' } }] }),
+      chunk({ tool_calls: [{ index: 2, id: 'call_7', type: 'function', function: { name: 'Glob', arguments: '{}' } }] }),
+      chunk({ tool_calls: [{ index: 3, id: 'call_7', type: 'function', function: { name: 'Glob', arguments: '{"pattern":"*"}' } }] }),
+      last({}, 'tool_calls', { prompt_tokens: 5, completion_tokens: 9 }),
     ]);
+    const { adapter } = setup('mistral', stream);
+    const events = await collect(adapter.stream(chatRequest({ model: 'zai-glm-5-3-flash' })));
+    const ended = events.flatMap((e) => (e.type === 'tool_call_end' ? [e] : []));
+    expect(ended.map((e) => e.input)).toEqual([{ file_path: 'a.ts' }, { file_path: 'b.ts' }, {}, { pattern: '*' }]);
+    const ids = ended.map((e) => e.id);
+    expect(new Set(ids).size).toBe(4);
+    expect(ids).not.toContain('null');
+    expect(ids[2]).toBe('call_7');
+    expect(finishOf(events).reason).toBe('tool_use');
+  });
+});
+
+describe('Mistral reply outlines in the log', () => {
+  const logged = (stream: string | ((call: { body: unknown }) => Response), model = 'zai-glm-5-3-flash') => {
+    const lines: string[] = [];
+    const fake = fakeFetch({ 'POST /v1/chat/completions': (call) => (typeof stream === 'function' ? stream(call) : streamResponse(stream)) });
+    const adapter = createAdapter(providerInstance('mistral-vibe', BASE, API_KEY), { ...deps(fake.fetch), log: (line) => lines.push(line) });
+    return { run: () => collect(adapter.stream(chatRequest({ model, effort: 'medium' }))), lines };
+  };
+
+  it('outlines a reply that thought until its limit and showed nothing, without a word of it', async () => {
+    const secret = 'the user wants a minecraft shader';
+    const { run, lines } = logged(sseOf([chunk({ content: [{ type: 'thinking', thinking: [{ type: 'text', text: secret }] }] }), last({ content: [] }, 'length', { prompt_tokens: 22_000, completion_tokens: 32_000 })]));
+    await run();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('mistral zai-glm-5-3-flash (mistral-vibe): finish_reason length, nothing to show');
+    expect(lines[0]).toContain('effort=low');
+    expect(lines[0]).toContain('content=[thinking]');
+    expect(lines[0]).toContain(`thinking=${secret.length}`);
+    expect(lines[0]).toContain('usage in=22000 out=32000');
+    expect(lines[0]).not.toContain(secret);
+  });
+
+  it('outlines an HTTP error with Mistral’s message, and says nothing about a reply that went well', async () => {
+    const failing = logged(() => jsonResponse({ object: 'error', message: 'Invalid model: zai-glm-5-3-flash', type: 'invalid_model', code: '1500' }, 400));
+    await failing.run();
+    expect(failing.lines[0]).toMatch(/^mistral zai-glm-5-3-flash \(mistral-vibe\): HTTP 400; sent effort=low .*; error=.*Invalid model/);
+    const fine = logged(sseOf([last({ content: 'Hi' }, 'stop', { prompt_tokens: 3, completion_tokens: 1 })], true));
+    await fine.run();
+    expect(fine.lines).toEqual([]);
+  });
+
+  it('takes `"error": null` on an ordinary chunk for no error', async () => {
+    const { run, lines } = logged(sseOf([{ ...chunk({ content: 'Hello' }), error: null }, { ...last({}, 'stop', { prompt_tokens: 1, completion_tokens: 1 }), error: null }], true));
+    const events = await run();
+    expect(textOf(events)).toBe('Hello');
+    expect(finishOf(events).reason).toBe('end');
+    expect(lines).toEqual([]);
   });
 
   it('says the reply was cut off at the model’s length', async () => {

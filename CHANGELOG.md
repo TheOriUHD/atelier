@@ -4,6 +4,11 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Mistral: tool calls keep their own ids.** Mistral's stream can carry a tool call's id as the text "null", or the same id for several calls of one reply (its own Vibe client skips such ids). Atelier took them as they came, so two calls could share an id and their results go to the wrong call. A missing, "null" or repeated id now gets one of Atelier's own. Not yet seen against Mistral's live API.
+- **Mistral: earlier reasoning goes back as Mistral's own Vibe sends it,** to every model that reasons (GLM and DeepSeek included again) and never to one that doesn't, which Mistral refuses after a switch from a reasoning model.
+- **Mistral: a reply that fails or shows nothing leaves an outline in the log,** which **Copy diagnostics** carries: what was asked (effort, output limit, how many tools and messages) and what came back (fields, chunk types, how much text and thinking, tool-call pieces, the finish reason, the usage, Mistral's error). Never the words of the conversation.
+- **Mistral's free plan** gives an API key (with low limits, and Mistral may train on what is sent with it); the provider form no longer says it has no API access.
+
 ## [0.5.0] — 2026-11-07
 
 - **Co-op: work in one session together.** Click **Co-op** in a session's header and send the invite link. The people you let in work in the same conversation and the same folder: up to four in all, each writing their own messages and watching every reply as it's written. There is no account. The host lets each person in after comparing four emoji with them; someone let in before comes back without asking. Between two computers, the apps meet through an end-to-end encrypted relay at `coop.atelierhq.dev`, which can't read what passes and keeps nothing. On a team server, the host adds teammates instead, and nothing leaves the server.

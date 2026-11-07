@@ -402,7 +402,7 @@ function MistralIntro({ type }: { type: 'mistral' | 'mistral-vibe' }) {
       <p className="text-body text-fg-secondary">
         {vibe
           ? 'Uses the Vibe allowance of your Le Chat Pro or Team plan instead of paying per token. In Le Chat, open Code › Vibe CLI, create a key and paste it below. Past the allowance, requests wait for the next billing period unless pay-as-you-go is on in Mistral’s console. On a server, everyone who can use this provider spends your plan.'
-          : 'Needs a key from Mistral’s console, with billing on: Mistral’s free plan has no API access. Requests are priced per token. For EU-only processing, change the base URL to https://api.eu.mistral.ai.'}
+          : 'Needs a key from Mistral’s console. Requests are priced per token; Mistral’s free plan gives a key with low limits, and Mistral may train on what is sent with it. For EU-only processing, change the base URL to https://api.eu.mistral.ai.'}
       </p>
       <Button size="sm" trailingIcon={ExternalLink} onClick={() => openExternal(vibe ? MISTRAL_VIBE_KEY_URL : MISTRAL_KEY_URL)}>
         {vibe ? 'Open Vibe keys in Le Chat' : 'Open Mistral’s console'}

@@ -188,15 +188,19 @@ export class ToolCallMerger {
   *add(raw: unknown): Generator<StreamEvent> {
     const delta = rec(raw);
     const fn = rec(delta.function);
-    const id = str(delta.id);
+    // Some servers (models Mistral hosts for others among them) send the id as the string "null", or the same id for
+    // every call of a reply: those calls would share an id, and their results would go to the wrong call.
+    const given = str(delta.id);
+    const id = given && given !== 'null' ? given : undefined;
     const index = num(delta.index) ?? this.indexWithout(id, str(fn.name));
     let call = this.calls.get(index);
+    const taken = (candidate: string) => [...this.calls.entries()].some(([i, c]) => i !== index && c.id === candidate);
     if (!call) {
-      call = { id: id || newCallId(), name: '', args: '', started: false };
+      call = { id: id && !taken(id) ? id : newCallId(), name: '', args: '', started: false };
       this.calls.set(index, call);
     }
     if (!call.started) {
-      if (id) call.id = id;
+      if (id && !taken(id)) call.id = id;
       const name = str(fn.name);
       if (name) call.name = name;
     }

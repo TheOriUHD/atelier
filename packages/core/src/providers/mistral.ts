@@ -129,13 +129,11 @@ function thinkingChunk(part: Extract<Part, { type: 'thinking' }>): Chunk {
 export interface MistralModelFacts {
   /** The model reads PDFs (its card says vision). */
   pdf: boolean;
-  /** Earlier thinking goes back as `thinking` chunks: only Mistral's own models are known to take them (default true). */
+  /**
+   * Earlier thinking goes back as `thinking` chunks (default true). A model that reasons takes it, GLM included, as
+   * Mistral's own Vibe sends it; a model without reasoning refuses it, as after a switch from one that reasons.
+   */
   thinking?: boolean;
-}
-
-/** The models Mistral hosts for others (GLM, DeepSeek): served as their makers built them, streamed OpenAI-style. */
-export function hostedForOthers(model: string): boolean {
-  return /^(zai-|glm-|deepseek)/.test(model);
 }
 
 async function userContent(parts: readonly Part[], deps: AdapterDeps, facts: MistralModelFacts): Promise<Content> {
@@ -337,16 +335,59 @@ export async function vibeBudget(instance: ProviderInstance, deps: AdapterDeps, 
   return { usedPercent: Math.max(0, used), resetsAt: Number.isFinite(resets) ? resets : null, ...(plan ? { plan } : {}), ...(overage ? { overage } : {}) };
 }
 
+/**
+ * What a reply looked like, without a word of it: which fields and chunk types came, how much text and thinking, the
+ * tool calls and their ids, how it ended. Logged when a reply fails or shows nothing, so Copy diagnostics can say what
+ * Mistral sent.
+ */
+class ReplyOutline {
+  events = 0;
+  readonly fields = new Set<string>();
+  readonly chunks = new Set<string>();
+  text = 0;
+  thinking = 0;
+  callPieces = 0;
+  nullIds = 0;
+
+  constructor(
+    private readonly instance: ProviderInstance,
+    private readonly request: ChatRequest,
+    private readonly body: Record<string, unknown>,
+  ) {}
+
+  see(delta: Record<string, unknown>): void {
+    this.events++;
+    for (const key of Object.keys(delta)) this.fields.add(key);
+    const content = delta.content;
+    if (typeof content === 'string') this.chunks.add(content ? 'string' : 'empty string');
+    for (const item of arr(content)) this.chunks.add(typeof item === 'string' ? 'string' : (str(rec(item).type) ?? 'untyped'));
+    for (const call of arr(delta.tool_calls)) {
+      this.callPieces++;
+      if (rec(call).id === 'null' || rec(call).id === null) this.nullIds++;
+    }
+  }
+
+  line(how: string, extra = ''): string {
+    const sent = `effort=${String(this.body.reasoning_effort ?? '-')} max_tokens=${String(this.body.max_tokens ?? '-')} tools=${arr(this.body.tools).length} messages=${arr(this.body.messages).length}`;
+    const got = `events=${this.events} fields=[${[...this.fields].join(',')}] content=[${[...this.chunks].join(',')}] text=${this.text} thinking=${this.thinking} tool_call_pieces=${this.callPieces} null_ids=${this.nullIds}`;
+    return `mistral ${this.request.model} (${this.instance.type}): ${how}; sent ${sent}; got ${got}${extra ? `; ${extra}` : ''}`;
+  }
+}
+
 async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, request: ChatRequest, known: Known): AsyncGenerator<StreamEvent> {
-  const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf, thinking: !hostedForOthers(request.model) });
+  const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf, thinking: known.reasoning.kind !== 'none' });
+  const body = mistralBody(request, messages, known.reasoning);
+  const outline = new ReplyOutline(instance, request, body);
   const res = await deps.fetch(apiUrl(instance.baseUrl, '/v1/chat/completions'), {
     method: 'POST',
     headers: jsonHeaders(instance, bearer(instance)),
-    body: JSON.stringify(mistralBody(request, messages, known.reasoning)),
+    body: JSON.stringify(body),
     signal: request.signal,
   });
   if (!res.ok || !res.body) {
-    yield { type: 'finish', reason: 'error', error: res.ok ? classifyError(instance, null, '', 'empty response body') : await mistralHttpError(res, instance) };
+    const error = res.ok ? classifyError(instance, null, '', 'empty response body') : await mistralHttpError(res, instance);
+    deps.log?.(outline.line(`HTTP ${res.status}`, `error=${error.code}: ${error.message.slice(0, 500)}`));
+    yield { type: 'finish', reason: 'error', error };
     return;
   }
 
@@ -362,28 +403,46 @@ async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, reques
     } catch {
       continue; // `[DONE]`
     }
-    if (chunk.object === 'error' || chunk.error !== undefined) {
+    // A stream error is an object of its own (`"error": null` on an ordinary chunk is no error).
+    if (chunk.object === 'error' || (chunk.error !== undefined && chunk.error !== null)) {
       const error = isRecord(chunk.error) ? chunk.error : chunk;
       const message = str(error.message) || mistralErrorMessage(JSON.stringify(error)) || 'stream error';
       const code = num(error.code) ?? num(error.raw_status_code);
+      deps.log?.(outline.line('error in the stream', `error=${String(code ?? '-')} ${str(error.type) ?? ''}: ${message.slice(0, 500)}`));
       yield { type: 'finish', reason: 'error', error: classifyError(instance, code !== undefined && code >= 400 && code < 600 ? code : null, str(error.type) ?? '', message) };
       return;
     }
     if (isRecord(chunk.usage)) usage = mapUsage(chunk.usage);
     const choice = rec(arr(chunk.choices)[0]);
     const delta = rec(choice.delta);
-    for (const text of deltaReasoning(delta)) yield { type: 'thinking', delta: text };
+    outline.see(delta);
+    for (const text of deltaReasoning(delta)) {
+      outline.thinking += text.length;
+      yield { type: 'thinking', delta: text };
+    }
     const content = delta.content;
-    if (typeof content === 'string' && content) yield { type: 'text', delta: content };
+    if (typeof content === 'string' && content) {
+      outline.text += content.length;
+      yield { type: 'text', delta: content };
+    }
     for (const item of arr(content)) {
       if (typeof item === 'string') {
-        if (item) yield { type: 'text', delta: item };
+        if (item) {
+          outline.text += item.length;
+          yield { type: 'text', delta: item };
+        }
         continue;
       }
       const piece = rec(item);
-      if (piece.type === 'text' && str(piece.text)) yield { type: 'text', delta: str(piece.text)! };
+      if (piece.type === 'text' && str(piece.text)) {
+        outline.text += str(piece.text)!.length;
+        yield { type: 'text', delta: str(piece.text)! };
+      }
       if (piece.type === 'thinking' || piece.type === 'reasoning' || piece.type === 'reasoning_text') {
-        for (const text of thinkingTexts(piece)) yield { type: 'thinking', delta: text };
+        for (const text of thinkingTexts(piece)) {
+          outline.thinking += text.length;
+          yield { type: 'thinking', delta: text };
+        }
         signature = str(piece.signature) ?? signature;
       }
     }
@@ -391,13 +450,21 @@ async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, reques
     finishReason = str(choice.finish_reason) ?? finishReason;
   }
 
+  const sawTool = calls.size > 0;
+  const usageNote = usage ? `usage in=${usage.input} out=${usage.output}${usage.reasoning ? ` reasoning=${usage.reasoning}` : ''}` : 'no usage';
   // Without a finish reason or usage the stream was cut off; the guard reports it.
-  if (finishReason === undefined && usage === undefined) return;
+  if (finishReason === undefined && usage === undefined) {
+    deps.log?.(outline.line('the stream ended with no finish reason and no usage'));
+    return;
+  }
   if (finishReason === 'error') {
+    deps.log?.(outline.line('finish_reason error', usageNote));
     yield { type: 'finish', reason: 'error', error: classifyError(instance, null, 'error', 'Mistral stopped the reply with an error') };
     return;
   }
-  const sawTool = calls.size > 0;
+  if ((outline.text === 0 && !sawTool) || finishReason === undefined || finishReason === 'length' || finishReason === 'model_length') {
+    deps.log?.(outline.line(`finish_reason ${finishReason ?? 'none'}${outline.text === 0 && !sawTool ? ', nothing to show' : ''}`, usageNote));
+  }
   yield* calls.finish();
   if (signature) yield { type: 'thinking_replay', data: { signature } };
   if (usage) yield { type: 'usage', usage };

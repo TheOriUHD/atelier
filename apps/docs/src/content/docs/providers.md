@@ -196,7 +196,8 @@ only in the key and in how use is paid.
 - **Base URL:** `https://api.mistral.ai`. For processing in the EU only, change it to `https://api.eu.mistral.ai`. Mistral
   charges 1.1 times its prices there, and not every model or feature is offered there.
 - **Key:** required, from Mistral's console (console.mistral.ai/api-keys; the form's **Open Mistral’s console** button opens
-  it). Billing has to be on: Mistral's free plan has no API access.
+  it). Mistral's free plan also gives a key, with low limits, after a phone check; Mistral may train on what is sent
+  with it. *(next release)*
 - **What Atelier asks:** `/v1/models` for the model list and health, `/v1/chat/completions` for replies. Mistral refuses
   fields it doesn't know, so requests carry only Mistral's own.
 - **Models:** one entry per model. Mistral lists a model under each of its names (`mistral-small-latest` as well as
