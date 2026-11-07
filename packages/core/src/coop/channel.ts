@@ -14,8 +14,12 @@
  * The attempt number lets each side drop an answer to a handshake the guest already gave up on (it timed out, or the
  * host asked for a new one), instead of failing the current one on it and starting yet another.
  *
+ * Pre-shared keys: a guest uses one, the host accepts up to `MAX_PSKS` (the current invite's, and member keys it gave
+ * guests it let in), trying each on its own copy of the handshake at message 3, where XXpsk3 first uses the key. So
+ * the host can withdraw a leaked invite (`setPsks`) without locking out its members, whose sessions stay up anyway.
+ *
  * A transport message's plaintext is `[0]` (the host's confirmation, sent first: it proves the host knows the
- * invite's key, so a guest is never "in" with an impostor that only completed the handshake) or a chunk:
+ * guest's key, so a guest is never "in" with an impostor that only completed the handshake) or a chunk:
  * `[1][flags: u8][message id: u32 LE][index: u32 LE][count: u32 LE][bytes]`, flags bit 0 = zlib. Chunks of a
  * message go in order and messages one after another, so a gap means a chunk was lost: that message is dropped.
  *
@@ -24,8 +28,9 @@
  * what lets a host keep its guests through a relay reconnect: their sessions are still valid when it is back.
  *
  * What the app layer does on top: admit a joiner (or not) after showing `hello.name` and the fingerprint, pin the
- * other side's static key, and resubscribe after `relay-state` 'connected' (host) or `reconnected` (guest): messages
- * sent while the link was down are lost, not replayed.
+ * other side's static key, hand an admitted guest its member key over the channel (`setPsk` on the guest, `setPsks`
+ * on the host), and resubscribe after `relay-state` 'connected' (host) or `reconnected` (guest): messages sent while
+ * the link was down are lost, not replayed.
  */
 import { EventEmitter } from 'node:events';
 import { deflate, inflate } from 'node:zlib';
@@ -690,6 +695,11 @@ export interface PeerChannel {
   readonly hello: CoopHello;
   /** Whether `remoteStatic` is one of `knownPeers`. */
   readonly known: boolean;
+  /**
+   * Which of the host's accepted keys the guest's handshake used: its index in the `psks` the room held when the
+   * handshake completed (say 0 for the invite's, then the members'). The key itself isn't exposed.
+   */
+  readonly pskIndex: number;
   /** False once the channel ended; sends also fail while the host's relay link is down. */
   readonly open: boolean;
   /** Resolves when the whole message was handed to the socket; rejects while the link is down. */
@@ -703,12 +713,20 @@ export interface PeerChannel {
 
 export type RelayState = 'connected' | 'reconnecting' | 'closed';
 
+/** Keys a host accepts at once: each costs a try on a guest's third handshake message. */
+export const MAX_PSKS = 8;
+/** Handshakes one guest connection may start in a minute; past that the host closes it (4012). */
+export const MAX_HANDSHAKES_PER_MINUTE = 10;
+
 export interface HostRoomOptions {
   relayUrl: string;
   roomId: string;
   hostToken: string;
-  /** From the invite's secret (`pskFromSecret`). */
-  psk: Uint8Array;
+  /**
+   * The pre-shared keys a guest's handshake may use (32 bytes each, at most `MAX_PSKS`): the current invite's
+   * (`pskFromSecret`) and the members' the host handed out. `setPsks` replaces them later. None refuses everyone new.
+   */
+  psks: readonly Uint8Array[];
   staticKey: StaticKey;
   /** Guests already pinned (keys or base64), or a check: `peer.known` says whether a guest is one of them. */
   knownPeers?: readonly (Uint8Array | string)[] | ((remoteStatic: Uint8Array) => boolean);
@@ -729,6 +747,7 @@ class Peer implements PeerChannel {
   readonly handshakeHash: Uint8Array;
   readonly hello: CoopHello;
   readonly known: boolean;
+  readonly pskIndex: number;
   readonly #session: Session;
   readonly #inbox = new Inbox();
   readonly #outbox: Outbox;
@@ -736,15 +755,22 @@ class Peer implements PeerChannel {
   #closeListeners = new Set<(reason: CoopCloseReason) => void>();
   #ended = false;
 
-  constructor(link: () => RelayLink | null, kick: (slot: number) => void, slot: number, handshake: HandshakeState, hello: CoopHello, known: boolean) {
+  constructor(
+    link: () => RelayLink | null,
+    kick: (slot: number) => void,
+    slot: number,
+    handshake: HandshakeState,
+    about: { hello: CoopHello; known: boolean; pskIndex: number },
+  ) {
     this.#kick = kick;
     this.slot = slot;
     this.remoteStatic = handshake.remoteStatic!;
     this.remoteKey = encodeKey(this.remoteStatic);
     this.handshakeHash = handshake.handshakeHash;
     this.fingerprint = fingerprintOf(this.handshakeHash);
-    this.hello = hello;
-    this.known = known;
+    this.hello = about.hello;
+    this.known = about.known;
+    this.pskIndex = about.pskIndex;
     this.#session = { cipher: handshake.split(), received: 0 };
     this.#outbox = new Outbox(() => {
       const current = link();
@@ -804,6 +830,17 @@ interface SlotState {
   handshake: HandshakeState | null;
   attempt: number;
   timer: ReturnType<typeof setTimeout> | null;
+  /** When this connection started its recent handshakes (the last minute's). */
+  started: number[];
+}
+
+const newSlot = (): SlotState => ({ handshake: null, attempt: 0, timer: null, started: [] });
+
+/** Copies of the keys, after checking there are at most `MAX_PSKS` of 32 bytes. */
+function acceptedPsks(psks: readonly Uint8Array[]): Uint8Array[] {
+  if (!Array.isArray(psks) || psks.length > MAX_PSKS) throw new TypeError(`A co-op room accepts at most ${MAX_PSKS} pre-shared keys.`);
+  for (const psk of psks) if (!(psk instanceof Uint8Array) || psk.length !== 32) throw new TypeError('A pre-shared key is 32 bytes.');
+  return psks.map((psk) => new Uint8Array(psk));
 }
 
 /**
@@ -815,6 +852,7 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
   readonly #options: HostRoomOptions;
   readonly #timing: CoopTiming;
   readonly #known: (key: Uint8Array) => boolean;
+  #psks: Uint8Array[];
   #link: RelayLink | null = null;
   #state: RelayState = 'reconnecting';
   #slots = new Map<number, SlotState>();
@@ -832,6 +870,7 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
     if (!isRoomId(options.roomId)) throw new TypeError("That isn't a co-op room id.");
     this.roomId = options.roomId;
     this.#options = options;
+    this.#psks = acceptedPsks(options.psks);
     this.#timing = { ...DEFAULT_TIMING, ...options.timing };
     const known = options.knownPeers;
     if (typeof known === 'function') this.#known = known;
@@ -843,6 +882,14 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
 
   get state(): RelayState {
     return this.#state;
+  }
+
+  /**
+   * The keys handshakes may use from now on (at most `MAX_PSKS`), say when an invite expires or is replaced, or a
+   * member gets a key. Sessions already up stay up; a guest whose key is gone is refused at its next handshake.
+   */
+  setPsks(psks: readonly Uint8Array[]): void {
+    this.#psks = acceptedPsks(psks);
   }
 
   /** The guests with a completed handshake. */
@@ -908,7 +955,7 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
         }
       }
       for (const slot of slots) {
-        if (!this.#slots.has(slot)) this.#slots.set(slot, { handshake: null, attempt: 0, timer: null });
+        if (!this.#slots.has(slot)) this.#slots.set(slot, newSlot());
         // Each guest learns whether its session is still here (a confirmation through it), or that it should start
         // over (this host restarted, or its handshake was cut off).
         const peer = this.#peers.get(slot);
@@ -923,7 +970,7 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
       const old = this.#peers.get(relay.slot);
       if (old) this.#endPeer(old, 'left');
       this.#dropSlot(relay.slot);
-      this.#slots.set(relay.slot, { handshake: null, attempt: 0, timer: null });
+      this.#slots.set(relay.slot, newSlot());
     } else if (relay.t === 'left' && typeof relay.slot === 'number') {
       const peer = this.#peers.get(relay.slot);
       if (peer) this.#endPeer(peer, 'left');
@@ -966,12 +1013,22 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
 
   /**
    * A guest's first message. A session the slot already has stays until the new handshake completes: only the guest
-   * can complete it (it needs the invite's key), and a replayed first message (anyone can send one) changes nothing.
+   * can complete it (it needs an accepted key), and a replayed first message (anyone can send one) changes nothing.
+   * Each answer costs the host a new key pair and two DH, so a connection gets `MAX_HANDSHAKES_PER_MINUTE`.
    */
   #hello1(link: RelayLink, slot: number, state: SlotState, attempt: number, message: Uint8Array): void {
+    const now = Date.now();
+    state.started = state.started.filter((at) => at > now - 60_000);
+    if (state.started.length >= MAX_HANDSHAKES_PER_MINUTE) {
+      // A guest with a session doesn't do this; someone replaying its first message might. Keep that session.
+      if (!this.#peers.has(slot)) this.kick(slot, CloseCode.handshakes);
+      return;
+    }
+    state.started.push(now);
     if (state.timer) clearTimeout(state.timer);
     state.handshake = null;
-    const handshake = new HandshakeState({ initiator: false, staticKey: this.#options.staticKey, psk: this.#options.psk, prologue: prologue(this.roomId) });
+    // No key yet: XXpsk3 needs it only in message 3, where each accepted key is tried.
+    const handshake = new HandshakeState({ initiator: false, staticKey: this.#options.staticKey, prologue: prologue(this.roomId) });
     try {
       handshake.readMessage(message);
       link.post(handshakeFrame([slot], FRAME_HELLO2, attempt, handshake.writeMessage()));
@@ -998,34 +1055,47 @@ export class HostRoom extends EventEmitter<HostRoomEvents> {
     state.handshake = null;
     state.timer = null;
     if (!handshake) return link.post(Uint8Array.of(slot, FRAME_RESET));
-    let hello: CoopHello | null;
-    try {
-      hello = readHello(handshake.readMessage(message));
-    } catch {
-      hello = null;
-    }
-    if (!hello) {
-      // The guest doesn't have this room's invite (or has an old one): tell it, so it stops trying. With a working
-      // session on the slot, this wasn't that guest (whose invite works), so the session stays.
+    const matched = this.#tryPsks(handshake, message);
+    const hello = matched && readHello(matched.payload);
+    if (!matched || !hello) {
+      // The guest has none of the keys this room accepts (a wrong, old or withdrawn invite): tell it, so it stops
+      // trying. With a working session on the slot, this wasn't that guest, so the session stays.
       if (!this.#peers.has(slot)) this.kick(slot, CloseCode.refused);
       return;
     }
     const old = this.#peers.get(slot);
     if (old) this.#endPeer(old, 'rejoined');
+    const done = matched.handshake;
     const peer = new Peer(
       () => this.#link,
       (s) => this.kick(s, CloseCode.removed),
       slot,
-      handshake,
-      hello,
-      this.#known(handshake.remoteStatic!),
+      done,
+      { hello, known: this.#known(done.remoteStatic!), pskIndex: matched.index },
     );
     this.#peers.set(slot, peer);
     peer.confirm(link);
     this.emit('peer', peer);
   }
 
-  /** Closes a guest's connection at the relay (4010 removed, 4011 refused, or another 4010–4019). */
+  /**
+   * Reads message 3 with each accepted key in turn, each on its own fork of the handshake, until one decrypts. Only
+   * the key's step differs between tries, so a message that fails for another reason (too short, a bad key) isn't
+   * tried again.
+   */
+  #tryPsks(handshake: HandshakeState, message: Uint8Array): { handshake: HandshakeState; payload: Uint8Array; index: number } | null {
+    for (const [index, psk] of this.#psks.entries()) {
+      const fork = handshake.fork(psk);
+      try {
+        return { handshake: fork, payload: fork.readMessage(message), index };
+      } catch (error) {
+        if (!(error instanceof NoiseError) || error.code !== 'decrypt') return null;
+      }
+    }
+    return null;
+  }
+
+  /** Closes a guest's connection at the relay (4010 removed, 4011 refused, 4012 handshakes, or another 4010–4019). */
   kick(slot: number, code: number = CloseCode.removed): void {
     const peer = this.#peers.get(slot);
     if (peer) this.#endPeer(peer, 'closed');
@@ -1098,7 +1168,7 @@ export async function openHostRoom(options: HostRoomOptions): Promise<HostRoom> 
 export interface JoinRoomOptions {
   relayUrl: string;
   roomId: string;
-  /** From the invite's secret (`pskFromSecret`). */
+  /** From the invite's secret (`pskFromSecret`), or a member key the host gave; `setPsk` changes it later. */
   psk: Uint8Array;
   staticKey: StaticKey;
   /** Who this is, for the host to decide (sent encrypted, in the handshake). */
@@ -1141,6 +1211,7 @@ export class GuestChannel extends EventEmitter<GuestEvents> {
   readonly #options: JoinRoomOptions;
   readonly #timing: CoopTiming;
   readonly #hello: Uint8Array;
+  #psk: Uint8Array;
   #hostKey: Uint8Array | null;
   #link: RelayLink | null = null;
   #handshake: HandshakeState | null = null;
@@ -1169,6 +1240,7 @@ export class GuestChannel extends EventEmitter<GuestEvents> {
     this.#options = options;
     this.#timing = { ...DEFAULT_TIMING, ...options.timing };
     this.#hello = hello;
+    this.#psk = acceptedPsks([options.psk])[0]!;
     this.#hostKey = options.hostKey === undefined ? null : typeof options.hostKey === 'string' ? decodeKey(options.hostKey) : new Uint8Array(options.hostKey);
     this.#outbox = new Outbox(() => (this.#ready && this.#link?.open && this.#session ? { link: this.#link, session: this.#session, prefix: [] } : null));
   }
@@ -1309,7 +1381,7 @@ export class GuestChannel extends EventEmitter<GuestEvents> {
     this.#ready = false;
     this.#pending = null;
     this.#attempt = (this.#attempt % 0xffff_ffff) + 1;
-    this.#handshake = new HandshakeState({ initiator: true, staticKey: this.#options.staticKey, psk: this.#options.psk, prologue: prologue(this.roomId) });
+    this.#handshake = new HandshakeState({ initiator: true, staticKey: this.#options.staticKey, psk: this.#psk, prologue: prologue(this.roomId) });
     link.post(handshakeFrame([], FRAME_HELLO1, this.#attempt, this.#handshake.writeMessage()));
     if (this.#first) this.#options.onStatus?.('handshaking');
     this.#step();
@@ -1363,7 +1435,7 @@ export class GuestChannel extends EventEmitter<GuestEvents> {
     if (this.#pending) {
       const plain = openData(this.#pending.session, body);
       if (plain?.length !== 1 || plain[0] !== PLAIN_CONFIRM) return;
-      // The host proved it has the invite's key: this session is the one.
+      // The host proved it has our key: this session is the one.
       const { session, hash, remote } = this.#pending;
       this.#pending = null;
       this.#clearStep();
@@ -1407,7 +1479,7 @@ export class GuestChannel extends EventEmitter<GuestEvents> {
       if (!this.#first) this.emit('host', false);
     }
     const reason = GUEST_CLOSE[code];
-    if (this.#first) return this.#fail(firstJoinError(reason));
+    if (this.#first) return this.#fail(code === CloseCode.handshakes ? new CoopError('rate_limited', 'Too many handshakes with the host; try again in a minute.') : firstJoinError(reason));
     if (reason) return this.#shutDown(reason);
     this.#scheduleReconnect();
   }
@@ -1454,6 +1526,14 @@ export class GuestChannel extends EventEmitter<GuestEvents> {
   onClose(listener: (reason: CoopCloseReason) => void): () => void {
     this.#closeListeners.add(listener);
     return () => this.#closeListeners.delete(listener);
+  }
+
+  /**
+   * The key for this guest's next handshake (a reconnect, or the host asking for a new one), such as the member key
+   * the host gave it after letting it in. The session that is up now stays as it is.
+   */
+  setPsk(psk: Uint8Array): void {
+    this.#psk = acceptedPsks([psk])[0]!;
   }
 
   /** Leaves the room. */

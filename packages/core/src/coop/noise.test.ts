@@ -106,6 +106,29 @@ describe('Noise_XXpsk3_25519_ChaChaPoly_SHA256', () => {
     expect(() => host.readMessage(third)).toThrow(expect.objectContaining({ code: 'state' }));
   });
 
+  it('lets a responder without a key try several on forks of message 3, leaving the handshake as it was', () => {
+    const guestPsk = new Uint8Array(32).fill(2);
+    const guest = new HandshakeState({ initiator: true, staticKey: generateKeyPair(), psk: guestPsk });
+    const host = new HandshakeState({ initiator: false, staticKey: generateKeyPair() });
+    host.readMessage(guest.writeMessage());
+    guest.readMessage(host.writeMessage());
+    const third = guest.writeMessage(text('hello'));
+    // No key given and none forked in: message 3 can't be read.
+    expect(() => host.fork().readMessage(third)).toThrow(expect.objectContaining({ code: 'state' }));
+    const wrong = host.fork(new Uint8Array(32).fill(1));
+    expect(() => wrong.readMessage(third)).toThrow(expect.objectContaining({ code: 'decrypt' }));
+    const right = host.fork(guestPsk);
+    expect(right.readMessage(third)).toEqual(text('hello'));
+    expect(right.handshakeHash).toEqual(guest.handshakeHash);
+    // The failed fork took nothing from the others: another fork of the original still works.
+    expect(host.fork(guestPsk).readMessage(third)).toEqual(text('hello'));
+    expect(host.complete).toBe(false);
+    const g = guest.split();
+    expect(right.split().receive.decrypt(g.send.encrypt(text('in')))).toEqual(text('in'));
+    // Once message 3 is through, the key can't change.
+    expect(() => right.fork(guestPsk)).toThrow(expect.objectContaining({ code: 'state' }));
+  });
+
   it('fails when the prologues differ', () => {
     const { guest, host } = pair({ guestPrologue: text('room a'), hostPrologue: text('room b') });
     // The first message's payload is encrypted under a key from the ephemeral, with the prologue in its hash.

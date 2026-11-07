@@ -130,6 +130,13 @@ export class CipherState {
     return this.#key !== null;
   }
 
+  /** An independent copy: the same key and nonce. */
+  clone(): CipherState {
+    const copy = new CipherState(this.#key ?? undefined);
+    copy.#n = this.#n;
+    return copy;
+  }
+
   /** The nonce the next message uses. */
   get nonce(): number {
     return this.#n;
@@ -196,6 +203,14 @@ class SymmetricState {
     this.ck = this.h;
   }
 
+  clone(): SymmetricState {
+    const copy = new SymmetricState(PROTOCOL_NAME);
+    copy.ck = new Uint8Array(this.ck);
+    copy.h = new Uint8Array(this.h);
+    copy.cipher = this.cipher.clone();
+    return copy;
+  }
+
   mixKey(input: Uint8Array): void {
     const [ck, key] = hkdf(this.ck, input, 2);
     this.ck = ck;
@@ -234,14 +249,19 @@ class SymmetricState {
 type Token = 'e' | 's' | 'ee' | 'es' | 'se' | 'psk';
 /** XXpsk3: message 1 from the initiator, 2 from the responder, 3 from the initiator. */
 const PATTERN: Token[][] = [['e'], ['e', 'ee', 's', 'es'], ['s', 'se', 'psk']];
+/** The message (by index) whose tokens include `psk`. */
+const PSK_MESSAGE = 2;
 
 export interface HandshakeOptions {
   /** The guest starts (initiator); the host answers (responder). */
   initiator: boolean;
   /** This device's long-term key. */
   staticKey: KeyPair;
-  /** The invite's pre-shared key (32 bytes, `pskFromSecret`). */
-  psk: Uint8Array;
+  /**
+   * The pre-shared key (32 bytes). XXpsk3 only uses it in message 3, so a responder that accepts several may leave it
+   * out and try each on a `fork(psk)` of the handshake when message 3 arrives.
+   */
+  psk?: Uint8Array;
   /** Bound into the handshake hash: both sides must use the same bytes. */
   prologue?: Uint8Array;
   /** A fixed ephemeral key: for the published test vectors only. */
@@ -266,19 +286,37 @@ export class HandshakeState {
   #e: KeyPair | null;
   #rs: Uint8Array | null = null;
   #re: Uint8Array | null = null;
-  #psk: Uint8Array;
+  #psk: Uint8Array | null;
   #step = 0;
   #failed = false;
 
   constructor(options: HandshakeOptions) {
-    checkKey(options.psk, 'The pre-shared key');
+    if (options.psk) checkKey(options.psk, 'The pre-shared key');
     checkKey(options.staticKey.privateKey, 'The static private key');
     checkKey(options.staticKey.publicKey, 'The static public key');
     this.initiator = options.initiator;
     this.#s = options.staticKey;
     this.#e = options.ephemeral ?? null;
-    this.#psk = new Uint8Array(options.psk);
+    this.#psk = options.psk ? new Uint8Array(options.psk) : null;
     this.#symmetric.mixHash(options.prologue ?? EMPTY);
+  }
+
+  /**
+   * An independent copy of this handshake, with `psk` as its pre-shared key when given. Only before message 3 (where
+   * the key is used): a responder holding several keys reads message 3 on one fork per key, and the forks that fail
+   * leave this handshake as it was.
+   */
+  fork(psk?: Uint8Array): HandshakeState {
+    if (this.#failed) throw new NoiseError('state', 'This handshake failed; start a new one.');
+    if (psk && this.#step > PSK_MESSAGE) throw new NoiseError('state', 'The pre-shared key is already in this handshake.');
+    if (psk) checkKey(psk, 'The pre-shared key');
+    const copy = new HandshakeState({ initiator: this.initiator, staticKey: this.#s, psk: psk ?? this.#psk ?? undefined });
+    copy.#symmetric = this.#symmetric.clone();
+    copy.#e = this.#e;
+    copy.#rs = this.#rs && new Uint8Array(this.#rs);
+    copy.#re = this.#re && new Uint8Array(this.#re);
+    copy.#step = this.#step;
+    return copy;
   }
 
   /** Whether all three messages went through. */
@@ -308,6 +346,11 @@ export class HandshakeState {
     return PATTERN[this.#step]!;
   }
 
+  #needPsk(): Uint8Array {
+    if (!this.#psk) throw new NoiseError('state', 'Message 3 needs a pre-shared key: give one, or `fork(psk)` first.');
+    return this.#psk;
+  }
+
   #dh(token: 'ee' | 'es' | 'se'): void {
     const sym = this.#symmetric;
     // es: the initiator's ephemeral with the responder's static; se: the other way round.
@@ -329,7 +372,7 @@ export class HandshakeState {
           // A psk handshake mixes the ephemeral into the key as well (spec §9.2).
           sym.mixKey(this.#e.publicKey);
         } else if (token === 's') parts.push(sym.encryptAndHash(this.#s.publicKey));
-        else if (token === 'psk') sym.mixKeyAndHash(this.#psk);
+        else if (token === 'psk') sym.mixKeyAndHash(this.#needPsk());
         else this.#dh(token);
       }
       parts.push(sym.encryptAndHash(payload));
@@ -364,7 +407,7 @@ export class HandshakeState {
           sym.mixHash(this.#re);
           sym.mixKey(this.#re);
         } else if (token === 's') this.#rs = sym.decryptAndHash(take(sym.cipher.hasKey() ? KEY_LENGTH + TAG_LENGTH : KEY_LENGTH));
-        else if (token === 'psk') sym.mixKeyAndHash(this.#psk);
+        else if (token === 'psk') sym.mixKeyAndHash(this.#needPsk());
         else this.#dh(token);
       }
       const payload = sym.decryptAndHash(message.subarray(at));
