@@ -485,8 +485,6 @@ export class ChatService {
   private guestJoined = new Set<string>();
   /** Co-op: sub-agents started in such a turn, which keep a guest's permissions for as long as they work. */
   private guestAgents = new Set<string>();
-  /** Co-op: who the model was last told is in each session (`rosterNote`). */
-  private rosters = new Map<string, string>();
   private seqs = new Map<string, number>();
   /** Parts of the message each session is streaming right now; ahead of the store between batched writes. */
   private live = new Map<string, { messageId: string; parts: readonly Part[] }>();
@@ -1412,7 +1410,6 @@ export class ChatService {
       if (!session.parentSessionId && !session.title && !this.titling.has(sessionId) && !actor.ref && actor.payer === session.userId) void this.generateTitle(sessionId, resolved);
       const run = await this.requestContext(session, resolved, signal, true);
       if (!session.parentSessionId) await this.announce(session, run);
-      if (!session.parentSessionId) await this.rosterNote(sessionId);
       for (const note of moved) await this.addContextMessage(sessionId, note);
       // A defined sub-agent's own `maxTurns` wins over the sub-agents' ceiling; a person's own turn has none.
       const maxSteps = (await this.definedAgentTurns(session)) ?? stepCap(!!session.parentSessionId, resolved.info.tier);
@@ -1530,6 +1527,7 @@ export class ChatService {
         tools: run.tools.map((t) => t.name),
         safeguards: run.snapshot.safeguardsHash,
         research: session.overrides.research === true && settings.capabilities.webSearch.enabled,
+        ...(!session.parentSessionId ? await this.roster(session.id) : {}),
         ...(run.tools.some((t) => t.name === 'GenerateImage') && this.deps.images ? { imageModels: await this.deps.images.modelList(session) } : {}),
         ...(run.tools.some((t) => t.name === 'GenerateVideo') && this.deps.videos ? { videoModels: await this.deps.videos.modelList(session) } : {}),
         ...(run.tools.some((t) => t.name === 'GenerateAudio') && this.deps.audio ? { audioModels: await this.deps.audio.modelList(session) } : {}),
@@ -1549,6 +1547,18 @@ export class ChatService {
     const parts: Part[] = [...(note ? [{ type: 'context' as const, text: note.text, ...(Object.keys(note.state).length ? { state: note.state } : {}) }] : []), ...message.parts];
     await this.deps.repo.updateMessage(message.id, { parts });
     this.emit(session.id, { type: 'message', message: { ...message, parts } });
+  }
+
+  /**
+   * Co-op: who is in the session, for the turn note that tells the model when it changes (prompts/notes/coop.md). Kept
+   * in the conversation, not the system prompt, so the prompt's cache survives people coming and going.
+   */
+  private async roster(sessionId: string): Promise<{ coop?: { roster: string; people: string; host: string } }> {
+    if (!this.actors.get(sessionId)?.shared) return {};
+    const people = await this.deps.coop!.list(sessionId);
+    const host = people.find((p) => p.role === 'host')?.name ?? 'The host';
+    const names = people.map((p) => escapeTags(p.role === 'host' ? `${p.name} (host)` : p.role === 'viewer' ? `${p.name} (watching)` : p.name)).join(', ');
+    return { coop: { roster: people.map((p) => `${p.id}|${p.name}|${p.role}`).join(','), people: names, host: escapeTags(host) } };
   }
 
   /** Today in the backend's time zone, which is the person's on the desktop. */
@@ -1638,20 +1648,6 @@ export class ChatService {
     return map;
   }
 
-  /**
-   * Co-op: tells the model who is in the session, when they change (at a turn's start). Kept as a note in the
-   * conversation, not the system prompt, so the prompt's cache survives people coming and going.
-   */
-  private async rosterNote(sessionId: string): Promise<void> {
-    if (!this.actors.get(sessionId)?.shared) return;
-    const people = await this.deps.coop!.list(sessionId);
-    const roster = people.map((p) => `${p.name}|${p.role}`).join(',');
-    if (this.rosters.get(sessionId) === roster) return;
-    this.rosters.set(sessionId, roster);
-    const host = people.find((p) => p.role === 'host')?.name ?? 'The host';
-    const names = people.map((p) => escapeTags(p.role === 'host' ? `${p.name} (host)` : p.role === 'viewer' ? `${p.name} (watching)` : p.name)).join(', ');
-    await this.addContextMessage(sessionId, renderNote('notes/coop', { people: names, host: escapeTags(host) }, this.deps.promptOverrides()));
-  }
 
   /** The model a session runs on: its own, else the mode's default, else the first one available. */
   private async modelRef(session: SessionRow): Promise<string | undefined> {
@@ -2912,7 +2908,10 @@ export class ChatService {
       // Co-op: who wrote it, first, in a tag their own (escaped) text can't produce.
       // A message from someone who left keeps a name of its own: never the host's.
       const sender = senders && m.role === 'user' && m.kind === 'normal' ? (m.author ? (senders.get(m.author) ?? { name: 'someone who left', host: false }) : senders.get('')) : undefined;
-      if (sender) parts.unshift({ type: 'text', text: senderTag(sender.name, sender.host) });
+      // After Atelier's own notes at the front of the message, before the person's words.
+      // (A person's own text is escaped, so only Atelier's notes start with the tag.)
+      const words = parts.findIndex((p) => !(p.type === 'text' && p.text.startsWith('<context-update>')));
+      if (sender) parts.splice(words === -1 ? parts.length : words, 0, { type: 'text', text: senderTag(sender.name, sender.host) });
       out.push({ ...m, parts });
     }
     // Computer use keeps the newest screenshots only (a compact model sees one), and old generated images leave too.
