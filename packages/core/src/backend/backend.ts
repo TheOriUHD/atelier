@@ -1752,21 +1752,28 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
   // ---------------------------------------------------------------- co-op across computers (ARCHITECTURE §24)
   if (platform.surface === 'desktop') {
+    // A computer whose protected storage refuses (Windows' without a signed-in session, a locked keyring) says so,
+    // instead of an internal error.
+    const unstorable = (e: unknown) => appError('secret_store', `Atelier couldn’t use this computer’s protected storage for co-op’s keys: ${e instanceof Error ? e.message : String(e)}`);
     const coopSecrets = {
-      get: (id: string) => secrets.get(id),
-      set: async (id: string, value: string) => void (await secrets.set({ id, label: 'Co-op', kind: 'token', value })),
+      get: (id: string) => secrets.get(id).catch((e: unknown) => Promise.reject(unstorable(e))),
+      set: async (id: string, value: string) => void (await secrets.set({ id, label: 'Co-op', kind: 'token', value }).catch((e: unknown) => Promise.reject(unstorable(e)))),
       delete: (id: string) => secrets.delete(id),
     };
     // This computer's long-term co-op key: what the people it meets pin.
     let deviceKey: Promise<ReturnType<typeof parseStaticKey>> | null = null;
     const coopDeviceKey = () =>
       (deviceKey ??= (async () => {
-        const stored = await secrets.get('coop-device-key');
+        const stored = await coopSecrets.get('coop-device-key');
         if (stored) return parseStaticKey(stored);
         const key = generateStaticKey();
         await coopSecrets.set('coop-device-key', serializeStaticKey(key));
         return key;
-      })());
+      })().catch((e: unknown) => {
+        // Not kept: the next join tries the storage again.
+        deviceKey = null;
+        throw e;
+      }));
     const transport = relayTransport(coopDeviceKey);
     const nameOf = async (userId: string) => (await accounts.get(userId).catch(() => null))?.name || 'Someone';
     coopHost = new CoopHost({

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { APP, connectorFingerprintInput, contract, createMemoryTransportPair, createRpcClient, LOOP_MAX_PER_SESSION, LOOP_MAX_PER_USER, type AppContract, type HomeScan, type RpcClient } from '@atelier/protocol';
+import { APP, connectorFingerprintInput, contract, createMemoryTransportPair, createRpcClient, LOOP_MAX_PER_SESSION, LOOP_MAX_PER_USER, makeInviteUrl, type AppContract, type HomeScan, type RpcClient } from '@atelier/protocol';
 import { programChannel } from '../mcp/line-transport.ts';
 import { ArtifactRepo } from '../artifacts/artifact-repo.ts';
 import { BlobStore } from '../store/blobs.ts';
@@ -281,6 +281,37 @@ describe('co-op on a team server: a teammate’s own sidebar', () => {
     // Deleting his group files it back under no group.
     await bob.call('groups.delete', { id: group.id });
     expect((await bob.call('sessions.list', { archived: 'archived' })).find((s) => s.id === session.id)).toMatchObject({ groupId: null });
+  });
+});
+
+describe('co-op on a desktop whose protected storage refuses', () => {
+  it('joining says the storage refused, instead of an internal error, and tries the storage again next time', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-coop-storage-'));
+    let refuse = true;
+    const desktop = await createBackend({
+      surface: 'desktop', configDir: home, dataDir: home,
+      // The message Electron gives on Windows without a signed-in session.
+      env: { ATELIER_COOP_RELAY: 'http://127.0.0.1:9' },
+      cipher: { encrypt: async (s) => (refuse ? Promise.reject(new Error('Error while encrypting the text provided to safeStorage.encryptStringAsync.')) : s), decrypt: async (s) => s },
+      logger: { info: () => {}, error: () => {} },
+      fetch: async () => Promise.reject(new Error('offline')),
+    });
+    try {
+      const [clientSide, serverSide] = createMemoryTransportPair();
+      desktop.connect(serverSide, { client: { clientKind: 'desktop', ip: '127.0.0.1', userAgent: 'test' } });
+      const c = createRpcClient(contract, clientSide);
+      await c.call('auth.setup', { username: 'ben', name: 'Ben', password: 'correct horse', clientKind: 'desktop' });
+      const invite = makeInviteUrl('R'.repeat(22), 'S'.repeat(43), { hostName: 'Ada', title: 'Shader', mode: 'code' });
+      const refused = await c.call('coop.join', { invite, models: 'host' }).then(() => null, (e: { data?: { code?: string }; message?: string }) => e);
+      expect(refused?.data?.code).toBe('secret_store');
+      expect(refused?.message).toMatch(/protected storage.*safeStorage/);
+      // Storage that works again: the join gets as far as the relay (nothing listens there in this test).
+      refuse = false;
+      expect(await code(c.call('coop.join', { invite, models: 'host' }))).not.toBe('secret_store');
+    } finally {
+      await desktop.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
 

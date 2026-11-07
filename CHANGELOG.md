@@ -7,6 +7,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 - **Co-op guests file a shared session in their own sidebar:** pin it, rename it, put it in one of their groups, archive it and mark it unread, on a team server and on another computer. Only they see it; the session keeps its name and place for the host and the others. A session whose co-op ended without a copy can be removed from the sidebar after Atelier started again (it couldn't be).
 - **Co-op guests on another computer open sub-agents' and tracks' transcripts,** and the **Background tasks** pane in Code with what runs there and commands' output. The host lets them follow a sub-agent's or track's session of the shared one only, never a side chat. Stopping and clearing background tasks is the host's, so guests no longer see buttons for it.
 - **File › Join a Co-op Session…** in the desktop app opens the dialog to paste an invite link.
+- **Co-op says when this computer's protected storage refuses its keys,** instead of "Internal error" (Windows' storage, for one, needs a signed-in session). The next try asks the storage again.
+- **A co-op test between two real computers** (`e2e/coop-two-machines.desktop.spec.ts`): a host on one, a guest on the other, through a real relay, with the emoji compared before the guest is let in.
 
 ## [0.5.0] — 2026-11-07
 
