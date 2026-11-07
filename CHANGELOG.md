@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-11-07
+
 - **Mistral: GLM no longer saves half-written files.** When a reply of GLM 5.3 or GLM 5.3 Flash runs out of room in the middle of a tool call, Mistral ends it as an ordinary tool call (`tool_calls`, not `length`), with that call's input cut off; Atelier read the half input as whole and ran it, so a Write saved half a shader, and the model wrote it again and ran out again, at up to 32,000 tokens a round. A Mistral reply that used its whole output limit, or a call whose input stops mid-JSON, is now taken as cut off: none of its calls runs, and the model is asked to send it again (a large Write split up). Seen and checked against Mistral's API with an API key and a Vibe key.
 - **Mistral: a turn on a model that reasons gets the model's own output limit.** Mistral counts reasoning toward a reply's limit, and GLM reasons tens of thousands of tokens before it writes on a bigger task (23,000 of 32,000 on one measured first reply, 37,000 at High); Atelier's 32,000 at Medium (64,000 at High) cut such replies off with nothing written. Mistral's own Vibe sets no limit. The model's maximum now applies, within the room the context has left: 131,072 tokens for GLM, Medium 3.5 and Small 4, 262,144 for Large 4.
 - **Mistral's model list as the API gives it now:** Medium 3.5 is listed as `mistral-medium-latest` (Atelier knew only its other names, so it showed the bare id and a 32,768-token limit); GLM 5.2 is known; DeepSeek V4.1 Flash takes Low, High and Max. Each model's `reasoning_effort` values were checked against the API: GLM 5.3 low, high, max; Large 4 low, medium, high; Medium 3.5 and Small 4 none or high.
