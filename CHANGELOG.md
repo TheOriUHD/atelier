@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-07
+
 - **Co-op: work in one session together.** Click **Co-op** in a session's header and send the invite link. The people you let in work in the same conversation and the same folder: up to four in all, each writing their own messages and watching every reply as it's written. There is no account. The host lets each person in after comparing four emoji with them; someone let in before comes back without asking. Between two computers, the apps meet through an end-to-end encrypted relay at `coop.atelierhq.dev`, which can't read what passes and keeps nothing. On a team server, the host adds teammates instead, and nothing leaves the server.
   - **Whose models answer you** is each person's choice: the host's, while the host shares them, with a daily limit per guest in requests and dollars; or their own providers and plans, which run on their own computer with their own keys.
   - **Turns:** a message sent during someone else's turn waits as yours, or joins that turn if you choose. Stop keeps others' waiting messages. Retry and edits run as whoever clicked.
