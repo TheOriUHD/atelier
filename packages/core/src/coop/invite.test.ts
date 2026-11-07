@@ -24,6 +24,11 @@ describe('co-op invites', () => {
     }
   });
 
+  it('reads an invite with the join card’s description after the secret', () => {
+    const meta = Buffer.from(JSON.stringify({ hostName: 'Ada', title: 'Shader', mode: 'code' })).toString('base64url');
+    expect(parseInvite(`https://atelierhq.dev/join#v1.${roomId}.${secret}.${meta}`)).toMatchObject({ roomId, secret });
+  });
+
   it('refuses links that are not invites', () => {
     const fragment = `v1.${roomId}.${secret}`;
     for (const text of [
@@ -34,7 +39,8 @@ describe('co-op invites', () => {
       `http://atelierhq.dev/join#${fragment}`,
       `v2.${roomId}.${secret}`,
       `v1.${roomId}`,
-      `v1.${roomId}.${secret}.extra`,
+      `v1.${roomId}.${secret}.meta.extra`,
+      `v1.${roomId}.${secret}.not+meta`,
       `v1.short.${secret}`,
       `v1.${roomId}.${secret.slice(1)}`,
       // The same bytes in another spelling (base64url's unused bits set).

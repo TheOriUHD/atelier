@@ -511,6 +511,10 @@ export const RunEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('presence'), participants: z.array(z.lazy(() => Participant)) }),
   /** Co-op: a participant is typing in the message box (sent at most every 2 s while they type; it lapses after 5 s). */
   z.object({ type: z.literal('typing'), participantId: z.string() }),
+  /** Co-op, on a guest's computer: the host's computer went away (asleep, offline) or came back. */
+  z.object({ type: z.literal('host_away'), away: z.boolean() }),
+  /** Co-op, on a guest's computer: the link to the host came back after a gap; the window loads the session again. */
+  z.object({ type: z.literal('resync') }),
 ]);
 export type RunEvent = z.infer<typeof RunEvent>;
 

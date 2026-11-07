@@ -57,6 +57,24 @@ export class BlobAccess {
   }
 
   /**
+   * Whether a session (with its sub-agents and side chats) refers to a blob: what a co-op guest on another computer may
+   * fetch of it (coop/host.ts), and attach to their messages there.
+   */
+  inSession(sessionId: string, sha256: string): boolean {
+    if (!SHA.test(sha256)) return false;
+    const db = this.db.$client;
+    const values: Record<string, string> = { s: sessionId, sha: sha256, quoted: `"blob":"${sha256}"` };
+    const has = (sql: string) => db.prepare(sql).get(Object.fromEntries(Object.entries(values).filter(([k]) => sql.includes(`@${k}`)))) !== undefined;
+    const ours = `(SELECT @s UNION SELECT id FROM sessions WHERE parent_session_id = @s)`;
+    return (
+      has(`SELECT 1 FROM users WHERE avatar_blob = @sha LIMIT 1`) ||
+      has(`SELECT 1 FROM files WHERE blob = @sha AND session_id IN ${ours} LIMIT 1`) ||
+      has(`SELECT 1 FROM generated_images WHERE blob = @sha AND session_id IN ${ours} LIMIT 1`) ||
+      has(`SELECT 1 FROM messages WHERE session_id IN ${ours} AND instr(parts, @quoted) > 0 LIMIT 1`)
+    );
+  }
+
+  /**
    * Cheapest checks first; the messages (every part of every message of the account's sessions) last. The account's
    * sessions are its own, and the co-op sessions it takes part in (coop/participants.ts) with their sub-agents.
    */

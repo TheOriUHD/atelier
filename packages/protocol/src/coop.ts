@@ -103,6 +103,23 @@ export function parsePeerModelRef(ref: string): { keyId: string; ref: string } |
   return { keyId: ref.slice(PEER_MODEL_PREFIX.length, slash), ref: ref.slice(slash + 1) };
 }
 
+/**
+ * A connector tool a guest lends to their own turns, as the host's session names it: `coop_<8 chars of their key id>__
+ * <their tool>`. Every call asks that guest (packages/core/src/agent/chat-service.ts decideAccess).
+ */
+export const LENT_TOOL_PREFIX = 'coop_';
+export const lentToolName = (keyId: string, tool: string): string => `${LENT_TOOL_PREFIX}${keyId.slice(0, 8)}__${tool}`;
+export function parseLentToolName(name: string): { key: string; tool: string } | null {
+  const m = /^coop_([A-Za-z0-9_-]{8})__(.+)$/.exec(name);
+  return m ? { key: m[1]!, tool: m[2]! } : null;
+}
+/** Whether a lent tool's name belongs to the guest `participantId` (`peer:<keyId>`). */
+export function lentToolOf(name: string, participantId: string): string | null {
+  const parsed = parseLentToolName(name);
+  const keyId = participantId.startsWith('peer:') ? participantId.slice(5) : null;
+  return parsed && keyId && keyId.slice(0, 8) === parsed.key ? parsed.tool : null;
+}
+
 /** A co-op session mirrored on a guest's own backend has this id prefix (`coop_<roomId>_<host session id>`). */
 export const COOP_MIRROR_PREFIX = 'coop_';
 export const isCoopMirror = (sessionId: string): boolean => sessionId.startsWith(COOP_MIRROR_PREFIX);
@@ -134,7 +151,8 @@ export function inviteFragment(invite: string): string {
 /** The parts of an invite's fragment; null when it isn't one. */
 export function parseInviteFragment(invite: string): { roomId: string; secret: string; meta: InviteMeta | null } | null {
   const [version, roomId, secret, meta] = inviteFragment(invite).split('.');
-  if (version !== 'v1' || !roomId || !secret || !/^[A-Za-z0-9_-]+$/.test(roomId) || !/^[A-Za-z0-9_-]+$/.test(secret)) return null;
+  // A room id is 16 random bytes and a secret 32, base64url (packages/core/src/coop/invite.ts).
+  if (version !== 'v1' || !roomId || !secret || !/^[A-Za-z0-9_-]{22}$/.test(roomId) || !/^[A-Za-z0-9_-]{43}$/.test(secret)) return null;
   let parsed: InviteMeta | null = null;
   if (meta) {
     try {

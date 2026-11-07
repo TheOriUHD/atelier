@@ -26,7 +26,7 @@ export interface CoopHandlerDeps<C> {
     close(sessionId: string): Promise<void>;
   };
   /** A guest's desktop joining a session on another computer (gateway.ts). */
-  join?(invite: string, models: ModelsChoice): Promise<{ sessionId: string; waiting: boolean }>;
+  join?(userId: string, invite: string, models: ModelsChoice): Promise<{ sessionId: string; waiting: boolean }>;
   /** A guest's desktop leaving a mirrored session (gateway.ts). */
   leaveMirror?(sessionId: string): Promise<boolean>;
   error(code: string, message: string): Error;
@@ -46,7 +46,6 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
 
   return {
     'coop.state': async ({ sessionId }: { sessionId: string }, ctx: C) => {
-      if (d.leaveMirror && sessionId.startsWith('coop_')) return null;
       const as = await d.access(ctx, sessionId, 'coop.state');
       return d.coop.state(sessionId, as);
     },
@@ -126,6 +125,13 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
       return { ok: true as const };
     },
 
+    // A guest on this server lends their own connectors through their account already (chat-service.ts toolsFor);
+    // across computers the guest's gateway answers this for its mirror (gateway.ts).
+    'coop.lend': async ({ sessionId }: { sessionId: string; lend: boolean }, ctx: C) => {
+      await d.access(ctx, sessionId, 'coop.lend');
+      return { ok: true as const };
+    },
+
     'coop.leave': async ({ sessionId }: { sessionId: string }, ctx: C) => {
       if (d.leaveMirror && (await d.leaveMirror(sessionId))) return { ok: true as const };
       const as = await d.access(ctx, sessionId, 'coop.leave');
@@ -137,15 +143,16 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
 
     'coop.end': async ({ sessionId }: { sessionId: string }, ctx: C) => {
       await host(ctx, sessionId, 'coop.end');
+      // Guests across computers are told first, while they may still fetch the copy the host lets them keep.
+      await d.relay?.close(sessionId);
       const gone = await d.coop.end(sessionId);
       for (const p of gone) await d.forgetParticipant(sessionId, { id: p.id, userId: p.userId });
-      await d.relay?.close(sessionId);
       return { ok: true as const };
     },
 
-    'coop.join': async ({ invite, models }: { invite: string; models: ModelsChoice }, _ctx: C) => {
+    'coop.join': async ({ invite, models }: { invite: string; models: ModelsChoice }, ctx: C) => {
       if (!d.join) throw d.error('unsupported', 'Joining a session on another computer needs the desktop app, running on this computer.');
-      return d.join(invite, models);
+      return d.join(d.userId(ctx), invite, models);
     },
   };
 }

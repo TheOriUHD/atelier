@@ -9,6 +9,8 @@ import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import {
   accountParticipant,
   CoopSettings,
+  parsePeerModelRef,
+  peerParticipant,
   DEFAULT_COOP_SETTINGS,
   type CoopState,
   type ModelsChoice,
@@ -220,6 +222,9 @@ export class CoopService {
   /** A participant's choice of whose models answer them, and which. The host's only while the host shares them. */
   async setModels(sessionId: string, participantId: string, models: ModelsChoice, model: string | null): Promise<void> {
     if (models === 'host' && !(await this.settings(sessionId)).shareModels) throw new Error('The host doesn’t share their models in this session.');
+    // A guest's own model on their computer is theirs alone: nobody else picks it, nor they as one of the host's.
+    const peer = model ? parsePeerModelRef(model) : null;
+    if (peer && (models !== 'own' || participantId !== peerParticipant(peer.keyId))) throw new Error('That model isn’t yours to choose.');
     await this.participants.update(sessionId, participantId, { models, model });
     await this.presence(sessionId);
   }

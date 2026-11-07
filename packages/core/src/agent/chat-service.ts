@@ -55,7 +55,7 @@ import {
   type Usage,
   type UserPrefs,
 } from '@atelier/protocol';
-import { imageId, LIMIT_REACHED, type ImageProgress } from '@atelier/protocol';
+import { imageId, LIMIT_REACHED, lentToolOf, parseLentToolName, type ImageProgress } from '@atelier/protocol';
 import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
@@ -207,6 +207,8 @@ export interface CoopPort {
   /** Why a guest can't use the host's shared models for another request now, or null. */
   sharedCapReached(sessionId: string, participantId: string): Promise<string | null>;
   list(sessionId: string): Promise<Participant[]>;
+  /** The connectors a guest from another computer lends to their own turns (coop/lent-tools.ts); each call asks them. */
+  lentTools?(sessionId: string, participant: TurnParticipant): Promise<Tool[]>;
 }
 
 export interface ChatServiceDeps {
@@ -1673,6 +1675,17 @@ export class ChatService {
     signal: AbortSignal,
     seen: { ctx?: PermissionContext },
   ): Promise<{ allow: true; input?: unknown } | { allow: false; message: string }> {
+    // Co-op: a guest's own connector, lent to their turns, asks them about every call, whatever the mode or rules here
+    // (their computer runs only the calls they allowed: coop/gateway.ts). Nobody else's turn uses it.
+    if (parseLentToolName(call.name)) {
+      const asker = askerOf(session);
+      const actor = this.actors.get(session.id) ?? this.actors.get(asker);
+      const owner = actor?.participant && lentToolOf(call.name, actor.participant.id) ? actor.participant : null;
+      if (!owner) return { allow: false, message: 'Only its owner’s turns can use a guest’s connector.' };
+      const request: PermissionRequest = { callId: call.id, toolName: call.name, input: call.input, reason: `${owner.name}’s own connector: they approve each call.`, suggestedRule: '' };
+      const answer = await this.interactions.ask<PermissionAnswer>(asker, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }, { approver: owner.id, timeoutMs: COOP_QUESTION_TIMEOUT_MS });
+      return answer.behavior === 'allow' ? { allow: true } : { allow: false, message: answer.message ? `They declined and said: ${answer.message}` : 'They declined this connector call. Do not retry it unchanged.' };
+    }
     // The current row: the mode can change mid-run (plan approval, the mode picker).
     const current = await this.requireSession(session.id);
     // A side chat follows its main session's mode and rules, and asks in its own pane.
@@ -2221,7 +2234,8 @@ export class ChatService {
     const actor = this.actors.get(session.id);
     const shared = actor?.shared ?? (await this.deps.coop?.isShared(session.id)) ?? false;
     const connectorUser = !shared ? session.userId : actor?.participant?.role === 'host' ? session.userId : actor?.participant?.models === 'own' && actor.participant.kind === 'account' ? actor.participant.userId : null;
-    const mcp = (await this.deps.mcpTools?.(session, connectorUser)) ?? [];
+    const lent = shared && actor?.participant?.kind === 'peer' ? ((await this.deps.coop?.lentTools?.(session.id, actor.participant).catch(() => [])) ?? []) : [];
+    const mcp = [...((await this.deps.mcpTools?.(session, connectorUser)) ?? []), ...lent];
     // Adding a connector asks the person, which a sub-agent can't.
     const connect = this.deps.addConnector && !session.parentSessionId && !shared ? [this.addConnector] : [];
     // Computer use: top-level Code and Cowork sessions only (a sub-agent can't ask for apps, and several would fight over one mouse).

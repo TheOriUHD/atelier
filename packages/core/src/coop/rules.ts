@@ -55,6 +55,7 @@ export const COOP_RULES = {
   'coop.models': 'viewer',
   'coop.leave': 'viewer',
   'coop.typing': 'editor',
+  'coop.lend': 'editor',
   'coop.start': 'owner',
   'coop.invite': 'owner',
   'coop.add': 'owner',

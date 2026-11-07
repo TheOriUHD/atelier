@@ -3,8 +3,8 @@
  * the URL fragment (browsers don't send it anywhere, and the relay never sees it). Both sides derive the Noise
  * pre-shared key from the secret, so only people with the link complete a handshake with the host.
  *
- *   https://atelierhq.dev/join#v1.<roomId>.<secret>
- *   atelier://join#v1.<roomId>.<secret>
+ *   https://atelierhq.dev/join#v1.<roomId>.<secret>[.<meta>]
+ *   atelier://join#v1.<roomId>.<secret>[.<meta>]
  *
  * The host lets each joiner in after comparing three emoji with them (`fingerprint`, from the handshake hash both
  * sides share). After that both pin each other's device keys, and later joins need no comparing.
@@ -57,8 +57,10 @@ export function parseInvite(text: string): Invite | null {
     if (!/^https:\/\/(www\.)?atelierhq\.dev\/join$/i.test(base) && base.toLowerCase() !== INVITE_APP_URL) return null;
     fragment = value.slice(hash + 1);
   } else if (hash === 0) fragment = value.slice(1);
-  const [version, roomId, secret, ...rest] = fragment.split('.');
-  if (version !== INVITE_VERSION || rest.length || !roomId || !secret || !isRoomId(roomId) || !isSecret(secret)) return null;
+  // A fourth part may follow: what the join card shows (the host's name, the title), read by `parseInviteFragment` in
+  // packages/protocol/src/coop.ts. It carries nothing the channel needs.
+  const [version, roomId, secret, meta, ...rest] = fragment.split('.');
+  if (version !== INVITE_VERSION || rest.length || (meta !== undefined && !/^[A-Za-z0-9_-]*$/.test(meta)) || !roomId || !secret || !isRoomId(roomId) || !isSecret(secret)) return null;
   return makeInvite(roomId, secret);
 }
 

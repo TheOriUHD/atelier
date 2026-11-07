@@ -56,6 +56,8 @@ const backend = await createBackend({
   ...(hasRunner ? { runnerDir } : {}),
   // Main keeps the folders "Show in Finder" and "Open in" may open: the backend's own, however they were added.
   folderTrusted: (root) => send({ kind: 'trusted', root }),
+  // Guests work on this computer while a co-op room is open: main keeps it awake (keep-awake.ts).
+  coopAwake: (sessionIds) => send({ kind: 'coop-awake', sessionIds }),
   computer: {
     available: async () => (await askComputer('', 'available', {})) === true,
     call: async (sessionId, method, params) => (await askComputer(sessionId, method, params)) as never,

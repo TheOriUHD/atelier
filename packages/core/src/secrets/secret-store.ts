@@ -80,7 +80,8 @@ export class SecretStore {
 
   async list(usedBy: (id: string) => string[]): Promise<SecretSummary[]> {
     const rows = await this.db.select().from(secrets).all();
-    return rows.map((r) => ({
+    // Co-op's room tokens, invite secrets and device key are kept here encrypted, but they are no one's to manage.
+    return rows.filter((r) => !r.id.startsWith('coop-')).map((r) => ({
       id: r.id,
       label: r.label,
       kind: r.kind,

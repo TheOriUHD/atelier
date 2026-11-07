@@ -476,6 +476,8 @@ export const contract = {
     'coop.remove': { input: z.object({ sessionId: z.string(), participantId: z.string() }), output: Ok },
     'coop.models': { input: z.object({ sessionId: z.string(), models: ModelsChoice, model: z.string().nullable() }), output: CoopState },
     'coop.typing': { input: z.object({ sessionId: z.string() }), output: Ok },
+    /** A guest lends their own connectors to their turns (each call still asks them), or stops. */
+    'coop.lend': { input: z.object({ sessionId: z.string(), lend: z.boolean() }), output: Ok },
     'coop.leave': { input: z.object({ sessionId: z.string() }), output: Ok },
     'coop.end': { input: z.object({ sessionId: z.string() }), output: Ok },
     'coop.join': {
