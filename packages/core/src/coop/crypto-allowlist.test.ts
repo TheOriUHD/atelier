@@ -13,7 +13,7 @@ import { fingerprint, makeInvite, pskFromSecret } from './invite.ts';
 import { hashToken, newRoomId } from './relay-protocol.ts';
 
 const ALLOWED = {
-  imports: ['createCipheriv', 'createDecipheriv', 'createHash', 'createHmac', 'createPrivateKey', 'createPublicKey', 'diffieHellman', 'generateKeyPairSync', 'hkdfSync', 'randomBytes', 'KeyObject'],
+  imports: ['createCipheriv', 'createDecipheriv', 'createHash', 'createHmac', 'createPrivateKey', 'createPublicKey', 'diffieHellman', 'generateKeyPairSync', 'hkdfSync', 'randomBytes', 'randomUUID', 'KeyObject'],
   ciphers: ['aes-256-gcm'],
   hashes: ['sha256'],
   keyTypes: ['x25519'],
