@@ -333,6 +333,8 @@ export const OutboxMessage = z.object({
   author: z.string().optional(),
   /** Co-op: it joins the turn that is running (someone else's) instead of waiting for a turn of its own. */
   joinTurn: z.boolean().optional(),
+  /** Co-op: the model it asked to answer it (an @mention), a ref. */
+  answerWith: z.string().optional(),
 });
 export type OutboxMessage = z.infer<typeof OutboxMessage>;
 
@@ -451,6 +453,8 @@ export const SessionSnapshot = z.object({
   limitWarning: LimitWarning.nullable().optional(),
   /** Messages sent while the agent worked that it hasn't taken yet, oldest first. */
   outbox: z.array(OutboxMessage),
+  /** Co-op: the emoji people put on messages, by message id. */
+  reactions: z.record(z.string(), z.array(z.object({ emoji: z.string(), participants: z.array(z.string()) }))).optional(),
   /** When the run going on began (the `status` event's `runStartedAt`), null while none runs. */
   runStartedAt: z.number().nullable().optional(),
   seq: z.number().int().nonnegative(),
@@ -515,6 +519,8 @@ export const RunEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('host_away'), away: z.boolean() }),
   /** Co-op, on a guest's computer: the link to the host came back after a gap; the window loads the session again. */
   z.object({ type: z.literal('resync') }),
+  /** Co-op: someone put an emoji on a message (`on`), or took it off. */
+  z.object({ type: z.literal('reaction'), messageId: z.string(), participantId: z.string(), emoji: z.string(), on: z.boolean() }),
 ]);
 export type RunEvent = z.infer<typeof RunEvent>;
 

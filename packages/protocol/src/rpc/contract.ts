@@ -417,7 +417,7 @@ export const contract = {
     'sessions.leave': { input: Id, output: z.object({ deleted: z.boolean() }) },
 
     'chat.send': {
-      input: z.object({ sessionId: z.string(), parentId: z.string().nullable().optional(), parts: z.array(Part).min(1) }),
+      input: z.object({ sessionId: z.string(), parentId: z.string().nullable().optional(), parts: z.array(Part).min(1), answerWith: z.string().max(300).optional() }),
       output: z.object({ userMessageId: z.string() }),
     },
     'chat.stop': { input: z.object({ sessionId: z.string() }), output: Ok },
@@ -425,7 +425,11 @@ export const contract = {
      * Sends a message while the agent works: it is shown as waiting, joins the conversation at the agent's next step,
      * and can be taken back (`chat.unqueue`) or sent at once (`chat.sendNow`). When no run is going it is a plain send.
      */
-    'chat.queue': { input: z.object({ sessionId: z.string(), parts: z.array(Part).min(1), joinTurn: z.boolean().optional() }), output: z.object({ id: z.string(), queued: z.boolean() }) },
+    'chat.queue': { input: z.object({ sessionId: z.string(), parts: z.array(Part).min(1), joinTurn: z.boolean().optional(), answerWith: z.string().max(300).optional() }), output: z.object({ id: z.string(), queued: z.boolean() }) },
+    /** Co-op: the same question answered again by another model the caller may use, as a sibling of `messageId` (an assistant reply). */
+    'chat.secondOpinion': { input: z.object({ sessionId: z.string(), messageId: z.string(), model: z.string().min(1).max(300) }), output: Ok },
+    /** Co-op: puts an emoji on a message, or takes it off. */
+    'chat.react': { input: z.object({ sessionId: z.string(), messageId: z.string(), emoji: z.string().min(1).max(16), on: z.boolean() }), output: Ok },
     /** Takes a waiting message back; its parts, or none when the agent already took it. */
     'chat.unqueue': { input: z.object({ sessionId: z.string(), id: z.string() }), output: z.object({ parts: z.array(Part) }) },
     /** Interrupts the agent's current step and sends this waiting message now; the agent carries on from there. */
@@ -476,6 +480,8 @@ export const contract = {
     'coop.remove': { input: z.object({ sessionId: z.string(), participantId: z.string() }), output: Ok },
     'coop.models': { input: z.object({ sessionId: z.string(), models: ModelsChoice, model: z.string().nullable() }), output: CoopState },
     'coop.typing': { input: z.object({ sessionId: z.string() }), output: Ok },
+    /** A participant's model looks over the agent's edits (navigator), or stops; one at a time. */
+    'coop.navigate': { input: z.object({ sessionId: z.string(), on: z.boolean() }), output: CoopState },
     /** A guest lends their own connectors to their turns (each call still asks them), or stops. */
     'coop.lend': { input: z.object({ sessionId: z.string(), lend: z.boolean() }), output: Ok },
     'coop.leave': { input: z.object({ sessionId: z.string() }), output: Ok },

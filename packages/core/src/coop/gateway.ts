@@ -18,6 +18,7 @@ import {
   createRpcClient,
   isCoopMirror,
   lentToolOf,
+  parseAnswerWith,
   parseInviteFragment,
   PeerContract,
   serveRpc,
@@ -116,6 +117,8 @@ interface Link {
   /** Their own model for their turns (a ref on this computer), when they answer with their own. */
   models: ModelsChoice;
   model: string | null;
+  /** Other models of their own they asked for by name (an @mention, a second opinion): the host may run those too. */
+  secondary: Set<string>;
   /** They lend their connectors to their own turns. */
   lend: boolean;
   /** Connector calls they allowed in the session, each good for one call. */
@@ -208,7 +211,7 @@ export class CoopGateway {
   }
 
   private blank(membership: Membership, models: ModelsChoice, model: string | null): Link {
-    return { membership, channel: null, client: null, welcome: null, admitted: false, connected: false, watched: false, state: null, snapshot: null, models, model, lend: false, allowed: new Map(), asked: new Map(), streams: new Map(), ended: false };
+    return { membership, channel: null, client: null, welcome: null, admitted: false, connected: false, watched: false, state: null, snapshot: null, models, model, secondary: new Set(), lend: false, allowed: new Map(), asked: new Map(), streams: new Map(), ended: false };
   }
 
   /** The channel to the host, its two directions, and what the host tells. */
@@ -449,9 +452,23 @@ export class CoopGateway {
         await this.leave(userId, id);
         return { ok: true };
       case 'chat.send':
-        return this.live(userId, id).call('chat.send', { parentId: (input.parentId as string | null | undefined) ?? null, parts: input.parts as never });
+        this.askedFor(link, input.answerWith);
+        return this.live(userId, id).call('chat.send', { parentId: (input.parentId as string | null | undefined) ?? null, parts: input.parts as never, ...(typeof input.answerWith === 'string' ? { answerWith: input.answerWith } : {}) });
       case 'chat.queue':
-        return this.live(userId, id).call('chat.queue', { parts: input.parts as never, ...(input.joinTurn ? { joinTurn: true } : {}) });
+        this.askedFor(link, input.answerWith);
+        return this.live(userId, id).call('chat.queue', { parts: input.parts as never, ...(input.joinTurn ? { joinTurn: true } : {}), ...(typeof input.answerWith === 'string' ? { answerWith: input.answerWith } : {}) });
+      case 'chat.secondOpinion': {
+        // Their own model answers on their computer: it must be the one the host may call for them.
+        this.askedFor(link, input.model);
+        return this.live(userId, id).call('chat.secondOpinion', { messageId: String(input.messageId), model: String(input.model) });
+      }
+      case 'chat.react':
+        return this.live(userId, id).call('chat.react', { messageId: String(input.messageId), emoji: String(input.emoji), on: !!input.on });
+      case 'coop.navigate': {
+        const state = await this.live(userId, id).call('coop.navigate', { on: !!input.on });
+        link.state = state;
+        return state;
+      }
       case 'chat.unqueue':
         return this.live(userId, id).call('chat.unqueue', { id: String(input.id) });
       case 'chat.sendNow':
@@ -491,6 +508,12 @@ export class CoopGateway {
     }
   }
 
+  /** A model of their own they named for an answer: the host may run it for them from now on. */
+  private askedFor(link: Link, value: unknown): void {
+    const chosen = typeof value === 'string' ? parseAnswerWith(value) : null;
+    if (chosen?.source === 'own') link.secondary.add(chosen.ref);
+  }
+
   /** What a window shows while the host is away or it ended: the last snapshot, or an empty one. */
   private offlineSnapshot(link: Link): SessionSnapshot {
     const base = link.snapshot;
@@ -519,7 +542,7 @@ export class CoopGateway {
     const { userId } = link.membership;
     const chosen = (ref: string) => {
       if (link.ended || !link.admitted) throw appError('forbidden', 'Not in that session.');
-      if (link.models !== 'own' || !link.model || ref !== link.model) throw appError('forbidden', 'That isn’t the model they answer with.');
+      if (!(link.models === 'own' && link.model && ref === link.model) && !link.secondary.has(ref)) throw appError('forbidden', 'That isn’t a model they answer with.');
     };
     return {
       'model.describe': async ({ ref }) => {

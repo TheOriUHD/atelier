@@ -257,6 +257,9 @@ interface Connection {
   origin: string | undefined;
 }
 
+/** What co-op refuses a person, said to them as it is (agent/coop-turns.ts answerWithProblem, chat-service.ts). */
+const COOP_REFUSALS = /^(That isn’t a model|That model is a guest|The host doesn’t share|The host hasn’t agreed|Asking for a model by name|That emoji isn’t|Ask for a second opinion)/;
+
 /** Said when a shared connector at a loopback address can't be reached: on a server that address is the server itself. */
 const LOOPBACK_ON_SERVER =
   'That address is the Atelier server itself. A connector on your own computer goes under Customize › Connectors › Your connectors, added in the desktop app on that computer.';
@@ -1069,6 +1072,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       participant: (sessionId, participantId) => coop.participant(sessionId, participantId),
       sharedCapReached: (sessionId, participantId) => coop.sharedCapReached(sessionId, participantId),
       list: (id) => coop.list(id),
+      settings: (id) => coop.settings(id),
       lentTools: async (sessionId, participant) => {
         const keyId = participant.kind === 'peer' ? participant.id.slice('peer:'.length) : null;
         const peer = keyId ? coopHost?.peerOf(keyId) : null;
@@ -1542,8 +1546,15 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return await action();
     } catch (e) {
       if (e instanceof Error && /^Only (its author|your own)/.test(e.message)) throw appError('forbidden', e.message);
+      // A model a person may not have answer them, a reaction that isn't one: said as it is.
+      if (e instanceof Error && COOP_REFUSALS.test(e.message)) throw appError('invalid_request', e.message);
       throw e;
     }
+  };
+  /** A co-op call by someone in a session nobody shares is refused plainly. */
+  const shared = (as: ParticipantInfo | null): ParticipantInfo => {
+    if (!as) throw appError('invalid_request', 'That is for co-op sessions.');
+    return as;
   };
   /**
    * A session for a procedure co-op participants may also call (coop/rules.ts): its owner as always, or a participant
@@ -2356,20 +2367,30 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { deleted: true };
     },
 
-    'chat.send': async ({ sessionId, parentId, parts }, ctx) => {
+    'chat.send': async ({ sessionId, parentId, parts, answerWith }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.send');
       await ownBlobsOnly(parts, ctx);
-      return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as)) };
+      return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, answerWith ? { answerWith } : {})) };
+    },
+    'chat.secondOpinion': async ({ sessionId, messageId, model }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'chat.secondOpinion');
+      await coopAction(() => chat.secondOpinion(sessionId, messageId, model, shared(as)));
+      return { ok: true as const };
+    },
+    'chat.react': async ({ sessionId, messageId, emoji, on }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'chat.react');
+      await coopAction(() => chat.react(sessionId, messageId, emoji, on, shared(as)));
+      return { ok: true as const };
     },
     'chat.stop': async ({ sessionId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.stop');
       await chat.stop(sessionId, as);
       return { ok: true as const };
     },
-    'chat.queue': async ({ sessionId, parts, joinTurn }, ctx) => {
+    'chat.queue': async ({ sessionId, parts, joinTurn, answerWith }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.queue');
       await ownBlobsOnly(parts, ctx);
-      return coopAction(() => chat.queue(sessionId, parts, as, { ...(joinTurn ? { joinTurn } : {}) }));
+      return coopAction(() => chat.queue(sessionId, parts, as, { ...(joinTurn ? { joinTurn } : {}), ...(answerWith ? { answerWith } : {}) }));
     },
     'chat.unqueue': async ({ sessionId, id }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.unqueue');

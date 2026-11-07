@@ -269,6 +269,8 @@ export const messages = sqliteTable(
     summarizesThroughId: text('summarizes_through_id'),
     /** Co-op: the participant who wrote it, or for whom it answered (packages/protocol/src/coop.ts); null outside co-op. */
     author: text('author'),
+    /** Co-op: the model a person's message asked to answer it (an @mention), a model ref; null for the usual one. */
+    answerWith: text('answer_with'),
     /** Plain text for full-text search (kept in sync with messages_fts by triggers). */
     searchText: text('search_text').notNull().default(''),
     createdAt: integer('created_at').notNull(),
@@ -369,6 +371,23 @@ export const sessionLanes = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.lane] })],
+);
+
+/** Co-op: an emoji someone put on a message. */
+export const messageReactions = sqliteTable(
+  'message_reactions',
+  {
+    messageId: text('message_id')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    participantId: text('participant_id').notNull(),
+    emoji: text('emoji').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.messageId, t.participantId, t.emoji] }), index('message_reactions_session').on(t.sessionId)],
 );
 
 /**

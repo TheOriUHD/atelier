@@ -13,7 +13,10 @@ import {
   CoopContract,
   PeerContract,
   createRpcClient,
+  answerWithValue,
   makeInviteUrl,
+  parseAnswerWith,
+  peerModelRef,
   peerParticipant,
   serveRpc,
   appError,
@@ -63,7 +66,7 @@ export interface CoopHostDeps {
   sessionRow(id: string): Promise<SessionRow | null>;
   hostName(userId: string): Promise<string>;
   secrets: { get(id: string): Promise<string | null | undefined>; set(id: string, value: string): Promise<void>; delete(id: string): Promise<void> };
-  chat: Pick<ChatService, 'send' | 'queue' | 'unqueue' | 'sendNow' | 'stop' | 'retry' | 'continue' | 'edit' | 'respond' | 'mayRespond' | 'snapshot' | 'changePreview' | 'editPreview' | 'forgetParticipant'>;
+  chat: Pick<ChatService, 'send' | 'queue' | 'secondOpinion' | 'react' | 'unqueue' | 'sendNow' | 'stop' | 'retry' | 'continue' | 'edit' | 'respond' | 'mayRespond' | 'snapshot' | 'changePreview' | 'editPreview' | 'forgetParticipant'>;
   contextBreakdown(sessionId: string): Promise<{ context: ContextUsage | null; usage: SessionUsage }>;
   sessionDiff(sessionId: string, path?: string): Promise<{ diff: string; truncated: boolean; base: string | null }>;
   artifacts(sessionId: string): Promise<ArtifactSummary[]>;
@@ -285,8 +288,14 @@ export class CoopHost {
         return await action();
       } catch (e) {
         if (e instanceof Error && /^Only (its author|your own)/.test(e.message)) throw appError('forbidden', e.message);
+        if (e instanceof Error && /^(That isn’t a model|That model is a guest|The host doesn’t share|The host hasn’t agreed|That emoji isn’t|Ask for a second opinion|Message not found)/.test(e.message)) throw appError('invalid_request', e.message);
         throw e;
       }
+    };
+    // A model of their own is a ref on their computer: here it runs through them (peer-model.ts).
+    const theirs = (value: string | undefined): string | undefined => {
+      const chosen = parseAnswerWith(value);
+      return chosen?.source === 'own' ? answerWithValue({ source: 'own', ref: peerModelRef(keyId, chosen.ref) }) : value;
     };
 
     const handlers: Handlers<typeof CoopContract, object> = {
@@ -367,15 +376,37 @@ export class CoopHost {
         setTimeout(() => channel.close(), 500);
         return { ok: true as const };
       },
-      'chat.send': async ({ parentId, parts }) => {
+      'chat.send': async ({ parentId, parts, answerWith }) => {
         const p = await editor();
         await ownBlobs(parts);
-        return { userMessageId: await refusals(() => this.deps.chat.send(sessionId, parts, parentId, p)) };
+        const asked = theirs(answerWith);
+        return { userMessageId: await refusals(() => this.deps.chat.send(sessionId, parts, parentId, p, asked ? { answerWith: asked } : {})) };
       },
-      'chat.queue': async ({ parts, joinTurn }) => {
+      'chat.queue': async ({ parts, joinTurn, answerWith }) => {
         const p = await editor();
         await ownBlobs(parts);
-        return refusals(() => this.deps.chat.queue(sessionId, parts, p, { ...(joinTurn ? { joinTurn } : {}) }));
+        const asked = theirs(answerWith);
+        return refusals(() => this.deps.chat.queue(sessionId, parts, p, { ...(joinTurn ? { joinTurn } : {}), ...(asked ? { answerWith: asked } : {}) }));
+      },
+      'chat.secondOpinion': async ({ messageId, model }) => {
+        const p = await editor();
+        await refusals(() => this.deps.chat.secondOpinion(sessionId, messageId, theirs(model)!, p));
+        return { ok: true as const };
+      },
+      'chat.react': async ({ messageId, emoji, on }) => {
+        const p = await self();
+        if (guest?.farewell) throw appError('forbidden', 'Co-op ended for this session.');
+        await refusals(() => this.deps.chat.react(sessionId, messageId, emoji, on, p));
+        return { ok: true as const };
+      },
+      'coop.navigate': async ({ on }) => {
+        const p = await editor();
+        const settings = await this.deps.coop.settings(sessionId);
+        if (on && p.models === 'host' && !settings.shareModels) throw appError('invalid_request', 'The host doesn’t share their models: choose one of your own first.');
+        if (on && p.models === 'own' && !settings.allowGuestModels) throw appError('invalid_request', 'The host hasn’t agreed to send this session to guests’ own models.');
+        if (on) await this.deps.coop.updateSettings(sessionId, { navigator: p.id });
+        else if (settings.navigator === p.id) await this.deps.coop.updateSettings(sessionId, { navigator: null });
+        return (await this.deps.coop.state(sessionId, (await this.deps.coop.participant(sessionId, p.id))!))!;
       },
       'chat.unqueue': async ({ id }) => ({ parts: await refusals(async () => this.deps.chat.unqueue(sessionId, id, await editor())) }),
       'chat.sendNow': async ({ id }) => (await refusals(async () => this.deps.chat.sendNow(sessionId, id, await editor())), { ok: true as const }),

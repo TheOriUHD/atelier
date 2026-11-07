@@ -60,6 +60,11 @@ export const CoopSettings = z.object({
   guestsKeepCopy: z.boolean(),
   /** Guests' own models read what the session reads (files in the host's folder): the host agreed to it. */
   allowGuestModels: z.boolean(),
+  /**
+   * The participant whose model looks over each edit the agent makes and adds a short note when something seems off
+   * (navigator). They turn it on for themselves; the host can turn it off. Null: nobody.
+   */
+  navigator: z.string().nullable().default(null),
 });
 export type CoopSettings = z.infer<typeof CoopSettings>;
 
@@ -69,7 +74,22 @@ export const DEFAULT_COOP_SETTINGS: CoopSettings = {
   sharedSpendPerDayUsd: 2,
   guestsKeepCopy: true,
   allowGuestModels: true,
+  navigator: null,
 };
+
+/**
+ * A model a person picks for one answer (an @mention, a second opinion): one of the host's (`host:<ref>`, which the
+ * host pays within the guest's daily share) or one of their own (`own:<ref>`, which they pay or run on their computer).
+ */
+export type AnswerWith = { source: 'host' | 'own'; ref: string };
+export const answerWithValue = (a: AnswerWith): string => `${a.source}:${a.ref}`;
+export function parseAnswerWith(value: string | null | undefined): AnswerWith | null {
+  const m = value ? /^(host|own):(.+)$/.exec(value) : null;
+  return m ? { source: m[1] as 'host' | 'own', ref: m[2]! } : null;
+}
+
+/** Emoji people can put on messages in a co-op session. */
+export const REACTIONS = ['👍', '❤️', '😂', '🎉', '🤔', '👀', '🔥', '🚀'] as const;
 
 /** A co-op session as one participant sees it. */
 export const CoopState = z.object({

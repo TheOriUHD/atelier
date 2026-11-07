@@ -55,7 +55,7 @@ import {
   type Usage,
   type UserPrefs,
 } from '@atelier/protocol';
-import { imageId, LIMIT_REACHED, lentToolOf, parseLentToolName, type ImageProgress } from '@atelier/protocol';
+import { imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLentToolName, REACTIONS, type CoopSettings, type ImageProgress } from '@atelier/protocol';
 import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
@@ -124,7 +124,7 @@ import { newId } from '../util/ids.ts';
 import type { CodeContext } from '../workspaces/code-context.ts';
 import { isTrusted, type Workspace } from '../workspaces/workspace.ts';
 import { runTurn, type PreparedRequest } from './loop.ts';
-import { actorFor, COOP_QUESTION_TIMEOUT_MS, guestMode, guestParts, keptOnStop, mayHandle, nextTurn, senderTag, soloActor, takenByTurn, type TurnActor, type TurnParticipant } from './coop-turns.ts';
+import { actorFor, answerWithProblem, COOP_QUESTION_TIMEOUT_MS, guestMode, guestParts, keptOnStop, mayHandle, nextTurn, senderTag, soloActor, takenByTurn, type TurnActor, type TurnParticipant } from './coop-turns.ts';
 import { renderForSummary, renderState, summarize, type CarriedState } from './compaction.ts';
 import { afterCompaction, announcedState, todoNudge, turnNote, type GitSnapshot, type NoteState } from './context-notes.ts';
 import { isSideChat, mainTranscript, SIDE_CHAT_EFFORT, SIDE_CHAT_KEY, sideChatNote, sideChatTitle, sideChatTools, withSideChatNote } from './side-chat.ts';
@@ -166,6 +166,9 @@ export interface ModelResolver {
   /** Waits for a sub-agent's turn on the server of `ref`, telling `onWait` how many are ahead; returns the release. */
   agentTurn?(ref: string, signal: AbortSignal, onWait?: (ahead: number | null) => void, userId?: string | null): Promise<() => void>;
 }
+
+/** Co-op: the edits a navigator looks over. */
+const NAVIGATED_TOOLS = new Set(['Edit', 'Write']);
 
 /** A turn kept filling the window, however often it was summarized: it stops instead of going around again. */
 export class ContextLoopError extends Error {
@@ -209,6 +212,7 @@ export interface CoopPort {
   list(sessionId: string): Promise<Participant[]>;
   /** The connectors a guest from another computer lends to their own turns (coop/lent-tools.ts); each call asks them. */
   lentTools?(sessionId: string, participant: TurnParticipant): Promise<Tool[]>;
+  settings(sessionId: string): Promise<CoopSettings>;
 }
 
 export interface ChatServiceDeps {
@@ -733,6 +737,7 @@ export class ChatService {
       if (!row) throw new Error('Session not found');
       const { messages, siblings } = await this.deps.repo.branch(sessionId);
       const summary = (await this.deps.repo.get(sessionId))!;
+      const reactions = summary.coop || (await this.deps.coop?.isShared(sessionId)) ? await this.deps.repo.reactions(sessionId) : undefined;
       if ((this.versions.get(sessionId) ?? 0) !== version && attempt < 3) continue;
       // No awaits from here on: the live parts and seq below describe the same instant.
       const live = this.live.get(sessionId);
@@ -758,13 +763,15 @@ export class ChatService {
         outbox: [...(this.outboxes.get(sessionId) ?? [])],
         runStartedAt: this.runs.get(sessionId)?.startedAt ?? null,
         seq: this.seqs.get(sessionId) ?? 0,
+        ...(reactions ? { reactions } : {}),
       };
     }
   }
 
-  async send(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null): Promise<string> {
+  async send(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null, opts: { answerWith?: string } = {}): Promise<string> {
     const checked = this.checked(sessionId, withQuotes(by && by.role !== 'host' ? guestParts(rawParts) : rawParts));
     const parts = Array.isArray(checked) ? checked : await checked;
+    const answerWith = by && opts.answerWith ? await this.checkedAnswerWith(sessionId, opts.answerWith, by) : undefined;
     const id = newId();
     await this.start(sessionId, true, {
       before: async () => {
@@ -782,6 +789,7 @@ export class ChatService {
           kind: 'normal',
           summarizesThroughId: null,
           ...(by ? { author: by.id } : {}),
+          ...(answerWith ? { answerWith } : {}),
         });
         this.emit(sessionId, { type: 'message', message });
         // The person spoke: background sub-agents' ends may wake the session again.
@@ -806,6 +814,35 @@ export class ChatService {
     // In co-op, a person edits their own messages (the host may edit any).
     if (by && by.role !== 'host' && (original.author ?? null) !== by.id) throw new Error('Only your own messages can be edited');
     return this.send(sessionId, parts, original.parentId, by);
+  }
+
+  /**
+   * Co-op: the same question answered again by another model `by` may use, as a sibling of the reply `messageId`
+   * (‹ 1/2 ›). It is `by`'s request: their share of the host's models, or their own model.
+   */
+  async secondOpinion(sessionId: string, messageId: string, model: string, by: TurnParticipant): Promise<void> {
+    const target = await this.deps.repo.getMessage(messageId);
+    if (!target || target.sessionId !== sessionId || target.role !== 'assistant') throw new Error('Ask for a second opinion on a reply.');
+    const answerWith = await this.checkedAnswerWith(sessionId, model, by);
+    await this.retry(sessionId, messageId, { ...by, answerWith });
+  }
+
+  /** Co-op: `value` as a model `by` may have answer them, or an error saying why not. */
+  private async checkedAnswerWith(sessionId: string, value: string, by: TurnParticipant): Promise<string> {
+    const coop = this.deps.coop;
+    if (!coop || !(await coop.isShared(sessionId))) throw new Error('Asking for a model by name is for co-op sessions.');
+    const problem = answerWithProblem(value, by, await coop.settings(await coop.rootOf(sessionId)));
+    if (problem) throw new Error(problem);
+    return value;
+  }
+
+  /** Co-op: someone puts an emoji on a message, or takes it off. */
+  async react(sessionId: string, messageId: string, emoji: string, on: boolean, by: TurnParticipant): Promise<void> {
+    if (!(REACTIONS as readonly string[]).includes(emoji)) throw new Error('That emoji isn’t one of the reactions.');
+    const message = await this.deps.repo.getMessage(messageId);
+    if (!message || message.sessionId !== sessionId) throw new Error('Message not found');
+    await this.deps.repo.react(sessionId, messageId, by.id, emoji, on);
+    this.notify(sessionId, { type: 'reaction', messageId, participantId: by.id, emoji, on });
   }
 
   /** Retry = a new sibling reply to the same user turn. */
@@ -845,11 +882,13 @@ export class ChatService {
    * A message sent while the agent works. A running session keeps it waiting (shown to the person, who can take it
    * back or send it at once) and the agent takes it at its next step; an idle one simply sends it.
    */
-  async queue(sessionId: string, rawParts: Part[], by?: TurnParticipant | null, opts: { joinTurn?: boolean } = {}): Promise<{ id: string; queued: boolean }> {
+  async queue(sessionId: string, rawParts: Part[], by?: TurnParticipant | null, opts: { joinTurn?: boolean; answerWith?: string } = {}): Promise<{ id: string; queued: boolean }> {
     const checked = this.checked(sessionId, withQuotes(by && by.role !== 'host' ? guestParts(rawParts) : rawParts));
     const parts = Array.isArray(checked) ? checked : await checked;
-    if (!this.runs.has(sessionId)) return { id: await this.send(sessionId, parts, undefined, by), queued: false };
-    const item: OutboxMessage = { id: newId(), parts, ...(by ? { author: by.id } : {}), ...(by && opts.joinTurn ? { joinTurn: true } : {}) };
+    if (!this.runs.has(sessionId)) return { id: await this.send(sessionId, parts, undefined, by, opts.answerWith ? { answerWith: opts.answerWith } : {}), queued: false };
+    const answerWith = by && opts.answerWith ? await this.checkedAnswerWith(sessionId, opts.answerWith, by) : undefined;
+    // A message that asks for its own model opens a turn of its own: it doesn't join someone's running one.
+    const item: OutboxMessage = { id: newId(), parts, ...(by ? { author: by.id } : {}), ...(by && opts.joinTurn && !answerWith ? { joinTurn: true } : {}), ...(answerWith ? { answerWith } : {}) };
     this.setOutbox(sessionId, [...(this.outboxes.get(sessionId) ?? []), item]);
     return { id: item.id, queued: true };
   }
@@ -1002,6 +1041,7 @@ export class ChatService {
       kind: 'normal',
       summarizesThroughId: null,
       ...(item.author ? { author: item.author } : {}),
+      ...(item.answerWith ? { answerWith: item.answerWith } : {}),
     });
     this.emit(sessionId, { type: 'message', message });
   }
@@ -1545,15 +1585,24 @@ export class ChatService {
     const forced = this.forcedActors.get(session.id);
     this.forcedActors.delete(session.id);
     let id: string | null = forced?.id ?? (typeof session.overrides.coopActor === 'string' ? session.overrides.coopActor : null);
+    let answerWith = forced?.answerWith;
     if (!id) {
       const history = await this.deps.repo.history(session.id);
       const opened = [...history].reverse().find((m) => m.role === 'user' && m.kind === 'normal');
       id = opened?.author ?? hostId;
+      answerWith = opened?.answerWith;
     }
     const participant = id ? await coop.participant(root, id) : null;
     // Someone who left since (or a message without an author): the host's turn.
     const who = participant ?? (hostId ? await coop.participant(root, hostId) : null);
-    return who ? actorFor(hostUserId, who) : soloActor(session.userId);
+    if (!who) return soloActor(session.userId);
+    const settings = await coop.settings(root);
+    // A model asked for by name that they may no longer use (the host stopped sharing) answers as they usually would.
+    const asked = answerWith && participant && !answerWithProblem(answerWith, who, settings) ? { ...who, answerWith } : who;
+    const actor = actorFor(hostUserId, asked);
+    // A guest's own models read what the session reads: only where the host agreed to it.
+    const own = who.role !== 'host' && (parseAnswerWith(asked.answerWith)?.source ?? who.models) === 'own';
+    return own && !settings.allowGuestModels ? { ...actor, problem: `${who.name} answers with their own models, but the host hasn’t agreed to send this session to guests’ own models.` } : actor;
   }
 
   /**
@@ -1880,9 +1929,50 @@ export class ChatService {
       const post = await this.runHooks(session, hooks, 'PostToolUse', { tool_name: call.name, tool_input: call.input, tool_response: response }, signal, call.name);
       notes.push(...[post.block && `PostToolUse hook feedback: ${post.block}`, post.context].filter((n): n is string => !!n).map(escapeTags));
     }
+    const navigator = output.isError ? null : await this.navigatorNote(session, call, signal).catch(() => null);
+    if (navigator) notes.push(navigator);
     const updates = [output.isError ? null : await this.nestedInstructions(session, call), await this.todoNudge(session, call)].filter((n): n is string => !!n);
     if (updates.length) notes.push(`<context-update>\n${updates.join('\n\n')}\n</context-update>`);
     return notes.length ? { ...output, content: [...output.content, { type: 'text', text: notes.join('\n') }] } : output;
+  }
+
+  /**
+   * Co-op: when someone is the navigator, their model looks over each edit made in someone else's turn and answers OK or
+   * a short concern, which joins the edit's result (prompts/coop-navigator.md). Their model, their cost: their share of
+   * the host's models, or their own. Never in their own turns, and nothing when it fails or takes too long.
+   */
+  private async navigatorNote(session: SessionRow, call: ToolCallPart, signal: AbortSignal): Promise<string | null> {
+    if (!NAVIGATED_TOOLS.has(call.name)) return null;
+    const coop = this.deps.coop;
+    const actor = this.actors.get(session.id) ?? this.actors.get(askerOf(session));
+    if (!coop || !actor?.shared) return null;
+    const root = await coop.rootOf(session.id);
+    const settings = await coop.settings(root);
+    if (!settings.navigator || settings.navigator === actor.participant?.id) return null;
+    const navigator = await coop.participant(root, settings.navigator);
+    if (!navigator || navigator.role === 'viewer') return null;
+    if (navigator.role !== 'host' && navigator.models === 'own' && !settings.allowGuestModels) return null;
+    const rootRow = await this.deps.repo.getRow(root);
+    const reviewer = actorFor(rootRow?.userId ?? null, navigator);
+    if (reviewer.problem || (reviewer.forParticipant && (await coop.sharedCapReached(root, navigator.id)))) return null;
+    if (reviewer.payer && (await this.limitError(reviewer.payer))) return null;
+    const ref = reviewer.ref ?? rootRow?.model ?? session.model;
+    if (!ref) return null;
+    const model = await this.deps.models.resolve(ref, reviewer.modelUser);
+    const asked = [...(await this.deps.repo.history(askerOf(session)))].reverse().find((m) => m.role === 'user' && m.kind === 'normal');
+    const request = asked ? messageText(asked.parts).slice(0, 4000) : '';
+    const edit = JSON.stringify(call.input ?? {}).slice(0, 12_000);
+    const reply = await collectText(model, {
+      system: [{ text: template('coop-navigator', this.deps.promptOverrides()) }],
+      user: `<request>\n${escapeTags(request)}\n</request>\n<edit tool="${call.name}">\n${escapeTags(edit)}\n</edit>`,
+      maxOutputTokens: 300,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+      queue: { priority: 'background', timeoutMs: 30_000 },
+      onUsage: (usage) => this.deps.recordUsage({ model: model.info, sessionId: session.id, userId: reviewer.payer, mode: session.mode, usage, participant: reviewer.forParticipant }),
+    });
+    const text = reply.trim();
+    if (!text || /^ok\b[.!]?$/i.test(text) || /^ok\b/i.test(text.slice(0, 3))) return null;
+    return `<navigator name="${escapeTags(navigator.name)}">\n${escapeTags(text.slice(0, 1200))}\n</navigator>`;
   }
 
   /**

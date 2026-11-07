@@ -185,6 +185,8 @@ export const Message = z.object({
    * coop.ts). Absent outside co-op, and on the host's own messages from before co-op began.
    */
   author: z.string().optional(),
+  /** Co-op: the model a person's message asked to answer it (an @mention of a model), a ref; absent for the usual one. */
+  answerWith: z.string().optional(),
   createdAt: z.number(),
 });
 export type Message = z.infer<typeof Message>;

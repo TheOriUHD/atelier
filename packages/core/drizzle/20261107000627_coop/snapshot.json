@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "277d4348-29b8-4497-9e09-36ddec75841b",
+  "id": "cc51498b-e47a-4dc4-9679-0ffdb8420d92",
   "prevIds": [
     "b4c49b44-0d8c-4a18-8ef0-ae4d947036d8"
   ],
@@ -64,6 +64,10 @@
     },
     {
       "name": "memory_progress",
+      "entityType": "tables"
+    },
+    {
+      "name": "message_reactions",
       "entityType": "tables"
     },
     {
@@ -1536,6 +1540,56 @@
     },
     {
       "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "message_id",
+      "entityType": "columns",
+      "table": "message_reactions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "message_reactions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "participant_id",
+      "entityType": "columns",
+      "table": "message_reactions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "emoji",
+      "entityType": "columns",
+      "table": "message_reactions"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "message_reactions"
+    },
+    {
+      "type": "text",
       "notNull": false,
       "autoincrement": false,
       "default": null,
@@ -1651,6 +1705,16 @@
       "default": null,
       "generated": null,
       "name": "author",
+      "entityType": "columns",
+      "table": "messages"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "answer_with",
       "entityType": "columns",
       "table": "messages"
     },
@@ -3606,6 +3670,36 @@
     },
     {
       "columns": [
+        "message_id"
+      ],
+      "tableTo": "messages",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_message_reactions_message_id_messages_id_fk",
+      "entityType": "fks",
+      "table": "message_reactions"
+    },
+    {
+      "columns": [
+        "session_id"
+      ],
+      "tableTo": "sessions",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_message_reactions_session_id_sessions_id_fk",
+      "entityType": "fks",
+      "table": "message_reactions"
+    },
+    {
+      "columns": [
         "session_id"
       ],
       "tableTo": "sessions",
@@ -3888,6 +3982,17 @@
       "name": "image_model_cache_pk",
       "entityType": "pks",
       "table": "image_model_cache"
+    },
+    {
+      "columns": [
+        "message_id",
+        "participant_id",
+        "emoji"
+      ],
+      "nameExplicit": false,
+      "name": "message_reactions_pk",
+      "entityType": "pks",
+      "table": "message_reactions"
     },
     {
       "columns": [
@@ -4376,6 +4481,20 @@
       "name": "memory_entries_user",
       "entityType": "indexes",
       "table": "memory_entries"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "message_reactions_session",
+      "entityType": "indexes",
+      "table": "message_reactions"
     },
     {
       "columns": [

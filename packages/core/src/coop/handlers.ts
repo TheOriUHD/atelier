@@ -91,6 +91,8 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
 
     'coop.settings': async ({ sessionId, settings }: { sessionId: string; settings: Partial<CoopSettings> }, ctx: C) => {
       const as = await host(ctx, sessionId, 'coop.settings');
+      // The host can turn the navigator off; each person turns it on for themselves (their model, their cost).
+      if (settings.navigator) throw d.error('invalid_request', 'Each person turns the navigator on for themselves.');
       await d.coop.updateSettings(sessionId, settings);
       return state(sessionId, as);
     },
@@ -123,6 +125,16 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
       const as = await d.access(ctx, sessionId, 'coop.typing');
       d.coop.typing(sessionId, as.id);
       return { ok: true as const };
+    },
+
+    'coop.navigate': async ({ sessionId, on }: { sessionId: string; on: boolean }, ctx: C) => {
+      const as = await d.access(ctx, sessionId, 'coop.navigate');
+      const settings = await d.coop.settings(sessionId);
+      if (on && as.role !== 'host' && as.models === 'host' && !settings.shareModels) throw d.error('invalid_request', 'The host doesn’t share their models: choose one of your own first.');
+      if (on && as.role !== 'host' && as.models === 'own' && !settings.allowGuestModels) throw d.error('invalid_request', 'The host hasn’t agreed to send this session to guests’ own models.');
+      if (on) await d.coop.updateSettings(sessionId, { navigator: as.id });
+      else if (settings.navigator === as.id) await d.coop.updateSettings(sessionId, { navigator: null });
+      return state(sessionId, (await d.coop.participant(sessionId, as.id))!);
     },
 
     // A guest on this server lends their own connectors through their account already (chat-service.ts toolsFor);

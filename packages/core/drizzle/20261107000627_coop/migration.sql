@@ -28,6 +28,17 @@ CREATE TABLE `coop_rooms` (
 	CONSTRAINT `fk_coop_rooms_session_id_sessions_id_fk` FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON DELETE CASCADE
 );
 --> statement-breakpoint
+CREATE TABLE `message_reactions` (
+	`message_id` text NOT NULL,
+	`session_id` text NOT NULL,
+	`participant_id` text NOT NULL,
+	`emoji` text NOT NULL,
+	`created_at` integer NOT NULL,
+	CONSTRAINT `message_reactions_pk` PRIMARY KEY(`message_id`, `participant_id`, `emoji`),
+	CONSTRAINT `fk_message_reactions_message_id_messages_id_fk` FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON DELETE CASCADE,
+	CONSTRAINT `fk_message_reactions_session_id_sessions_id_fk` FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON DELETE CASCADE
+);
+--> statement-breakpoint
 CREATE TABLE `session_lanes` (
 	`session_id` text NOT NULL,
 	`lane` text NOT NULL,
@@ -62,5 +73,7 @@ CREATE TABLE `session_participants` (
 );
 --> statement-breakpoint
 ALTER TABLE `messages` ADD `author` text;--> statement-breakpoint
+ALTER TABLE `messages` ADD `answer_with` text;--> statement-breakpoint
 ALTER TABLE `usage_events` ADD `participant` text;--> statement-breakpoint
+CREATE INDEX `message_reactions_session` ON `message_reactions` (`session_id`);--> statement-breakpoint
 CREATE INDEX `session_participants_user` ON `session_participants` (`user_id`);

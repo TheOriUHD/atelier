@@ -6,7 +6,7 @@
  * model and the payer: the host's models are the host's to pay for (a guest's use counts against what the host shares),
  * a guest's own models are theirs. The folder, its tools and their approvals stay the host's either way.
  */
-import { parsePeerModelRef, type OutboxMessage, type Part, type ParticipantRole } from '@atelier/protocol';
+import { parseAnswerWith, parsePeerModelRef, peerParticipant, type CoopSettings, type OutboxMessage, type Part, type ParticipantRole } from '@atelier/protocol';
 
 /** A participant as a turn needs them (coop/service.ts `ParticipantInfo`). */
 export interface TurnParticipant {
@@ -18,6 +18,8 @@ export interface TurnParticipant {
   model: string | null;
   trusted: boolean;
   name: string;
+  /** For this one turn, the model they asked for (an @mention, a second opinion): `host:<ref>` or `own:<ref>`. */
+  answerWith?: string;
 }
 
 export interface TurnActor {
@@ -41,9 +43,13 @@ export interface TurnActor {
 export const soloActor = (userId: string | null): TurnActor => ({ shared: false, participant: null, payer: userId, modelUser: userId, ref: null, forParticipant: null, problem: null });
 
 /** The actor of a co-op turn for `participant` in a session owned by `hostUserId`. */
-export function actorFor(hostUserId: string | null, participant: TurnParticipant): TurnActor {
+export function actorFor(hostUserId: string | null, asked: TurnParticipant): TurnActor {
+  const { answerWith, ...participant } = asked;
+  const chosen = parseAnswerWith(answerWith);
   const base = { shared: true, participant, problem: null };
-  if (participant.role === 'host') return { ...base, payer: hostUserId, modelUser: hostUserId, ref: null, forParticipant: null };
+  if (participant.role === 'host') return { ...base, payer: hostUserId, modelUser: hostUserId, ref: chosen?.ref ?? null, forParticipant: null };
+  // A model asked for this one answer stands in for their usual choice, by the same rules.
+  if (chosen) return actorFor(hostUserId, { ...participant, models: chosen.source, model: chosen.ref });
   if (participant.models === 'host') return { ...base, payer: hostUserId, modelUser: hostUserId, ref: participant.model, forParticipant: participant.id };
   if (!participant.model) return { ...base, payer: null, modelUser: null, ref: null, forParticipant: null, problem: `${participant.name} answers with their own models but hasn’t chosen one yet.` };
   // A peer's own model runs on their computer (peer-<key>/<ref>): nothing is paid or limited here.
@@ -105,3 +111,18 @@ export const guestParts = (parts: readonly Part[]): Part[] => parts.filter((p) =
 
 /** The tag that opens each person's message in a shared session, added after their text is escaped (unforgeable). */
 export const senderTag = (name: string, host: boolean): string => `<sender name="${name.replaceAll('"', "'").replace(/[<>&]/g, '')}"${host ? ' role="host"' : ''}/>`;
+
+/**
+ * Why `by` can't have `value` answer them (an @mention, a second opinion), or null when they can: the host's models only
+ * while the host shares them, someone's own models only their own, and a guest's own only where the host agreed.
+ */
+export function answerWithProblem(value: string, by: TurnParticipant, settings: CoopSettings): string | null {
+  const chosen = parseAnswerWith(value);
+  if (!chosen) return 'That isn’t a model to answer with.';
+  if (by.role === 'host') return parsePeerModelRef(chosen.ref) ? 'That model is a guest’s own.' : null;
+  if (chosen.source === 'host') return !settings.shareModels ? 'The host doesn’t share their models in this session.' : parsePeerModelRef(chosen.ref) ? 'That model is a guest’s own.' : null;
+  if (!settings.allowGuestModels) return 'The host hasn’t agreed to send this session to guests’ own models.';
+  const peer = parsePeerModelRef(chosen.ref);
+  if (by.kind === 'peer') return peer && peerParticipant(peer.keyId) === by.id ? null : 'Only your own models answer as yours.';
+  return peer ? 'That model is a guest’s own.' : null;
+}

@@ -56,6 +56,10 @@ export const COOP_RULES = {
   'coop.leave': 'viewer',
   'coop.typing': 'editor',
   'coop.lend': 'editor',
+  'coop.navigate': 'editor',
+  'chat.secondOpinion': 'editor',
+  // Watching is enough to put an emoji on a message.
+  'chat.react': 'viewer',
   'coop.start': 'owner',
   'coop.invite': 'owner',
   'coop.add': 'owner',
