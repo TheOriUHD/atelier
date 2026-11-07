@@ -40,6 +40,8 @@ export const CoopWelcome = z.object({
   mode: z.enum(['chat', 'work', 'code']),
   /** Both sides show these to compare. */
   fingerprint: z.array(z.string()).length(3),
+  /** Once let in: their own secret, to come back with after the invite is gone (packages/core/src/coop/host.ts). */
+  memberSecret: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
 });
 export type CoopWelcome = z.infer<typeof CoopWelcome>;
 
@@ -84,7 +86,7 @@ export const CoopContract = {
   events: {
     'session.event': z.object({ seq: z.number().int().nonnegative(), event: RunEvent }),
     /** The host let them in. */
-    admitted: z.object({ participantId: z.string() }),
+    admitted: z.object({ participantId: z.string(), memberSecret: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional() }),
     /** The host declined, removed them, or ended co-op; `copy`: the host lets them keep a copy (they ask for it). */
     gone: z.object({ reason: z.enum(['declined', 'removed', 'ended']), copy: z.boolean() }),
     /** The session's title, mode or co-op settings changed. */

@@ -54,6 +54,8 @@ export interface GuestChannelPort extends JsonChannel {
   onReconnected(handler: () => void): void;
   /** The relay says whether the host's computer is connected. */
   onHost(handler: (present: boolean) => void): void;
+  /** The secret for the next handshake: the member secret the host gave once it let them in. */
+  setSecret(secret: string): void;
   close(): void;
 }
 
@@ -186,10 +188,11 @@ export class CoopGateway {
       endedAt: null,
     };
     const link = this.blank(placeholder, models, model);
+    // The invite's secret until the host gives them their own (`keep`), which then replaces it.
+    await this.deps.secrets.set(pskSecret, parsed.secret);
     const welcome = await this.connect(link, parsed.secret);
     const id = mirrorId(parsed.roomId, welcome.sessionId);
     link.membership = { ...placeholder, id, hostKey: link.channel!.remoteKey, hostName: welcome.hostName, hostSessionId: welcome.sessionId, title: welcome.title, mode: welcome.mode };
-    await this.deps.secrets.set(pskSecret, parsed.secret);
     await this.deps.db.insert(coopMemberships).values(link.membership).onConflictDoUpdate({ target: coopMemberships.id, set: { ...link.membership } });
     this.links.set(id, link);
     this.changed(link);
@@ -227,8 +230,9 @@ export class CoopGateway {
     const peerServer = serveRpc(PeerContract, this.peerHandlers(link, (payload) => peerServer.emit('model.event', payload)), peer, {}, (method, error) => this.deps.log(`co-op peer call ${method} failed`, error));
 
     client.on('session.event', ({ seq, event }) => this.event(link, seq, event));
-    client.on('admitted', () => {
+    client.on('admitted', ({ memberSecret }) => {
       link.admitted = true;
+      if (memberSecret) void this.keep(link, memberSecret);
       void this.syncChoice(link).catch(() => undefined);
       this.changed(link);
       if (link.watched) this.resync(link);
@@ -262,6 +266,7 @@ export class CoopGateway {
     const welcome = await link.client!.call('coop.hello', { name: profile.name, avatar: profile.avatar, models: link.models, model: link.models === 'own' ? link.model : null, version: this.deps.version });
     link.welcome = welcome;
     link.admitted = welcome.admitted;
+    if (welcome.memberSecret) await this.keep(link, welcome.memberSecret);
     link.connected = true;
     this.emit(link, { type: 'host_away', away: false });
     if (welcome.admitted) await this.syncChoice(link).catch(() => undefined);
@@ -280,6 +285,12 @@ export class CoopGateway {
     link.models = me.models;
     const own = me.model ? parsePeerModelRef(me.model) : null;
     link.model = me.models === 'own' && own ? own.ref : null;
+  }
+
+  /** Their own secret for the room: kept in place of the invite's, and used for every later handshake. */
+  private async keep(link: Link, secret: string): Promise<void> {
+    link.channel?.setSecret(secret);
+    await this.deps.secrets.set(link.membership.pskSecret, secret).catch((e: unknown) => this.deps.log('keeping the co-op member secret failed', e));
   }
 
   /** The window reloads the session: the host's view of it is the one that counts. */

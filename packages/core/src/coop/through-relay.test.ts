@@ -23,6 +23,8 @@ let coop: CoopService;
 let sessionId: string;
 const sent: { text: string; by: string }[] = [];
 const guestKey = generateStaticKey();
+const guestSecrets = new Map<string, string>();
+let guestDeps: CoopGatewayDeps;
 
 const until = async (check: () => boolean | Promise<boolean>, ms = 8000) => {
   const end = Date.now() + ms;
@@ -74,11 +76,12 @@ beforeEach(async () => {
     stateChanged: () => undefined,
     log: () => undefined,
   } as unknown as CoopHostDeps);
-  gateway = new CoopGateway({
+  guestSecrets.clear();
+  gateway = new CoopGateway((guestDeps = {
     db: guestDb,
     relayUrl: () => relay.url,
     transport: relayTransport(async () => guestKey),
-    secrets: { get: async () => undefined, set: async () => undefined, delete: async () => undefined },
+    secrets: { get: async (id: string) => guestSecrets.get(id), set: async (id: string, v: string) => void guestSecrets.set(id, v), delete: async (id: string) => void guestSecrets.delete(id) },
     profile: async () => ({ name: 'Ben', avatar: null }),
     version: 'test',
     emitToUser: (() => undefined) as never,
@@ -91,7 +94,7 @@ beforeEach(async () => {
     putBlob: async () => '',
     saveCopy: async () => null,
     log: () => undefined,
-  } satisfies CoopGatewayDeps);
+  }));
 });
 
 afterEach(async () => {
@@ -124,5 +127,20 @@ describe('co-op through the relay', () => {
     expect(snapshot.session).toMatchObject({ id: joined.sessionId, title: 'Shader', coop: { mirror: true } });
     await gateway.call('u2', 'chat.send', { sessionId: joined.sessionId, parts: [{ type: 'text', text: 'slower waves' }] });
     expect(sent).toEqual([{ text: 'slower waves', by: id }]);
-  }, 20_000);
+
+    // The host makes a new link: the old one no longer gets anyone in. Ben's computer restarts and comes back with his
+    // own secret, without asking.
+    await host.invite(sessionId);
+    gateway.shutdown();
+    gateway = new CoopGateway(guestDeps);
+    await gateway.resume();
+    await until(async () => (await gateway.call('u2', 'coop.state', { sessionId: joined.sessionId }).catch(() => null)) !== null, 15_000);
+    await gateway.call('u2', 'chat.send', { sessionId: joined.sessionId, parts: [{ type: 'text', text: 'back again' }] });
+    expect(sent.at(-1)).toEqual({ text: 'back again', by: id });
+    expect(host.port.knocking(sessionId)).toEqual([]);
+
+    // Someone with the old link can't even begin.
+    const stranger = new CoopGateway({ ...guestDeps, db: guestDb, transport: relayTransport(async () => generateStaticKey()) });
+    await expect(stranger.join('u2', url.replace(/#v1\.[^.]+\./, (m) => m), 'host').then(() => 'joined', (e: unknown) => String(e))).resolves.not.toBe('joined');
+  }, 40_000);
 });

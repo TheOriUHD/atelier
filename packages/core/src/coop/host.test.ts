@@ -14,10 +14,13 @@ let coop: CoopService;
 let host: CoopHost;
 let sessionId: string;
 let arrive: (peer: PeerChannelPort) => void;
+/** The secrets the room accepts handshakes with now. */
+let keys: string[] = [];
 const emitted: RunEvent[] = [];
 const sent: { parts: unknown; by: string }[] = [];
 const secrets = new Map<string, string>();
 let now = 1_000_000;
+let made = 0;
 
 const hello = (name = 'Ben'): CoopHello => ({ name, avatar: null, models: 'host', model: null, version: 'test' });
 
@@ -40,7 +43,7 @@ beforeEach(async () => {
     relay: { invite: (s) => host.port.invite(s), knocking: (s) => host.port.knocking(s), peerOnline: (s, p) => host.port.peerOnline(s, p) },
     now: () => now,
   });
-  const room: HostRoomPort = { onPeer: (handler) => void (arrive = handler), onRelayState: () => undefined, close: async () => undefined };
+  const room: HostRoomPort = { onPeer: (handler) => void (arrive = handler), setSecrets: (list) => void (keys = list), onRelayState: () => undefined, close: async () => undefined };
   const chat = {
     send: async (_s: string, parts: unknown, _p: unknown, by: { id: string }) => (sent.push({ parts, by: by.id }), 'm1'),
     snapshot: async () => ({ session: { id: sessionId }, messages: [], seq: 3 }) as unknown as SessionSnapshot,
@@ -48,7 +51,7 @@ beforeEach(async () => {
   };
   const deps = {
     coop,
-    transport: { createRoom: async () => ({ roomId: 'R'.repeat(22), hostToken: 'T'.repeat(43) }), openHostRoom: async () => room, deleteRoom: async () => undefined, newSecret: () => 'S'.repeat(43) },
+    transport: { createRoom: async () => ({ roomId: 'R'.repeat(22), hostToken: 'T'.repeat(43) }), openHostRoom: async () => room, deleteRoom: async () => undefined, newSecret: () => String(++made).padStart(43, 'S') },
     relayUrl: () => 'https://relay.test',
     sessionRow: async (id: string) => (await repo.getRow(id)) ?? null,
     hostName: async () => 'Ada',
@@ -201,6 +204,47 @@ describe('co-op host across computers', () => {
     await refused(ben.client.call('chat.send', { parts: [{ type: 'text', text: 'one more' }] }), 'forbidden');
     vi.advanceTimersByTime(5000);
     expect(ben.closed()).toBe(true);
+  });
+
+  it('a guest let in gets their own secret; a new link withdraws the old one, and removal withdraws theirs', async () => {
+    const invite = keys[0]!;
+    expect(keys).toEqual([invite]);
+    const ben = guest('key-ben');
+    await ben.client.call('coop.hello', hello());
+    await host.admit(sessionId, keyIdOf('key-ben'), true);
+    await settle();
+    const admitted = ben.events.find((e) => e.name === 'admitted')!.payload as { memberSecret: string };
+    expect(admitted.memberSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(keys).toEqual([invite, admitted.memberSecret]);
+    // Coming back on a known device, they're told it again.
+    ben.pair.drop();
+    const back = guest('key-ben');
+    expect(await back.client.call('coop.hello', hello())).toMatchObject({ admitted: true, memberSecret: admitted.memberSecret });
+
+    // A new link: the old one's key is gone, Ben's stays.
+    const { url } = await host.invite(sessionId);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(invite);
+    expect(url).toContain(keys[0]!);
+    expect(keys[1]).toBe(admitted.memberSecret);
+
+    // Removed: Ben's key goes too.
+    const id = peerParticipant(keyIdOf('key-ben'));
+    await coop.remove(sessionId, id);
+    host.removed(sessionId, id);
+    expect(keys).toEqual([keys[0]]);
+    expect(secrets.has(`coop-member-${sessionId}-${id.replace(':', '_')}`)).toBe(false);
+  });
+
+  it('when the invite lapses, only members’ keys are left', async () => {
+    const ben = guest('key-ben');
+    await ben.client.call('coop.hello', hello());
+    await host.admit(sessionId, keyIdOf('key-ben'), true);
+    await settle();
+    expect(keys).toHaveLength(2);
+    now += 24 * 3600_000 + 2000;
+    vi.advanceTimersByTime(24 * 3600_000 + 2000);
+    expect(keys).toHaveLength(1);
   });
 
   it('room for four people at most', async () => {

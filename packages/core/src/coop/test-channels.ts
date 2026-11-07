@@ -20,6 +20,8 @@ export interface ChannelPair {
   drop(): void;
   hostPresent(present: boolean): void;
   reconnected(): void;
+  /** The secret the guest's end was told to use for its next handshake. */
+  secret: string | null;
 }
 
 export function channelPair(opts: { guestKey: string; hostKey?: string; fingerprint?: string[] }): ChannelPair {
@@ -63,15 +65,18 @@ export function channelPair(opts: { guestKey: string; hostKey?: string; fingerpr
     onClose: (handler) => (g.closes.add(handler), () => g.closes.delete(handler)),
     onReconnected: (handler) => void reconnectedHandlers.add(handler),
     onHost: (handler) => void hostHandlers.add(handler),
+    setSecret: (secret) => void (pair.secret = secret),
     close,
   };
-  return {
+  const pair: ChannelPair = {
     host,
     guest,
+    secret: null as string | null,
     drop: close,
     hostPresent: (present) => hostHandlers.forEach((handler) => handler(present)),
     reconnected: () => reconnectedHandlers.forEach((handler) => handler()),
   };
+  return pair;
 }
 
 /** Lets the asynchronous deliveries above run. */

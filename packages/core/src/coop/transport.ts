@@ -9,6 +9,7 @@ import { newInviteSecret, pskFromSecret } from './invite.ts';
 
 const peerPort = (peer: PeerChannel): PeerChannelPort => ({
   remoteKey: peer.remoteKey,
+  pskIndex: peer.pskIndex,
   fingerprint: [...peer.fingerprint],
   send: (message) => peer.send(message),
   onMessage: (handler) => peer.onMessage(handler),
@@ -28,6 +29,7 @@ const guestPort = (channel: GuestChannel): GuestChannelPort => ({
   onClose: (handler) => channel.onClose(() => handler()),
   onReconnected: (handler) => void channel.on('reconnected', handler),
   onHost: (handler) => void channel.on('host', handler),
+  setSecret: (secret) => channel.setPsk(pskFromSecret(secret)),
   close: () => channel.close(),
 });
 
@@ -36,10 +38,11 @@ export function relayTransport(deviceKey: () => Promise<StaticKey>): CoopTranspo
     createRoom: (relayUrl) => createRoom(relayUrl),
     deleteRoom: (relayUrl, roomId, hostToken) => deleteRoom(relayUrl, roomId, hostToken),
     newSecret: () => newInviteSecret(),
-    async openHostRoom({ relayUrl, roomId, hostToken, secret }): Promise<HostRoomPort> {
-      const room = await openHostRoom({ relayUrl, roomId, hostToken, psk: pskFromSecret(secret), staticKey: await deviceKey() });
+    async openHostRoom({ relayUrl, roomId, hostToken, secrets }): Promise<HostRoomPort> {
+      const room = await openHostRoom({ relayUrl, roomId, hostToken, psks: secrets.map(pskFromSecret), staticKey: await deviceKey() });
       return {
         onPeer: (handler) => void room.on('peer', (peer) => handler(peerPort(peer))),
+        setSecrets: (list) => room.setPsks(list.map(pskFromSecret)),
         onRelayState: (handler) => void room.on('relay-state', handler),
         close: async () => room.close(),
       };

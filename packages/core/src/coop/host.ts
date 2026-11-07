@@ -38,6 +38,8 @@ import type { CoopRelayPort, CoopService, ParticipantInfo } from './service.ts';
 
 /** A guest's channel once their handshake is done (channel.ts `PeerChannel`). */
 export interface PeerChannelPort extends JsonChannel {
+  /** Which of the room's keys their handshake used (`HostRoomPort.setSecrets`' order). */
+  pskIndex?: number;
   /** Their device's static key, base64. */
   remoteKey: string;
   fingerprint: string[];
@@ -46,6 +48,8 @@ export interface PeerChannelPort extends JsonChannel {
 
 export interface HostRoomPort {
   onPeer(handler: (peer: PeerChannelPort) => void): void;
+  /** The secrets whose keys new handshakes may use: the live invite's and each member's. Sessions up stay up. */
+  setSecrets(secrets: string[]): void;
   onRelayState(handler: (state: 'connected' | 'reconnecting' | 'closed') => void): void;
   close(): Promise<void>;
 }
@@ -53,7 +57,7 @@ export interface HostRoomPort {
 /** The transport (channel.ts and invite.ts), behind a port so the host can be tested without a relay. */
 export interface CoopTransportPort {
   createRoom(relayUrl: string): Promise<{ roomId: string; hostToken: string }>;
-  openHostRoom(opts: { relayUrl: string; roomId: string; hostToken: string; secret: string }): Promise<HostRoomPort>;
+  openHostRoom(opts: { relayUrl: string; roomId: string; hostToken: string; secrets: string[] }): Promise<HostRoomPort>;
   deleteRoom(relayUrl: string, roomId: string, hostToken: string): Promise<void>;
   /** A fresh invite secret (32 random bytes, base64url). */
   newSecret(): string;
@@ -122,12 +126,20 @@ interface Room {
   sessionId: string;
   roomId: string;
   room: HostRoomPort;
+  /** The live invite's secret: new people may knock with it until `inviteUntil`. */
   secret: string;
   inviteUntil: number;
+  /** Each admitted guest's own secret, by participant id: how they come back once the invite is gone. */
+  members: Map<string, string>;
+  /** Withdraws the invite's key when it lapses. */
+  lapse?: ReturnType<typeof setTimeout>;
   inviteUrl: string | null;
   knocks: Map<string, Knock>;
   guests: Map<string, Guest>;
 }
+
+/** Where a guest's own secret for a room is kept in the host's secret store. */
+const memberSecretId = (sessionId: string, participantId: string): string => `coop-member-${sessionId}-${participantId.replace(/[^A-Za-z0-9_-]/g, '_')}`;
 
 /** A short id for a device key: what its participant id carries. */
 export const keyIdOf = (staticKey: string): string => createHash('sha256').update(staticKey).digest('base64url').slice(0, 16);
@@ -172,9 +184,19 @@ export class CoopHost {
       await this.deps.coop.start(sessionId, { relayUrl, roomId, hostTokenSecret: `coop-host-${sessionId}` });
       await this.deps.coop.setRoom(sessionId, { inviteSecret: `coop-invite-${sessionId}`, inviteExpiresAt: this.now() + INVITE_TTL_MS });
     }
-    const room = await this.deps.transport.openHostRoom({ relayUrl, roomId, hostToken, secret });
-    const r: Room = { sessionId, roomId, room, secret, inviteUntil: (await this.deps.coop.room(sessionId))?.inviteExpiresAt ?? 0, inviteUrl: null, knocks: new Map(), guests: new Map() };
+    // The guests let in before come back with their own secrets.
+    const members = new Map<string, string>();
+    for (const p of await this.deps.coop.participants.list(sessionId)) {
+      if (p.kind !== 'peer') continue;
+      const member = await this.deps.secrets.get(memberSecretId(sessionId, p.id));
+      if (member) members.set(p.id, member);
+    }
+    const inviteUntil = (await this.deps.coop.room(sessionId))?.inviteExpiresAt ?? 0;
+    const r: Room = { sessionId, roomId, room: null as unknown as HostRoomPort, secret, inviteUntil, members, inviteUrl: null, knocks: new Map(), guests: new Map() };
+    r.room = await this.deps.transport.openHostRoom({ relayUrl, roomId, hostToken, secrets: this.secretsOf(r) });
+    const room = r.room;
     this.rooms.set(sessionId, r);
+    this.scheduleLapse(r);
     room.onPeer((peer) => this.arrive(r, peer));
     room.onRelayState((state) => {
       if (state === 'closed') this.deps.log(`co-op room of ${sessionId} closed by the relay`);
@@ -191,8 +213,13 @@ export class CoopHost {
   async invite(sessionId: string): Promise<{ url: string; expiresAt: number }> {
     await this.open(sessionId);
     const r = this.rooms.get(sessionId)!;
+    // Each link is new: the one before stops working, and nobody it reached can knock any more.
+    r.secret = this.deps.transport.newSecret();
+    await this.deps.secrets.set(`coop-invite-${sessionId}`, r.secret);
     r.inviteUntil = this.now() + INVITE_TTL_MS;
-    await this.deps.coop.setRoom(sessionId, { inviteExpiresAt: r.inviteUntil });
+    await this.deps.coop.setRoom(sessionId, { inviteSecret: `coop-invite-${sessionId}`, inviteExpiresAt: r.inviteUntil });
+    r.room.setSecrets(this.secretsOf(r));
+    this.scheduleLapse(r);
     const row = await this.deps.sessionRow(sessionId);
     const hostName = row?.userId ? await this.deps.hostName(row.userId) : 'Someone';
     r.inviteUrl = makeInviteUrl(r.roomId, r.secret, { hostName, title: row?.title || 'Untitled', mode: (row?.mode ?? 'chat') as 'chat' | 'work' | 'code' });
@@ -221,8 +248,10 @@ export class CoopHost {
       g.server.emit('gone', { reason: 'ended', copy });
     }
     for (const k of r.knocks.values()) k.peer.close();
+    if (r.lapse) clearTimeout(r.lapse);
     this.rooms.delete(sessionId);
     this.awake();
+    for (const id of r.members.keys()) await this.deps.secrets.delete(memberSecretId(sessionId, id)).catch(() => undefined);
     // A few seconds for the guests to fetch their copy, then the room is gone from the relay.
     setTimeout(() => {
       for (const g of r.guests.values()) g.channel.close();
@@ -235,13 +264,22 @@ export class CoopHost {
 
   /** Atelier quits: the links to the relay close, the rooms stay (guests see the host away until it is back). */
   async shutdown(): Promise<void> {
-    for (const r of this.rooms.values()) await r.room.close().catch(() => undefined);
+    for (const r of this.rooms.values()) {
+      if (r.lapse) clearTimeout(r.lapse);
+      await r.room.close().catch(() => undefined);
+    }
     this.rooms.clear();
   }
 
   /** The host removed a guest: their channel closes. */
   removed(sessionId: string, participantId: string): void {
-    const g = this.rooms.get(sessionId)?.guests.get(participantId);
+    const r = this.rooms.get(sessionId);
+    // Their own secret goes: their device can't even start a handshake with the room any more.
+    if (r?.members.delete(participantId)) {
+      r.room.setSecrets(this.secretsOf(r));
+      void this.deps.secrets.delete(memberSecretId(sessionId, participantId)).catch(() => undefined);
+    }
+    const g = r?.guests.get(participantId);
     if (!g) return;
     g.server.emit('gone', { reason: 'removed', copy: false });
     this.rooms.get(sessionId)!.guests.delete(participantId);
@@ -259,6 +297,20 @@ export class CoopHost {
   peerOf(keyId: string): RpcClient<typeof PeerContract> | null {
     for (const r of this.rooms.values()) for (const g of r.guests.values()) if (g.keyId === keyId && g.admitted) return g.peer;
     return null;
+  }
+
+  /** The keys new handshakes may use: the invite's while it lasts, then each member's. */
+  private secretsOf(r: Room): string[] {
+    return [...(r.inviteUntil > this.now() ? [r.secret] : []), ...r.members.values()];
+  }
+
+  /** When the invite lapses, its key goes; members still come back. */
+  private scheduleLapse(r: Room): void {
+    if (r.lapse) clearTimeout(r.lapse);
+    const wait = r.inviteUntil - this.now();
+    if (wait <= 0) return;
+    r.lapse = setTimeout(() => r.room.setSecrets(this.secretsOf(r)), Math.min(wait + 1000, 2 ** 31 - 1));
+    r.lapse.unref?.();
   }
 
   private awake(): void {
@@ -319,7 +371,7 @@ export class CoopHost {
           r.guests.set(participantId, guest);
           await this.deps.coop.participants.update(sessionId, participantId, { name: hello.name, avatar: hello.avatar });
           await this.deps.coop.presence(sessionId);
-          return { admitted: true, ...base };
+          return { admitted: true, ...base, ...(r.members.get(participantId) ? { memberSecret: r.members.get(participantId)! } : {}) };
         }
         if (r.inviteUntil <= this.now()) throw appError('forbidden', 'This invite has expired: ask the host for a new link.');
         const id = keyId;
@@ -334,11 +386,16 @@ export class CoopHost {
               const settings = await this.deps.coop.settings(sessionId);
               const models = hello.models === 'own' && hello.model ? 'own' : settings.shareModels ? 'host' : 'own';
               await this.deps.coop.addPeer(sessionId, { id: participantId, peerKey: channel.remoteKey, name: hello.name, avatar: hello.avatar, models });
+              // Their own way back in, once the invite is gone: a secret only they and this computer hold.
+              const member = this.deps.transport.newSecret();
+              await this.deps.secrets.set(memberSecretId(sessionId, participantId), member);
+              r.members.set(participantId, member);
+              r.room.setSecrets(this.secretsOf(r));
               if (models === 'own' && hello.model) await this.deps.coop.participants.update(sessionId, participantId, { model: `peer-${keyId}/${hello.model}` });
               r.knocks.delete(id);
               guest = { participantId, keyId, channel, peer, server, admitted: true, subscribed: false };
               r.guests.set(participantId, guest);
-              server.emit('admitted', { participantId });
+              server.emit('admitted', { participantId, memberSecret: member });
               await this.deps.coop.presence(sessionId);
               this.deps.stateChanged(sessionId);
             })().catch((e: unknown) => this.deps.log('admitting a guest failed', e));
