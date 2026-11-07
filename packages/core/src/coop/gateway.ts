@@ -19,6 +19,7 @@ import {
   isCoopMirror,
   lentToolOf,
   parseAnswerWith,
+  parsePeerModelRef,
   parseInviteFragment,
   PeerContract,
   serveRpc,
@@ -228,6 +229,7 @@ export class CoopGateway {
     client.on('session.event', ({ seq, event }) => this.event(link, seq, event));
     client.on('admitted', () => {
       link.admitted = true;
+      void this.syncChoice(link).catch(() => undefined);
       this.changed(link);
       if (link.watched) this.resync(link);
     });
@@ -262,7 +264,22 @@ export class CoopGateway {
     link.admitted = welcome.admitted;
     link.connected = true;
     this.emit(link, { type: 'host_away', away: false });
+    if (welcome.admitted) await this.syncChoice(link).catch(() => undefined);
     return welcome;
+  }
+
+  /**
+   * What the host has on record for this person's models: after Atelier restarted here, the host's word is what runs.
+   * A model of their own is `peer-<key>/<ref>` there and `<ref>` here.
+   */
+  private async syncChoice(link: Link): Promise<void> {
+    const state = await link.client!.call('coop.state', {});
+    link.state = state;
+    const me = state?.participants.find((p) => p.id === state.me);
+    if (!me) return;
+    link.models = me.models;
+    const own = me.model ? parsePeerModelRef(me.model) : null;
+    link.model = me.models === 'own' && own ? own.ref : null;
   }
 
   /** The window reloads the session: the host's view of it is the one that counts. */
