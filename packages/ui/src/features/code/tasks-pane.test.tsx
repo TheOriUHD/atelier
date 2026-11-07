@@ -8,6 +8,7 @@ import { callsTo, resetBackend } from '../settings/test-backend.ts';
 import { RunningTasksChip, TaskCard, TaskList, TasksPane, agentFacts, formatDuration, loopSchedule } from './tasks-pane.tsx';
 import type { PaneFrameState } from './pane-dock.tsx';
 import { AgentNotice, CodeActivity, SessionTasks, WorkspaceRoot, activitySummary, backgroundSummary, type ToolStep } from './tool-cards.tsx';
+import { CoopContext, SOLO } from '../coop/coop.ts';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
@@ -338,5 +339,25 @@ describe('in the transcript', () => {
       { name: 'Read', input: { file_path: '/repo/src/app.ts' } },
     ];
     expect(activitySummary(calls, '/repo')).toBe('Created 2 files, ran 2 commands, searched the code, read app.ts');
+  });
+});
+
+describe('the tasks pane in someone else’s co-op session', () => {
+  const guest = { ...SOLO, shared: true, isHost: false, role: 'editor' as const, hostName: 'Ada' };
+  const frame = { canMaximize: false, maximized: false, onMaximize: () => {}, onClose: () => {} } as unknown as PaneFrameState;
+
+  it('lets a guest follow the tasks and open a sub-agent’s transcript, but leaves stopping and clearing to the host', async () => {
+    const shown: (string | null)[] = [];
+    render(wrap(<CoopContext.Provider value={guest}><TasksPane frame={frame} sessionId="s1" tasks={[task({}), agent, task({ id: 'e2', status: 'done', endedAt: NOW })]} shown={null} onShow={(id) => shown.push(id)} /></CoopContext.Provider>));
+    expect(screen.queryByRole('button', { name: /^Stop / })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear finished tasks' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Survey the repo/ }));
+    expect(shown).toEqual(['agent:child']);
+  });
+
+  it('shows the host Stop and Clear as before', () => {
+    render(wrap(<TasksPane frame={frame} sessionId="s1" tasks={[task({}), task({ id: 'e2', status: 'done', endedAt: NOW })]} shown={null} onShow={() => {}} />));
+    expect(screen.getByRole('button', { name: 'Stop Start the dev server' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Clear finished tasks' })).toBeTruthy();
   });
 });

@@ -8,6 +8,7 @@ import { basename, dirname, join, posix, win32 } from 'node:path';
 import { flavorOfSep, pathOps } from '../paths.ts';
 import {
   accountParticipant,
+  isCoopMirror,
   ADMIN_PROCEDURES,
   APP,
   DEVICE_LINK_PROTOCOL,
@@ -1786,6 +1787,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         return sessionDiff(ws, await checkpointStore.firstVersions(sessionId, ws.id), path);
       },
       artifacts: (sessionId) => artifacts.list(sessionId),
+      taskOutput: (sessionId, taskId, since) =>
+        chat.tasks.output(sessionId, taskId, since).catch((e: unknown) => {
+          throw appError('not_found', (e as Error).message);
+        }),
       blob: async (sessionId, sha256) => (blobAccess.inSession(sessionId, sha256) ? ((await readBlob(sha256)) ?? null) : null),
       sessionHasBlob: async (sessionId, sha256) => blobAccess.inSession(sessionId, sha256),
       upload: async (sessionId, file) => {
@@ -3173,7 +3178,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const run = handler as unknown as (i: never, x: Ctx & { signal: AbortSignal }) => unknown;
         // A session joined on another computer: the call goes to its host, if it is one a guest may make there.
         const mirror = mirrorOf(ctx, input);
-        if (mirror && c.auth) {
+        // A sub-agent's session in one goes by the host's id: never one of this computer's own sessions.
+        if (mirror && c.auth && (isCoopMirror(mirror) || !(await sessions.getRow(mirror)))) {
           if (method === 'sessions.subscribe') c.subscriptions.add(mirror);
           if (method === 'sessions.unsubscribe' || method === 'sessions.leave') c.subscriptions.delete(mirror);
           const watching = [...connections].some((o) => o !== c && o.subscriptions.has(mirror));

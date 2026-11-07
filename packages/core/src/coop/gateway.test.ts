@@ -60,7 +60,16 @@ beforeEach(async () => {
   const record = (method: string) => async (input: unknown) => (calls.push({ method, input }), { ok: true as const });
   const handlers = {
     'coop.hello': async () => ({ admitted: true, participantId: PARTICIPANT, hostName: 'Ada', sessionId: 'host-1', title: 'Shader', mode: 'code', fingerprint: ['🐙', '🌵', '🎈', '🚀'] }),
-    'coop.subscribe': async () => ({ session: { id: 'host-1', title: 'Shader', mode: 'code', model: null, effort: null, status: 'idle' }, messages: [], siblings: {}, seq: 7 }) as unknown as SessionSnapshot,
+    // Its conversation names a sub-agent's session: a tool call that started one.
+    'coop.subscribe': async () =>
+      ({
+        session: { id: 'host-1', title: 'Shader', mode: 'code', model: null, effort: null, status: 'idle' },
+        messages: [{ id: 'a1', sessionId: 'host-1', parentId: null, role: 'assistant', parts: [{ type: 'tool_call', id: 'c1', name: 'Agent', input: {}, childSessionId: 'agent-1' }], createdAt: 1 }],
+        siblings: {},
+        seq: 7,
+      }) as unknown as SessionSnapshot,
+    'coop.subscribeChild': async (input: { sessionId: string }) => (calls.push({ method: 'coop.subscribeChild', input }), { session: { id: input.sessionId, title: 'Agent', mode: 'code' }, messages: [], seq: 2 }) as unknown as SessionSnapshot,
+    'coop.unsubscribeChild': record('coop.unsubscribeChild'),
     'coop.unsubscribe': record('coop.unsubscribe'),
     'chat.respond': record('chat.respond'),
     'chat.send': async (input: unknown) => (calls.push({ method: 'chat.send', input }), { userMessageId: 'm1' }),
@@ -184,6 +193,33 @@ describe('co-op gateway on the guest’s computer', () => {
     // It is kept: Atelier starting again lists it as they filed it.
     await gateway.call('u2', 'sessions.update', { id: sessionId, title: 'Our shader' });
     expect((await new CoopGateway(deps).list('u2'))[0]).toMatchObject({ title: 'Our shader', groupId: 'g-mine', archivedAt: expect.any(Number) });
+  });
+
+  it('opens the transcript of a sub-agent its conversation names, read-only, with its events', async () => {
+    const { sessionId } = await gateway.join('u2', INVITE, 'host');
+    expect(gateway.owns('u2', 'agent-1')).toBe(false);
+    await gateway.call('u2', 'sessions.subscribe', { id: sessionId });
+    expect(gateway.owns('u2', 'agent-1')).toBe(true);
+    expect(gateway.owns('someone-else', 'agent-1')).toBe(false);
+    // One it never heard of isn't asked for.
+    await refused(gateway.call('u2', 'sessions.subscribe', { id: 'agent-2' }) as Promise<unknown>, 'not_found');
+
+    const snapshot = (await gateway.call('u2', 'sessions.subscribe', { id: 'agent-1' })) as SessionSnapshot;
+    expect(snapshot.session.id).toBe('agent-1');
+    expect(calls.at(-1)).toEqual({ method: 'coop.subscribeChild', input: { sessionId: 'agent-1' } });
+    hostServer.emit('child.event', { sessionId: 'agent-1', seq: 3, event: { type: 'status', status: 'running' } });
+    // A sub-agent of the sub-agent, named in its events, opens too.
+    hostServer.emit('child.event', { sessionId: 'agent-1', seq: 4, event: { type: 'tasks', tasks: [{ id: 't', kind: 'agent', title: 'x', command: null, sessionId: 'agent-3', background: true, loop: null, startedAt: 1, endedAt: null, status: 'running', exitCode: null }] } });
+    await settle();
+    expect(toWindows).toContainEqual({ sessionId: 'agent-1', event: { type: 'status', status: 'running' } });
+    expect(gateway.owns('u2', 'agent-3')).toBe(true);
+    // Only for reading.
+    await refused(gateway.call('u2', 'chat.send', { sessionId: 'agent-1', parts: [{ type: 'text', text: 'hi' }] }) as Promise<unknown>, 'unsupported');
+    await gateway.call('u2', 'sessions.unsubscribe', { id: 'agent-1' });
+    expect(calls.at(-1)).toEqual({ method: 'coop.unsubscribeChild', input: { sessionId: 'agent-1' } });
+    hostServer.emit('child.event', { sessionId: 'agent-1', seq: 5, event: { type: 'status', status: 'idle' } });
+    await settle();
+    expect(toWindows).not.toContainEqual({ sessionId: 'agent-1', event: { type: 'status', status: 'idle' } });
   });
 
   it('an ended session without a copy can still be removed after Atelier started again', async () => {

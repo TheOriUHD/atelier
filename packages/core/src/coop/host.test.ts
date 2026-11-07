@@ -60,6 +60,7 @@ beforeEach(async () => {
     contextBreakdown: async () => ({ context: null, usage: {} }),
     sessionDiff: async () => ({ diff: '', truncated: false, base: null }),
     artifacts: async () => [],
+    taskOutput: async (s: string, t: string, since: number) => ({ output: `${s}:${t}:${since}`, offset: 9, truncated: false, running: false, exitCode: 0 }),
     blob: async () => null,
     upload: async () => ({}),
     sessionHasBlob: async () => false,
@@ -84,7 +85,7 @@ function guest(key: string) {
   arrive(pair.host);
   const client = createRpcClient(CoopContract, lanes(pair.guest).coop);
   const events: { name: string; payload: unknown }[] = [];
-  for (const name of ['admitted', 'gone', 'session.event'] as const) client.on(name, (payload) => events.push({ name, payload }));
+  for (const name of ['admitted', 'gone', 'session.event', 'child.event'] as const) client.on(name, (payload) => events.push({ name, payload }));
   let closed = false;
   pair.guest.onClose(() => (closed = true));
   return { client, events, pair, closed: () => closed };
@@ -272,5 +273,46 @@ describe('co-op host across computers', () => {
     ben.pair.drop();
     await settle();
     expect(presence).not.toHaveBeenCalled();
+  });
+
+  it('a guest follows a sub-agent’s or track’s session of the shared one, never a side chat or another session', async () => {
+    const ben = guest('key-ben');
+    await ben.client.call('coop.hello', hello());
+    await host.admit(sessionId, keyIdOf('key-ben'), true);
+    await settle();
+    const agent = (await repo.create({ mode: 'code', userId: 'u1', parentSessionId: sessionId })).id;
+    const nested = (await repo.create({ mode: 'code', userId: 'u1', parentSessionId: agent })).id;
+    const side = (await repo.create({ mode: 'code', userId: 'u1', parentSessionId: sessionId, overrides: { sideChat: true } })).id;
+    const underSide = (await repo.create({ mode: 'code', userId: 'u1', parentSessionId: side })).id;
+    const other = (await repo.create({ mode: 'code', userId: 'u1' })).id;
+
+    await expect(ben.client.call('coop.subscribeChild', { sessionId: agent })).resolves.toBeTruthy();
+    await expect(ben.client.call('coop.subscribeChild', { sessionId: nested })).resolves.toBeTruthy();
+    for (const refusedId of [side, underSide, other, sessionId, 'nope']) await refused(ben.client.call('coop.subscribeChild', { sessionId: refusedId }), 'not_found');
+
+    host.forward(agent, 4, { type: 'status', status: 'running' } as RunEvent);
+    host.forward(other, 5, { type: 'status', status: 'running' } as RunEvent);
+    await settle();
+    expect(ben.events.filter((e) => e.name === 'child.event')).toEqual([{ name: 'child.event', payload: { sessionId: agent, seq: 4, event: { type: 'status', status: 'running' } } }]);
+    await ben.client.call('coop.unsubscribeChild', { sessionId: agent });
+    host.forward(agent, 6, { type: 'status', status: 'idle' } as RunEvent);
+    await settle();
+    expect(ben.events.filter((e) => e.name === 'child.event')).toHaveLength(1);
+  });
+
+  it('a guest reads a background command’s output in the shared session, once let in', async () => {
+    const ben = guest('key-ben');
+    await ben.client.call('coop.hello', hello());
+    await expect(ben.client.call('tasks.output', { taskId: 't1', since: 0 })).rejects.toBeInstanceOf(RpcError);
+    await host.admit(sessionId, keyIdOf('key-ben'), true);
+    await settle();
+    expect(await ben.client.call('tasks.output', { taskId: 't1', since: 4 })).toMatchObject({ output: `${sessionId}:t1:4`, offset: 9 });
+  });
+
+  it('someone who knocked but wasn’t let in can’t follow a sub-agent', async () => {
+    const eve = guest('key-eve');
+    await eve.client.call('coop.hello', hello('Eve'));
+    const agent = (await repo.create({ mode: 'code', userId: 'u1', parentSessionId: sessionId })).id;
+    await expect(eve.client.call('coop.subscribeChild', { sessionId: agent })).rejects.toBeInstanceOf(RpcError);
   });
 });

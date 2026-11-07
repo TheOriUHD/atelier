@@ -33,6 +33,7 @@ import {
 } from '@atelier/protocol';
 import type { ChatService } from '../agent/chat-service.ts';
 import type { SessionRow } from '../sessions/session-repo.ts';
+import { isSideChat } from '../agent/side-chat.ts';
 import { lanes, type JsonChannel } from './lanes.ts';
 import type { CoopRelayPort, CoopService, ParticipantInfo } from './service.ts';
 
@@ -74,6 +75,8 @@ export interface CoopHostDeps {
   chat: Pick<ChatService, 'send' | 'queue' | 'secondOpinion' | 'react' | 'unqueue' | 'sendNow' | 'stop' | 'retry' | 'continue' | 'edit' | 'respond' | 'mayRespond' | 'snapshot' | 'changePreview' | 'editPreview' | 'forgetParticipant'>;
   contextBreakdown(sessionId: string): Promise<{ context: ContextUsage | null; usage: SessionUsage }>;
   sessionDiff(sessionId: string, path?: string): Promise<{ diff: string; truncated: boolean; base: string | null }>;
+  /** A background command's output in the session (refused for a task of another session). */
+  taskOutput(sessionId: string, taskId: string, since: number): Promise<{ output: string; offset: number; truncated: boolean; running: boolean; exitCode: number | null }>;
   artifacts(sessionId: string): Promise<ArtifactSummary[]>;
   /** A blob this session refers to, or null. */
   blob(sessionId: string, sha256: string): Promise<{ mime: string; bytes: Uint8Array } | null>;
@@ -123,6 +126,8 @@ interface Guest {
   server: RpcServerConnection<typeof CoopContract>;
   admitted: boolean;
   subscribed: boolean;
+  /** Sub-agents' and tracks' sessions in this one whose transcripts they follow (`coop.subscribeChild`). */
+  children: Set<string>;
   /** Today's uploads: the UTC day, how many, how many bytes. */
   uploads?: { day: string; files: number; bytes: number };
   /** Co-op ended: who they were, for the copy they may still fetch before their channel closes. */
@@ -296,11 +301,30 @@ export class CoopHost {
     setTimeout(() => g.channel.close(), 1000);
   }
 
-  /** A run event of a session with a room: to the guests who follow it. */
+  /** A run event of a session with a room, or of a sub-agent's or track's session in one: to the guests who follow it. */
   forward(sessionId: string, seq: number, event: RunEvent): void {
     const r = this.rooms.get(sessionId);
-    if (!r) return;
-    for (const g of r.guests.values()) if (g.admitted && g.subscribed) g.server.emit('session.event', { seq, event });
+    if (r) {
+      for (const g of r.guests.values()) if (g.admitted && g.subscribed) g.server.emit('session.event', { seq, event });
+      return;
+    }
+    for (const room of this.rooms.values()) for (const g of room.guests.values()) if (g.admitted && g.children.has(sessionId)) g.server.emit('child.event', { sessionId, seq, event });
+  }
+
+  /**
+   * Whether `childId` is a sub-agent's or a track's session of the shared session `sessionId`: its parents lead there.
+   * A side chat is the host's own, and so is anything under one.
+   */
+  private async childOf(sessionId: string, childId: string): Promise<boolean> {
+    let id = childId;
+    for (let i = 0; i < 20; i++) {
+      const row = await this.deps.sessionRow(id);
+      if (!row || isSideChat(row)) return false;
+      if (!row.parentSessionId) return false;
+      if (row.parentSessionId === sessionId) return true;
+      id = row.parentSessionId;
+    }
+    return false;
   }
 
   /** The guest's computer for their own models and connectors, while they are connected (PeerModelAdapter). */
@@ -381,7 +405,7 @@ export class CoopHost {
         // Someone let in before (their device key on a participant row still in the session) comes back without asking.
         const known = await this.deps.coop.participants.get(sessionId, participantId);
         if (known && known.leftAt === null && known.peerKey === channel.remoteKey) {
-          guest = { participantId, keyId, channel, peer, server, admitted: true, subscribed: false };
+          guest = { participantId, keyId, channel, peer, server, admitted: true, subscribed: false, children: new Set() };
           r.guests.set(participantId, guest);
           await this.deps.coop.participants.update(sessionId, participantId, { name: hello.name, avatar: hello.avatar });
           await this.deps.coop.presence(sessionId);
@@ -407,7 +431,7 @@ export class CoopHost {
               r.room.setSecrets(this.secretsOf(r));
               if (models === 'own' && hello.model) await this.deps.coop.participants.update(sessionId, participantId, { model: `peer-${keyId}/${hello.model}` });
               r.knocks.delete(id);
-              guest = { participantId, keyId, channel, peer, server, admitted: true, subscribed: false };
+              guest = { participantId, keyId, channel, peer, server, admitted: true, subscribed: false, children: new Set() };
               r.guests.set(participantId, guest);
               server.emit('admitted', { participantId, memberSecret: member });
               await this.deps.coop.presence(sessionId);
@@ -433,6 +457,16 @@ export class CoopHost {
       },
       'coop.unsubscribe': async () => {
         if (guest) guest.subscribed = false;
+        return { ok: true as const };
+      },
+      'coop.subscribeChild': async ({ sessionId: childId }) => {
+        await self();
+        if (childId === sessionId || !(await this.childOf(sessionId, childId))) throw appError('not_found', 'That isn’t part of this session.');
+        guest!.children.add(childId);
+        return this.deps.chat.snapshot(childId);
+      },
+      'coop.unsubscribeChild': async ({ sessionId: childId }) => {
+        guest?.children.delete(childId);
         return { ok: true as const };
       },
       'coop.models': async ({ models, model }) => {
@@ -528,6 +562,7 @@ export class CoopHost {
       },
       'session.diff': async ({ path }) => (await self(), this.deps.sessionDiff(sessionId, path)),
       'artifacts.list': async () => (await self(), this.deps.artifacts(sessionId)),
+      'tasks.output': async ({ taskId, since }) => (await self(), this.deps.taskOutput(sessionId, taskId, since)),
       'blob.get': async ({ sha256 }) => {
         await self();
         const blob = await this.deps.blob(sessionId, sha256);

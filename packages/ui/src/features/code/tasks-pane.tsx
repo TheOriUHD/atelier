@@ -22,6 +22,13 @@ import { formatTokenCount, liveContext, liveStatus } from './live-context.ts';
 import { PaneFrame, PaneTitle, type PaneFrameState } from './pane-dock.tsx';
 import { GroupedActivity, SubagentTranscript, taskOutcome } from './tool-cards.tsx';
 import { CommandCode } from './command-code.tsx';
+import { useCoopView } from '../coop/coop.ts';
+
+/** In someone else's co-op session the tasks are the host's to stop and clear; a guest follows them. */
+function useMayStop(): boolean {
+  const coop = useCoopView();
+  return !coop.shared || coop.isHost;
+}
 
 /** How often a shown command's output is read while it runs (only while it is open). */
 const OUTPUT_POLL_MS = 1000;
@@ -87,6 +94,7 @@ export function TasksPane({
 }) {
   const task = tasks.find((t) => t.id === shown);
   const finished = tasks.filter((t) => t.status !== 'running');
+  const mayStop = useMayStop();
   if (task) {
     const { View } = KINDS[task.kind];
     return (
@@ -116,18 +124,20 @@ export function TasksPane({
       frame={frame}
       title="Background tasks"
       actions={
-        <IconButton
-          icon={Trash2}
-          label="Clear finished tasks"
-          size="xs"
-          disabled={!finished.length}
-          className="text-fg-secondary"
-          onClick={() =>
-            void rpc()
-              .call('tasks.clear', { sessionId })
-              .catch(() => {})
-          }
-        />
+        mayStop && (
+          <IconButton
+            icon={Trash2}
+            label="Clear finished tasks"
+            size="xs"
+            disabled={!finished.length}
+            className="text-fg-secondary"
+            onClick={() =>
+              void rpc()
+                .call('tasks.clear', { sessionId })
+                .catch(() => {})
+            }
+          />
+        )
       }
     >
       <TaskList sessionId={sessionId} tasks={tasks} onShow={onShow} />
@@ -208,6 +218,7 @@ export function TaskCard({
   const kind = KINDS[task.kind];
   const running = task.status === 'running';
   const now = useNow(running);
+  const mayStop = useMayStop();
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const stop = () => {
@@ -259,7 +270,7 @@ export function TaskCard({
           </p>
         )}
       </div>
-      {running && (
+      {running && mayStop && (
         <Tooltip content="Stop">
           <button
             type="button"
@@ -360,6 +371,7 @@ function LoopDetails({ task }: { task: BackgroundTask }) {
 
 /** A loop in the pane: what it sends, how often and when next, when it ends on its own, and Stop. */
 function LoopView({ sessionId, task }: { sessionId: string; task: BackgroundTask }) {
+  const mayStop = useMayStop();
   const running = task.status === 'running';
   const now = useNow(running);
   const [error, setError] = useState<string | null>(null);
@@ -384,17 +396,19 @@ function LoopView({ sessionId, task }: { sessionId: string; task: BackgroundTask
             next run comes a full interval after the Stop. The loop ends after {LOOP_MAX_RUNS} runs or on {ends}, when you
             stop it or delete the session, and when Atelier’s backend restarts.
           </p>
-          <Button
-            size="sm"
-            className="self-start"
-            onClick={() =>
-              void rpc()
-                .call('tasks.stop', { sessionId, taskId: task.id })
-                .catch((e: unknown) => setError(describeError(e).message))
-            }
-          >
-            Stop loop
-          </Button>
+          {mayStop && (
+            <Button
+              size="sm"
+              className="self-start"
+              onClick={() =>
+                void rpc()
+                  .call('tasks.stop', { sessionId, taskId: task.id })
+                  .catch((e: unknown) => setError(describeError(e).message))
+              }
+            >
+              Stop loop
+            </Button>
+          )}
         </>
       )}
       {error && (
