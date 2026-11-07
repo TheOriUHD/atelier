@@ -92,6 +92,23 @@
     Docker-Images des Servers lädt Ihr Rechner direkt aus der Container-Registry von GitHub (ghcr.io); dafür gilt die
     Datenschutzerklärung von GitHub.</p>
 
+    <h2>Co-op über coop.atelierhq.dev</h2>
+    <p>Wenn Sie in der Desktop-App eine Co-op-Sitzung mit einem anderen Rechner starten oder einer beitreten, verbinden sich
+    die Apps über ein Relay unter coop.atelierhq.dev, das Cloudflare für mich betreibt (siehe oben). Das Relay reicht den
+    Datenverkehr zwischen den Rechnern weiter. Dieser ist Ende-zu-Ende verschlüsselt: Nachrichten, Dateien und Namen kann
+    weder das Relay noch ich lesen.</p>
+    <p>Verarbeitet werden dabei die IP-Adressen der beteiligten Rechner, eine zufällige Kennung des Raums, die Zeitpunkte
+    der Verbindungen und die Menge der übertragenen Daten. IP-Adressen hält das Relay nur, solange eine Verbindung besteht,
+    auch für Begrenzungen gegen Missbrauch; es schreibt keine Protokolle. Zu jedem Raum speichert es seine Kennung, einen
+    Hashwert des Schlüssels des Gastgebers und Zeitpunkte. Ein Raum, mit dem sich der Gastgeber nie verbindet, wird nach
+    einer Stunde gelöscht, sonst spätestens 24 Stunden nach der letzten Verbindung des Gastgebers oder wenn der
+    Gastgeber Co-op beendet.</p>
+    <p>Rechtsgrundlage ist, dass Sie die Verbindung mit Co-op selbst anfordern (Art. 6 Abs. 1 lit. b DSGVO), und mein
+    berechtigtes Interesse, das Relay vor Missbrauch zu schützen (Art. 6 Abs. 1 lit. f DSGVO). Cloudflare handelt dabei als
+    mein Auftragsverarbeiter; für die Übermittlung in die USA gilt das oben Gesagte. Ein Konto ist nicht nötig. Die Seite
+    atelierhq.dev/join, die einen Einladungslink an die App übergibt, liest den Link nur in Ihrem Browser und sendet ihn
+    nirgendwohin.</p>
+
     <h2>Kontakt</h2>
     <p>E-Mails an contact@atelierhq.dev und licensing@atelierhq.dev leitet Cloudflare an ein Postfach bei Google (Gmail)
     weiter. Wenn Sie mir schreiben oder mich anrufen, verwende ich Ihre Angaben nur, um Ihre Anfrage zu beantworten, bei
@@ -104,7 +121,7 @@
     Issue eröffnen, gilt die Datenschutzerklärung von GitHub; Issues und Beiträge sind dort öffentlich sichtbar.</p>
 
     <h2>Die App selbst</h2>
-    <p>Atelier läuft auf Ihren Geräten oder Ihrem eigenen Server. Abgesehen von den Update-Anfragen oben erhalte ich keine
+    <p>Atelier läuft auf Ihren Geräten oder Ihrem eigenen Server. Abgesehen von den Update-Anfragen und dem Co-op-Relay oben erhalte ich keine
     Daten aus der App: keine Gespräche, keine Einstellungen, keine Nutzungsstatistik. Was an die Modellanbieter geht, die
     Sie selbst einrichten, beschreibt die Dokumentation unter
     <a href="https://docs.atelierhq.dev/privacy/" lang="en">What leaves your machine</a>.</p>
@@ -119,7 +136,7 @@
 
     <p>Es gibt keine automatisierte Entscheidungsfindung. Sie müssen keine Daten angeben, um die Websites zu nutzen.</p>
 
-    <p>Stand: Oktober 2026</p>
+    <p>Stand: November 2026</p>
   </div>
 </main>
 
