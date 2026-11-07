@@ -179,6 +179,7 @@ The desktop app has a menu bar. Its own items, with their default keys (the menu
 | Atelier (macOS) | **Settings…** | ⌘, | |
 | File | **New Chat** | ⌘N | Ctrl+N |
 | File | **New Temporary Chat** | ⇧⌘N | Ctrl+Shift+N |
+| File | **Join a Co-op Session…** (paste an invite link) | | |
 | File | **Lock Atelier** (only on "Run on this computer") | ⇧⌘L | Ctrl+Shift+L |
 | File (Windows / Linux) | **Settings…** | | Ctrl+, |
 | File (Windows / Linux) | **Quit** | | |

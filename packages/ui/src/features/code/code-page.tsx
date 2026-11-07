@@ -145,8 +145,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   const guestModel = useGuestModel(coop);
   const answerModels = useAnswerModels(coop).flatMap((g) => g.models);
   // On a guest's own computer a background task's output isn't one of the calls that reach the host.
-  const mirror = isCoopMirror(sessionId);
-  const panes = guest ? GUEST_PANES.filter((p) => !mirror || p !== 'tasks') : AVAILABLE;
+  const panes = guest ? GUEST_PANES : AVAILABLE;
 
   // The panes: as this device left them for this session, tiled into what the window has room for.
   const body = useRef<HTMLDivElement>(null);

@@ -55,6 +55,9 @@ export const CoopContract = {
     'coop.state': { input: Empty, output: CoopState.nullable() },
     'coop.subscribe': { input: Empty, output: SessionSnapshot },
     'coop.unsubscribe': { input: Empty, output: Ok },
+    /** A sub-agent's or a track's own session in this one (its transcript), and its events as `child.event`. */
+    'coop.subscribeChild': { input: z.object({ sessionId: z.string().min(1).max(200) }), output: SessionSnapshot },
+    'coop.unsubscribeChild': { input: z.object({ sessionId: z.string().min(1).max(200) }), output: Ok },
     'coop.models': { input: z.object({ models: ModelsChoice, model: z.string().max(300).nullable() }), output: CoopState },
     'coop.typing': { input: Empty, output: Ok },
     'coop.leave': { input: Empty, output: Ok },
@@ -79,6 +82,11 @@ export const CoopContract = {
     /** The session's own changes (Code's Diff pane), never the rest of the folder. */
     'session.diff': { input: z.object({ path: z.string().max(4096).optional() }), output: z.object({ diff: z.string(), truncated: z.boolean(), base: z.string().nullable() }) },
     'artifacts.list': { input: Empty, output: z.array(ArtifactSummary) },
+    /** A background command's output so far (the Background tasks pane), from `since`. */
+    'tasks.output': {
+      input: z.object({ taskId: z.string().min(1).max(200), since: z.number().int().nonnegative() }),
+      output: z.object({ output: z.string(), offset: z.number().int(), truncated: z.boolean(), running: z.boolean(), exitCode: z.number().int().nullable() }),
+    },
     /** A blob this session's messages, files or artifacts refer to (images, attachments), base64. */
     'blob.get': { input: z.object({ sha256: z.string().regex(/^[0-9a-f]{64}$/) }), output: z.object({ mime: z.string(), dataBase64: z.string() }) },
     /** A file the guest attaches to their message: it is stored on the host for this session. */
@@ -89,6 +97,8 @@ export const CoopContract = {
   },
   events: {
     'session.event': z.object({ seq: z.number().int().nonnegative(), event: RunEvent }),
+    /** A run event of a sub-agent's or track's session the guest follows (`coop.subscribeChild`). */
+    'child.event': z.object({ sessionId: z.string(), seq: z.number().int().nonnegative(), event: RunEvent }),
     /** The host let them in. */
     admitted: z.object({ participantId: z.string(), memberSecret: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional() }),
     /** The host declined, removed them, or ended co-op; `copy`: the host lets them keep a copy (they ask for it). */

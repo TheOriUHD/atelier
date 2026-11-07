@@ -97,6 +97,8 @@ export interface CoopGatewayDeps {
   putBlob(bytes: Uint8Array, mime: string): Promise<string>;
   /** Keeps a copy of the conversation as a session of the person's own; returns its id. */
   saveCopy(userId: string, snapshot: SessionSnapshot, title: string): Promise<string | null>;
+  /** Whether a sidebar group is this person's (to file a mirror in it). */
+  ownsGroup(userId: string, groupId: string): Promise<boolean>;
   log(message: string, error?: unknown): void;
   now?(): number;
 }
@@ -130,6 +132,27 @@ interface Link {
   asked: Map<string, string>;
   streams: Map<string, AbortController>;
   ended: boolean;
+  /**
+   * Sub-agents' and tracks' sessions in the host's session, by the host's ids, as its conversation names them (a tool
+   * call that started one, a background agent, a track): their transcripts open here read-only. `watchedChildren` are
+   * the ones a window has open.
+   */
+  children: Set<string>;
+  watchedChildren: Set<string>;
+}
+
+/** Sub-agents' and tracks' session ids a snapshot or event names: tool calls that started one, background agents. */
+export function childSessionIds(value: unknown, out = new Set<string>(), depth = 0): Set<string> {
+  if (depth > 16 || !value || typeof value !== 'object') return out;
+  if (Array.isArray(value)) {
+    for (const v of value) childSessionIds(v, out, depth + 1);
+    return out;
+  }
+  const o = value as Record<string, unknown>;
+  if (typeof o.childSessionId === 'string') out.add(o.childSessionId);
+  if (o.kind === 'agent' && typeof o.sessionId === 'string') out.add(o.sessionId);
+  for (const v of Object.values(o)) if (v && typeof v === 'object') childSessionIds(v, out, depth + 1);
+  return out;
 }
 
 /** At most this many of the guest's own model's requests run for the host at once. */
@@ -186,27 +209,42 @@ export class CoopGateway {
       copySessionId: null,
       joinedAt: this.now(),
       endedAt: null,
+      localTitle: null,
+      pinnedAt: null,
+      groupId: null,
+      archivedAt: null,
+      finishedUnseenAt: null,
     };
     const link = this.blank(placeholder, models, model);
     // The invite's secret until the host gives them their own (`keep`), which then replaces it.
     await this.deps.secrets.set(pskSecret, parsed.secret);
     const welcome = await this.connect(link, parsed.secret);
     const id = mirrorId(parsed.roomId, welcome.sessionId);
-    link.membership = { ...placeholder, id, hostKey: link.channel!.remoteKey, hostName: welcome.hostName, hostSessionId: welcome.sessionId, title: welcome.title, mode: welcome.mode };
-    await this.deps.db.insert(coopMemberships).values(link.membership).onConflictDoUpdate({ target: coopMemberships.id, set: { ...link.membership } });
+    const joined = { ...placeholder, id, hostKey: link.channel!.remoteKey, hostName: welcome.hostName, hostSessionId: welcome.sessionId, title: welcome.title, mode: welcome.mode };
+    // Joining again keeps how they filed it in their sidebar (their name for it, pinned, group).
+    const { localTitle: _t, pinnedAt: _p, groupId: _g, archivedAt: _a, finishedUnseenAt: _u, ...fresh } = joined;
+    await this.deps.db.insert(coopMemberships).values(joined).onConflictDoUpdate({ target: coopMemberships.id, set: fresh });
+    link.membership = (await this.deps.db.select().from(coopMemberships).where(eq(coopMemberships.id, id)))[0] ?? joined;
     this.links.set(id, link);
     this.changed(link);
     // The same four emoji the host sees, to compare with them.
     return { sessionId: id, waiting: !welcome.admitted, fingerprint: [...welcome.fingerprint] };
   }
 
-  /** Joins again the sessions this person was in when Atelier stopped (the host lets pinned guests straight in). */
+  /**
+   * Joins again the sessions this person was in when Atelier stopped (the host lets pinned guests straight in). Ended
+   * ones without a copy stay in the sidebar, ended, until the person removes them.
+   */
   async resume(): Promise<void> {
-    const rows = await this.deps.db.select().from(coopMemberships).where(isNull(coopMemberships.endedAt));
+    const rows = await this.deps.db.select().from(coopMemberships).where(isNull(coopMemberships.copySessionId));
     for (const row of rows) {
       if (this.links.has(row.id)) continue;
       const link = this.blank(row, 'host', null);
       this.links.set(row.id, link);
+      if (row.endedAt !== null) {
+        link.ended = true;
+        continue;
+      }
       void (async () => {
         const secret = await this.deps.secrets.get(row.pskSecret);
         if (!secret) return this.end(link, false);
@@ -216,7 +254,7 @@ export class CoopGateway {
   }
 
   private blank(membership: Membership, models: ModelsChoice, model: string | null): Link {
-    return { membership, channel: null, client: null, welcome: null, admitted: false, connected: false, watched: false, state: null, snapshot: null, models, model, secondary: new Set(), lend: false, allowed: new Map(), asked: new Map(), streams: new Map(), ended: false };
+    return { membership, channel: null, client: null, welcome: null, admitted: false, connected: false, watched: false, state: null, snapshot: null, models, model, secondary: new Set(), lend: false, allowed: new Map(), asked: new Map(), streams: new Map(), ended: false, children: new Set(), watchedChildren: new Set() };
   }
 
   /** The channel to the host, its two directions, and what the host tells. */
@@ -231,6 +269,11 @@ export class CoopGateway {
     const peerServer = serveRpc(PeerContract, this.peerHandlers(link, (payload) => peerServer.emit('model.event', payload)), peer, {}, (method, error) => this.deps.log(`co-op peer call ${method} failed`, error));
 
     client.on('session.event', ({ seq, event }) => this.event(link, seq, event));
+    client.on('child.event', ({ sessionId, seq, event }) => {
+      if (!link.watchedChildren.has(sessionId)) return;
+      this.learn(link, event);
+      this.deps.emitSession(sessionId, seq, event);
+    });
     client.on('admitted', ({ memberSecret }) => {
       link.admitted = true;
       if (memberSecret) void this.keep(link, memberSecret);
@@ -304,7 +347,13 @@ export class CoopGateway {
   }
 
   /** A host run event, as this computer's windows see it; connector questions are noted, for the tickets. */
+  /** The sub-agents' and tracks' sessions something from the host names, which this person may then open. */
+  private learn(link: Link, value: unknown): void {
+    for (const id of childSessionIds(value)) if (!isCoopMirror(id) && id !== link.membership.hostSessionId) link.children.add(id);
+  }
+
   private event(link: Link, seq: number, event: RunEvent): void {
+    this.learn(link, event);
     if (event.type === 'pending') this.noteAsked(link, event.pending);
     if (link.snapshot && seq > link.snapshot.seq) link.snapshot = { ...link.snapshot, seq };
     this.deps.emitSession(link.membership.id, seq, event);
@@ -327,7 +376,7 @@ export class CoopGateway {
       mode: m.mode,
       workspaceId: null,
       permissionMode: null,
-      title: m.title,
+      title: m.localTitle ?? m.title,
       projectId: null,
       model: null,
       effort: null,
@@ -335,7 +384,10 @@ export class CoopGateway {
       research: false,
       coop: { role: link.state?.role === 'viewer' ? 'viewer' : 'editor', hostName: m.hostName, participants: link.state?.participants.length ?? 2, mirror: true, ...(ended ? { ended: true } : {}) },
       status: 'idle',
-      pinnedAt: null,
+      pinnedAt: m.pinnedAt,
+      groupId: m.groupId,
+      archivedAt: m.archivedAt,
+      finishedUnseen: m.finishedUnseenAt !== null,
       createdAt: m.joinedAt,
       updatedAt: m.joinedAt,
     } as SessionSummary;
@@ -419,9 +471,42 @@ export class CoopGateway {
     return link.client;
   }
 
-  /** Whether `sessionId` is one of this person's mirrors. */
+  /** Whether `sessionId` is one of this person's mirrors, or a sub-agent's or track's session in one. */
   owns(userId: string, sessionId: string): boolean {
-    return isCoopMirror(sessionId) && this.links.get(sessionId)?.membership.userId === userId;
+    if (isCoopMirror(sessionId)) return this.links.get(sessionId)?.membership.userId === userId;
+    return this.parentOf(userId, sessionId) !== null;
+  }
+
+  /** The mirror whose host session has `childId` among its sub-agents' and tracks' sessions. */
+  private parentOf(userId: string, childId: string): Link | null {
+    for (const link of this.links.values()) if (link.membership.userId === userId && !link.ended && link.children.has(childId)) return link;
+    return null;
+  }
+
+  /** A sub-agent's or track's transcript: read-only, from the host, while the window has it open. */
+  private async childCall(userId: string, link: Link, childId: string, method: string, watching: boolean): Promise<unknown> {
+    switch (method) {
+      case 'sessions.subscribe': {
+        const snapshot = await this.live(userId, link.membership.id).call('coop.subscribeChild', { sessionId: childId });
+        link.watchedChildren.add(childId);
+        this.learn(link, snapshot);
+        return snapshot;
+      }
+      case 'sessions.unsubscribe':
+      case 'sessions.leave':
+        if (!watching) {
+          link.watchedChildren.delete(childId);
+          await link.client?.call('coop.unsubscribeChild', { sessionId: childId }).catch(() => undefined);
+        }
+        return method === 'sessions.leave' ? { deleted: false } : { ok: true };
+      case 'sessions.markSeen':
+        return { ok: true };
+      case 'artifacts.list':
+      case 'checkpoints.list':
+        return [];
+      default:
+        throw appError('unsupported', 'A sub-agent’s transcript in a session you joined is only for reading.');
+    }
   }
 
   /**
@@ -430,6 +515,11 @@ export class CoopGateway {
    */
   async call(userId: string, method: string, input: Record<string, unknown>, watching = false): Promise<unknown> {
     const id = String(input.sessionId ?? input.id ?? '');
+    if (!isCoopMirror(id)) {
+      const parent = this.parentOf(userId, id);
+      if (!parent) throw appError('not_found', 'That session isn’t here.');
+      return this.childCall(userId, parent, id, method, watching);
+    }
     const link = this.mine(userId, id);
     switch (method) {
       case 'sessions.subscribe': {
@@ -437,7 +527,8 @@ export class CoopGateway {
         if (link.ended || !link.client || !link.connected || !link.admitted) return this.offlineSnapshot(link);
         const snapshot = await link.client.call('coop.subscribe', {});
         link.snapshot = snapshot;
-        return { ...snapshot, session: { ...this.summary(link), title: snapshot.session.title, mode: snapshot.session.mode, model: snapshot.session.model, effort: snapshot.session.effort, status: snapshot.session.status } };
+        this.learn(link, snapshot);
+        return { ...snapshot, session: { ...this.summary(link), title: link.membership.localTitle ?? snapshot.session.title, mode: snapshot.session.mode, model: snapshot.session.model, effort: snapshot.session.effort, status: snapshot.session.status } };
       }
       case 'sessions.unsubscribe':
       case 'sessions.leave':
@@ -447,12 +538,17 @@ export class CoopGateway {
         }
         return method === 'sessions.leave' ? { deleted: false } : { ok: true };
       case 'sessions.markSeen':
+        if (link.membership.finishedUnseenAt !== null) await this.updateView(userId, link, { unread: false });
         return { ok: true };
+      case 'sessions.update':
+        return this.updateView(userId, link, input);
       case 'sessions.delete':
         await this.forget(userId, id);
         return { ok: true };
       case 'artifacts.list':
         return link.ended || !link.connected ? [] : this.live(userId, id).call('artifacts.list', {});
+      case 'tasks.output':
+        return this.live(userId, id).call('tasks.output', { taskId: String(input.taskId), since: Number(input.since) || 0 });
       case 'checkpoints.list':
         return [];
       case 'coop.state': {
@@ -493,10 +589,17 @@ export class CoopGateway {
       }
       case 'chat.react':
         return this.live(userId, id).call('chat.react', { messageId: String(input.messageId), emoji: String(input.emoji), on: !!input.on });
-      case 'coop.track':
-        return this.live(userId, id).call('coop.track', { task: String(input.task) });
-      case 'coop.tracks':
-        return link.ended || !link.connected ? [] : this.live(userId, id).call('coop.tracks', {});
+      case 'coop.track': {
+        const track = await this.live(userId, id).call('coop.track', { task: String(input.task) });
+        link.children.add(track.id);
+        return track;
+      }
+      case 'coop.tracks': {
+        if (link.ended || !link.connected) return [];
+        const tracks = await this.live(userId, id).call('coop.tracks', {});
+        for (const t of tracks) link.children.add(t.id);
+        return tracks;
+      }
       case 'coop.trackDiff':
         return this.live(userId, id).call('coop.trackDiff', { trackId: String(input.trackId) });
       case 'coop.navigate': {
@@ -543,6 +646,30 @@ export class CoopGateway {
     }
   }
 
+  /**
+   * How the person files a mirror in their own sidebar: their name for it, pinned, group, archived, unread. The host's
+   * session doesn't change, and anything else a session has is the host's.
+   */
+  private async updateView(userId: string, link: Link, input: Record<string, unknown>): Promise<SessionSummary> {
+    const { id: _id, title, pinned, groupId, archived, unread, ...rest } = input;
+    if (Object.values(rest).some((v) => v !== undefined)) throw appError('forbidden', `Only ${link.membership.hostName} can change that.`);
+    if (typeof groupId === 'string' && !(await this.deps.ownsGroup(userId, groupId))) throw appError('not_found', 'Group not found.');
+    const now = this.now();
+    const patch: Partial<Membership> = {
+      ...(typeof title === 'string' ? { localTitle: title.trim() || null } : {}),
+      ...(typeof pinned === 'boolean' ? { pinnedAt: pinned ? now : null } : {}),
+      ...(groupId === null || typeof groupId === 'string' ? { groupId } : {}),
+      ...(typeof archived === 'boolean' ? { archivedAt: archived ? now : null } : {}),
+      ...(typeof unread === 'boolean' ? { finishedUnseenAt: unread ? now : null } : {}),
+    };
+    if (Object.keys(patch).length) {
+      await this.deps.db.update(coopMemberships).set(patch).where(eq(coopMemberships.id, link.membership.id));
+      link.membership = { ...link.membership, ...patch };
+      this.changed(link);
+    }
+    return this.summary(link);
+  }
+
   /** A model of their own they named for an answer: the host may run it for them from now on. */
   private askedFor(link: Link, value: unknown): void {
     const chosen = typeof value === 'string' ? parseAnswerWith(value) : null;
@@ -553,7 +680,7 @@ export class CoopGateway {
   private offlineSnapshot(link: Link): SessionSnapshot {
     const base = link.snapshot;
     const session = this.summary(link);
-    if (base) return { ...base, session: { ...session, title: base.session.title }, streamingMessageId: null, pending: null, queued: null, phase: null };
+    if (base) return { ...base, session: { ...session, title: link.membership.localTitle ?? base.session.title }, streamingMessageId: null, pending: null, queued: null, phase: null };
     return { session, messages: [], siblings: {}, streamingMessageId: null, pending: null, todos: [], tasks: [], toolOutput: {}, context: null, compacting: false, queued: null, phase: null, outbox: [], seq: 0 } as unknown as SessionSnapshot;
   }
 

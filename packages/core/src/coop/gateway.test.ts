@@ -13,7 +13,7 @@ import {
   type SessionSnapshot,
 } from '@atelier/protocol';
 import { openDatabase, type Db } from '../store/db.ts';
-import { users } from '../store/schema.ts';
+import { coopMemberships, users } from '../store/schema.ts';
 import type { ModelResolver } from '../agent/chat-service.ts';
 import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/types.ts';
 import { CoopGateway, mirrorId, type CoopGatewayDeps } from './gateway.ts';
@@ -26,6 +26,7 @@ const INVITE = makeInviteUrl(ROOM, 'S'.repeat(43), { hostName: 'Ada', title: 'Sh
 const PARTICIPANT = 'peer:abcdefgh12345678';
 
 let db: Db;
+let deps: CoopGatewayDeps;
 let gateway: CoopGateway;
 let pair: ChannelPair;
 let hostServer: RpcServerConnection<typeof CoopContract>;
@@ -59,7 +60,16 @@ beforeEach(async () => {
   const record = (method: string) => async (input: unknown) => (calls.push({ method, input }), { ok: true as const });
   const handlers = {
     'coop.hello': async () => ({ admitted: true, participantId: PARTICIPANT, hostName: 'Ada', sessionId: 'host-1', title: 'Shader', mode: 'code', fingerprint: ['🐙', '🌵', '🎈', '🚀'] }),
-    'coop.subscribe': async () => ({ session: { id: 'host-1', title: 'Shader', mode: 'code', model: null, effort: null, status: 'idle' }, messages: [], siblings: {}, seq: 7 }) as unknown as SessionSnapshot,
+    // Its conversation names a sub-agent's session: a tool call that started one.
+    'coop.subscribe': async () =>
+      ({
+        session: { id: 'host-1', title: 'Shader', mode: 'code', model: null, effort: null, status: 'idle' },
+        messages: [{ id: 'a1', sessionId: 'host-1', parentId: null, role: 'assistant', parts: [{ type: 'tool_call', id: 'c1', name: 'Agent', input: {}, childSessionId: 'agent-1' }], createdAt: 1 }],
+        siblings: {},
+        seq: 7,
+      }) as unknown as SessionSnapshot,
+    'coop.subscribeChild': async (input: { sessionId: string }) => (calls.push({ method: 'coop.subscribeChild', input }), { session: { id: input.sessionId, title: 'Agent', mode: 'code' }, messages: [], seq: 2 }) as unknown as SessionSnapshot,
+    'coop.unsubscribeChild': record('coop.unsubscribeChild'),
     'coop.unsubscribe': record('coop.unsubscribe'),
     'chat.respond': record('chat.respond'),
     'chat.send': async (input: unknown) => (calls.push({ method: 'chat.send', input }), { userMessageId: 'm1' }),
@@ -69,7 +79,7 @@ beforeEach(async () => {
   hostServer = serveRpc(CoopContract, handlers, coop, {});
   peer = createRpcClient(PeerContract, peerLane);
   const models: ModelResolver = { resolve: async (ref) => ({ adapter, info: modelInfo(ref) }), firstAvailable: async () => undefined };
-  const deps: CoopGatewayDeps = {
+  deps = {
     db,
     relayUrl: () => 'https://relay.test',
     transport: { join: async () => pair.guest },
@@ -85,6 +95,7 @@ beforeEach(async () => {
     hasBlob: async () => true,
     putBlob: async () => 'x',
     saveCopy: async () => 'copy-1',
+    ownsGroup: async (_userId: string, groupId: string) => groupId === 'g-mine',
     log: () => undefined,
   };
   gateway = new CoopGateway(deps);
@@ -114,7 +125,7 @@ describe('co-op gateway on the guest’s computer', () => {
     await settle();
     expect(toWindows).toContainEqual({ sessionId, event: { type: 'typing', participantId: 'x' } });
     // What a guest can't do in someone else's session isn't forwarded at all.
-    await refused(gateway.call('u2', 'sessions.update', { id: sessionId, title: 'mine' }) as Promise<unknown>, 'unsupported');
+    await refused(gateway.call('u2', 'sessions.move', { id: sessionId, workspaceId: 'w' }) as Promise<unknown>, 'unsupported');
     expect((await gateway.list('u2')).map((s) => s.id)).toEqual([sessionId]);
   });
 
@@ -158,6 +169,69 @@ describe('co-op gateway on the guest’s computer', () => {
     await settle();
     await gateway.call('u2', 'chat.respond', { sessionId, interactionId: 'q2', answer: { behavior: 'allow' } });
     await refused(peer.call('mcp.call', { name: 'mcp__mail__send', input: { to: 'y' } }), 'forbidden');
+  });
+
+  it('files the mirror in their own sidebar (their name for it, pinned, group, archived, unread) and asks the host nothing', async () => {
+    const { sessionId } = await gateway.join('u2', INVITE, 'host');
+    const before = calls.length;
+    await gateway.call('u2', 'sessions.update', { id: sessionId, title: 'Our shader', pinned: true, groupId: 'g-mine' });
+    await gateway.call('u2', 'sessions.update', { id: sessionId, unread: true });
+    const [summary] = await gateway.list('u2');
+    expect(summary).toMatchObject({ id: sessionId, title: 'Our shader', groupId: 'g-mine', finishedUnseen: true, pinnedAt: expect.any(Number) });
+    expect(toUser.at(-1)).toMatchObject({ event: 'sessions.changed', payload: { id: sessionId, finishedUnseen: true } });
+    await gateway.call('u2', 'sessions.markSeen', { id: sessionId });
+    expect((await gateway.list('u2'))[0]!.finishedUnseen).toBe(false);
+    // The window shows their name for it too.
+    expect(((await gateway.call('u2', 'sessions.subscribe', { id: sessionId })) as SessionSnapshot).session.title).toBe('Our shader');
+    // Someone else's group, and the session's own settings (the host's), are refused.
+    await refused(gateway.call('u2', 'sessions.update', { id: sessionId, groupId: 'g-theirs' }) as Promise<unknown>, 'not_found');
+    await refused(gateway.call('u2', 'sessions.update', { id: sessionId, model: 'p/other' }) as Promise<unknown>, 'forbidden');
+    await gateway.call('u2', 'sessions.update', { id: sessionId, archived: true, title: '' });
+    expect((await gateway.list('u2'))[0]).toMatchObject({ title: 'Shader', archivedAt: expect.any(Number) });
+    // Nothing of it reached the host.
+    expect(calls.slice(before).filter((c) => c.method !== 'coop.subscribe')).toEqual([]);
+    // It is kept: Atelier starting again lists it as they filed it.
+    await gateway.call('u2', 'sessions.update', { id: sessionId, title: 'Our shader' });
+    expect((await new CoopGateway(deps).list('u2'))[0]).toMatchObject({ title: 'Our shader', groupId: 'g-mine', archivedAt: expect.any(Number) });
+  });
+
+  it('opens the transcript of a sub-agent its conversation names, read-only, with its events', async () => {
+    const { sessionId } = await gateway.join('u2', INVITE, 'host');
+    expect(gateway.owns('u2', 'agent-1')).toBe(false);
+    await gateway.call('u2', 'sessions.subscribe', { id: sessionId });
+    expect(gateway.owns('u2', 'agent-1')).toBe(true);
+    expect(gateway.owns('someone-else', 'agent-1')).toBe(false);
+    // One it never heard of isn't asked for.
+    await refused(gateway.call('u2', 'sessions.subscribe', { id: 'agent-2' }) as Promise<unknown>, 'not_found');
+
+    const snapshot = (await gateway.call('u2', 'sessions.subscribe', { id: 'agent-1' })) as SessionSnapshot;
+    expect(snapshot.session.id).toBe('agent-1');
+    expect(calls.at(-1)).toEqual({ method: 'coop.subscribeChild', input: { sessionId: 'agent-1' } });
+    hostServer.emit('child.event', { sessionId: 'agent-1', seq: 3, event: { type: 'status', status: 'running' } });
+    // A sub-agent of the sub-agent, named in its events, opens too.
+    hostServer.emit('child.event', { sessionId: 'agent-1', seq: 4, event: { type: 'tasks', tasks: [{ id: 't', kind: 'agent', title: 'x', command: null, sessionId: 'agent-3', background: true, loop: null, startedAt: 1, endedAt: null, status: 'running', exitCode: null }] } });
+    await settle();
+    expect(toWindows).toContainEqual({ sessionId: 'agent-1', event: { type: 'status', status: 'running' } });
+    expect(gateway.owns('u2', 'agent-3')).toBe(true);
+    // Only for reading.
+    await refused(gateway.call('u2', 'chat.send', { sessionId: 'agent-1', parts: [{ type: 'text', text: 'hi' }] }) as Promise<unknown>, 'unsupported');
+    await gateway.call('u2', 'sessions.unsubscribe', { id: 'agent-1' });
+    expect(calls.at(-1)).toEqual({ method: 'coop.unsubscribeChild', input: { sessionId: 'agent-1' } });
+    hostServer.emit('child.event', { sessionId: 'agent-1', seq: 5, event: { type: 'status', status: 'idle' } });
+    await settle();
+    expect(toWindows).not.toContainEqual({ sessionId: 'agent-1', event: { type: 'status', status: 'idle' } });
+  });
+
+  it('an ended session without a copy can still be removed after Atelier started again', async () => {
+    const { sessionId } = await gateway.join('u2', INVITE, 'host');
+    gateway.shutdown();
+    await db.update(coopMemberships).set({ endedAt: 5 });
+    const again = new CoopGateway(deps);
+    await again.resume();
+    expect(again.owns('u2', sessionId)).toBe(true);
+    expect((await again.list('u2'))[0]).toMatchObject({ id: sessionId, coop: { ended: true } });
+    await again.call('u2', 'sessions.delete', { id: sessionId });
+    expect(await again.list('u2')).toEqual([]);
   });
 
   it('when the host’s computer is away, windows hear it and calls say so calmly', async () => {

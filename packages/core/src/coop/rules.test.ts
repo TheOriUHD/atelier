@@ -29,7 +29,7 @@ describe('what co-op participants may call', () => {
     expect(coopAllows('sessions.subscribe', 'viewer')).toBe(true);
     expect(coopAllows('chat.send', 'viewer')).toBe(false);
     expect(coopAllows('chat.send', 'editor')).toBe(true);
-    for (const p of ['sessions.update', 'chat.switchBranch', 'checkpoints.rewind', 'loops.start', 'sessions.delete']) {
+    for (const p of ['sessions.move', 'chat.switchBranch', 'checkpoints.rewind', 'loops.start', 'sessions.delete']) {
       expect(coopAllows(p, 'editor')).toBe(false);
       expect(coopAllows(p, 'host')).toBe(true);
     }
