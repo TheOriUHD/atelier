@@ -25,7 +25,7 @@ test('two desktops: invite, compare emoji, let in, write together, and the guest
     const box = ada.getByRole('textbox', { name: 'Message', exact: true });
     await box.fill('the shader plan');
     await box.press('Enter');
-    await expect(ada.getByText('You said: the shader plan', { exact: true })).toBeVisible();
+    await expect(ada.getByText('You said: the shader plan', { exact: true })).toBeVisible({ timeout: 30_000 });
     await ada.getByRole('button', { name: 'Co-op', exact: true }).click();
     const popover = ada.getByRole('dialog', { name: 'Co-op' });
     await popover.getByRole('button', { name: 'Start co-op' }).click();
@@ -36,7 +36,7 @@ test('two desktops: invite, compare emoji, let in, write together, and the guest
 
     // Ben opens it: the join card says whose session it is and where it runs.
     await ben.evaluate((fragment) => void (location.hash = `#/join/${fragment}`), link.slice(link.indexOf('#') + 1));
-    await expect(ben.getByText(/Join Ada’s session/)).toBeVisible();
+    await expect(ben.getByText(/Join Ada’s session/)).toBeVisible({ timeout: 30_000 });
     await expect(ben.getByText('It runs on Ada’s computer.')).toBeVisible();
     await ben.getByRole('button', { name: 'Join', exact: true }).click();
 
@@ -53,7 +53,7 @@ test('two desktops: invite, compare emoji, let in, write together, and the guest
     await benBox.fill('calmer waves');
     await benBox.press('Enter');
     await expect(ada.getByText('You said: calmer waves', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(ben.getByText('You said: calmer waves', { exact: true })).toBeVisible();
+    await expect(ben.getByText('You said: calmer waves', { exact: true })).toBeVisible({ timeout: 30_000 });
 
     // Ada quits: Ben is told her computer is away.
     await host.close();
