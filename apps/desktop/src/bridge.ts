@@ -43,4 +43,4 @@ export type BackendToMain =
   | { kind: 'blob'; id: number; found: false };
 
 /** Menu commands forwarded to the renderer. */
-export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
+export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'join-coop' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';

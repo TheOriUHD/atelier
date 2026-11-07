@@ -4,7 +4,7 @@
  */
 import { APP, type AppTier, type ComputerApp, type ComputerSettings, type ComputerStatus, type DeviceLending, type RpcMessage, type Transport } from '@atelier/protocol';
 
-export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
+export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'join-coop' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
 
 /** A change to what this computer lends the server (apps/desktop/src/lending.ts). */
 export type LendingChange =

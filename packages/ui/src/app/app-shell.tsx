@@ -16,6 +16,7 @@ import { TrustWorkspaceHost } from '../features/workspaces/trust.tsx';
 import { LendScratchHost } from '../features/workspaces/lend-scratch.tsx';
 import { WhatsNewHost } from '../features/whats-new/whats-new.tsx';
 import { CommandPalette } from './command-palette.tsx';
+import { JoinLinkDialog } from '../features/coop/join-link-dialog.tsx';
 import { useLockNow } from '../features/auth/screen-lock.ts';
 import { rememberTab, tabOf } from './last-tab.ts';
 import { solo } from './solo.ts';
@@ -33,6 +34,8 @@ export function AppShell() {
   // The next start opens in the tab you are in now.
   const mode = useMode();
   useEffect(() => (solo ? undefined : rememberTab(tabOf(mode))), [mode]);
+  const joinCoopOpen = useUi((s) => s.joinCoopOpen);
+  const setJoinCoopOpen = useUi((s) => s.setJoinCoopOpen);
 
   return (
     <div className="flex h-full overflow-hidden bg-bg text-fg">
@@ -42,6 +45,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <CommandPalette />
+      <JoinLinkDialog open={joinCoopOpen} onOpenChange={setJoinCoopOpen} />
       <SettingsOverlay />
       {desktop && <KeepAwakeSync />}
       {/* Also in the browser: a session there can use an SSH host reached from the person's desktop. */}
@@ -73,6 +77,7 @@ function useAppShortcuts(): void {
   const openSettings = useOpenSettings();
   const toggleSidebar = useUi((s) => s.toggleSidebar);
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
+  const setJoinCoopOpen = useUi((s) => s.setJoinCoopOpen);
   const lockNow = useLockNow(openSettings);
   const bindings = useShortcutBindings();
 
@@ -85,6 +90,7 @@ function useAppShortcuts(): void {
       else if (command === 'settings') openSettings();
       else if (command === 'toggle-sidebar') toggleSidebar();
       else if (command === 'lock') lockNow();
+      else if (command === 'join-coop') setJoinCoopOpen(true);
       else setPaletteOpen(true);
     };
     if (desktop) return desktop.onMenu(run);
@@ -96,5 +102,5 @@ function useAppShortcuts(): void {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [newChat, newTemporaryChat, openSettings, toggleSidebar, setPaletteOpen, lockNow, bindings]);
+  }, [newChat, newTemporaryChat, openSettings, toggleSidebar, setPaletteOpen, setJoinCoopOpen, lockNow, bindings]);
 }

@@ -93,6 +93,7 @@ beforeEach(async () => {
     hasBlob: async () => true,
     putBlob: async () => '',
     saveCopy: async () => null,
+    ownsGroup: async () => true,
     log: () => undefined,
   }));
 });

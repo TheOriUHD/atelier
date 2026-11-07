@@ -38,7 +38,8 @@ the page sends nothing anywhere. The join card says whose session it is, that it
 you share. Choose what answers your messages, then click **Join** and wait for the host to let you in.
 
 If the link doesn't open Atelier (a Linux AppImage, for example, can't register it), open Atelier yourself and paste
-the link into **More › Join a co-op session…** in the sidebar, or the same command in the command palette.
+the link into **File › Join a Co-op Session…** in the desktop app, **More › Join a co-op session…** in the sidebar,
+or the same command in the command palette.
 
 To join a session on another computer you need the desktop app in **Run on this computer** mode. A desktop signed in
 to a server joins co-op sessions on that server only.
@@ -52,6 +53,10 @@ to a server joins co-op sessions on that server only.
 - **Retry**, **Continue** and editing your own message run as you: your choice of model, your cost.
 - Switching branches and rewinding are the host's.
 - **Can chat** people write and run turns; **Can watch** people follow along and add reactions.
+- **Your sidebar is yours.** A guest can pin the session, rename it, put it in one of their groups, archive it and
+  mark it unread. Only they see that: the session keeps its name and place for the host and everyone else.
+- **Sub-agents and tracks.** Everyone can open the transcript of a sub-agent or a track, and in Code the
+  **Background tasks** pane with what runs in the background. Stopping and clearing them is the host's.
 
 ## Whose models answer you
 
@@ -101,8 +106,8 @@ In a Code session whose folder is a git repository on the host's computer, **Sta
 work on for you, beside the conversation, in its own copy of the repository (a git worktree on its own branch, kept in
 Atelier's data folder). When it finishes, the conversation hears about it.
 
-**View changes** shows what it changed. The host clicks **Merge** to merge its branch into the folder, or **Close**
-to stop it and remove its copy. A track that doesn't merge cleanly is refused, and the folder stays as it was.
+**View changes** shows what it changed, and the **Background tasks** pane shows its transcript as it works. The host
+clicks **Merge** to merge its branch into the folder, or **Close** to stop it and remove its copy. A track that doesn't merge cleanly is refused, and the folder stays as it was.
 
 ## Reactions
 

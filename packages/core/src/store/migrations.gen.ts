@@ -255,5 +255,16 @@ export const migrations: { name: string; statements: string[] }[] = [
       "CREATE INDEX `message_reactions_session` ON `message_reactions` (`session_id`);",
       "CREATE INDEX `session_participants_user` ON `session_participants` (`user_id`);"
     ]
+  },
+  {
+    "name": "20261107151259_coop_views",
+    "statements": [
+      "ALTER TABLE `coop_memberships` ADD `local_title` text;",
+      "ALTER TABLE `coop_memberships` ADD `pinned_at` integer;",
+      "ALTER TABLE `coop_memberships` ADD `group_id` text;",
+      "ALTER TABLE `coop_memberships` ADD `archived_at` integer;",
+      "ALTER TABLE `coop_memberships` ADD `finished_unseen_at` integer;",
+      "ALTER TABLE `session_participants` ADD `title` text;"
+    ]
   }
 ];

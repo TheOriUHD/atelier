@@ -25,6 +25,8 @@ interface UiState {
   /** Narrow screens: the sidebar shows as a drawer over the page. */
   drawerOpen: boolean;
   paletteOpen: boolean;
+  /** "Join a co-op session…" from the desktop app's File menu: the paste-a-link dialog. */
+  joinCoopOpen: boolean;
   artifact: ArtifactPanelState | null;
   /** The split view cell the person works in (a session id, or the new session's place); the first when not shown. */
   activeCell: string | null;
@@ -32,6 +34,7 @@ interface UiState {
   toggleSidebar(): void;
   setDrawerOpen(open: boolean): void;
   setPaletteOpen(open: boolean): void;
+  setJoinCoopOpen(open: boolean): void;
   setActiveCell(id: string | null): void;
   openArtifact(sessionId: string, artifactId: string): void;
   updateArtifact(patch: Partial<ArtifactPanelState>): void;
@@ -42,6 +45,7 @@ export const useUi = create<UiState>((set) => ({
   sidebarCollapsed: readCollapsed(),
   drawerOpen: false,
   paletteOpen: false,
+  joinCoopOpen: false,
   artifact: null,
   activeCell: null,
   setActiveCell: (activeCell) => set({ activeCell }),
@@ -58,6 +62,7 @@ export const useUi = create<UiState>((set) => ({
   setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
   // The palette replaces the drawer it may have been opened from.
   setPaletteOpen: (paletteOpen) => set(paletteOpen ? { paletteOpen, drawerOpen: false } : { paletteOpen }),
+  setJoinCoopOpen: (joinCoopOpen) => set(joinCoopOpen ? { joinCoopOpen, drawerOpen: false, paletteOpen: false } : { joinCoopOpen }),
   openArtifact: (sessionId, artifactId) => set({ artifact: { sessionId, artifactId, version: null, view: 'preview', expanded: false } }),
   updateArtifact: (patch) => set((s) => (s.artifact ? { artifact: { ...s.artifact, ...patch } } : {})),
   closeArtifact: () => set({ artifact: null }),

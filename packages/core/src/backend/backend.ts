@@ -8,6 +8,7 @@ import { basename, dirname, join, posix, win32 } from 'node:path';
 import { flavorOfSep, pathOps } from '../paths.ts';
 import {
   accountParticipant,
+  isCoopMirror,
   ADMIN_PROCEDURES,
   APP,
   DEVICE_LINK_PROTOCOL,
@@ -1531,7 +1532,30 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     if (row?.userId === userId) return { ...summary, coop: { role: 'host', hostName, participants: participants.length } };
     const p = await coop.participants.get(summary.id, accountParticipant(userId));
     if (!p || p.leftAt !== null) return summary;
-    return { ...summary, pinnedAt: p.pinnedAt, groupId: p.groupId, archivedAt: p.archivedAt, finishedUnseen: p.finishedUnseenAt !== null, coop: { role: p.role, hostName, participants: participants.length } };
+    return { ...summary, title: p.title ?? summary.title, pinnedAt: p.pinnedAt, groupId: p.groupId, archivedAt: p.archivedAt, finishedUnseen: p.finishedUnseenAt !== null, coop: { role: p.role, hostName, participants: participants.length } };
+  };
+  /**
+   * A guest files a co-op session in their own sidebar: their name for it, pinned, group, archived, unread, kept on their
+   * participant row. The session itself, and every other setting of it, stays the host's.
+   */
+  const updateOwnView = async (input: { id: string; title?: string; pinned?: boolean; groupId?: string | null; archived?: boolean; unread?: boolean } & Record<string, unknown>, ctx: Ctx): Promise<SessionSummary> => {
+    const userId = me(ctx).id;
+    const { id, title, pinned, groupId, archived, unread, ...rest } = input;
+    const { summary, as } = await sessionFor(id, ctx, 'sessions.update');
+    if (!as || as.role === 'host') throw appError('not_found', 'That conversation no longer exists.');
+    if (Object.values(rest).some((v) => v !== undefined)) throw appError('forbidden', `Only ${summary.coop?.hostName || 'the host'} can change that.`);
+    if (groupId && !(await groups.get(userId, groupId))) throw appError('not_found', 'Group not found.');
+    const now = Date.now();
+    await coop.participants.update(id, as.id, {
+      ...(title !== undefined ? { title: title.trim() || null } : {}),
+      ...(pinned !== undefined ? { pinnedAt: pinned ? now : null } : {}),
+      ...(groupId !== undefined ? { groupId } : {}),
+      ...(archived !== undefined ? { archivedAt: archived ? now : null } : {}),
+      ...(unread !== undefined ? { finishedUnseenAt: unread ? now : null } : {}),
+    });
+    const view = await coopView((await sessions.get(id))!, userId);
+    emitToUser(userId, 'sessions.changed', view);
+    return view;
   };
   /** Tells these accounts about a co-op session: its summary as they see it, or that it's gone for them. */
   const notifyParticipants = async (sessionId: string, userIds: string[]): Promise<void> => {
@@ -1729,21 +1753,28 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
   // ---------------------------------------------------------------- co-op across computers (ARCHITECTURE §24)
   if (platform.surface === 'desktop') {
+    // A computer whose protected storage refuses (Windows' without a signed-in session, a locked keyring) says so,
+    // instead of an internal error.
+    const unstorable = (e: unknown) => appError('secret_store', `Atelier couldn’t use this computer’s protected storage for co-op’s keys: ${e instanceof Error ? e.message : String(e)}`);
     const coopSecrets = {
-      get: (id: string) => secrets.get(id),
-      set: async (id: string, value: string) => void (await secrets.set({ id, label: 'Co-op', kind: 'token', value })),
+      get: (id: string) => secrets.get(id).catch((e: unknown) => Promise.reject(unstorable(e))),
+      set: async (id: string, value: string) => void (await secrets.set({ id, label: 'Co-op', kind: 'token', value }).catch((e: unknown) => Promise.reject(unstorable(e)))),
       delete: (id: string) => secrets.delete(id),
     };
     // This computer's long-term co-op key: what the people it meets pin.
     let deviceKey: Promise<ReturnType<typeof parseStaticKey>> | null = null;
     const coopDeviceKey = () =>
       (deviceKey ??= (async () => {
-        const stored = await secrets.get('coop-device-key');
+        const stored = await coopSecrets.get('coop-device-key');
         if (stored) return parseStaticKey(stored);
         const key = generateStaticKey();
         await coopSecrets.set('coop-device-key', serializeStaticKey(key));
         return key;
-      })());
+      })().catch((e: unknown) => {
+        // Not kept: the next join tries the storage again.
+        deviceKey = null;
+        throw e;
+      }));
     const transport = relayTransport(coopDeviceKey);
     const nameOf = async (userId: string) => (await accounts.get(userId).catch(() => null))?.name || 'Someone';
     coopHost = new CoopHost({
@@ -1764,6 +1795,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         return sessionDiff(ws, await checkpointStore.firstVersions(sessionId, ws.id), path);
       },
       artifacts: (sessionId) => artifacts.list(sessionId),
+      taskOutput: (sessionId, taskId, since) =>
+        chat.tasks.output(sessionId, taskId, since).catch((e: unknown) => {
+          throw appError('not_found', (e as Error).message);
+        }),
       blob: async (sessionId, sha256) => (blobAccess.inSession(sessionId, sha256) ? ((await readBlob(sha256)) ?? null) : null),
       sessionHasBlob: async (sessionId, sha256) => blobAccess.inSession(sessionId, sha256),
       upload: async (sessionId, file) => {
@@ -1819,6 +1854,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         })),
       hasBlob: async (sha256) => !!(await blobs.info(sha256).catch(() => undefined)),
       putBlob: async (bytes, mime) => (await blobs.put(bytes, mime)).sha256,
+      ownsGroup: async (userId, groupId) => !!(await groups.get(userId, groupId)),
       saveCopy: async (userId, snapshot, title) => {
         const copy = await sessions.create({ mode: 'chat', userId, title: `${title} (co-op)` });
         const ids = new Map(snapshot.messages.map((m) => [m.id, newId()]));
@@ -2297,7 +2333,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         return view;
       }));
       // Sessions joined on other computers (coop/gateway.ts).
-      const mirrors = input.projectId || (input.archived ?? 'active') === 'archived' ? [] : ((await coopGateway?.list(userId)) ?? []).filter((m) => (!input.mode || m.mode === input.mode) && (!input.query || m.title.toLowerCase().includes(input.query.toLowerCase())));
+      const shown = input.archived ?? 'active';
+      const mirrors = input.projectId ? [] : ((await coopGateway?.list(userId)) ?? []).filter((m) => (!input.mode || m.mode === input.mode) && (!input.query || m.title.toLowerCase().includes(input.query.toLowerCase())) && (shown === 'all' || (shown === 'archived') === (m.archivedAt != null)));
       return [...allowed, ...joined, ...mirrors]
         .filter((summary): summary is SessionSummary => summary !== null)
         .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0) || b.updatedAt - a.updatedAt)
@@ -2351,7 +2388,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         throw e instanceof WorkspaceError ? appError('workspace_unavailable', e.message) : e;
       }
     },
-    'sessions.update': async ({ id, title, pinned, model, effort, thinking, remoteControl, projectId, permissionMode, connectorsOff: off, research, imageModel, groupId, archived, unread }, ctx) => {
+    'sessions.update': async (input, ctx) => {
+      const { id, title, pinned, model, effort, thinking, remoteControl, projectId, permissionMode, connectorsOff: off, research, imageModel, groupId, archived, unread } = input;
+      // Someone else's session they take part in: only how it sits in their own sidebar.
+      if ((await sessions.getRow(id))?.userId !== me(ctx).id) return updateOwnView(input, ctx);
       const before = await sessionOrThrow(id, ctx);
       if (model) await refuseHiddenModel(model, me(ctx).id);
       const row = off !== undefined || research !== undefined || imageModel !== undefined || thinking !== undefined || remoteControl !== undefined ? await sessions.getRow(id) : undefined;
@@ -3146,7 +3186,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const run = handler as unknown as (i: never, x: Ctx & { signal: AbortSignal }) => unknown;
         // A session joined on another computer: the call goes to its host, if it is one a guest may make there.
         const mirror = mirrorOf(ctx, input);
-        if (mirror && c.auth) {
+        // A sub-agent's session in one goes by the host's id: never one of this computer's own sessions.
+        if (mirror && c.auth && (isCoopMirror(mirror) || !(await sessions.getRow(mirror)))) {
           if (method === 'sessions.subscribe') c.subscriptions.add(mirror);
           if (method === 'sessions.unsubscribe' || method === 'sessions.leave') c.subscriptions.delete(mirror);
           const watching = [...connections].some((o) => o !== c && o.subscriptions.has(mirror));

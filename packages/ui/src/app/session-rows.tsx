@@ -148,7 +148,7 @@ export function SessionRow({
   const [namingGroup, setNamingGroup] = useState(false);
   const running = !showsStatus && (session.status === 'running' || session.status === 'waiting');
   const coop = coopLabel(session);
-  // A guest's session is the host's to rename, file and delete: its menu only leaves it (or, ended, removes it).
+  // Someone else's session: the guest files it in their own sidebar (only they see that), and leaves instead of deleting.
   const guest = !!session.coop && session.coop.role !== 'host';
 
   const update = (patch: { pinned?: boolean; projectId?: string | null }) =>
@@ -222,8 +222,18 @@ export function SessionRow({
               <Icon icon={MoreHorizontal} />
             </MenuTrigger>
             {/* Clicks in the portalled menu bubble through the React tree to the row link; don't let them open the chat. */}
-            {guest ? (
+            {guest && chat ? (
               <MenuContent align="start" anchor={anchor} className="w-56" onClick={(e) => e.preventDefault()}>
+                <MenuItem
+                  icon={session.pinnedAt ? PinOff : Pin}
+                  onClick={() => void update({ pinned: !session.pinnedAt })}
+                >
+                  {session.pinnedAt ? 'Unpin' : 'Pin'}
+                </MenuItem>
+                <MenuItem icon={Pencil} onClick={() => setRenaming(true)}>
+                  Rename
+                </MenuItem>
+                <MenuSeparator />
                 {session.coop?.ended ? (
                   <MenuItem icon={Trash2} danger onClick={() => setDeleting(true)}>
                     Remove from sidebar
@@ -275,6 +285,7 @@ export function SessionRow({
                 groups={groups ?? []}
                 onRename={() => setRenaming(true)}
                 onDelete={() => setDeleting(true)}
+                {...(guest ? { onLeave: () => setLeaving(true) } : {})}
                 onNewGroup={() => setNamingGroup(true)}
                 close={() => setMenuOpen(false)}
                 anchor={anchor}
@@ -355,7 +366,10 @@ export function RenameDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent title={`Rename ${sessionNoun(session)}`}>
+      <DialogContent
+        title={`Rename ${sessionNoun(session)}`}
+        {...(session.coop && session.coop.role !== 'host' ? { description: `Only you see this name. It stays as it is for ${session.coop.hostName} and the others.` } : {})}
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();

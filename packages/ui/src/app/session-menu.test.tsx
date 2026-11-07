@@ -30,12 +30,12 @@ const session: SessionSummary = {
 };
 const workspace: WorkspaceSummary = { id: 'w1', kind: 'local', name: 'site', root: '/work/site', host: null, deviceId: null, available: true, scratch: false, lastUsedAt: 1 };
 
-function open() {
+function open(shown: SessionSummary = session, handlers: { onLeave?: () => void; onDelete?: () => void } = {}) {
   const root = createRootRoute({
     component: () => (
       <Menu defaultOpen>
         <MenuTrigger>Options</MenuTrigger>
-        <SessionMenuContent session={session} workspace={workspace} groups={[]} onRename={() => {}} onDelete={() => {}} onNewGroup={() => {}} close={() => {}} />
+        <SessionMenuContent session={shown} workspace={workspace} groups={[]} onRename={() => {}} onDelete={handlers.onDelete ?? (() => {})} {...(handlers.onLeave ? { onLeave: handlers.onLeave } : {})} onNewGroup={() => {}} close={() => {}} />
       </Menu>
     ),
   });
@@ -62,5 +62,28 @@ describe('the session menu on the desktop', () => {
     fireEvent.keyDown(submenu, { key: '2' });
     await waitFor(() => expect(desktop.openWindow).toHaveBeenCalledWith('#/code/s1?solo=1'));
     expect(within(document.body).queryByText(/Something went wrong/)).toBeNull();
+  });
+});
+
+describe('the session menu in someone else’s co-op session', () => {
+  const joined: SessionSummary = { ...session, id: 'coop_room_s1', workspaceId: null, coop: { role: 'editor', hostName: 'Ada', participants: 2, mirror: true } };
+
+  it('files it in their own sidebar and leaves it, with no fork and no delete', async () => {
+    const onLeave = vi.fn();
+    open(joined, { onLeave });
+    await screen.findByRole('menuitem', { name: /^Pin/ });
+    const names = screen.getAllByRole('menuitem').map((m) => m.textContent?.replace(/[A-Z0-9]$/, ''));
+    expect(names).toEqual(expect.arrayContaining(['Pin', 'Mark as unread', 'Rename', 'Move to group', 'Archive', 'Leave']));
+    expect(names).not.toContain('Fork');
+    expect(names).not.toContain('Delete');
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Leave/ }));
+    expect(onLeave).toHaveBeenCalled();
+  });
+
+  it('once co-op ended, removes it from the sidebar instead', async () => {
+    const onDelete = vi.fn();
+    open({ ...joined, coop: { ...joined.coop!, ended: true } }, { onLeave: () => {}, onDelete });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^Remove from sidebar/ }));
+    expect(onDelete).toHaveBeenCalled();
   });
 });
