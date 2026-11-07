@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-11-07
+
 - **Co-op guests file a shared session in their own sidebar:** pin it, rename it, put it in one of their groups, archive it and mark it unread, on a team server and on another computer. Only they see it; the session keeps its name and place for the host and the others. A session whose co-op ended without a copy can be removed from the sidebar after Atelier started again (it couldn't be).
 - **Co-op guests on another computer open sub-agents' and tracks' transcripts,** and the **Background tasks** pane in Code with what runs there and commands' output. The host lets them follow a sub-agent's or track's session of the shared one only, never a side chat. Stopping and clearing background tasks is the host's, so guests no longer see buttons for it.
 - **File › Join a Co-op Session…** in the desktop app opens the dialog to paste an invite link.
