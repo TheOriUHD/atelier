@@ -497,7 +497,7 @@ export const contract = {
     'coop.end': { input: z.object({ sessionId: z.string() }), output: Ok },
     'coop.join': {
       input: z.object({ invite: z.string().max(2000), models: ModelsChoice.default('host') }),
-      output: z.object({ sessionId: z.string(), waiting: z.boolean() }),
+      output: z.object({ sessionId: z.string(), waiting: z.boolean(), fingerprint: z.array(z.string()).length(3).optional() }),
     },
     'sideChats.start': { input: z.object({ sessionId: z.string(), question: z.string().max(100_000).optional() }), output: SessionSummary },
     /** A session's side chats, oldest first. */

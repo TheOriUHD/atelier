@@ -162,14 +162,14 @@ export class CoopGateway {
   }
 
   /** Joins from an invite: connects, introduces the person, and waits for the host to let them in (`waiting`). */
-  async join(userId: string, invite: string, models: ModelsChoice, model: string | null = null): Promise<{ sessionId: string; waiting: boolean }> {
+  async join(userId: string, invite: string, models: ModelsChoice, model: string | null = null): Promise<{ sessionId: string; waiting: boolean; fingerprint?: string[] }> {
     const relayUrl = this.deps.relayUrl();
     if (!relayUrl) throw appError('unsupported', 'Co-op between computers is switched off on this computer.');
     const parsed = parseInviteFragment(invite);
     if (!parsed) throw appError('invalid_request', 'That isn’t a co-op invite link.');
     // Already in it (a second click on the same link): the same mirror.
     for (const link of this.links.values())
-      if (link.membership.userId === userId && link.membership.roomId === parsed.roomId && !link.ended) return { sessionId: link.membership.id, waiting: !link.admitted };
+      if (link.membership.userId === userId && link.membership.roomId === parsed.roomId && !link.ended) return { sessionId: link.membership.id, waiting: !link.admitted, ...(link.channel ? { fingerprint: [...link.channel.fingerprint] } : {}) };
     const pskSecret = `coop-psk-${parsed.roomId}`;
     const meta = parsed.meta ?? { hostName: 'Someone', title: 'Shared session', mode: 'chat' as const };
     const placeholder: Membership = {
@@ -196,7 +196,8 @@ export class CoopGateway {
     await this.deps.db.insert(coopMemberships).values(link.membership).onConflictDoUpdate({ target: coopMemberships.id, set: { ...link.membership } });
     this.links.set(id, link);
     this.changed(link);
-    return { sessionId: id, waiting: !welcome.admitted };
+    // The same three emoji the host sees, to compare with them.
+    return { sessionId: id, waiting: !welcome.admitted, fingerprint: [...welcome.fingerprint] };
   }
 
   /** Joins again the sessions this person was in when Atelier stopped (the host lets pinned guests straight in). */
@@ -455,11 +456,11 @@ export class CoopGateway {
       case 'checkpoints.list':
         return [];
       case 'coop.state': {
-        if (link.ended) return link.state ? { ...link.state, ended: true } : null;
-        if (!link.client || !link.connected || !link.admitted) return link.state ? { ...link.state, hostAway: !link.connected } : null;
+        if (link.ended) return link.state ? { ...link.state, ended: true, lending: link.lend } : null;
+        if (!link.client || !link.connected || !link.admitted) return link.state ? { ...link.state, hostAway: !link.connected, lending: link.lend } : null;
         const state = await link.client.call('coop.state', {});
         link.state = state;
-        return state;
+        return state ? { ...state, lending: link.lend } : state;
       }
       case 'coop.models': {
         const models = input.models as ModelsChoice;

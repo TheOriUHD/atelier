@@ -26,7 +26,7 @@ export interface CoopHandlerDeps<C> {
     close(sessionId: string): Promise<void>;
   };
   /** A guest's desktop joining a session on another computer (gateway.ts). */
-  join?(userId: string, invite: string, models: ModelsChoice): Promise<{ sessionId: string; waiting: boolean }>;
+  join?(userId: string, invite: string, models: ModelsChoice): Promise<{ sessionId: string; waiting: boolean; fingerprint?: string[] }>;
   /** A guest's desktop leaving a mirrored session (gateway.ts). */
   leaveMirror?(sessionId: string): Promise<boolean>;
   error(code: string, message: string): Error;

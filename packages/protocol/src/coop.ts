@@ -124,6 +124,10 @@ export const CoopState = z.object({
   ended: z.boolean(),
   /** Today's use of the host's models by this viewer, when they answer with them. */
   sharedUse: z.object({ requests: z.number(), spentUsd: z.number() }).nullable(),
+  /** The host's models a guest may pick while the host shares them (for a guest; the host has their own list). */
+  hostModels: z.array(z.object({ ref: z.string(), displayName: z.string() })).optional(),
+  /** On a guest's computer: they lend their own connectors to their turns. */
+  lending: z.boolean().optional(),
 });
 export type CoopState = z.infer<typeof CoopState>;
 
