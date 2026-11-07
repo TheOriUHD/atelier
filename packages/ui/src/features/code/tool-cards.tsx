@@ -3,7 +3,7 @@
  * edits as inline diffs, commands with their live output and exit status, sub-agents with their own transcript.
  */
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { AudioLines, Bot, Film, FolderInput, ListChecks, Maximize2, MessageSquare } from 'lucide-react';
+import { AudioLines, Bot, Compass, Film, FolderInput, ListChecks, Maximize2, MessageSquare } from 'lucide-react';
 import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolCallPart, type ToolResultPart } from '@atelier/protocol';
 import { Badge, DiffStat, Icon, IconButton, ThinkingDots, cn } from '../../components/ui/index.ts';
 import { queuedLabel, useLiveSession, type LiveSessionState } from '../../lib/live-session.ts';
@@ -24,6 +24,7 @@ import { SearchResults } from './search-results.tsx';
 import { WithViewedImages } from '../chat/images.tsx';
 import { parseSearchResult } from './search-result.ts';
 import { CommandCode } from './command-code.tsx';
+import { navigatorNotes } from '../coop/coop.ts';
 import { MEMORY_TOOLS, MemoryStep } from '../chat/memory-steps.tsx';
 
 export type ToolStep = Extract<ActivityStepView, { kind: 'tool' }>;
@@ -175,6 +176,7 @@ function ActivityRow({ step }: { step: ActivityStepView }) {
       case 'Write': {
         const created = step.result && !failed && !text?.startsWith('Updated') && step.call.name === 'Write';
         title = `${failed || !step.result ? step.call.name : step.call.name === 'Edit' ? 'Edited' : created ? 'Created' : 'Updated'} ${summary.target}`;
+        if (text && navigatorNotes(text).notes.length) status = <span className="shrink-0 text-warning-text">Navigator note</span>;
         body = <FileChangeBody step={step} />;
         break;
       }
@@ -701,6 +703,7 @@ function FileChangeCard({ step }: { step: ToolStep }) {
       <FileSummary open={open} onToggle={() => setOpen((o) => !o)} running={step.running} verb={verb} path={path}>
         <DiffStat added={rows.filter((r) => r.kind === 'add').length} removed={rows.filter((r) => r.kind === 'remove').length} />
         {failed && <span className="shrink-0 text-danger-text">Failed</span>}
+        {!failed && navigatorNotes(text).notes.length > 0 && <span className="shrink-0 text-warning-text">Navigator note</span>}
       </FileSummary>
       {open && (
         <div className="mt-2">
@@ -745,6 +748,7 @@ function FileChangeBody({ step }: { step: ToolStep }) {
           This changed {place.matches} places. The first is shown, at line {place.line}.
         </p>
       )}
+      {!failed && <NavigatorNotes text={resultText(step.result)} />}
       {whole && (
         <ChangeView
           {...(edit && sessionId ? { source: { sessionId, callId: step.call.id } } : {})}
@@ -756,6 +760,25 @@ function FileChangeBody({ step }: { step: ToolStep }) {
         />
       )}
     </div>
+  );
+}
+
+/** Co-op: what a navigator's model noted about an edit (it joins the edit's result), as a small note under the change. */
+export function NavigatorNotes({ text }: { text: string }) {
+  const { notes } = navigatorNotes(text);
+  if (!notes.length) return null;
+  return (
+    <>
+      {notes.map((n, i) => (
+        <aside key={i} aria-label={`Navigator · ${n.name}`} className="flex flex-col gap-0.5 rounded-lg bg-warning-subtle px-3 py-2">
+          <span className="flex items-center gap-1.5 text-footnote font-medium text-warning-text">
+            <Icon icon={Compass} className="size-3.5" />
+            Navigator · {n.name}
+          </span>
+          <p className="text-footnote whitespace-pre-wrap text-fg-secondary">{n.text}</p>
+        </aside>
+      ))}
+    </>
   );
 }
 

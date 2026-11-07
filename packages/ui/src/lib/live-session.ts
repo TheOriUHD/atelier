@@ -4,7 +4,8 @@
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { ArtifactSummary, BackgroundTask, ContextUsage, ImageProgress, LimitWarning, Message, OutboxMessage, PendingInteraction, RunEvent, RunPhase, SessionSnapshot, SessionSummary, Todo } from '@atelier/protocol';
+import { isCoopMirror } from '@atelier/protocol';
+import type { ArtifactSummary, BackgroundTask, ContextUsage, ImageProgress, LimitWarning, Message, OutboxMessage, Participant, PendingInteraction, RunEvent, RunPhase, SessionSnapshot, SessionSummary, Todo } from '@atelier/protocol';
 import { rpc } from './rpc.ts';
 import { getTransport } from './platform.ts';
 
@@ -43,7 +44,36 @@ export interface LiveSessionState {
   limitWarning?: LimitWarning | null;
   /** When the run going on began, from the server; null or absent while none runs (or from a server too old to say). */
   runStartedAt?: number | null;
+  /** Co-op: who is in the session and online, from the latest `presence` event; absent until one arrives. */
+  participants?: Participant[] | null;
+  /** Co-op: when each participant last said they were typing (this window's clock); it lapses after `TYPING_LAPSE_MS`. */
+  typing?: Record<string, number>;
+  /** Co-op, on a guest's computer: the host's computer can't be reached right now (the `host_away` event, or a call that said so). */
+  hostAway?: boolean;
+  /** Co-op: the emoji people put on messages, by message id. */
+  reactions?: Record<string, { emoji: string; participants: string[] }[]>;
+  /** Co-op: what the host's backend refused last (a model the person may not use…), shown above the message box until dismissed. */
+  coopNotice?: string | null;
   seq: number;
+}
+
+/** A reaction put on (`on`) or taken off a message's list. */
+function react(list: { emoji: string; participants: string[] }[] = [], participantId: string, emoji: string, on: boolean): { emoji: string; participants: string[] }[] {
+  const others = list.find((r) => r.emoji === emoji)?.participants.filter((p) => p !== participantId) ?? [];
+  const participants = on ? [...others, participantId] : others;
+  const rest = list.filter((r) => r.emoji !== emoji);
+  return participants.length ? [...rest, { emoji, participants }] : rest;
+}
+
+/** How long "is typing" lasts after the last `typing` event (they come at most every 2 s while someone types). */
+export const TYPING_LAPSE_MS = 5000;
+
+/** Someone's typing ends with what they sent: their message, or one of theirs waiting. */
+function doneTyping(typing: Record<string, number> | undefined, authors: (string | undefined)[]): Record<string, number> | undefined {
+  if (!typing || !authors.some((a) => a && a in typing)) return typing;
+  const next = { ...typing };
+  for (const a of authors) if (a) delete next[a];
+  return next;
 }
 
 /**
@@ -107,6 +137,13 @@ function wire(): void {
   rpc().on('session.event', ({ sessionId, seq, event }) => {
     const entry = entries.get(sessionId);
     if (!entry) return;
+    // Made up by a co-op guest's own backend, under the session's last number: applied whatever it is, and left as it is.
+    if (fromGateway(sessionId, event)) {
+      if (event.type === 'resync') void load(sessionId, entry);
+      else if (entry.buffer) entry.buffer.push({ seq, event });
+      else entry.store.setState((s) => applyEvent(s, event));
+      return;
+    }
     if (entry.buffer) entry.buffer.push({ seq, event });
     // Compaction can slot its summary in before the newest message, a switch or rewind changes the branch, and a message
     // can follow one this window never had (it moved elsewhere): take the backend's view of the branch.
@@ -120,7 +157,8 @@ function wire(): void {
   // Deleted elsewhere (another window, the other half of a split view, Delete all): say so instead of failing on send.
   rpc().on('sessions.removed', ({ id }) => {
     const entry = entries.get(id);
-    if (entry) entry.store.setState({ status: 'error', error: 'This conversation was deleted.' });
+    // A co-op session on someone else's computer goes from the sidebar when it ended and a copy took its place.
+    if (entry) entry.store.setState({ status: 'error', error: isCoopMirror(id) ? 'Co-op ended. If the host kept you a copy, it’s in your sidebar.' : 'This conversation was deleted.' });
   });
   getTransport().onReconnect(() => {
     for (const [id, entry] of entries) void load(id, entry);
@@ -134,6 +172,10 @@ async function load(sessionId: string, entry: Entry): Promise<void> {
     const artifacts = await rpc().call('artifacts.list', { sessionId });
     let state = fromSnapshot(snapshot, artifacts);
     for (const { seq, event } of entry.buffer) {
+      if (fromGateway(sessionId, event)) {
+        state = applyEvent(state, event);
+        continue;
+      }
       if (seq <= state.seq) continue;
       // The branch changed again while this loaded (a second compaction slotted its summary in, a switch): the events
       // after it name messages this snapshot doesn't have, and applied anyway one would cut the list down to itself.
@@ -172,6 +214,7 @@ function fromSnapshot(s: SessionSnapshot, artifacts: ArtifactSummary[]): LiveSes
     suggestion: s.suggestion ?? null,
     limitWarning: s.limitWarning ?? null,
     runStartedAt: s.runStartedAt ?? null,
+    ...(s.reactions ? { reactions: s.reactions } : {}),
     seq: s.seq,
   };
 }
@@ -184,9 +227,19 @@ function updateMessage(state: LiveSessionState, id: string, fn: (m: Message) => 
   return { ...state, messages };
 }
 
+/**
+ * Co-op, on a guest's computer: what its own backend says about the link to the host rather than passing on from the
+ * host (the host's computer away or back, the link back after a gap, co-op ended). It carries the last number the host
+ * gave, so it can't be told apart by its number: the host's own events keep the usual rule.
+ */
+function fromGateway(sessionId: string, event: RunEvent): boolean {
+  return event.type === 'host_away' || event.type === 'resync' || (event.type === 'presence' && event.participants.length === 0 && isCoopMirror(sessionId));
+}
+
 /** The event changes which messages make up the branch, so this window takes the backend's view of it again. */
 function needsReload(state: LiveSessionState, event: RunEvent): boolean {
-  return event.type === 'compacted' || event.type === 'branch' || unknownParent(state, event);
+  // `resync`: a co-op guest's link to the host came back after a gap, and events may have gone missing meanwhile.
+  return event.type === 'compacted' || event.type === 'branch' || event.type === 'resync' || unknownParent(state, event);
 }
 
 /** A new message whose parent this window doesn't have: the conversation went on from a branch it never loaded. */
@@ -221,6 +274,7 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
         siblings,
         streamingMessageId: m.role === 'assistant' && !m.stopReason ? m.id : state.streamingMessageId,
         ...(m.role === 'tool' ? { toolOutput: {}, toolProgress: {} } : {}),
+        ...(m.role === 'user' && m.author ? { typing: doneTyping(state.typing, [m.author]) } : {}),
       };
     }
     case 'part':
@@ -268,7 +322,7 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
     case 'phase':
       return { ...state, phase: event.phase, retryAttempt: event.phase === 'retrying' ? event.retryAttempt : undefined };
     case 'outbox':
-      return { ...state, outbox: event.items };
+      return { ...state, outbox: event.items, typing: doneTyping(state.typing, event.items.map((m) => m.author)) };
     case 'compacted':
       return { ...state, context: null };
     case 'branch':
@@ -287,6 +341,16 @@ export function applyEvent(state: LiveSessionState, event: RunEvent): LiveSessio
       return { ...state, toolProgress: { ...state.toolProgress, [event.callId]: event.progress } };
     case 'tool_output':
       return { ...state, toolOutput: { ...state.toolOutput, [event.callId]: ((state.toolOutput[event.callId] ?? '') + event.text).slice(-OUTPUT_TAIL_CHARS) } };
+    case 'presence':
+      return { ...state, participants: event.participants };
+    case 'typing':
+      return { ...state, typing: { ...state.typing, [event.participantId]: Date.now() } };
+    case 'host_away':
+      return { ...state, hostAway: event.away };
+    case 'resync':
+      return state;
+    case 'reaction':
+      return { ...state, reactions: { ...state.reactions, [event.messageId]: react(state.reactions?.[event.messageId], event.participantId, event.emoji, event.on) } };
   }
 }
 
@@ -372,6 +436,22 @@ function shallowEqual<T>(a: T, b: T): boolean {
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
   const keys = Object.keys(a);
   return keys.length === Object.keys(b).length && keys.every((k) => Object.is((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** Co-op: a call to a session on the host's computer said it can't be reached (`host_away`), before the event did. */
+export function markHostAway(sessionId: string): void {
+  const entry = entries.get(sessionId);
+  if (entry && !entry.store.getState().hostAway) entry.store.setState({ hostAway: true });
+}
+
+/** Co-op: says above the message box why the host's backend refused something (null clears it). */
+export function showCoopNotice(sessionId: string, text: string | null): void {
+  entries.get(sessionId)?.store.setState({ coopNotice: text });
+}
+
+/** Whether a session open in this window is a shared one (co-op), as its summary says. */
+export function isSharedSession(sessionId: string): boolean {
+  return isCoopMirror(sessionId) || !!entries.get(sessionId)?.store.getState().session?.coop;
 }
 
 /** Replaces local state with a snapshot returned by a call (e.g. switching branches). */

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Participant } from './coop.ts';
 import { ImageProgress } from './images.ts';
 import { EditPlace, Message, MessageError, Part, Usage } from './messages.ts';
 import { LimitWarning } from './limits.ts';
@@ -39,6 +40,11 @@ export const SessionSummary = z.object({
   archivedAt: z.number().nullable().optional(),
   /** Set on temporary chats: never listed or searched, and deleted when the person leaves them. */
   temporary: TemporaryMode.nullable().optional(),
+  /**
+   * Co-op: this viewer's part in it, and who hosts it. Absent for a session of one's own that nobody else is in.
+   * `mirror`: shown on a guest's own computer for a session that runs on the host's (packages/core/src/coop/gateway.ts).
+   */
+  coop: z.object({ role: z.enum(['host', 'editor', 'viewer']), hostName: z.string(), participants: z.number().int(), mirror: z.boolean().optional(), ended: z.boolean().optional() }).optional(),
   status: SessionStatus,
   pinnedAt: z.number().nullable(),
   createdAt: z.number(),
@@ -95,7 +101,15 @@ export const ChangePreview = z.object({
 export type ChangePreview = z.infer<typeof ChangePreview>;
 
 /** A pending interaction the run is blocked on; survives reconnects (cleared if the backend restarts). */
-export const PendingInteraction = z.object({ kind: z.enum(['permission', 'question', 'elicitation']), id: z.string(), payload: z.unknown() });
+export const PendingInteraction = z.object({
+  kind: z.enum(['permission', 'question', 'elicitation']),
+  id: z.string(),
+  payload: z.unknown(),
+  /** Co-op: the participant who may answer it (whoever owns what is at risk); absent: the session's own person. */
+  approver: z.string().optional(),
+  /** Co-op: when it is denied by itself if nobody who may answer does (a host away from their computer). */
+  expiresAt: z.number().optional(),
+});
 export type PendingInteraction = z.infer<typeof PendingInteraction>;
 
 /**
@@ -312,7 +326,16 @@ export type GitHubRepo = z.infer<typeof GitHubRepo>;
  * A message sent while the agent was working: it joins the conversation at the agent's next step (or when the turn
  * ends), unless it is taken back or sent right away, which interrupts the step in progress.
  */
-export const OutboxMessage = z.object({ id: z.string(), parts: z.array(Part) });
+export const OutboxMessage = z.object({
+  id: z.string(),
+  parts: z.array(Part),
+  /** Co-op: who wrote it; only they take it back. */
+  author: z.string().optional(),
+  /** Co-op: it joins the turn that is running (someone else's) instead of waiting for a turn of its own. */
+  joinTurn: z.boolean().optional(),
+  /** Co-op: the model it asked to answer it (an @mention), a ref. */
+  answerWith: z.string().optional(),
+});
 export type OutboxMessage = z.infer<typeof OutboxMessage>;
 
 export const CodespaceMachine = z.object({ name: z.string(), displayName: z.string(), cpus: z.number(), memoryBytes: z.number() });
@@ -430,6 +453,8 @@ export const SessionSnapshot = z.object({
   limitWarning: LimitWarning.nullable().optional(),
   /** Messages sent while the agent worked that it hasn't taken yet, oldest first. */
   outbox: z.array(OutboxMessage),
+  /** Co-op: the emoji people put on messages, by message id. */
+  reactions: z.record(z.string(), z.array(z.object({ emoji: z.string(), participants: z.array(z.string()) }))).optional(),
   /** When the run going on began (the `status` event's `runStartedAt`), null while none runs. */
   runStartedAt: z.number().nullable().optional(),
   seq: z.number().int().nonnegative(),
@@ -486,6 +511,16 @@ export const RunEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('tool_progress'), messageId: z.string(), callId: z.string(), progress: ImageProgress }),
   /** The run waits for the person (permission prompt, question) or stopped waiting (null). */
   z.object({ type: z.literal('pending'), pending: PendingInteraction.nullable() }),
+  /** Co-op: who is in the session and online changed. */
+  z.object({ type: z.literal('presence'), participants: z.array(z.lazy(() => Participant)) }),
+  /** Co-op: a participant is typing in the message box (sent at most every 2 s while they type; it lapses after 5 s). */
+  z.object({ type: z.literal('typing'), participantId: z.string() }),
+  /** Co-op, on a guest's computer: the host's computer went away (asleep, offline) or came back. */
+  z.object({ type: z.literal('host_away'), away: z.boolean() }),
+  /** Co-op, on a guest's computer: the link to the host came back after a gap; the window loads the session again. */
+  z.object({ type: z.literal('resync') }),
+  /** Co-op: someone put an emoji on a message (`on`), or took it off. */
+  z.object({ type: z.literal('reaction'), messageId: z.string(), participantId: z.string(), emoji: z.string(), on: z.boolean() }),
 ]);
 export type RunEvent = z.infer<typeof RunEvent>;
 

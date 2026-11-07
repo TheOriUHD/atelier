@@ -13,6 +13,7 @@ import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { randomBytes } from 'node:crypto';
 import { AccountError, AesGcmCipher, createBackend, loadServerKey, type ClientInfo, type LinkSocket } from '@atelier/core';
+import { attachCoopRelay } from '@atelier/core/coop';
 import { APP, artifactRuntimeCsp, DEVICE_HEADERS, DEVICE_LINK_PATH, DeviceInfo, Password, Username, type RpcMessage, type Transport } from '@atelier/protocol';
 import { z } from 'zod';
 import { blobRoutes } from './blobs.ts';
@@ -315,8 +316,21 @@ if (existsSync(uiDir)) {
 
 const server = serve({ fetch: app.fetch, hostname: host, port }, (info) => logger.info('listening', { url: `http://${host}:${info.port}` }));
 injectWebSocket(server);
+// A co-op relay for desktops that point ATELIER_COOP_RELAY at `<this server>/api/coop` (ARCHITECTURE §24). Off unless
+// the admin offers one: it carries other people's encrypted traffic, which this server can't read. It must come after
+// injectWebSocket, whose upgrade handler ends every upgrade its app doesn't route.
+const coopRelay =
+  env.ATELIER_SERVE_COOP_RELAY === '1'
+    ? attachCoopRelay(server as unknown as import('node:http').Server, {
+        path: '/api/coop',
+        clientIp: (req) => clientIp(proxy, req.socket.remoteAddress ?? '', [req.headers['x-forwarded-for']].flat()[0]),
+        logger: { info: (message) => logger.info(message), error: (message) => logger.error(message) },
+      })
+    : null;
+if (coopRelay) logger.info('co-op relay on', { path: '/api/coop' });
 
 const shutdown = async () => {
+  await coopRelay?.close();
   server.close();
   await backend.dispose();
   process.exit(0);

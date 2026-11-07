@@ -16,6 +16,8 @@ import { isRecord, rec } from '../providers/util.ts';
 
 export interface TurnOptions {
   sessionId: string;
+  /** Co-op: the participant the reply is for, kept on it as its author. */
+  author?: string;
   repo: SessionRepo;
   adapter: ProviderAdapter;
   model: ModelInfo;
@@ -218,6 +220,7 @@ async function streamAssistantMessage(
       error: null,
       kind: 'normal',
       summarizesThroughId: null,
+      ...(opts.author ? { author: opts.author } : {}),
     });
   }
   opts.emit({ type: 'message', message });

@@ -36,6 +36,7 @@ no cookies of their own.
 | SSH hosts and codespaces | The host you connect to | The runner program (uploaded once), the commands, and the file contents the agent reads there | Do not connect |
 | Commands the agent runs | Whatever they contact (`git push`, `npm install`, `curl`) | Whatever the command sends | Your permission mode and rules |
 | Git actions in the Code panel | Your Git remote for **Push**; GitHub, through `gh`, for **Open pull request** | What `git push` and `gh pr create` send, with the credentials those programs already have | Do not use those buttons |
+| **Co-op between computers** | `coop.atelierhq.dev` (a Cloudflare Worker), or the relay set in `ATELIER_COOP_RELAY` | Only while a session has co-op on: everything the session shows its people (messages, replies, tool calls and results, the changes in the host's folder, attachments), end-to-end encrypted, so the relay can't read it. The relay sees the IP addresses, the room's id, when people connect and how many bytes pass. A guest who answers with their own model gets the session's requests on their computer, where their provider gets them. See [Co-op](/co-op/#privacy). | Don't start or join co-op. `ATELIER_COOP_RELAY=` (empty) switches it off. On a team server, co-op needs no relay. |
 | Fonts, scripts, images, analytics, crash reports | none | none | |
 
 ## Model providers
@@ -179,4 +180,6 @@ instructions and safeguards still apply). Temporary chats exist in Chat only, an
 | A server's admins, in the app | The account list, aggregate usage across accounts (not per person), connector logs, and the [activity log](/accounts/#the-activity-log) of who changed what and who signed in from which address. Not conversations, memory or files. See [Accounts](/accounts/#what-admins-can-and-cannot-see). |
 | Whoever runs the server's host | The whole data folder: conversations and files in plain form, secrets decryptable with the key in the same volume unless you set `ATELIER_SECRET_KEY` elsewhere. |
 | Your other signed-in devices | Your conversations, unless you turn off [Remote control](/remote-control/). |
-| Other people with accounts | Nothing of yours. |
+| Other people with accounts | Nothing of yours, unless you invite them to a co-op session. |
+| People in a co-op session with you | Everything in that session: messages, replies, tool calls and results, the changes in the session's folder, attachments, and the people's names and pictures. Nothing else of yours: no other sessions, memory, settings, terminal or files beyond the session's changes. See [Co-op](/co-op/). |
+| The co-op relay's operator | IP addresses, room ids, connection times and byte counts. Not the content: it is end-to-end encrypted. |

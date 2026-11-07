@@ -164,6 +164,8 @@ its own, printed here verbatim.
 ${READING_GUIDE}
 ${verbatim('auto-mode', 'Auto mode reviewer', 'In Auto permission mode, a model reviews each action that would otherwise ask. It uses the session’s own model (a small model for ChatGPT Chat), reads the conversation and the proposed action, and answers allow or block. See [Permissions](/permissions/).')}
 
+${verbatim('coop-navigator', 'Co-op navigator', 'In a co-op session where someone turned on the navigator, their model looks over each edit the agent makes and adds a short note to the edit’s result when something seems wrong. See [Co-op](/co-op/).')}
+
 ${verbatim('compaction', 'Compaction', 'Written when a conversation is compacted: the model produces the record that another instance continues from.')}
 
 ${verbatim('memory-update', 'Memory update', 'The background task that updates what Atelier remembers. It receives the current memory and a new part of a conversation (or an imported export) and answers with one JSON object of operations. See [Memory](/memory/).')}
@@ -174,7 +176,7 @@ ${verbatim('web-fetch', 'Web page questions', 'WebFetch fetches a page and a hel
 `;
   return page(
     'Side prompts',
-    'The prompts for Auto mode review, compaction, memory updates, titles and web page questions, verbatim.',
+    'The prompts for Auto mode review, the co-op navigator, compaction, memory updates, titles and web page questions, verbatim.',
     'packages/core/prompts',
     body,
   );
@@ -222,6 +224,7 @@ export const NOTE_WHEN: Record<string, { group: string; when: string }> = {
   'message-interrupt': { group: 'Tool loops', when: 'The person pressed Send now: the message interrupted the work in progress.' },
   'background-agent': { group: 'Agents and sessions', when: 'Code and Cowork: a sub-agent started with run_in_background ended. Carries its task, how it ended and its result.' },
   'session-message': { group: 'Agents and sessions', when: 'Code and Cowork: another of the person’s sessions, the parent or a sub-agent sent a message.' },
+  coop: { group: 'Agents and sessions', when: 'Co-op: the first turn of a shared session, and the next turn after someone joined or left. Names everyone in it and who hosts it.' },
   'loop-tick': { group: 'Agents and sessions', when: 'Code and Cowork: a /loop sends its prompt again.' },
   'folder-moved': { group: 'Agents and sessions', when: 'Code and Cowork: the person moved the session to another of their folders. Sent at once, as a note of its own; the system prompt is rebuilt for the next turn.' },
   'side-chat': { group: 'Agents and sessions', when: 'Every request of a side chat (/btw): it was asked beside the main session, answers briefly and only reads.' },

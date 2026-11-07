@@ -10,6 +10,8 @@ export * from './settings.ts';
 export * from './accounts.ts';
 export * from './audit.ts';
 export * from './domain.ts';
+export * from './coop.ts';
+export * from './coop-contract.ts';
 export * from './mcp.ts';
 export * from './rpc/index.ts';
 export * from './runner.ts';

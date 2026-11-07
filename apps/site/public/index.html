@@ -167,11 +167,34 @@
     </div>
   </section>
 
+  <section class="section" id="co-op">
+    <div class="wrap split">
+      <div class="reveal">
+        <h2>Better with a friend.</h2>
+        <p class="lead">Co-op puts up to four people in one session: the same conversation and the same folder, everyone writing and watching the agent work. Each person picks what answers them: the host’s models, or their own.</p>
+        <ul class="ticks">
+          <li><strong>Send a link, compare four emoji.</strong> There is no account. The host lets each person in.</li>
+          <li><strong>The host’s computer stays the host’s.</strong> Commands and anything outside the folder ask the host first.</li>
+          <li><strong>Second opinions, a navigator, parallel tracks.</strong> Ask another model the same question, have one look over every edit, or give an agent its own branch.</li>
+          <li><strong>Still nothing of yours on our servers.</strong> Between computers, co-op passes through an encrypted relay that can’t read what you send and keeps nothing. On your own server it needs nothing from us.</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <pre class="pre" aria-label="A co-op session"><span class="c"># Ada clicks Co-op › Copy invite link</span>
+<span class="k">Ben wants to join · 🐙 🌵 🎈 🚀</span>   <span class="c">Let in</span>
+
+<span class="c"># Ben, on his own Claude:</span>
+<span class="k">make the water wave slower</span>
+<span class="c"># Ada’s computer asks Ada before npm install</span></pre>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="self-host">
     <div class="wrap split">
       <div class="reveal">
         <h2>Yours to run, and yours to keep.</h2>
-        <p class="lead">There is no Atelier cloud. The desktop app runs its own backend, and the web app is the same backend in a Docker image.</p>
+        <p class="lead">Nothing of yours lives on our servers. The desktop app runs its own backend, and the web app is the same backend in a Docker image.</p>
         <ul class="ticks">
           <li><strong>Everything lives in one folder you control.</strong> Keep conversations as long as you like, export them as a zip, or delete them all.</li>
           <li><strong>No telemetry.</strong> Requests go to the model providers and connectors you set up and to the search engines and pages web search reaches. The desktop app also checks for updates.</li>
@@ -221,7 +244,7 @@
       <div class="reveal">
         <h3>What it won’t do</h3>
         <ul class="plain">
-          <li>It isn’t a hosted service. You run it, and you hold the data.</li>
+          <li>It isn’t a hosted service; co-op only relays encrypted traffic. You run it, and you hold the data.</li>
           <li>It doesn’t make a weak model strong. Small local models can struggle with tools.</li>
           <li>Auto mode isn’t a security boundary. Review sensitive work yourself.</li>
           <li>There are no mobile apps. The web app has a phone layout.</li>
@@ -234,9 +257,9 @@
     <div class="wrap faq-layout">
       <div class="reveal"><h2>Questions</h2></div>
       <div class="faq reveal">
-        <details><summary>Is it free?</summary><p>For personal and other noncommercial use, yes; commercial use needs a license from the author. There is no paid tier and no account with us. You pay only for the hosted models you choose to use.</p></details>
+        <details><summary>Is it free?</summary><p>For personal and other noncommercial use, yes; commercial use needs a license from the author. There is no paid tier and no account with us, co-op included. You pay only for the hosted models you choose to use.</p></details>
         <details><summary>Which models can I use?</summary><p>Local models through Ollama, llama.cpp or LM Studio, hosted ones through Anthropic, OpenAI or Mistral keys, GitHub Copilot, OpenRouter, OpenCode Zen or any OpenAI-compatible endpoint, or a ChatGPT or Mistral Vibe plan. ChatGPT Chat is an experimental extra: it drives a signed-in ChatGPT browser window, which OpenAI doesn’t officially support, so Atelier shows a warning first.</p></details>
-        <details><summary>Does anything leave my machine?</summary><p>Requests go to the model providers and connectors you set up, to the search engines and pages web search and fetch reach, and the desktop app checks for new versions every five minutes. There is no telemetry and no Atelier cloud.</p></details>
+        <details><summary>Does anything leave my machine?</summary><p>Requests go to the model providers and connectors you set up, to the search engines and pages web search and fetch reach, and the desktop app checks for new versions every five minutes. Co-op between two computers goes through an encrypted relay at coop.atelierhq.dev, which can’t read it; no account. There is no telemetry, and nothing of yours is stored with us.</p></details>
         <details><summary>Can I bring my existing skills, plugins and hooks?</summary><p>Mostly. Atelier reads agent skills, commands, sub-agents and hooks where they already live, lists plugins you installed for other agents so you can switch them on or off, and can import MCP config. A few things differ, and the <a href="https://docs.atelierhq.dev/claude-code-compatibility/">compatibility page</a> lists them.</p></details>
         <details><summary>Can I see the prompts Atelier sends to the model?</summary><p>Yes, all of them. Every system prompt, note and tool description is published verbatim in the <a href="https://docs.atelierhq.dev/prompts/">documentation</a> and lives in the repository, where you can also override them.</p></details>
         <details><summary>Which platforms are supported?</summary><p>Desktop apps for macOS, Windows and Linux, and a web app you host with Docker. macOS is the most used. The Windows and Linux builds exist but have had less testing.</p></details>

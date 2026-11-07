@@ -46,7 +46,7 @@ export function PaneButtons({
   buttonRef,
 }: {
   open: ReadonlySet<PaneId>;
-  /** The panes this surface offers (no Browser in a web browser). */
+  /** The panes this surface offers (no Browser in a web browser; a co-op guest has no Terminal, Files or Side chat). */
   available: readonly PaneId[];
   onToggle(pane: PaneId): void;
   onOpen(pane: PaneId): void;
@@ -86,18 +86,26 @@ export function PaneButtons({
           }
         />
         <MenuContent align="end" className="w-64">
-          <MenuItem icon={Activity} onClick={() => onOpen('tasks')} shortcut={runningTasks > 0 && <Badge tone="accent">{runningTasks}</Badge>}>
-            Background tasks
-          </MenuItem>
-          <MenuItem icon={ListChecks} onClick={() => onOpen('plan')}>
-            Plan
-          </MenuItem>
-          <MenuItem icon={Shapes} onClick={() => onOpen('artifact')}>
-            Artifact
-          </MenuItem>
-          <MenuItem icon={MessageCircleQuestion} onClick={() => onOpen('side')}>
-            Side chat
-          </MenuItem>
+          {available.includes('tasks') && (
+            <MenuItem icon={Activity} onClick={() => onOpen('tasks')} shortcut={runningTasks > 0 && <Badge tone="accent">{runningTasks}</Badge>}>
+              Background tasks
+            </MenuItem>
+          )}
+          {available.includes('plan') && (
+            <MenuItem icon={ListChecks} onClick={() => onOpen('plan')}>
+              Plan
+            </MenuItem>
+          )}
+          {available.includes('artifact') && (
+            <MenuItem icon={Shapes} onClick={() => onOpen('artifact')}>
+              Artifact
+            </MenuItem>
+          )}
+          {available.includes('side') && (
+            <MenuItem icon={MessageCircleQuestion} onClick={() => onOpen('side')}>
+              Side chat
+            </MenuItem>
+          )}
           {keepAwake && (
             <>
               <MenuSeparator />

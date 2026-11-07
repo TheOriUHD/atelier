@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./device": "./src/device.ts"
+    "./device": "./src/device.ts",
+    "./coop": "./src/coop/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p .",
@@ -34,12 +35,14 @@
     "pdfjs-dist": "6.4.299",
     "pngjs": "7.0.0",
     "tar": "7.5.22",
+    "ws": "8.22.0",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@modelcontextprotocol/server": "2.3.0",
     "@types/pngjs": "6.0.5",
+    "@types/ws": "8.18.2",
     "drizzle-kit": "1.0.0-rc.4",
     "tsx": "4.23.15"
   }

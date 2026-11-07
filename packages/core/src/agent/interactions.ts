@@ -10,7 +10,17 @@ interface Waiting {
   sessionId: string;
   kind: PendingInteraction['kind'];
   payload: unknown;
+  /** Co-op: who may answer it. */
+  approver?: string;
   resolve(answer: unknown): void;
+  /** Settles it as if it were stopped (a denial). */
+  cancel(): void;
+}
+
+/** Co-op: who answers a question, and how long it waits for them before it is denied by itself. */
+export interface AskOptions {
+  approver?: string;
+  timeoutMs?: number;
 }
 
 export class InteractionBroker {
@@ -20,7 +30,7 @@ export class InteractionBroker {
   constructor(private readonly setPending: (sessionId: string, pending: PendingInteraction | null) => Promise<void>) {}
 
   /** Asks and waits for the answer. An abort resolves with `onAbort` and clears the question. */
-  ask<A>(sessionId: string, kind: PendingInteraction['kind'], payload: unknown, signal: AbortSignal, onAbort: A): Promise<A> {
+  ask<A>(sessionId: string, kind: PendingInteraction['kind'], payload: unknown, signal: AbortSignal, onAbort: A, opts: AskOptions = {}): Promise<A> {
     const previous = this.queues.get(sessionId) ?? Promise.resolve();
     const run = previous.then(async () => {
       if (signal.aborted) return onAbort;
@@ -29,12 +39,15 @@ export class InteractionBroker {
       const answered = new Promise<A>((resolve) => (settle = resolve));
       const abort = () => settle(onAbort);
       signal.addEventListener('abort', abort, { once: true });
+      // Co-op: nobody who may answer does (a host away from their computer), so it is denied after a while.
+      const timer = opts.timeoutMs ? setTimeout(abort, opts.timeoutMs) : undefined;
       // Waiting before the question goes out, so an answer that comes straight back isn't refused.
-      this.waiting.set(id, { sessionId, kind, payload, resolve: (answer) => settle(answer as A) });
+      this.waiting.set(id, { sessionId, kind, payload, ...(opts.approver ? { approver: opts.approver } : {}), resolve: (answer) => settle(answer as A), cancel: abort });
       try {
-        await this.setPending(sessionId, { kind, id, payload });
+        await this.setPending(sessionId, { kind, id, payload, ...(opts.approver ? { approver: opts.approver } : {}), ...(opts.timeoutMs ? { expiresAt: Date.now() + opts.timeoutMs } : {}) });
         return await answered;
       } finally {
+        if (timer) clearTimeout(timer);
         this.waiting.delete(id);
         signal.removeEventListener('abort', abort);
         await this.setPending(sessionId, null);
@@ -59,6 +72,17 @@ export class InteractionBroker {
   payloadOf(sessionId: string, interactionId: string): unknown {
     const w = this.waiting.get(interactionId);
     return w && w.sessionId === sessionId ? w.payload : undefined;
+  }
+
+  /** Co-op: who may answer the open question under this id, if there is one. */
+  pendingOf(sessionId: string, interactionId: string): { approver?: string } | null {
+    const w = this.waiting.get(interactionId);
+    return w && w.sessionId === sessionId ? { ...(w.approver ? { approver: w.approver } : {}) } : null;
+  }
+
+  /** Co-op: someone left: the questions only they could answer are denied. */
+  denyFor(sessionId: string, approver: string): void {
+    for (const w of [...this.waiting.values()]) if (w.sessionId === sessionId && w.approver === approver) w.cancel();
   }
 
   /** Delivers an answer; false when nothing with that id is waiting in that session (already answered or stale). */

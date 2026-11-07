@@ -4,9 +4,10 @@
  */
 import { homedir } from 'node:os';
 import { z } from 'zod';
-import { dirname, join, posix, win32 } from 'node:path';
+import { basename, dirname, join, posix, win32 } from 'node:path';
 import { flavorOfSep, pathOps } from '../paths.ts';
 import {
+  accountParticipant,
   ADMIN_PROCEDURES,
   APP,
   DEVICE_LINK_PROTOCOL,
@@ -36,12 +37,14 @@ import {
   type ControllerEvent,
   type ControllerMethods,
   type Handlers,
+  type HandlerContext,
   type McpServerStatus,
   type ModelInfo,
   type Usage,
   type PermissionMode,
   type RpcServerConnection,
   type SafeguardCategories,
+  type CoopTrack,
   type SessionSummary,
   type Settings,
   type SettingsSnapshot,
@@ -87,7 +90,17 @@ import { deviceSocket } from '../workspaces/device-socket.ts';
 import { findFiles, gitDiff, gitStatus, grepFiles, listDir, readFile as readWorkspaceFile, sessionDiff } from '../workspaces/workspace-view.ts';
 import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
 import { ChatService, ModelHiddenError, type ExtensionCatalog } from '../agent/chat-service.ts';
-import { isSideChat } from '../agent/side-chat.ts';
+import { CoopService, type ParticipantInfo } from '../coop/service.ts';
+import { coopHandlers } from '../coop/handlers.ts';
+import { CoopHost } from '../coop/host.ts';
+import { CoopGateway } from '../coop/gateway.ts';
+import { withPeerModels } from '../coop/peer-model.ts';
+import { lentTools } from '../coop/lent-tools.ts';
+import { relayTransport } from '../coop/transport.ts';
+import { DEFAULT_COOP_RELAY, generateStaticKey, parseStaticKey, serializeStaticKey } from '../coop/channel.ts';
+import { coopAllows } from '../coop/rules.ts';
+import { isSideChat, sideChatTitle } from '../agent/side-chat.ts';
+import { addTrack, mergeTrack, removeTrack, TrackError, trackBranch, trackDiff, type TrackRecord } from '../coop/tracks.ts';
 import { LoopLimitError } from '../agent/loops.ts';
 import { UsageLimits } from '../usage/limits.ts';
 import { sessionUsage, statsSummary, usageSummary } from '../usage/usage.ts';
@@ -135,7 +148,8 @@ import { BlobStore } from '../store/blobs.ts';
 import { MemoryEditingOffError, MemoryInvalidError, MemoryNotFoundError, MemoryService, ModelChoiceError } from '../memory/memory-service.ts';
 import { openDatabase } from '../store/db.ts';
 import { ServerUpdateError, serverUpdatesFromEnv, type ServerUpdates } from '../server-updates/server-updates.ts';
-import { usageEvents, users } from '../store/schema.ts';
+import { coopRooms, usageEvents, users } from '../store/schema.ts';
+import { isNull } from 'drizzle-orm';
 import { newId } from '../util/ids.ts';
 import { getAt, leafPaths } from '../util/json-path.ts';
 import { interpolate, secretRefs } from '../util/interpolate.ts';
@@ -170,6 +184,8 @@ export interface Platform {
   serverUpdates?: ServerUpdates | null;
   /** The desktop: a folder on this machine became one of the person's, so the app may show and open it (Show in Finder). */
   folderTrusted?(root: string): void;
+  /** The desktop: the co-op sessions with a room open, for which the computer stays awake (guests work on it). */
+  coopAwake?(sessionIds: string[]): void;
   /**
    * The desktop: computer use on this computer (ARCHITECTURE §22), through the app's main process, which decides what
    * each session may do there. `onEvent` hears when the person held Esc or took the mouse back.
@@ -242,6 +258,9 @@ interface Connection {
   deviceId: string | null;
   origin: string | undefined;
 }
+
+/** What co-op refuses a person, said to them as it is (agent/coop-turns.ts answerWithProblem, chat-service.ts). */
+const COOP_REFUSALS = /^(That isn’t a model|That model is a guest|The host doesn’t share|The host hasn’t agreed|Asking for a model by name|That emoji isn’t|Ask for a second opinion|You have \d+ messages waiting)/;
 
 /** Said when a shared connector at a loopback address can't be reached: on a server that address is the server itself. */
 const LOOPBACK_ON_SERVER =
@@ -375,6 +394,39 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const oidc = new Oidc({ db, accounts, secrets, log: (message, reason) => platform.logger.error(message, reason) });
 
   const connections = new Set<Connection>();
+  /** Co-op (ARCHITECTURE §24): who else takes part in a session, and what they may do. */
+  const coop = new CoopService({
+    db,
+    sessionRow: async (id) => (await sessions.getRow(id)) ?? null,
+    account: async (userId) => {
+      try {
+        const user = await accounts.get(userId);
+        return { name: user.name, avatar: user.avatar };
+      } catch {
+        return null;
+      }
+    },
+    emit: (sessionId, event) => chat.notify(sessionId, event),
+    changed: (sessionId, userIds) => void notifyParticipants(sessionId, userIds),
+    watchers: (sessionId) => new Set([...connections].flatMap((c) => (c.subscriptions.has(sessionId) && c.auth ? [c.auth.user.id] : []))),
+    // A guest picks from the host's own visible models while the host shares them (never another guest's).
+    hostModels: async (userId) => ((await registry.listModels?.(userId)) ?? []).filter((m) => !m.hidden && m.available !== false).map((m) => ({ ref: m.ref, displayName: m.displayName })),
+    // Desktops: guests from other computers, through the relay (set up once the chat service exists, below).
+    relay: {
+      invite: (sessionId) => coopHost?.port.invite(sessionId) ?? null,
+      knocking: (sessionId) => coopHost?.port.knocking(sessionId) ?? [],
+      peerOnline: (sessionId, participantId) => coopHost?.port.peerOnline(sessionId, participantId) ?? false,
+    },
+  });
+  /** Co-op across computers (ARCHITECTURE §24): this desktop hosting sessions, and its person's seat in others'. */
+  let coopHost: CoopHost | null = null;
+  let coopGateway: CoopGateway | null = null;
+  /** The relay co-op uses; `ATELIER_COOP_RELAY` empty turns co-op between computers off. A server needs none. */
+  const coopRelayUrl = (): string | null => {
+    if (platform.surface !== 'desktop') return null;
+    const value = platform.env.ATELIER_COOP_RELAY;
+    return value === undefined ? DEFAULT_COOP_RELAY : value.trim() || null;
+  };
   type Events = AppContract['events'];
   type EventPayload = Parameters<RpcServerConnection<AppContract>['emit']>[1] & object;
   const isAdmin = (c: Connection) => c.auth?.user.role === 'admin';
@@ -859,7 +911,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   });
 
   /** One model request's tokens and cost, for Settings › Usage. */
-  const recordUsage = ({ model, sessionId, mode, usage, userId }: { model: ModelInfo; sessionId: string | null; mode: string; usage: Usage; userId: string | null }) => {
+  const recordUsage = ({ model, sessionId, mode, usage, userId, participant }: { model: ModelInfo; sessionId: string | null; mode: string; usage: Usage; userId: string | null; participant?: string | null }) => {
     // A price the person set wins; else the provider's list price where Atelier knows it (providers/prices.ts).
     const providerType = settings.effective.providers.find((p) => p.id === model.providerId)?.type;
     const price = settings.effective.pricing[model.ref] ?? (providerType ? listPrice(providerType, model.modelId) : null);
@@ -882,6 +934,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       durationMs: usage.durationMs ?? null,
       tokensPerSecond: usage.tokensPerSecond ?? null,
       costUsd: cost,
+      participant: participant ?? null,
     }).catch((e: unknown) => platform.logger.error('recording usage failed', e));
   };
 
@@ -1017,6 +1070,19 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   });
 
   const chat = new ChatService({
+    coop: {
+      isShared: (id) => coop.isShared(id),
+      rootOf: (id) => coop.rootOf(id),
+      participant: (sessionId, participantId) => coop.participant(sessionId, participantId),
+      sharedCapReached: (sessionId, participantId) => coop.sharedCapReached(sessionId, participantId),
+      list: (id) => coop.list(id),
+      settings: (id) => coop.settings(id),
+      lentTools: async (sessionId, participant) => {
+        const keyId = participant.kind === 'peer' ? participant.id.slice('peer:'.length) : null;
+        const peer = keyId ? coopHost?.peerOf(keyId) : null;
+        return peer && keyId ? lentTools(peer, keyId, async (bytes, mime) => (await blobs.put(bytes, mime)).sha256) : [];
+      },
+    },
     limits: { admit: (userId) => limits.admit(userId), check: (userId) => limits.check(userId), warnings: (userId) => limits.warnings(userId) },
     images: {
       generate: (input, ctx) => images.generate(input, ctx),
@@ -1046,22 +1112,27 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     projects,
     blobs,
     settings: () => settings.effective,
-    models: registry,
+    // Co-op guests' own models run on their computers (coop/peer-model.ts).
+    models: withPeerModels(registry, (keyId) => coopHost?.peerOf(keyId) ?? null),
     promptOverrides: () => promptOverrides,
     // Whether a connection may follow a conversation was settled when it subscribed, and `syncRemoteAccess` ends the
     // subscriptions of those who lose it. A check here would cost a database read for every streamed token.
     sessionEvent: (sessionId, seq, event) => {
       for (const c of connections) if (c.subscriptions.has(sessionId)) c.rpc.emit('session.event', { sessionId, seq, event });
+      coopHost?.forward(sessionId, seq, event);
     },
     sessionChanged: (summary) =>
       void sessions
         .getRow(summary.id)
         // Sub-agent sessions stay out of Recents; their transcript cards follow them through session events. A side chat's
         // change reaches its main session's windows as a change to its side chats.
-        .then((row) => {
+        .then(async (row) => {
           if (!row) return;
-          if (!row.parentSessionId) emitToUser(row.userId, 'sessions.changed', summary);
-          else if (isSideChat(row)) emitToUser(row.userId, 'sideChats.changed', { sessionId: row.parentSessionId });
+          if (!row.parentSessionId) {
+            emitToUser(row.userId, 'sessions.changed', row.userId ? await coopView(summary, row.userId) : summary);
+            // Co-op: the others' sidebars follow too.
+            for (const p of await coop.participants.list(row.id)) if (p.userId) emitToUser(p.userId, 'sessions.changed', await coopView(summary, p.userId));
+          } else if (isSideChat(row)) emitToUser(row.userId, 'sideChats.changed', { sessionId: row.parentSessionId });
         })
         .catch((e: unknown) => platform.logger.error('session update broadcast failed', e)),
     person: async (userId) => {
@@ -1173,10 +1244,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     extensions: (session) => extensionsFor(session.userId, session.mode === 'chat' ? null : session.workspaceId),
     // A sub-agent uses the connectors its parent session has on.
-    mcpTools: async (session) => {
+    mcpTools: async (session, connectorUser) => {
       const off = connectorsOff((session.parentSessionId && (await sessions.getRow(session.parentSessionId))) || session);
-      // The shared connectors, then the person's own (on a server), switched off for the session the same way.
-      const [shared, own] = await Promise.all([mcp.tools(off), session.userId && platform.surface === 'web' ? personal.tools(session.userId, off) : []]);
+      // The shared connectors, then the person's own (on a server), switched off for the session the same way. In co-op the
+      // own ones are the turn's person's (chat-service.ts `toolsFor`).
+      const ownerOfOwn = connectorUser === undefined ? session.userId : connectorUser;
+      const [shared, own] = await Promise.all([mcp.tools(off), ownerOfOwn && platform.surface === 'web' ? personal.tools(ownerOfOwn, off) : []]);
       return [...shared, ...own];
     },
     ...(platform.computer
@@ -1384,7 +1457,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     return added.id;
   };
   const canAccessSession = async (row: NonNullable<Awaited<ReturnType<SessionRepo['getRow']>>>, c: Connection): Promise<boolean> => {
-    if (row.userId !== c.auth?.user.id) return false;
+    // Someone else's session: only a co-op participant of it (or of the session a sub-agent belongs to) follows it.
+    if (row.userId !== c.auth?.user.id) return !!c.auth && (await coop.participantOfUser(row.id, c.auth.user.id)) !== null;
     if (row.parentSessionId) {
       const parent = await sessions.getRow(row.parentSessionId);
       return !!parent && canAccessSession(parent, c);
@@ -1443,6 +1517,65 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     if (!row || row.userId !== ctx.connection().auth?.user.id) throw appError('not_found', 'That conversation no longer exists.');
     if (!(await canAccessSession(row, ctx.connection()))) throw appError('not_found', 'That conversation is unavailable on this device.');
     return (await sessions.get(id))!;
+  };
+  /**
+   * A session's summary as `userId` sees it: with their part in co-op, and for a guest their own pinned, group, archived
+   * and unseen state (kept on their participant row).
+   */
+  const coopView = async (summary: SessionSummary, userId: string): Promise<SessionSummary> => {
+    if (!(await coop.room(summary.id))) return summary;
+    const participants = await coop.list(summary.id);
+    const hostName = participants.find((p) => p.role === 'host')?.name ?? '';
+    const row = await sessions.getRow(summary.id);
+    if (row?.userId === userId) return { ...summary, coop: { role: 'host', hostName, participants: participants.length } };
+    const p = await coop.participants.get(summary.id, accountParticipant(userId));
+    if (!p || p.leftAt !== null) return summary;
+    return { ...summary, pinnedAt: p.pinnedAt, groupId: p.groupId, archivedAt: p.archivedAt, finishedUnseen: p.finishedUnseenAt !== null, coop: { role: p.role, hostName, participants: participants.length } };
+  };
+  /** Tells these accounts about a co-op session: its summary as they see it, or that it's gone for them. */
+  const notifyParticipants = async (sessionId: string, userIds: string[]): Promise<void> => {
+    const summary = await sessions.get(sessionId);
+    for (const userId of userIds) {
+      const p = summary ? await coop.participantOfUser(sessionId, userId) : null;
+      if (summary && p) emitToUser(userId, 'sessions.changed', await coopView(summary, userId));
+      else {
+        emitToUser(userId, 'sessions.removed', { id: sessionId });
+        for (const c of connections) if (c.auth?.user.id === userId) c.subscriptions.delete(sessionId);
+      }
+    }
+  };
+  /** Co-op's "only its author may…" refusals from the chat service, as the caller's own error. */
+  const coopAction = async <T>(action: () => Promise<T>): Promise<T> => {
+    try {
+      return await action();
+    } catch (e) {
+      if (e instanceof Error && /^Only (its author|your own)/.test(e.message)) throw appError('forbidden', e.message);
+      // A model a person may not have answer them, a reaction that isn't one: said as it is.
+      if (e instanceof Error && COOP_REFUSALS.test(e.message)) throw appError('invalid_request', e.message);
+      throw e;
+    }
+  };
+  /** A co-op call by someone in a session nobody shares is refused plainly. */
+  const shared = (as: ParticipantInfo | null): ParticipantInfo => {
+    if (!as) throw appError('invalid_request', 'That is for co-op sessions.');
+    return as;
+  };
+  /**
+   * A session for a procedure co-op participants may also call (coop/rules.ts): its owner as always, or a participant
+   * whose role allows it. `as` is who acts, for authorship and turns; null for a session nobody shares.
+   */
+  const sessionFor = async (id: string, ctx: Ctx, procedure: string): Promise<{ summary: SessionSummary; as: ParticipantInfo | null }> => {
+    const c = ctx.connection();
+    const userId = c.auth?.user.id;
+    const row = await sessions.getRow(id);
+    if (!row || !userId) throw appError('not_found', 'That conversation no longer exists.');
+    if (row.userId === userId) {
+      if (!(await canAccessSession(row, c))) throw appError('not_found', 'That conversation is unavailable on this device.');
+      return { summary: (await sessions.get(id))!, as: (await coop.isShared(id)) ? await coop.participantOfUser(id, userId) : null };
+    }
+    const as = await coop.participantOfUser(id, userId);
+    if (!as || !coopAllows(procedure, as.role)) throw appError('not_found', 'That conversation no longer exists.');
+    return { summary: await coopView((await sessions.get(id))!, userId), as };
   };
   const projectOrThrow = async (id: string, ctx: Ctx): Promise<void> => {
     if ((await projects.ownerOf(id)) !== me(ctx).id) throw appError('not_found', 'Project not found.');
@@ -1505,7 +1638,257 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     }
   };
 
+  // ---------------------------------------------------------------- co-op parallel tracks (ARCHITECTURE §24)
+  const trackErrors = async <T>(action: () => Promise<T>): Promise<T> => {
+    try {
+      return await action();
+    } catch (e) {
+      if (e instanceof TrackError) throw appError('track_failed', e.message);
+      if (e instanceof WorkspaceError) throw appError('workspace_unavailable', e.message);
+      throw e;
+    }
+  };
+  const trackRow = async (sessionId: string, trackId: string) => {
+    const row = await sessions.getRow(trackId);
+    const record = row?.overrides.coopTrack as TrackRecord | undefined;
+    if (!row || row.parentSessionId !== sessionId || !record) throw appError('not_found', 'That track isn’t here.');
+    return { row, record };
+  };
+  const trackSummary = (row: { id: string; title: string; parentSessionId: string | null }, record: TrackRecord): CoopTrack => ({
+    id: row.id,
+    title: row.title,
+    participantId: record.participantId,
+    branch: record.branch,
+    status: record.state !== 'open' ? record.state : row.parentSessionId && chat.trackWorking(row.parentSessionId, row.id) ? 'working' : 'done',
+    createdAt: record.createdAt,
+  });
+  const setTrack = async (trackId: string, overrides: Record<string, unknown>, record: TrackRecord) => {
+    await sessions.update(trackId, { overrides: { ...overrides, coopTrack: record } });
+  };
+  /** The session's folder, on this backend's own machine: tracks are worktrees beside it in Atelier's data folder. */
+  const trackHome = async (sessionId: string) => {
+    const row = await sessions.getRow(sessionId);
+    if (!row?.userId || !row.workspaceId || row.mode !== 'code') throw appError('unsupported', 'Parallel tracks are for Code sessions with a folder.');
+    const main = await trackErrors(() => workspaceManager.open(row.userId!, row.workspaceId!));
+    if (main.kind !== 'local' || main.deviceId || main.host) throw appError('unsupported', 'Parallel tracks work in a folder on the host’s own computer.');
+    return { row, main, hostUserId: row.userId };
+  };
+  const coopTracks = {
+    start: async (sessionId: string, task: string, by: ParticipantInfo): Promise<CoopTrack> => {
+      const { main, hostUserId } = await trackHome(sessionId);
+      const id = newId();
+      const branch = trackBranch(by.name, id);
+      const path = join(platform.dataDir, 'coop-tracks', `${basename(main.root)}-${id.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)}`);
+      const base = await trackErrors(() => addTrack(main, branch, path));
+      const ws = await trackErrors(() => workspaceManager.addLocal(hostUserId, path));
+      if (main.trusted) await workspaceManager.trust(hostUserId, ws.id);
+      const record: TrackRecord = { participantId: by.id, branch, path, workspaceId: ws.id, base, state: 'open', createdAt: Date.now() };
+      const title = `${by.name}’s track: ${sideChatTitle(task)}`;
+      const trackId = await coopAction(() => chat.startTrack(sessionId, { task, title, workspaceId: ws.id, by, track: record as unknown as Record<string, unknown> })).catch(async (e: unknown) => {
+        await removeTrack(main, branch, path).catch(() => undefined);
+        await workspaceManager.remove(hostUserId, ws.id).catch(() => undefined);
+        throw e;
+      });
+      void coop.presence(sessionId);
+      return trackSummary({ id: trackId, title, parentSessionId: sessionId }, record);
+    },
+    list: async (sessionId: string): Promise<CoopTrack[]> =>
+      (await sessions.children(sessionId)).flatMap((row) => (row.overrides.coopTrack ? [trackSummary(row, row.overrides.coopTrack as TrackRecord)] : [])),
+    diff: async (sessionId: string, trackId: string) => {
+      const { row, record } = await trackRow(sessionId, trackId);
+      if (record.state === 'closed') throw appError('not_found', 'That track was closed.');
+      const ws = await trackErrors(() => workspaceManager.open(row.userId!, record.workspaceId));
+      return trackErrors(() => trackDiff(ws, record.base));
+    },
+    merge: async (sessionId: string, trackId: string): Promise<CoopTrack> => {
+      const { row, record } = await trackRow(sessionId, trackId);
+      if (record.state !== 'open') throw appError('invalid_request', record.state === 'merged' ? 'That track is merged already.' : 'That track was closed.');
+      if (chat.trackWorking(sessionId, trackId)) throw appError('invalid_request', 'Its agent is still working: wait for it, or close the track.');
+      const { main, hostUserId } = await trackHome(sessionId);
+      const ws = await trackErrors(() => workspaceManager.open(hostUserId, record.workspaceId));
+      const who = (await coop.participant(sessionId, record.participantId))?.name ?? 'someone who left';
+      const { authorName, authorEmail } = (await prefs.get(hostUserId)).git;
+      await trackErrors(() => mergeTrack(main, ws, record.branch, `${row.title}\n\nA co-op track by ${who}.`, { name: authorName, email: authorEmail }));
+      const merged = { ...record, state: 'merged' as const };
+      await setTrack(trackId, row.overrides, merged);
+      void coop.presence(sessionId);
+      return trackSummary(row, merged);
+    },
+    close: async (sessionId: string, trackId: string): Promise<void> => {
+      const { row, record } = await trackRow(sessionId, trackId);
+      if (record.state === 'closed') return;
+      await chat.stopTrack(sessionId, trackId);
+      const { main, hostUserId } = await trackHome(sessionId);
+      await trackErrors(() => removeTrack(main, record.branch, record.path));
+      await workspaceManager.remove(hostUserId, record.workspaceId).catch(() => undefined);
+      await setTrack(trackId, row.overrides, { ...record, state: 'closed' });
+      void coop.presence(sessionId);
+    },
+  };
+
+  // ---------------------------------------------------------------- co-op across computers (ARCHITECTURE §24)
+  if (platform.surface === 'desktop') {
+    const coopSecrets = {
+      get: (id: string) => secrets.get(id),
+      set: async (id: string, value: string) => void (await secrets.set({ id, label: 'Co-op', kind: 'token', value })),
+      delete: (id: string) => secrets.delete(id),
+    };
+    // This computer's long-term co-op key: what the people it meets pin.
+    let deviceKey: Promise<ReturnType<typeof parseStaticKey>> | null = null;
+    const coopDeviceKey = () =>
+      (deviceKey ??= (async () => {
+        const stored = await secrets.get('coop-device-key');
+        if (stored) return parseStaticKey(stored);
+        const key = generateStaticKey();
+        await coopSecrets.set('coop-device-key', serializeStaticKey(key));
+        return key;
+      })());
+    const transport = relayTransport(coopDeviceKey);
+    const nameOf = async (userId: string) => (await accounts.get(userId).catch(() => null))?.name || 'Someone';
+    coopHost = new CoopHost({
+      coop,
+      transport,
+      relayUrl: coopRelayUrl,
+      sessionRow: async (id) => (await sessions.getRow(id)) ?? null,
+      hostName: nameOf,
+      secrets: coopSecrets,
+      chat,
+      contextBreakdown: async (sessionId) => ({ context: await chat.contextUsage(sessionId), usage: sessionUsage(db, sessionId) }),
+      sessionDiff: async (sessionId, path) => {
+        const row = await sessions.getRow(sessionId);
+        if (!row?.userId || !row.workspaceId) return { diff: '', truncated: false, base: null };
+        const ws = await workspaceManager.open(row.userId, row.workspaceId).catch((e: unknown) => {
+          throw e instanceof WorkspaceError ? appError('workspace_unavailable', e.message) : e;
+        });
+        return sessionDiff(ws, await checkpointStore.firstVersions(sessionId, ws.id), path);
+      },
+      artifacts: (sessionId) => artifacts.list(sessionId),
+      blob: async (sessionId, sha256) => (blobAccess.inSession(sessionId, sha256) ? ((await readBlob(sha256)) ?? null) : null),
+      sessionHasBlob: async (sessionId, sha256) => blobAccess.inSession(sessionId, sha256),
+      upload: async (sessionId, file) => {
+        const row = await sessions.getRow(sessionId);
+        return files.upload({ ...file, kind: 'upload', userId: row?.userId ?? null, sessionId });
+      },
+      tracks: { start: coopTracks.start, list: coopTracks.list, diff: coopTracks.diff },
+      keepAwake: (sessionIds) => platform.coopAwake?.(sessionIds),
+      stateChanged: (sessionId) => void coop.presence(sessionId),
+      log: (message, error) => platform.logger.error(message, error),
+    });
+    const emitMirror = (userId: string, event: 'sessions.changed' | 'sessions.removed', payload: unknown) => {
+      for (const c of connections) if (c.auth?.user.id === userId) c.rpc.emit(event, payload as never);
+    };
+    coopGateway = new CoopGateway({
+      db,
+      relayUrl: coopRelayUrl,
+      transport,
+      secrets: coopSecrets,
+      profile: async (userId) => {
+        const user = await accounts.get(userId).catch(() => null);
+        // A small avatar goes along as a data URL; a large one stays home.
+        const info = user?.avatar ? await blobs.info(user.avatar).catch(() => undefined) : undefined;
+        const avatar = info && info.size <= 60_000 && /^image\/(png|jpeg|webp|gif)$/.test(info.mime) ? `data:${info.mime};base64,${Buffer.from(await blobs.read(info.sha256)).toString('base64')}` : null;
+        return { name: (await prefs.get(userId).catch(() => null))?.callMe.trim() || user?.name || 'Guest', avatar };
+      },
+      version: APP.version,
+      emitToUser: emitMirror as never,
+      emitSession: (sessionId, seq, event) => {
+        for (const c of connections) if (c.subscriptions.has(sessionId)) c.rpc.emit('session.event', { sessionId, seq, event });
+      },
+      models: registry,
+      limit: async (userId) => (await limits.check(userId))?.message ?? null,
+      recordUsage: ({ userId, sessionId, model, usage, mode }) => recordUsage({ model, sessionId, userId, usage, mode }),
+      connectorTools: async () =>
+        (await mcp.tools([])).map((tool) => ({
+          name: tool.name,
+          description: typeof tool.description === 'string' ? tool.description : tool.name,
+          inputSchema: tool.inputSchema,
+          readOnly: tool.readOnly,
+          call: async (input, signal) => {
+            const out = await tool.run(input, { sessionId: '', messageId: '', callId: '', signal, emit: () => undefined });
+            const content: unknown[] = [];
+            for (const part of out.content) {
+              if (part.type === 'text') content.push(part);
+              else if (part.type === 'image') {
+                const image = await readBlob(part.blob);
+                if (image) content.push({ type: 'image_data', mime: image.mime, dataBase64: Buffer.from(image.bytes).toString('base64') });
+              }
+            }
+            return { content, ...(out.isError ? { isError: true } : {}) };
+          },
+        })),
+      hasBlob: async (sha256) => !!(await blobs.info(sha256).catch(() => undefined)),
+      putBlob: async (bytes, mime) => (await blobs.put(bytes, mime)).sha256,
+      saveCopy: async (userId, snapshot, title) => {
+        const copy = await sessions.create({ mode: 'chat', userId, title: `${title} (co-op)` });
+        const ids = new Map(snapshot.messages.map((m) => [m.id, newId()]));
+        for (const m of snapshot.messages)
+          await sessions.insertMessage({
+            ...m,
+            id: ids.get(m.id)!,
+            sessionId: copy.id,
+            parentId: m.parentId ? (ids.get(m.parentId) ?? null) : null,
+            summarizesThroughId: m.summarizesThroughId ? (ids.get(m.summarizesThroughId) ?? null) : null,
+          });
+        const summary = await sessions.get(copy.id);
+        if (summary) emitToUser(userId, 'sessions.changed', summary);
+        return copy.id;
+      },
+      log: (message, error) => platform.logger.error(message, error),
+    });
+    // The rooms this computer hosts and the sessions its person joined, as they were when Atelier stopped.
+    const open = await db.select({ sessionId: coopRooms.sessionId, relayUrl: coopRooms.relayUrl }).from(coopRooms).where(isNull(coopRooms.endedAt));
+    if (coopRelayUrl()) {
+      void coopHost.resume(open.filter((r) => r.relayUrl).map((r) => r.sessionId));
+      void coopGateway.resume();
+    }
+  }
+  /** The person's own mirror of a session they joined on another computer (coop/gateway.ts), or null. */
+  const mirrorOf = (ctx: Ctx, input: unknown): string | null => {
+    if (!coopGateway || !input || typeof input !== 'object') return null;
+    const { sessionId, id } = input as { sessionId?: unknown; id?: unknown };
+    const target = typeof sessionId === 'string' ? sessionId : typeof id === 'string' ? id : null;
+    const userId = ctx.connection().auth?.user.id;
+    return target && userId && coopGateway.owns(userId, target) ? target : null;
+  };
+
   const handlers: Handlers<AppContract, Ctx> = {
+    ...coopHandlers<HandlerContext<Ctx>>({
+      coop,
+      access: async (ctx, sessionId, procedure) => {
+        const { as } = await sessionFor(sessionId, ctx, procedure);
+        if (as) return as;
+        // The owner of a session nobody shares yet (turning co-op on).
+        const self = await coop.participantOfUser(sessionId, me(ctx).id);
+        if (!self) throw appError('not_found', 'That conversation no longer exists.');
+        return self;
+      },
+      userId: (ctx) => me(ctx).id,
+      // A team server's members others may invite; a desktop has only its own person.
+      directory: async (callerId) =>
+        platform.surface === 'desktop' ? [] : (await accounts.list()).filter((u) => u.id !== callerId && u.role !== 'pending' && !u.disabled).map((u) => ({ userId: u.id, name: u.name, avatar: u.avatar })),
+      surface: platform.surface,
+      ...(coopHost
+        ? {
+            relay: {
+              open: (sessionId: string) => coopHost!.open(sessionId),
+              invite: (sessionId: string) => coopHost!.invite(sessionId),
+              admit: (sessionId: string, knockId: string, allow: boolean) => coopHost!.admit(sessionId, knockId, allow),
+              close: (sessionId: string) => coopHost!.close(sessionId),
+            },
+          }
+        : {}),
+      ...(coopGateway ? { join: (userId: string, invite: string, models: 'host' | 'own') => coopGateway!.join(userId, invite, models) } : {}),
+      forgetParticipant: async (sessionId, participant) => {
+        // A guest from another computer: their channel closes.
+        if (!participant.userId) coopHost?.removed(sessionId, participant.id);
+        await chat.forgetParticipant(sessionId, participant.id);
+        if (participant.userId) {
+          blobAccess.forget(participant.userId);
+          await notifyParticipants(sessionId, [participant.userId]);
+        }
+      },
+      error: (code, message) => appError(code as never, message),
+    }),
     'app.info': () => ({
       name: APP.name,
       version: APP.version,
@@ -1896,12 +2279,28 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
     // ---------------------------------------------------------------- your chats
     'sessions.list': async (input, ctx) => {
-      const list = await sessions.list({ ...input, userId: me(ctx).id });
+      const userId = me(ctx).id;
+      const list = await sessions.list({ ...input, userId });
       const allowed = await Promise.all(list.map(async (summary) => {
         const row = await sessions.getRow(summary.id);
-        return row && await canAccessSession(row, ctx.connection()) ? summary : null;
+        return row && await canAccessSession(row, ctx.connection()) ? coopView(summary, userId) : null;
       }));
-      return allowed.filter((summary): summary is SessionSummary => summary !== null);
+      // Co-op sessions of other people's this account takes part in (never inside a project of theirs).
+      const joined = input.projectId ? [] : await Promise.all((await coop.participants.ofUser(userId)).map(async (p) => {
+        const summary = await sessions.get(p.sessionId);
+        if (!summary || (input.mode && summary.mode !== input.mode)) return null;
+        const view = await coopView(summary, userId);
+        const archived = view.archivedAt !== null && view.archivedAt !== undefined;
+        if ((input.archived ?? 'active') === 'active' ? archived : input.archived === 'archived' ? !archived : false) return null;
+        if (input.query && !view.title.toLowerCase().includes(input.query.toLowerCase())) return null;
+        return view;
+      }));
+      // Sessions joined on other computers (coop/gateway.ts).
+      const mirrors = input.projectId || (input.archived ?? 'active') === 'archived' ? [] : ((await coopGateway?.list(userId)) ?? []).filter((m) => (!input.mode || m.mode === input.mode) && (!input.query || m.title.toLowerCase().includes(input.query.toLowerCase())));
+      return [...allowed, ...joined, ...mirrors]
+        .filter((summary): summary is SessionSummary => summary !== null)
+        .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0) || b.updatedAt - a.updatedAt)
+        .slice(0, input.limit);
     },
     'sessions.create': async ({ mode, projectId, model, effort, thinking, remoteControl, workspaceId, scratch, permissionMode, connectorsOff: off, research, imageModel, groupId, temporary }, ctx) => {
       if (projectId) await projectOrThrow(projectId, ctx);
@@ -2014,9 +2413,15 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     'sessions.markSeen': async ({ id }, ctx) => {
-      await sessionOrThrow(id, ctx);
+      const { as } = await sessionFor(id, ctx, 'sessions.markSeen');
+      // A guest's "seen" is their own (their participant row); the host's is the session's.
+      if (as && as.role !== 'host') {
+        await coop.participants.update(id, as.id, { finishedUnseenAt: null });
+        await notifyParticipants(id, [me(ctx).id]);
+        return { ok: true as const };
+      }
       const seen = await sessions.markSeen(id);
-      if (seen) emitToUser(me(ctx).id, 'sessions.changed', seen);
+      if (seen) emitToUser(me(ctx).id, 'sessions.changed', await coopView(seen, me(ctx).id));
       return { ok: true as const };
     },
     'sessions.delete': async ({ id }, ctx) => {
@@ -2029,16 +2434,25 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     'sessions.subscribe': async ({ id }, ctx) => {
-      await sessionOrThrow(id, ctx);
+      const { as } = await sessionFor(id, ctx, 'sessions.subscribe');
       ctx.connection().subscriptions.add(id);
+      // Someone came online in a co-op session.
+      if (as) void coop.presence(id);
       return chat.snapshot(id);
     },
     'sessions.unsubscribe': ({ id }, ctx) => {
       ctx.connection().subscriptions.delete(id);
+      void coop.presence(id);
       return { ok: true as const };
     },
     'sessions.leave': async ({ id }, ctx) => {
-      await sessionOrThrow(id, ctx);
+      const { as } = await sessionFor(id, ctx, 'sessions.leave');
+      // A guest closing the window leaves nothing to clean up; leaving co-op is coop.leave.
+      if (as && as.role !== 'host') {
+        ctx.connection().subscriptions.delete(id);
+        void coop.presence(id);
+        return { deleted: false };
+      }
       const row = (await sessions.getRow(id))!;
       ctx.connection().subscriptions.delete(id);
       if (!row.temporary || row.parentSessionId || openAnywhere(id)) return { deleted: false };
@@ -2046,62 +2460,95 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { deleted: true };
     },
 
-    'chat.send': async ({ sessionId, parentId, parts }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+    'chat.send': async ({ sessionId, parentId, parts, answerWith }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'chat.send');
       await ownBlobsOnly(parts, ctx);
-      return { userMessageId: await chat.send(sessionId, parts, parentId) };
+      return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, answerWith ? { answerWith } : {})) };
     },
-    'chat.stop': async ({ sessionId }, ctx) => {
+    'coop.track': async ({ sessionId, task }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'coop.track');
+      return coopTracks.start(sessionId, task, shared(as));
+    },
+    'coop.tracks': async ({ sessionId }, ctx) => {
+      await sessionFor(sessionId, ctx, 'coop.tracks');
+      return coopTracks.list(sessionId);
+    },
+    'coop.trackDiff': async ({ sessionId, trackId }, ctx) => {
+      await sessionFor(sessionId, ctx, 'coop.trackDiff');
+      return coopTracks.diff(sessionId, trackId);
+    },
+    'coop.mergeTrack': async ({ sessionId, trackId }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
-      await chat.stop(sessionId);
+      return coopTracks.merge(sessionId, trackId);
+    },
+    'coop.closeTrack': async ({ sessionId, trackId }, ctx) => {
+      await sessionOrThrow(sessionId, ctx);
+      await coopTracks.close(sessionId, trackId);
       return { ok: true as const };
     },
-    'chat.queue': async ({ sessionId, parts }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+    'chat.secondOpinion': async ({ sessionId, messageId, model }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'chat.secondOpinion');
+      await coopAction(() => chat.secondOpinion(sessionId, messageId, model, shared(as)));
+      return { ok: true as const };
+    },
+    'chat.react': async ({ sessionId, messageId, emoji, on }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'chat.react');
+      await coopAction(() => chat.react(sessionId, messageId, emoji, on, shared(as)));
+      return { ok: true as const };
+    },
+    'chat.stop': async ({ sessionId }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'chat.stop');
+      await chat.stop(sessionId, as);
+      return { ok: true as const };
+    },
+    'chat.queue': async ({ sessionId, parts, joinTurn, answerWith }, ctx) => {
+      const { as } = await sessionFor(sessionId, ctx, 'chat.queue');
       await ownBlobsOnly(parts, ctx);
-      return chat.queue(sessionId, parts);
+      return coopAction(() => chat.queue(sessionId, parts, as, { ...(joinTurn ? { joinTurn } : {}), ...(answerWith ? { answerWith } : {}) }));
     },
     'chat.unqueue': async ({ sessionId, id }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
-      return { parts: chat.unqueue(sessionId, id) };
+      const { as } = await sessionFor(sessionId, ctx, 'chat.unqueue');
+      return { parts: await coopAction(() => chat.unqueue(sessionId, id, as)) };
     },
     'chat.sendNow': async ({ sessionId, id }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
-      await chat.sendNow(sessionId, id);
+      const { as } = await sessionFor(sessionId, ctx, 'chat.sendNow');
+      await coopAction(() => chat.sendNow(sessionId, id, as));
       return { ok: true as const };
     },
     'chat.retry': async ({ sessionId, messageId }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
-      await chat.retry(sessionId, messageId);
+      const { as } = await sessionFor(sessionId, ctx, 'chat.retry');
+      await chat.retry(sessionId, messageId, as);
       return { ok: true as const };
     },
     'chat.continue': async ({ sessionId }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
-      await chat.continue(sessionId);
+      const { as } = await sessionFor(sessionId, ctx, 'chat.continue');
+      await chat.continue(sessionId, as);
       return { ok: true as const };
     },
     'chat.edit': async ({ sessionId, messageId, parts }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+      const { as } = await sessionFor(sessionId, ctx, 'chat.edit');
       await ownBlobsOnly(parts, ctx);
-      return { userMessageId: await chat.edit(sessionId, messageId, parts) };
+      return { userMessageId: await coopAction(() => chat.edit(sessionId, messageId, parts, as)) };
     },
     'chat.switchBranch': async ({ sessionId, messageId }, ctx) => {
       await sessionOrThrow(sessionId, ctx);
       return chat.switchBranch(sessionId, messageId);
     },
     'chat.respond': async ({ sessionId, interactionId, answer }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
-      if (!chat.respond(sessionId, interactionId, answer)) throw appError('not_waiting', 'This question was already answered or the response stopped.');
+      const { as } = await sessionFor(sessionId, ctx, 'chat.respond');
+      // Co-op: a question is answered by whoever owns what is at risk (its approver), or a guest the host trusts.
+      if (as && !(await chat.mayRespond(sessionId, interactionId, as))) throw appError('forbidden', 'This one is for someone else to answer.');
+      if (!chat.respond(sessionId, interactionId, answer, as)) throw appError('not_waiting', 'This question was already answered or the response stopped.');
       return { ok: true as const };
     },
     'chat.changePreview': async ({ sessionId, interactionId }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+      await sessionFor(sessionId, ctx, 'chat.changePreview');
       const preview = await chat.changePreview(sessionId, interactionId);
       if (!preview) throw appError('not_waiting', 'This question was already answered or the response stopped.');
       return preview;
     },
     'chat.editPreview': async ({ sessionId, callId }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+      await sessionFor(sessionId, ctx, 'chat.editPreview');
       const preview = await chat.editPreview(sessionId, callId);
       if (!preview) throw appError('not_found', 'That edit is not in this conversation.');
       return preview;
@@ -2118,7 +2565,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return chat.sideChats(sessionId);
     },
     'tasks.output': async ({ sessionId, taskId, since }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+      await sessionFor(sessionId, ctx, 'tasks.output');
       return chat.tasks.output(sessionId, taskId, since).catch((e: unknown) => {
         throw appError('not_found', (e as Error).message);
       });
@@ -2152,7 +2599,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { stopped: chat.stopLoops(sessionId, target) };
     },
     'checkpoints.list': async ({ sessionId }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+      await sessionFor(sessionId, ctx, 'checkpoints.list');
       return checkpointStore.list(sessionId);
     },
     'checkpoints.rewind': async ({ sessionId, messageId, files, conversation }, ctx) => {
@@ -2175,7 +2622,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { ok: true as const };
     },
     'chat.contextBreakdown': async ({ sessionId }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+      await sessionFor(sessionId, ctx, 'chat.contextBreakdown');
       return { context: await chat.contextUsage(sessionId), usage: sessionUsage(db, sessionId) };
     },
 
@@ -2459,6 +2906,18 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       }),
     'workspaces.gitStatus': async ({ workspaceId }, ctx) => gitStatus(await openWorkspace(ctx, workspaceId)),
     'workspaces.diff': async ({ workspaceId, path, compare = 'head', sessionId }, ctx) => {
+      // A co-op guest sees the session's own changes, read through the host's folder, and nothing else of it.
+      if (sessionId) {
+        const { summary, as } = await sessionFor(sessionId, ctx, 'workspaces.diff');
+        if (as && as.role !== 'host') {
+          const owner = (await sessions.getRow(sessionId))?.userId;
+          if (compare !== 'session' || summary.workspaceId !== workspaceId || !owner) throw appError('forbidden', 'Guests see the changes this session made.');
+          const hostWs = await workspaceManager.open(owner, workspaceId).catch((e: unknown) => {
+            throw e instanceof WorkspaceError ? appError('workspace_unavailable', e.message) : e;
+          });
+          return sessionDiff(hostWs, await checkpointStore.firstVersions(sessionId, hostWs.id), path);
+        }
+      }
       const ws = await openWorkspace(ctx, workspaceId);
       if (compare !== 'session') return gitDiff(ws, path, compare);
       if (!sessionId) throw appError('invalid_request', 'Say which session’s changes to show.');
@@ -2502,7 +2961,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
 
     'files.upload': async ({ name, mime, dataBase64, sessionId }, ctx) => {
-      if (sessionId) await sessionOrThrow(sessionId, ctx);
+      if (sessionId) await sessionFor(sessionId, ctx, 'files.upload');
       return files.upload({ name, mime, bytes: new Uint8Array(Buffer.from(dataBase64, 'base64')), kind: 'upload', userId: me(ctx).id, sessionId: sessionId ?? null });
     },
     'files.get': async ({ id }, ctx) => {
@@ -2617,7 +3076,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       }),
 
     'artifacts.list': async ({ sessionId }, ctx) => {
-      await sessionOrThrow(sessionId, ctx);
+      await sessionFor(sessionId, ctx, 'artifacts.list');
       return artifacts.list(sessionId);
     },
     'artifacts.get': async ({ id, version }, ctx) => {
@@ -2684,6 +3143,14 @@ export async function createBackend(platform: Platform): Promise<Backend> {
           if (ADMIN_PROCEDURES.has(method) && c.auth.user.role !== 'admin') throw appError('forbidden', 'Only admins can do this.');
         }
         const run = handler as unknown as (i: never, x: Ctx & { signal: AbortSignal }) => unknown;
+        // A session joined on another computer: the call goes to its host, if it is one a guest may make there.
+        const mirror = mirrorOf(ctx, input);
+        if (mirror && c.auth) {
+          if (method === 'sessions.subscribe') c.subscriptions.add(mirror);
+          if (method === 'sessions.unsubscribe' || method === 'sessions.leave') c.subscriptions.delete(mirror);
+          const watching = [...connections].some((o) => o !== c && o.subscriptions.has(mirror));
+          return coopGateway!.call(c.auth.user.id, method, input as Record<string, unknown>, watching);
+        }
         if (!ADMIN_PROCEDURES.has(method) || local) return run(input, ctx);
         // What the call is about to change (the old value, whether the thing existed) is read first, if its rule asks.
         const entry = auditEntry(method);
@@ -2735,11 +3202,14 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     readBlob,
     async readBlobFor(userId, sha256) {
       if (!local && !(await blobAccess.canRead(userId, sha256))) return undefined;
+      if (local && coopGateway && !(await blobs.info(sha256).catch(() => undefined))) await coopGateway.fetchBlob(null, sha256).catch(() => false);
       return readBlob(sha256);
     },
     async blobSource(userId, sha256) {
       // As `readBlobFor`: a blob is for accounts that hold something referring to it. "This computer" has one person.
       if (!local && !(await blobAccess.canRead(userId, sha256))) return undefined;
+      // An image in a session joined on another computer comes from its host the first time.
+      if (local && coopGateway && !(await blobs.info(sha256).catch(() => undefined))) await coopGateway.fetchBlob(null, sha256).catch(() => false);
       const info = await blobs.info(sha256).catch(() => undefined);
       if (!info) return undefined;
       return { mime: info.mime, size: info.size, whole: () => blobs.stream(sha256), slice: (start, end) => blobs.readRange(sha256, start, end) };
@@ -2761,6 +3231,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       chatgpt.dispose();
       links.closeAll();
       await chat.stopAll();
+      await coopHost?.shutdown();
+      coopGateway?.shutdown();
       memory.dispose();
       await terminals.closeAll();
       await mcp.close();

@@ -2,7 +2,7 @@ import { useDeferredValue, useState, type ReactNode } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Command } from 'cmdk';
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
-import { Ghost, Lock, MessageSquare, Plus, Search, Settings as SettingsIcon, type LucideIcon } from 'lucide-react';
+import { Ghost, Lock, MessageSquare, Plus, Search, Settings as SettingsIcon, Users, type LucideIcon } from 'lucide-react';
 import { Icon, Kbd, cn } from '../components/ui/index.ts';
 import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { relativeTime } from '../lib/dates.ts';
@@ -11,6 +11,7 @@ import { useUi } from '../lib/ui-store.ts';
 import { useMode, useNewChat, useNewTemporaryChat, useOpenSettings } from './navigation.ts';
 import { useLockNow, useScreenLock } from '../features/auth/screen-lock.ts';
 import { sessionTitle } from '../lib/sessions.ts';
+import { JoinLinkDialog } from '../features/coop/join-link-dialog.tsx';
 
 interface Action {
   id: string;
@@ -33,6 +34,7 @@ export function CommandPalette() {
   const openSettings = useOpenSettings();
   const lock = useScreenLock();
   const lockNow = useLockNow(openSettings);
+  const [joining, setJoining] = useState(false);
 
   const close = () => {
     setOpen(false);
@@ -41,12 +43,15 @@ export function CommandPalette() {
   const actions: Action[] = [
     { id: 'new-chat', label: { chat: 'New chat', work: 'New Cowork task', code: 'New session' }[mode], icon: Plus, run: newChat },
     { id: 'new-temporary-chat', label: 'New temporary chat', icon: Ghost, run: newTemporaryChat },
+    { id: 'join-coop', label: 'Join a co-op session…', icon: Users, run: () => setJoining(true) },
     { id: 'settings', label: 'Settings', icon: SettingsIcon, run: () => openSettings() },
     ...(lock?.enabled ? [{ id: 'lock', label: 'Lock Atelier', icon: Lock, run: lockNow }] : []),
   ].filter((a) => a.label.toLowerCase().includes(search.toLowerCase()));
   const chats = (sessions ?? []).slice(0, search ? 20 : 8);
 
   return (
+    <>
+    <JoinLinkDialog open={joining} onOpenChange={setJoining} />
     <BaseDialog.Root open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className={dialogBackdropClass} />
@@ -115,6 +120,7 @@ export function CommandPalette() {
         </BaseDialog.Popup>
       </BaseDialog.Portal>
     </BaseDialog.Root>
+    </>
   );
 }
 

@@ -66,6 +66,8 @@ export interface TurnFacts {
   /** The rendered safeguards block's hash, empty when safeguards are off. */
   safeguards: string;
   research: boolean;
+  /** Co-op: who is in the session (names already escaped), told when it changes. */
+  coop?: { roster: string; people: string; host: string };
   /** The image models a session with GenerateImage can use, one per line. */
   imageModels?: string;
   /** The video models a session with GenerateVideo can use, one per line. */
@@ -147,6 +149,9 @@ export async function turnNote(facts: TurnFacts, prior: NoteState, history: read
   set('safeguards', facts.safeguards);
 
   if (facts.research) note('research');
+  // Co-op: the people, on the first shared turn and when someone came or went.
+  if (facts.coop && prior.coop !== facts.coop.roster) note('coop', { people: facts.coop.people, host: facts.coop.host });
+  if (facts.coop) set('coop', facts.coop.roster);
 
   // Only when the list changes, so the tool's description and the frozen prompt stay byte-stable.
   if (facts.imageModels !== undefined) {

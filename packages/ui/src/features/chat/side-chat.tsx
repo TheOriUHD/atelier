@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Maximize2, MessageCircleQuestion, Minimize2, Plus, X } from 'lucide-react';
-import type { SessionSummary } from '@atelier/protocol';
+import { isCoopMirror, type SessionSummary } from '@atelier/protocol';
 import { Icon, IconButton, Spinner, cn, toast } from '../../components/ui/index.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
 import { useModels } from '../../lib/queries.ts';
@@ -34,7 +34,8 @@ const listKey = (sessionId: string) => ['sideChats', sessionId] as const;
 /** A session's side chats and the one shown, with starting and closing them. */
 export function useSideChats(sessionId: string) {
   const qc = useQueryClient();
-  const { data: chats = [] } = useQuery({ queryKey: listKey(sessionId), queryFn: () => rpc().call('sideChats.list', { sessionId }) });
+  // Side chats are the session owner's: none beside a co-op session on someone else's computer.
+  const { data: chats = [] } = useQuery({ queryKey: listKey(sessionId), queryFn: () => rpc().call('sideChats.list', { sessionId }), enabled: !isCoopMirror(sessionId) });
   const [picked, setPicked] = useState<string | null>(null);
   const [starting, setStarting] = useState(0);
   const shown = chats.find((c) => c.id === picked) ?? chats.at(-1) ?? null;

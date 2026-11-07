@@ -90,7 +90,11 @@ async function chat(req, res) {
   // The notes Atelier puts in front of a message aren't the person's words: the script reacts to what they typed (and
   // still sees what follows it, such as a /command's text).
   const notes = /^(?:<context-update>[\s\S]*?<\/context-update>\s*)*/.exec(latest)[0];
-  const lastUser = latest.slice(notes.length).replace(/\s*<context-update>\nThis message comes from a loop[\s\S]*?<\/context-update>/, '');
+  // In a co-op session each message starts with its writer's tag (`<sender name="Ben"/>`): the script answers the words.
+  const lastUser = latest
+    .slice(notes.length)
+    .replace(/\s*<context-update>\nThis message comes from a loop[\s\S]*?<\/context-update>/, '')
+    .replace(/^<sender [^>]*\/>\s*/, '');
   const answeredTool = messages.at(-1)?.role === 'tool';
   if (lastUser.startsWith('reconnect-probe ') && !/short title/i.test(system)) {
     const attempts = reconnectAttempts.get(lastUser) ?? 0;

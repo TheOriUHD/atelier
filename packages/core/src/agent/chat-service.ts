@@ -18,8 +18,11 @@ import {
   shownEffort,
   ULTRACODE_LEVEL,
   ULTRACODE_MAX_SUBAGENTS,
+  accountParticipant,
+  participantUserId,
   type ContextPart,
   type ContextUsage,
+  type Participant,
   type ControllerMethods,
   type Effort,
   type EffortOptions,
@@ -52,7 +55,7 @@ import {
   type Usage,
   type UserPrefs,
 } from '@atelier/protocol';
-import { imageId, LIMIT_REACHED, type ImageProgress } from '@atelier/protocol';
+import { imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLentToolName, REACTIONS, type CoopSettings, type ImageProgress } from '@atelier/protocol';
 import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
@@ -121,6 +124,7 @@ import { newId } from '../util/ids.ts';
 import type { CodeContext } from '../workspaces/code-context.ts';
 import { isTrusted, type Workspace } from '../workspaces/workspace.ts';
 import { runTurn, type PreparedRequest } from './loop.ts';
+import { actorFor, answerWithProblem, COOP_QUESTION_TIMEOUT_MS, guestMode, guestParts, keptOnStop, mayHandle, nextTurn, senderTag, soloActor, takenByTurn, type TurnActor, type TurnParticipant } from './coop-turns.ts';
 import { renderForSummary, renderState, summarize, type CarriedState } from './compaction.ts';
 import { afterCompaction, announcedState, todoNudge, turnNote, type GitSnapshot, type NoteState } from './context-notes.ts';
 import { isSideChat, mainTranscript, SIDE_CHAT_EFFORT, SIDE_CHAT_KEY, sideChatNote, sideChatTitle, sideChatTools, withSideChatNote } from './side-chat.ts';
@@ -163,6 +167,12 @@ export interface ModelResolver {
   agentTurn?(ref: string, signal: AbortSignal, onWait?: (ahead: number | null) => void, userId?: string | null): Promise<() => void>;
 }
 
+/** Co-op: how many of a guest's messages may wait at once. */
+const MAX_WAITING_PER_GUEST = 20;
+
+/** Co-op: the edits a navigator looks over. */
+const NAVIGATED_TOOLS = new Set(['Edit', 'Write']);
+
 /** A turn kept filling the window, however often it was summarized: it stops instead of going around again. */
 export class ContextLoopError extends Error {
   constructor(readonly compactions: number) {
@@ -194,6 +204,20 @@ export class ModelHiddenError extends ModelUnavailableError {
   }
 }
 
+/** What the chat service asks co-op (coop/service.ts): who is in a shared session, and what they chose. */
+export interface CoopPort {
+  isShared(sessionId: string): Promise<boolean>;
+  /** The main session a sub-agent or side chat belongs to. */
+  rootOf(sessionId: string): Promise<string>;
+  participant(sessionId: string, participantId: string): Promise<TurnParticipant | null>;
+  /** Why a guest can't use the host's shared models for another request now, or null. */
+  sharedCapReached(sessionId: string, participantId: string): Promise<string | null>;
+  list(sessionId: string): Promise<Participant[]>;
+  /** The connectors a guest from another computer lends to their own turns (coop/lent-tools.ts); each call asks them. */
+  lentTools?(sessionId: string, participant: TurnParticipant): Promise<Tool[]>;
+  settings(sessionId: string): Promise<CoopSettings>;
+}
+
 export interface ChatServiceDeps {
   repo: SessionRepo;
   artifacts: ArtifactRepo;
@@ -205,7 +229,9 @@ export interface ChatServiceDeps {
   promptOverrides: () => Partial<Record<string, string>>;
   sessionEvent(sessionId: string, seq: number, event: RunEvent): void;
   sessionChanged(summary: SessionSummary): void;
-  recordUsage(entry: { model: ModelInfo; sessionId: string; userId: string | null; mode: string; usage: Usage }): void;
+  recordUsage(entry: { model: ModelInfo; sessionId: string; userId: string | null; mode: string; usage: Usage; participant?: string | null }): void;
+  /** Co-op (ARCHITECTURE §24): who takes part in a shared session, for whom each turn is, and what they chose. */
+  coop?: CoopPort;
   /** The session owner's preferences, how the assistant should address them and the admin's safeguards override (ARCHITECTURE §21). */
   person(userId: string | null): Promise<{ prefs: UserPrefs; name: string; safeguards: SafeguardsOverride }>;
   /**
@@ -219,8 +245,11 @@ export interface ChatServiceDeps {
   hookError?(sessionId: string, message: string): void;
   /** The skills and commands a session can use (ARCHITECTURE §10). */
   extensions?(session: SessionRow): Promise<ExtensionCatalog>;
-  /** Tools of the enabled MCP connectors, offered in every mode (ARCHITECTURE §9-B). */
-  mcpTools?(session: SessionRow): Promise<Tool[]>;
+  /**
+   * Tools of the enabled MCP connectors, offered in every mode (ARCHITECTURE §9-B). `connectorUser`: whose own connectors
+   * join the shared ones (co-op: the turn's person when they bring theirs; null for none); the session's person otherwise.
+   */
+  mcpTools?(session: SessionRow, connectorUser?: string | null): Promise<Tool[]>;
   /** Adds an MCP server the person agreed to (AddConnector) to their connectors and connects to it; without it the tool isn't offered. */
   addConnector?(session: SessionRow, connector: NewConnector): Promise<AddedConnector>;
   /** Computer use on the person's computer (ARCHITECTURE §22): whether a session can have it, and its controller. */
@@ -449,6 +478,13 @@ function outputCap(effort: Effort | null): number {
 
 export class ChatService {
   private runs = new Map<string, ActiveRun>();
+  /** Co-op: for whom each running turn is (coop-turns.ts), and the turn a Retry or Continue asked to run as someone. */
+  private actors = new Map<string, TurnActor>();
+  private forcedActors = new Map<string, TurnParticipant>();
+  /** Co-op: sessions whose running turn took in a guest's message from someone else's turn (its permissions are a guest's). */
+  private guestJoined = new Set<string>();
+  /** Co-op: sub-agents started in such a turn, which keep a guest's permissions for as long as they work. */
+  private guestAgents = new Set<string>();
   private seqs = new Map<string, number>();
   /** Parts of the message each session is streaming right now; ahead of the store between batched writes. */
   private live = new Map<string, { messageId: string; parts: readonly Part[] }>();
@@ -654,6 +690,11 @@ export class ChatService {
     await this.runs.get(sessionId)?.done;
   }
 
+  /** A run event from outside the run (co-op presence and typing), numbered with the session's own. */
+  notify(sessionId: string, event: RunEvent): void {
+    this.emit(sessionId, event);
+  }
+
   private emit(sessionId: string, event: RunEvent): void {
     const seq = (this.seqs.get(sessionId) ?? 0) + 1;
     this.seqs.set(sessionId, seq);
@@ -701,6 +742,7 @@ export class ChatService {
       if (!row) throw new Error('Session not found');
       const { messages, siblings } = await this.deps.repo.branch(sessionId);
       const summary = (await this.deps.repo.get(sessionId))!;
+      const reactions = summary.coop || (await this.deps.coop?.isShared(sessionId)) ? await this.deps.repo.reactions(sessionId) : undefined;
       if ((this.versions.get(sessionId) ?? 0) !== version && attempt < 3) continue;
       // No awaits from here on: the live parts and seq below describe the same instant.
       const live = this.live.get(sessionId);
@@ -726,13 +768,15 @@ export class ChatService {
         outbox: [...(this.outboxes.get(sessionId) ?? [])],
         runStartedAt: this.runs.get(sessionId)?.startedAt ?? null,
         seq: this.seqs.get(sessionId) ?? 0,
+        ...(reactions ? { reactions } : {}),
       };
     }
   }
 
-  async send(sessionId: string, rawParts: Part[], parentId?: string | null): Promise<string> {
-    const checked = this.checked(sessionId, withQuotes(rawParts));
+  async send(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null, opts: { answerWith?: string } = {}): Promise<string> {
+    const checked = this.checked(sessionId, withQuotes(by && by.role !== 'host' ? guestParts(rawParts) : rawParts));
     const parts = Array.isArray(checked) ? checked : await checked;
+    const answerWith = by && opts.answerWith ? await this.checkedAnswerWith(sessionId, opts.answerWith, by) : undefined;
     const id = newId();
     await this.start(sessionId, true, {
       before: async () => {
@@ -749,6 +793,8 @@ export class ChatService {
           error: null,
           kind: 'normal',
           summarizesThroughId: null,
+          ...(by ? { author: by.id } : {}),
+          ...(answerWith ? { answerWith } : {}),
         });
         this.emit(sessionId, { type: 'message', message });
         // The person spoke: background sub-agents' ends may wake the session again.
@@ -767,14 +813,47 @@ export class ChatService {
   }
 
   /** Edit = a new sibling of the user message, then a fresh reply on that branch. */
-  async edit(sessionId: string, messageId: string, parts: Part[]): Promise<string> {
+  async edit(sessionId: string, messageId: string, parts: Part[], by?: TurnParticipant | null): Promise<string> {
     const original = await this.deps.repo.getMessage(messageId);
     if (!original || original.sessionId !== sessionId || original.role !== 'user') throw new Error('Only your messages can be edited');
-    return this.send(sessionId, parts, original.parentId);
+    // In co-op, a person edits their own messages (the host may edit any).
+    if (by && by.role !== 'host' && (original.author ?? null) !== by.id) throw new Error('Only your own messages can be edited');
+    return this.send(sessionId, parts, original.parentId, by);
+  }
+
+  /**
+   * Co-op: the same question answered again by another model `by` may use, as a sibling of the reply `messageId`
+   * (‹ 1/2 ›). It is `by`'s request: their share of the host's models, or their own model.
+   */
+  async secondOpinion(sessionId: string, messageId: string, model: string, by: TurnParticipant): Promise<void> {
+    const target = await this.deps.repo.getMessage(messageId);
+    if (!target || target.sessionId !== sessionId || target.role !== 'assistant') throw new Error('Ask for a second opinion on a reply.');
+    const answerWith = await this.checkedAnswerWith(sessionId, model, by);
+    await this.retry(sessionId, messageId, { ...by, answerWith });
+  }
+
+  /** Co-op: `value` as a model `by` may have answer them, or an error saying why not. */
+  private async checkedAnswerWith(sessionId: string, value: string, by: TurnParticipant): Promise<string> {
+    const coop = this.deps.coop;
+    if (!coop || !(await coop.isShared(sessionId))) throw new Error('Asking for a model by name is for co-op sessions.');
+    const problem = answerWithProblem(value, by, await coop.settings(await coop.rootOf(sessionId)));
+    if (problem) throw new Error(problem);
+    return value;
+  }
+
+  /** Co-op: someone puts an emoji on a message, or takes it off. */
+  async react(sessionId: string, messageId: string, emoji: string, on: boolean, by: TurnParticipant): Promise<void> {
+    if (!(REACTIONS as readonly string[]).includes(emoji)) throw new Error('That emoji isn’t one of the reactions.');
+    const message = await this.deps.repo.getMessage(messageId);
+    if (!message || message.sessionId !== sessionId) throw new Error('Message not found');
+    await this.deps.repo.react(sessionId, messageId, by.id, emoji, on);
+    this.notify(sessionId, { type: 'reaction', messageId, participantId: by.id, emoji, on });
   }
 
   /** Retry = a new sibling reply to the same user turn. */
-  async retry(sessionId: string, messageId: string): Promise<void> {
+  async retry(sessionId: string, messageId: string, by?: TurnParticipant | null): Promise<void> {
+    // In co-op the new reply runs as the person who asked for it: their models, their cost.
+    if (by) this.forcedActors.set(sessionId, by);
     await this.start(sessionId, false, {
       before: async () => {
         const target = await this.deps.repo.getMessage(messageId);
@@ -791,10 +870,11 @@ export class ChatService {
    * Stops the session's run and the sub-agents it left working in the background. Its loops go on, none sending right
    * after the Stop: each next sends a full interval from now.
    */
-  async stop(sessionId: string): Promise<void> {
+  async stop(sessionId: string, by?: TurnParticipant | null): Promise<void> {
     this.loops.stopped(sessionId);
-    // Messages still waiting go back to the person (the window puts them in the box again): Stop is not "send these".
-    this.setOutbox(sessionId, []);
+    // Messages still waiting go back to the person (the window puts them in the box again): Stop is not "send these". In
+    // co-op only the stopper's own: the others' keep waiting for their turns.
+    this.setOutbox(sessionId, by ? keptOnStop(this.outboxes.get(sessionId) ?? [], by.id, await this.hostParticipantId(sessionId)) : []);
     this.interrupting.delete(sessionId);
     const run = this.runs.get(sessionId);
     run?.controller.abort();
@@ -807,11 +887,17 @@ export class ChatService {
    * A message sent while the agent works. A running session keeps it waiting (shown to the person, who can take it
    * back or send it at once) and the agent takes it at its next step; an idle one simply sends it.
    */
-  async queue(sessionId: string, rawParts: Part[]): Promise<{ id: string; queued: boolean }> {
-    const checked = this.checked(sessionId, withQuotes(rawParts));
+  async queue(sessionId: string, rawParts: Part[], by?: TurnParticipant | null, opts: { joinTurn?: boolean; answerWith?: string } = {}): Promise<{ id: string; queued: boolean }> {
+    const checked = this.checked(sessionId, withQuotes(by && by.role !== 'host' ? guestParts(rawParts) : rawParts));
     const parts = Array.isArray(checked) ? checked : await checked;
-    if (!this.runs.has(sessionId)) return { id: await this.send(sessionId, parts), queued: false };
-    const item: OutboxMessage = { id: newId(), parts };
+    if (!this.runs.has(sessionId)) return { id: await this.send(sessionId, parts, undefined, by, opts.answerWith ? { answerWith: opts.answerWith } : {}), queued: false };
+    // Co-op: a guest's waiting messages are capped, so nobody fills the queue for everyone.
+    if (by && by.role !== 'host' && (this.outboxes.get(sessionId) ?? []).filter((m) => m.author === by.id).length >= MAX_WAITING_PER_GUEST) {
+      throw new Error(`You have ${MAX_WAITING_PER_GUEST} messages waiting already: send the rest when one has gone.`);
+    }
+    const answerWith = by && opts.answerWith ? await this.checkedAnswerWith(sessionId, opts.answerWith, by) : undefined;
+    // A message that asks for its own model opens a turn of its own: it doesn't join someone's running one.
+    const item: OutboxMessage = { id: newId(), parts, ...(by ? { author: by.id } : {}), ...(by && opts.joinTurn && !answerWith ? { joinTurn: true } : {}), ...(answerWith ? { answerWith } : {}) };
     this.setOutbox(sessionId, [...(this.outboxes.get(sessionId) ?? []), item]);
     return { id: item.id, queued: true };
   }
@@ -827,6 +913,7 @@ export class ChatService {
     const before = (await this.deps.workspace?.(session))?.root ?? null;
     const target = await this.deps.moveWorkspace(session, path);
     if (target.id === session.workspaceId) return `The session is already working in ${target.root}.`;
+    await this.deps.repo.clearLanes(sessionId);
     this.deps.sessionChanged(await this.deps.repo.update(sessionId, { workspaceId: target.id, systemSnapshot: null }));
     const moved = await this.requireSession(sessionId);
     const [code, git] = await Promise.all([this.deps.codeContext?.(moved).catch(() => null), this.deps.gitSnapshot?.(moved).catch(() => null)]);
@@ -869,6 +956,7 @@ export class ChatService {
     const session = await this.requireSession(sessionId);
     if (workspaceId === session.workspaceId) return;
     const { from, to } = await this.deps.moveTarget!(session, workspaceId);
+    await this.deps.repo.clearLanes(sessionId);
     this.deps.sessionChanged(await this.deps.repo.update(sessionId, { workspaceId: to.id, systemSnapshot: null }));
     const git = await this.deps.gitSnapshot?.(await this.requireSession(sessionId)).catch(() => null);
     const text = renderNote(
@@ -888,10 +976,11 @@ export class ChatService {
   }
 
   /** Takes a waiting message back: its parts, or none when the agent already took it. */
-  unqueue(sessionId: string, id: string): Part[] {
+  async unqueue(sessionId: string, id: string, by?: TurnParticipant | null): Promise<Part[]> {
     const waiting = this.outboxes.get(sessionId) ?? [];
     const item = waiting.find((m) => m.id === id);
     if (!item) return [];
+    if (by && !mayHandle(item, by.id, await this.hostParticipantId(sessionId), by.role)) throw new Error('Only its author can take a waiting message back.');
     this.setOutbox(sessionId, waiting.filter((m) => m !== item));
     return item.parts;
   }
@@ -900,10 +989,20 @@ export class ChatService {
    * Sends a waiting message now: the step in progress is cut off (what it had written and every finished tool call stay)
    * and the message opens the next turn, which carries on with the task. Background sub-agents and loops are left alone.
    */
-  async sendNow(sessionId: string, id: string): Promise<void> {
+  async sendNow(sessionId: string, id: string, by?: TurnParticipant | null): Promise<void> {
     const waiting = this.outboxes.get(sessionId) ?? [];
     const item = waiting.find((m) => m.id === id);
     if (!item) return;
+    if (by) {
+      const host = await this.hostParticipantId(sessionId);
+      if (!mayHandle(item, by.id, host, by.role)) throw new Error('Only its author can send a waiting message now.');
+      // Someone else's turn isn't cut off by a guest: their message joins it at its next step instead.
+      const actor = this.actors.get(sessionId);
+      if (this.runs.has(sessionId) && by.role !== 'host' && actor?.participant && actor.participant.id !== by.id) {
+        this.setOutbox(sessionId, waiting.map((m) => (m === item ? { ...m, joinTurn: true } : m)));
+        return;
+      }
+    }
     this.setOutbox(sessionId, waiting.filter((m) => m !== item));
     const run = this.runs.get(sessionId);
     if (!run) {
@@ -950,6 +1049,8 @@ export class ChatService {
       error: null,
       kind: 'normal',
       summarizesThroughId: null,
+      ...(item.author ? { author: item.author } : {}),
+      ...(item.answerWith ? { answerWith: item.answerWith } : {}),
     });
     this.emit(sessionId, { type: 'message', message });
   }
@@ -965,12 +1066,23 @@ export class ChatService {
     const hooks = await this.deps.hooks?.(session);
     if (hooks && hooksFor(hooks.configs, 'UserPromptSubmit').length > 0) return;
     const text = (m: OutboxMessage) => m.parts.map((p) => (p.type === 'text' ? p.text : '')).join('').trimStart();
-    const take: OutboxMessage[] = [];
-    for (const m of waiting) {
-      if (text(m).startsWith('/')) break;
-      take.push(m);
+    const actor = this.actors.get(sessionId);
+    // In co-op a turn takes its own author's messages, and those asked to join it; the others wait for turns of their own.
+    const take: OutboxMessage[] = actor?.shared
+      ? takenByTurn(waiting, actor.participant?.id ?? null, await this.hostParticipantId(sessionId), (m) => text(m).startsWith('/'))
+      : [];
+    if (!actor?.shared) {
+      for (const m of waiting) {
+        if (text(m).startsWith('/')) break;
+        take.push(m);
+      }
     }
     if (!take.length) return;
+    // A guest's message joining another person's turn: the rest of the turn runs with a guest's permissions.
+    if (actor?.shared) {
+      const hostId = await this.hostParticipantId(sessionId);
+      if (take.some((m) => m.author && m.author !== hostId && m.author !== actor.participant?.id)) this.guestJoined.add(sessionId);
+    }
     this.setOutbox(sessionId, waiting.filter((m) => !take.includes(m)));
     for (const item of take) await this.insertWaiting(sessionId, item, 'step');
     this.wakes.delete(sessionId);
@@ -1079,7 +1191,8 @@ export class ChatService {
   }
 
   /** Carries on with a reply a restart cut off: "Continue" as the person's message, with a note on what happened. */
-  async continue(sessionId: string): Promise<void> {
+  async continue(sessionId: string, by?: TurnParticipant | null): Promise<void> {
+    if (by) this.forcedActors.set(sessionId, by);
     await this.start(sessionId, true, {
       before: async () => {
         const session = await this.requireSession(sessionId);
@@ -1170,11 +1283,16 @@ export class ChatService {
       void this.deliver(sessionId, [now], 'interrupt').catch(() => undefined);
       return;
     }
-    // Messages that arrived too late for a step of this run (during its last reply) are the next turn.
+    // Messages that arrived too late for a step of this run (during its last reply) are the next turn. In co-op the next
+    // turn is the first waiting author's; the others' wait for theirs, which follow one after another.
     const waiting = this.outboxes.get(sessionId);
     if (waiting?.length && !stopped) {
-      this.setOutbox(sessionId, []);
-      void this.deliver(sessionId, waiting, 'turn-end').catch(() => undefined);
+      void (async () => {
+        const shared = this.actors.get(sessionId)?.shared ?? false;
+        const next = shared ? nextTurn(waiting, await this.hostParticipantId(sessionId)) : waiting;
+        this.setOutbox(sessionId, waiting.filter((m) => !next.includes(m)));
+        await this.deliver(sessionId, next, 'turn-end');
+      })().catch(() => undefined);
       return;
     }
     if (stopped) for (const notice of this.notices.get(sessionId) ?? []) notice.wake = false;
@@ -1247,8 +1365,24 @@ export class ChatService {
     let finalStatus: 'idle' | 'error' = 'idle';
     try {
       const session = await this.requireSession(sessionId);
+      // Co-op: whom this turn is for decides its model, who pays and whose limits count (coop-turns.ts).
+      const actor = await this.turnActor(session);
+      this.actors.set(sessionId, actor);
+      // A new turn starts with its own author's permissions; a sub-agent started under a guest's message keeps a guest's.
+      if (!this.guestAgents.has(sessionId)) this.guestJoined.delete(sessionId);
+      if (actor.problem) {
+        await this.failTurn(sessionId, { code: 'model_unavailable', message: actor.problem, retryable: false });
+        finalStatus = 'error';
+        return;
+      }
+      const capped = actor.forParticipant ? await this.deps.coop?.sharedCapReached(sessionId, actor.forParticipant) : null;
+      if (capped) {
+        await this.failTurn(sessionId, { code: 'limit_reached', message: capped, retryable: false });
+        finalStatus = 'error';
+        return;
+      }
       // Over a usage limit: nothing is sent. A turn started for background sub-agents' ends just waits for the person.
-      const refused = await this.limitError(session.userId);
+      const refused = await this.limitError(actor.payer);
       if (refused) {
         if (!wake) await this.failTurn(sessionId, refused);
         finalStatus = wake ? 'idle' : 'error';
@@ -1262,17 +1396,18 @@ export class ChatService {
       let resolved: ResolvedModel;
       const moved: string[] = [];
       try {
-        const ref = await this.modelRef(session);
+        // A guest's own choice (theirs, or one of the host's models), else the session's own.
+        const ref = actor.ref ?? (await this.modelRef(session));
         if (!ref) throw new ModelUnavailableError('Add a model provider to start chatting.');
-        resolved = await this.resolveSessionModel(session, ref, moved);
-        if (!session.model) await this.deps.repo.update(sessionId, { model: ref });
+        resolved = await this.resolveSessionModel(session, ref, moved, actor.modelUser);
+        if (!session.model && !actor.ref) await this.deps.repo.update(sessionId, { model: ref });
       } catch (error) {
         await this.failWithoutModel(sessionId, error);
         finalStatus = 'error';
         return;
       }
-      // Named from the first message right away, ahead of the reply.
-      if (!session.parentSessionId && !session.title && !this.titling.has(sessionId)) void this.generateTitle(sessionId, resolved);
+      // Named from the first message right away, ahead of the reply. In co-op only on the host's own models (helpers are theirs).
+      if (!session.parentSessionId && !session.title && !this.titling.has(sessionId) && !actor.ref && actor.payer === session.userId) void this.generateTitle(sessionId, resolved);
       const run = await this.requestContext(session, resolved, signal, true);
       if (!session.parentSessionId) await this.announce(session, run);
       for (const note of moved) await this.addContextMessage(sessionId, note);
@@ -1288,6 +1423,7 @@ export class ChatService {
       const offered = new Set(run.tools.map((t) => t.name));
       const turn = () => runTurn({
         sessionId,
+        ...(actor.shared && actor.participant ? { author: actor.participant.id } : {}),
         repo: this.deps.repo,
         adapter: resolved.adapter,
         model: resolved.info,
@@ -1309,13 +1445,13 @@ export class ChatService {
         },
         authorize: (call, tool) => this.authorize(session, call, tool, offered, signal),
         // Before each request, so a long turn (and its sub-agents) stops soon after a limit is reached.
-        ...(this.deps.limits ? { admit: () => this.deps.limits!.admit(session.userId) } : {}),
+        ...(this.deps.limits ? { admit: () => this.deps.limits!.admit(actor.payer) } : {}),
         afterTool: (call, output) => this.afterTool(session, hooks ?? null, call, output, signal),
         onOutputCut: () => this.addContextMessage(sessionId, renderNote('notes/output-cut', {}, this.deps.promptOverrides(), [...offered])),
         onUsage: (usage) => {
           this.observeUsage(run, usage);
-          this.deps.recordUsage({ model: resolved.info, sessionId, userId: session.userId, mode: session.mode, usage });
-          this.warnAboutLimits(sessionId, session.userId);
+          this.deps.recordUsage({ model: resolved.info, sessionId, userId: actor.payer, mode: session.mode, usage, participant: actor.forParticipant });
+          if (actor.payer) this.warnAboutLimits(sessionId, actor.payer);
         },
       });
       let result = await turn();
@@ -1336,9 +1472,11 @@ export class ChatService {
         this.emit(sessionId, { type: 'done', messageId: result.lastAssistantId, usage: null, stopReason: 'error', error: result.error });
       }
       // The row as it is now: a title written while this turn ran counts.
-      if (!this.titling.has(sessionId) && !(await this.deps.repo.getRow(sessionId))?.title) void this.generateTitle(sessionId, resolved);
-      if (!session.parentSessionId && !signal.aborted) this.deps.memory?.turnEnded(session);
-      if (!session.parentSessionId && !signal.aborted && result.stopReason === 'end' && (session.mode === 'code' || session.mode === 'work') && !session.temporary) {
+      // Titles and memory are the host's: never from a guest's model, never from a shared conversation's contents.
+      if (!actor.shared && !this.titling.has(sessionId) && !(await this.deps.repo.getRow(sessionId))?.title) void this.generateTitle(sessionId, resolved);
+      if (!session.parentSessionId && !signal.aborted && !actor.shared) this.deps.memory?.turnEnded(session);
+      // A guess at the next message is one person's composer aid: not in co-op.
+      if (!session.parentSessionId && !signal.aborted && !actor.shared && result.stopReason === 'end' && (session.mode === 'code' || session.mode === 'work') && !session.temporary) {
         void this.suggestReply(sessionId, resolved);
       }
     } catch (error) {
@@ -1389,6 +1527,7 @@ export class ChatService {
         tools: run.tools.map((t) => t.name),
         safeguards: run.snapshot.safeguardsHash,
         research: session.overrides.research === true && settings.capabilities.webSearch.enabled,
+        ...(!session.parentSessionId ? await this.roster(session.id) : {}),
         ...(run.tools.some((t) => t.name === 'GenerateImage') && this.deps.images ? { imageModels: await this.deps.images.modelList(session) } : {}),
         ...(run.tools.some((t) => t.name === 'GenerateVideo') && this.deps.videos ? { videoModels: await this.deps.videos.modelList(session) } : {}),
         ...(run.tools.some((t) => t.name === 'GenerateAudio') && this.deps.audio ? { audioModels: await this.deps.audio.modelList(session) } : {}),
@@ -1410,6 +1549,18 @@ export class ChatService {
     this.emit(session.id, { type: 'message', message: { ...message, parts } });
   }
 
+  /**
+   * Co-op: who is in the session, for the turn note that tells the model when it changes (prompts/notes/coop.md). Kept
+   * in the conversation, not the system prompt, so the prompt's cache survives people coming and going.
+   */
+  private async roster(sessionId: string): Promise<{ coop?: { roster: string; people: string; host: string } }> {
+    if (!this.actors.get(sessionId)?.shared) return {};
+    const people = await this.deps.coop!.list(sessionId);
+    const host = people.find((p) => p.role === 'host')?.name ?? 'The host';
+    const names = people.map((p) => escapeTags(p.role === 'host' ? `${p.name} (host)` : p.role === 'viewer' ? `${p.name} (watching)` : p.name)).join(', ');
+    return { coop: { roster: people.map((p) => `${p.id}|${p.name}|${p.role}`).join(','), people: names, host: escapeTags(host) } };
+  }
+
   /** Today in the backend's time zone, which is the person's on the desktop. */
   private date(): { iso: string; long: string } {
     return localDate(this.deps.now?.() ?? new Date(), this.timeZone());
@@ -1425,9 +1576,9 @@ export class ChatService {
    * conversation (`notes` collects the text for the caller to add, else it is added now), and keeps the new model.
    * Without another model the refusal stands.
    */
-  private async resolveSessionModel(session: SessionRow, ref: string, notes?: string[]): Promise<ResolvedModel> {
+  private async resolveSessionModel(session: SessionRow, ref: string, notes?: string[], userId: string | null = session.userId): Promise<ResolvedModel> {
     try {
-      return await this.deps.models.resolve(ref, session.userId);
+      return await this.deps.models.resolve(ref, userId);
     } catch (error) {
       if (!(error instanceof ModelHiddenError)) throw error;
       const fallback = await firstUsableModel(this.deps.models, [defaultModelFor(this.deps.settings(), session.mode), await this.deps.models.firstAvailable()], session.userId);
@@ -1440,6 +1591,63 @@ export class ChatService {
       return fallback;
     }
   }
+
+  /** Co-op: the host's participant id for a shared session's root; null for a session nobody shares. */
+  private async hostParticipantId(sessionId: string): Promise<string | null> {
+    const root = this.deps.coop ? await this.deps.coop.rootOf(sessionId) : sessionId;
+    const row = await this.deps.repo.getRow(root);
+    return row?.userId ? accountParticipant(row.userId) : null;
+  }
+
+  /**
+   * For whom a turn is (coop-turns.ts): outside co-op, the session's own person. In co-op, whoever a Retry or Continue
+   * named, else the participant a sub-agent or side chat was started for, else the author of the person's message that
+   * opened the turn (the host's when it has none).
+   */
+  private async turnActor(session: SessionRow): Promise<TurnActor> {
+    const coop = this.deps.coop;
+    if (!coop || !(await coop.isShared(session.id))) return soloActor(session.userId);
+    const root = await coop.rootOf(session.id);
+    const rootRow = root === session.id ? session : await this.deps.repo.getRow(root);
+    const hostUserId = rootRow?.userId ?? session.userId;
+    const hostId = hostUserId ? accountParticipant(hostUserId) : null;
+    const forced = this.forcedActors.get(session.id);
+    this.forcedActors.delete(session.id);
+    let id: string | null = forced?.id ?? (typeof session.overrides.coopActor === 'string' ? session.overrides.coopActor : null);
+    let answerWith = forced?.answerWith;
+    if (!id) {
+      const history = await this.deps.repo.history(session.id);
+      const opened = [...history].reverse().find((m) => m.role === 'user' && m.kind === 'normal');
+      id = opened?.author ?? hostId;
+      answerWith = opened?.answerWith;
+    }
+    const participant = id ? await coop.participant(root, id) : null;
+    // Someone who left since (or a message without an author): the host's turn.
+    const who = participant ?? (hostId ? await coop.participant(root, hostId) : null);
+    if (!who) return soloActor(session.userId);
+    const settings = await coop.settings(root);
+    // A model asked for by name that they may no longer use (the host stopped sharing) answers as they usually would.
+    const asked = answerWith && participant && !answerWithProblem(answerWith, who, settings) ? { ...who, answerWith } : who;
+    const actor = actorFor(hostUserId, asked);
+    // A guest's own models read what the session reads: only where the host agreed to it.
+    const own = who.role !== 'host' && (parseAnswerWith(asked.answerWith)?.source ?? who.models) === 'own';
+    return own && !settings.allowGuestModels ? { ...actor, problem: `${who.name} answers with their own models, but the host hasn’t agreed to send this session to guests’ own models.` } : actor;
+  }
+
+  /**
+   * Co-op: who wrote what, for the `<sender>` tags (a message without an author is the host's, under ''); undefined for a
+   * session nobody shares. Everyone who ever took part, so a message from someone who left still names them.
+   */
+  private async senders(sessionId: string): Promise<Map<string, { name: string; host: boolean }> | undefined> {
+    if (!this.actors.get(sessionId)?.shared) return undefined;
+    const coop = this.deps.coop!;
+    const map = new Map<string, { name: string; host: boolean }>();
+    for (const p of await coop.list(sessionId)) map.set(p.id, { name: p.name, host: p.role === 'host' });
+    const host = [...map.entries()].find(([, v]) => v.host);
+    if (host) map.set('', host[1]);
+    return map;
+  }
+
 
   /** The model a session runs on: its own, else the mode's default, else the first one available. */
   private async modelRef(session: SessionRow): Promise<string | undefined> {
@@ -1463,7 +1671,39 @@ export class ChatService {
   }
 
   /** Answers the permission prompt, question or connector request a run is waiting on; false when it is no longer waiting for that one. */
-  respond(sessionId: string, interactionId: string, answer: PermissionAnswer | QuestionAnswer | ElicitationAnswer): boolean {
+  /**
+   * Co-op: whether `by` may answer this question. Each has an approver, whoever owns what is at risk: the host for their
+   * folder, terminal and computer, a guest for their own connectors. A guest the host trusts may answer the host's.
+   */
+  async mayRespond(sessionId: string, interactionId: string, by: TurnParticipant): Promise<boolean> {
+    const pending = this.interactions.pendingOf(sessionId, interactionId);
+    if (!pending) return true; // Already answered: respond() says so.
+    const approver = pending.approver ?? (await this.hostParticipantId(sessionId));
+    if (approver === by.id) return true;
+    return by.trusted && by.role !== 'viewer' && approver === (await this.hostParticipantId(sessionId));
+  }
+
+  /**
+   * Co-op: someone left or was removed. Their turn stops, their waiting messages go, their open questions are denied,
+   * and the background work started for them ends.
+   */
+  async forgetParticipant(sessionId: string, participantId: string): Promise<void> {
+    // What they allowed for the rest of the session goes with them: coming back, they start from nothing.
+    for (const rules of [this.sessionRules, this.folderRules]) for (const key of [...rules.keys()]) if (key.endsWith(`\n${participantId}`)) rules.delete(key);
+    const waiting = this.outboxes.get(sessionId) ?? [];
+    if (waiting.some((m) => m.author === participantId)) this.setOutbox(sessionId, waiting.filter((m) => m.author !== participantId));
+    this.interactions.denyFor(sessionId, participantId);
+    const actor = this.actors.get(sessionId);
+    if (actor?.participant?.id === participantId) this.runs.get(sessionId)?.controller.abort();
+    for (const [childId] of this.backgroundAgents.get(sessionId) ?? []) {
+      const child = await this.deps.repo.getRow(childId);
+      if (child?.overrides.coopActor === participantId) this.agentStops.get(childId)?.abort();
+    }
+  }
+
+  respond(sessionId: string, interactionId: string, answer: PermissionAnswer | QuestionAnswer | ElicitationAnswer, by?: TurnParticipant | null): boolean {
+    // A guest answering for the host (trusted) approves for this session at most: the host's own rules are theirs to set.
+    if (by && by.role !== 'host' && 'behavior' in answer && (answer.remember === 'always' || answer.remember === 'project')) answer = { ...answer, remember: 'session' };
     const kind = this.interactions.kindOf(sessionId, interactionId);
     // A permission prompt only takes a permission answer: anything else must not read as approval.
     const fits = kind === 'permission' ? 'behavior' in answer : kind === 'question' ? 'answers' in answer : kind === 'elicitation' ? 'action' in answer : false;
@@ -1501,6 +1741,17 @@ export class ChatService {
     signal: AbortSignal,
     seen: { ctx?: PermissionContext },
   ): Promise<{ allow: true; input?: unknown } | { allow: false; message: string }> {
+    // Co-op: a guest's own connector, lent to their turns, asks them about every call, whatever the mode or rules here
+    // (their computer runs only the calls they allowed: coop/gateway.ts). Nobody else's turn uses it.
+    if (parseLentToolName(call.name)) {
+      const asker = askerOf(session);
+      const actor = this.actors.get(session.id) ?? this.actors.get(asker);
+      const owner = actor?.participant && lentToolOf(call.name, actor.participant.id) ? actor.participant : null;
+      if (!owner) return { allow: false, message: 'Only its owner’s turns can use a guest’s connector.' };
+      const request: PermissionRequest = { callId: call.id, toolName: call.name, input: call.input, reason: `${owner.name}’s own connector: they approve each call.`, suggestedRule: '' };
+      const answer = await this.interactions.ask<PermissionAnswer>(asker, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }, { approver: owner.id, timeoutMs: COOP_QUESTION_TIMEOUT_MS });
+      return answer.behavior === 'allow' ? { allow: true } : { allow: false, message: answer.message ? `They declined and said: ${answer.message}` : 'They declined this connector call. Do not retry it unchanged.' };
+    }
     // The current row: the mode can change mid-run (plan approval, the mode picker).
     const current = await this.requireSession(session.id);
     // A side chat follows its main session's mode and rules, and asks in its own pane.
@@ -1510,11 +1761,21 @@ export class ChatService {
     seen.ctx = ctx;
     // A sub-agent's questions appear in its parent's transcript, where the person is looking.
     const asker = askerOf(session);
+    // Co-op: a guest's turn acts on the host's computer without the host's trust. Their standing allow rules, Auto and
+    // Bypass don't apply; edits in the folder go through at most, the rest asks the host (coop-turns.ts guestMode).
+    const actor = this.actors.get(session.id) ?? this.actors.get(asker);
+    // A guest's message that joined someone else's turn makes the rest of it a guest's turn too: it never runs on the
+    // host's standing rules or mode.
+    const guest = (!!actor?.shared && !!actor.participant && actor.participant.role !== 'host') || this.guestJoined.has(asker) || this.guestJoined.has(session.id) || this.guestAgents.has(session.id);
+    const hostId = actor?.shared ? await this.hostParticipantId(session.id) : null;
+    // What is allowed for the rest of a session is kept per person in co-op: one person's yes isn't another's.
+    const key = (id: string) => (actor?.shared && actor.participant ? `${id}\n${actor.participant.id}` : id);
     const subject = { name: call.name, input: (call.input ?? {}) as Record<string, unknown> };
     const target = connectorOrNone(call.name) ? null : outsideRoots(subject, ctx);
-    const folders = target && credentialPath(target) ? [] : [...(this.folderRules.get(asker) ?? []), ...(main ? (this.folderRules.get(main.id) ?? []) : [])];
-    const rules = { ...ctx.rules, allow: [...ctx.rules.allow, ...(this.sessionRules.get(asker) ?? []), ...(main ? (this.sessionRules.get(main.id) ?? []) : []), ...folders] };
-    const judge: PermissionContext = { ...ctx, rules, isReadOnly: (name) => (name === tool.name && tool.readOnly) || ctx.isReadOnly(name), offers: (name) => offered.has(name) };
+    const folders = target && credentialPath(target) ? [] : [...(this.folderRules.get(key(asker)) ?? []), ...(main ? (this.folderRules.get(key(main.id)) ?? []) : [])];
+    const standing = guest ? [] : ctx.rules.allow;
+    const rules = { ...ctx.rules, allow: [...standing, ...(this.sessionRules.get(key(asker)) ?? []), ...(main ? (this.sessionRules.get(key(main.id)) ?? []) : []), ...folders] };
+    const judge: PermissionContext = { ...ctx, ...(guest ? { mode: guestMode(ctx.mode), guest: true } : {}), rules, isReadOnly: (name) => (name === tool.name && tool.readOnly) || ctx.isReadOnly(name), offers: (name) => offered.has(name) };
     const decision = current.mode === 'chat' && SANDBOX_TOOLS.has(call.name) ? await this.sandboxDecision(current, subject) : decide(subject, judge);
     if (decision.behavior === 'deny') return { allow: false, message: refusal(decision) };
 
@@ -1551,7 +1812,9 @@ export class ChatService {
       ...(session.parentSessionId && !main ? { agent: current.title } : {}),
       ...(position ? { position } : {}),
     };
-    const answer = await this.interactions.ask<PermissionAnswer>(asker, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' });
+    // Co-op: the host answers for their folder, terminal and computer (a guest they trust may too), and an unanswered
+    // question is denied after a while rather than holding everyone up.
+    const answer = await this.interactions.ask<PermissionAnswer>(asker, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }, hostId ? { approver: hostId, timeoutMs: COOP_QUESTION_TIMEOUT_MS } : {});
     if (answer.behavior === 'deny') {
       return { allow: false, message: answer.message ? `The person declined and said: ${answer.message}` : 'The person declined this action. Do not retry it unchanged; ask them or take another approach.' };
     }
@@ -1564,12 +1827,14 @@ export class ChatService {
     // credentials and private data never ride along.
     const looked = !answer.remember && LOOKS.has(call.name) ? outsideRoots({ name: call.name, input: (final.input ?? {}) as Record<string, unknown> }, ctx) : null;
     if (looked && !credentialPath(looked)) {
-      this.folderRules.set(asker, [...(this.folderRules.get(asker) ?? []), request.suggestedRule]);
+      this.folderRules.set(key(asker), [...(this.folderRules.get(key(asker)) ?? []), request.suggestedRule]);
       return { allow: true, ...(input ? { input } : {}) };
     }
     if (!answer.remember) return { allow: true, ...(input ? { input } : {}) };
     // Every scope covers the rest of this session at once (project files are re-read only every few seconds).
-    this.sessionRules.set(asker, [...(this.sessionRules.get(asker) ?? []), request.suggestedRule]);
+    this.sessionRules.set(key(asker), [...(this.sessionRules.get(key(asker)) ?? []), request.suggestedRule]);
+    // Co-op: what lasts beyond this session (the host's own rules, the project's) only for the host's own turns.
+    if (guest) return { allow: true, ...(input ? { input } : {}) };
     if (answer.remember === 'project') await this.deps.rememberProjectRule?.(session, request.suggestedRule);
     if (answer.remember === 'always' && session.userId) await this.deps.rememberRule?.(session.userId, request.suggestedRule);
     return { allow: true, ...(input ? { input } : {}) };
@@ -1683,9 +1948,50 @@ export class ChatService {
       const post = await this.runHooks(session, hooks, 'PostToolUse', { tool_name: call.name, tool_input: call.input, tool_response: response }, signal, call.name);
       notes.push(...[post.block && `PostToolUse hook feedback: ${post.block}`, post.context].filter((n): n is string => !!n).map(escapeTags));
     }
+    const navigator = output.isError ? null : await this.navigatorNote(session, call, signal).catch(() => null);
+    if (navigator) notes.push(navigator);
     const updates = [output.isError ? null : await this.nestedInstructions(session, call), await this.todoNudge(session, call)].filter((n): n is string => !!n);
     if (updates.length) notes.push(`<context-update>\n${updates.join('\n\n')}\n</context-update>`);
     return notes.length ? { ...output, content: [...output.content, { type: 'text', text: notes.join('\n') }] } : output;
+  }
+
+  /**
+   * Co-op: when someone is the navigator, their model looks over each edit made in someone else's turn and answers OK or
+   * a short concern, which joins the edit's result (prompts/coop-navigator.md). Their model, their cost: their share of
+   * the host's models, or their own. Never in their own turns, and nothing when it fails or takes too long.
+   */
+  private async navigatorNote(session: SessionRow, call: ToolCallPart, signal: AbortSignal): Promise<string | null> {
+    if (!NAVIGATED_TOOLS.has(call.name)) return null;
+    const coop = this.deps.coop;
+    const actor = this.actors.get(session.id) ?? this.actors.get(askerOf(session));
+    if (!coop || !actor?.shared) return null;
+    const root = await coop.rootOf(session.id);
+    const settings = await coop.settings(root);
+    if (!settings.navigator || settings.navigator === actor.participant?.id) return null;
+    const navigator = await coop.participant(root, settings.navigator);
+    if (!navigator || navigator.role === 'viewer') return null;
+    if (navigator.role !== 'host' && navigator.models === 'own' && !settings.allowGuestModels) return null;
+    const rootRow = await this.deps.repo.getRow(root);
+    const reviewer = actorFor(rootRow?.userId ?? null, navigator);
+    if (reviewer.problem || (reviewer.forParticipant && (await coop.sharedCapReached(root, navigator.id)))) return null;
+    if (reviewer.payer && (await this.limitError(reviewer.payer))) return null;
+    const ref = reviewer.ref ?? rootRow?.model ?? session.model;
+    if (!ref) return null;
+    const model = await this.deps.models.resolve(ref, reviewer.modelUser);
+    const asked = [...(await this.deps.repo.history(askerOf(session)))].reverse().find((m) => m.role === 'user' && m.kind === 'normal');
+    const request = asked ? messageText(asked.parts).slice(0, 4000) : '';
+    const edit = JSON.stringify(call.input ?? {}).slice(0, 12_000);
+    const reply = await collectText(model, {
+      system: [{ text: template('coop-navigator', this.deps.promptOverrides()) }],
+      user: `<request>\n${escapeTags(request)}\n</request>\n<edit tool="${call.name}">\n${escapeTags(edit)}\n</edit>`,
+      maxOutputTokens: 300,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+      queue: { priority: 'background', timeoutMs: 30_000 },
+      onUsage: (usage) => this.deps.recordUsage({ model: model.info, sessionId: session.id, userId: reviewer.payer, mode: session.mode, usage, participant: reviewer.forParticipant }),
+    });
+    const text = reply.trim();
+    if (!text || /^ok\b[.!]?$/i.test(text) || /^ok\b/i.test(text.slice(0, 3))) return null;
+    return `<navigator name="${escapeTags(navigator.name)}">\n${escapeTags(text.slice(0, 1200))}\n</navigator>`;
   }
 
   /**
@@ -2031,15 +2337,22 @@ export class ChatService {
     const web = [...(webSearch.enabled ? [this.webSearch] : []), ...(webFetch ? [this.webFetch] : [])];
     const catalog = await this.deps.extensions?.(session);
     const skills = catalog?.skills.some((s) => !s.disableModelInvocation) ? [this.skill] : [];
-    const mcp = (await this.deps.mcpTools?.(session)) ?? [];
+    // Co-op (ARCHITECTURE §24): a shared session reaches nothing of anyone's beyond it. No other sessions, no moving
+    // folders, no new connectors, no computer use, no usage figures or memory; and the connectors are the turn's own
+    // person's: the host's on the host's turns, a guest's on theirs when they bring their own, none otherwise.
+    const actor = this.actors.get(session.id);
+    const shared = actor?.shared ?? (await this.deps.coop?.isShared(session.id)) ?? false;
+    const connectorUser = !shared ? session.userId : actor?.participant?.role === 'host' ? session.userId : actor?.participant?.models === 'own' && actor.participant.kind === 'account' ? actor.participant.userId : null;
+    const lent = shared && actor?.participant?.kind === 'peer' ? ((await this.deps.coop?.lentTools?.(session.id, actor.participant).catch(() => [])) ?? []) : [];
+    const mcp = [...((await this.deps.mcpTools?.(session, connectorUser)) ?? []), ...lent];
     // Adding a connector asks the person, which a sub-agent can't.
-    const connect = this.deps.addConnector && !session.parentSessionId ? [this.addConnector] : [];
+    const connect = this.deps.addConnector && !session.parentSessionId && !shared ? [this.addConnector] : [];
     // Computer use: top-level Code and Cowork sessions only (a sub-agent can't ask for apps, and several would fight over one mouse).
-    const computer = (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && (await this.deps.computer?.available(session)) ? this.computerTools : [];
-    const memory = this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? [];
+    const computer = (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && !shared && (await this.deps.computer?.available(session)) ? this.computerTools : [];
+    const memory = shared ? [] : (this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? []);
     const inlineVisual = !session.parentSessionId && (session.mode === 'chat' || session.mode === 'work') ? [createInlineVisualTool()] : [];
     // The clock for everyone; the usage figures only where the model's provider has limits or a cost, and not for sub-agents.
-    const modelRef = session.parentSessionId ? undefined : await this.modelRef(session);
+    const modelRef = session.parentSessionId || shared ? undefined : await this.modelRef(session);
     const usage = modelRef && this.deps.usage?.offered(modelRef) ? [this.usage] : [];
     const images = (await this.imagesFor(session)) ? [createGenerateImageTool({ generate: (input, ctx) => this.deps.images!.generate(input, ctx) })] : [];
     const videos = (await this.videosFor(session)) ? [createGenerateVideoTool({ generate: (input, ctx) => this.deps.videos!.generate(input, ctx) })] : [];
@@ -2073,7 +2386,9 @@ export class ChatService {
     const stopTasks = workspace ? [this.taskStop] : [];
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));
-    const moveSession = movable ? [this.changeDirectory] : [];
+    const moveSession = movable && !shared ? [this.changeDirectory] : [];
+    // Other sessions are the host's own business.
+    const between = shared ? [] : [this.sendMessage, this.listSessions];
     const checkpoints = this.deps.checkpoints;
     // Only with image generation, so a session without an image provider asks the model for exactly what it did before.
     const saveImage = workspace && images.length ? [createSaveImageTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
@@ -2081,7 +2396,7 @@ export class ChatService {
     const saveVideo = workspace && videos.length ? [createSaveVideoTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
     // And with sound: SaveAudio exists only where a session can make one.
     const saveAudio = workspace && sounds.length ? [createSaveAudioTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
-    return [...code, this.todoWrite, this.askUser, agent, this.sendMessage, this.listSessions, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...memory, ...mcp];
+    return [...code, this.todoWrite, this.askUser, agent, ...between, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */
@@ -2205,9 +2520,18 @@ export class ChatService {
         permissionMode: parent.permissionMode,
         parentSessionId: parent.id,
         title: task.description,
-        overrides: { thinking: parent.overrides.thinking !== false, originClient: parent.overrides.originClient, remoteControl: parent.overrides.remoteControl !== false, ...(parent.overrides.explainChanges === true ? { explainChanges: true } : {}), ...(def ? { agent: def.name } : {}) },
+        overrides: {
+          thinking: parent.overrides.thinking !== false,
+          originClient: parent.overrides.originClient,
+          remoteControl: parent.overrides.remoteControl !== false,
+          ...(parent.overrides.explainChanges === true ? { explainChanges: true } : {}),
+          ...(def ? { agent: def.name } : {}),
+          // Co-op: the sub-agent works for the person whose turn started it: their models, their cost.
+          ...(this.actors.get(parent.id)?.participant ? { coopActor: this.actors.get(parent.id)!.participant!.id } : {}),
+        },
       });
       await this.linkChild(call.messageId, call.callId, child.id);
+      if (this.guestJoined.has(parent.id) || this.guestAgents.has(parent.id)) this.guestAgents.add(child.id);
     } catch (error) {
       unstarted(SUBAGENT_STOPPED);
       throw error;
@@ -2225,6 +2549,7 @@ export class ChatService {
       } finally {
         this.agentStops.delete(child.id);
         this.notices.delete(child.id);
+        this.guestAgents.delete(child.id);
       }
     };
     if (!task.background) return finished();
@@ -2245,6 +2570,63 @@ export class ChatService {
       });
     agents.set(child.id, ended);
     return { content: [{ type: 'text', text: startedInBackground(task.description, taskId) }] };
+  }
+
+  /**
+   * Co-op: a parallel track (ARCHITECTURE §24). An agent for `by` works on `task` in the background, in `workspaceId` (a git
+   * worktree of the session's folder), while the conversation goes on; its end is noted in the main session like a
+   * background sub-agent's, and its changes wait there to be merged. Returns the track's session id.
+   */
+  async startTrack(parentId: string, opts: { task: string; title: string; workspaceId: string; by: TurnParticipant; track: Record<string, unknown> }): Promise<string> {
+    const working = this.backgroundPlaces.get(parentId) ?? 0;
+    if (working >= MAX_BACKGROUND_AGENTS) throw new Error(BACKGROUND_AGENTS_BUSY);
+    const parent = await this.requireSession(parentId);
+    const child = await this.deps.repo.create({
+      mode: parent.mode,
+      userId: parent.userId,
+      projectId: parent.projectId,
+      workspaceId: opts.workspaceId,
+      model: parent.model,
+      effort: parent.effort === 'ultracode' ? ULTRACODE_LEVEL : parent.effort,
+      permissionMode: parent.permissionMode,
+      parentSessionId: parent.id,
+      title: opts.title,
+      overrides: { thinking: parent.overrides.thinking !== false, coopActor: opts.by.id, coopTrack: opts.track },
+    });
+    this.backgroundPlaces.set(parentId, working + 1);
+    const taskId = this.tasks.addAgent(parent.id, { childSessionId: child.id, description: opts.title, background: true });
+    const own = new AbortController();
+    this.agentStops.set(child.id, own);
+    const agents = this.backgroundAgents.get(parent.id) ?? new Map<string, Promise<void>>();
+    this.backgroundAgents.set(parent.id, agents);
+    const ended = this.runChild(child, opts.task, own.signal, undefined, 0)
+      .then((output) => (this.tasks.endAgent(parent.id, taskId, agentStatus(output)), output))
+      .catch((error: unknown): ToolOutput => {
+        this.tasks.endAgent(parent.id, taskId, 'failed');
+        return { content: [{ type: 'text', text: `The track failed: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      })
+      .then((output) => this.noteEnded(parent.id, { taskId, title: opts.title, sessionId: child.id }, output))
+      .catch(() => undefined)
+      .finally(() => {
+        this.agentStops.delete(child.id);
+        this.notices.delete(child.id);
+        this.leaveBackground(parent.id);
+        agents.delete(child.id);
+        if (!agents.size && this.backgroundAgents.get(parent.id) === agents) this.backgroundAgents.delete(parent.id);
+      });
+    agents.set(child.id, ended);
+    return child.id;
+  }
+
+  /** Co-op: whether a track's agent is still working. */
+  trackWorking(parentId: string, trackId: string): boolean {
+    return this.backgroundAgents.get(parentId)?.has(trackId) ?? false;
+  }
+
+  /** Co-op: stops a track's agent (its track is closed). */
+  async stopTrack(parentId: string, trackId: string): Promise<void> {
+    this.agentStops.get(trackId)?.abort();
+    await this.backgroundAgents.get(parentId)?.get(trackId);
   }
 
   /** Messages a sub-agent got after its last request (during its final reply): it never read them. */
@@ -2372,9 +2754,20 @@ export class ChatService {
     return firstUsableModel(this.deps.models, [current ? this.helperModel(ref, current) : ref, ref]);
   }
 
+  /**
+   * Co-op: the lane a session's turn runs in, when it isn't the session's own. A guest's turns keep a system prompt of
+   * their own (their model, their tools), so turns that alternate between people don't rebuild one prompt each time and
+   * lose its cache. The host's turns use the session's own.
+   */
+  private laneOf(sessionId: string): string | null {
+    const actor = this.actors.get(sessionId);
+    return actor?.shared && actor.participant && actor.participant.role !== 'host' ? actor.participant.id : null;
+  }
+
   private async storedSnapshot(sessionId: string): Promise<SystemSnapshot | null> {
-    const row = await this.requireSession(sessionId);
-    return row.systemSnapshot ? (JSON.parse(await this.deps.blobs.readText(row.systemSnapshot)) as SystemSnapshot) : null;
+    const lane = this.laneOf(sessionId);
+    const blob = lane ? await this.deps.repo.lane(sessionId, lane) : (await this.requireSession(sessionId)).systemSnapshot;
+    return blob ? (JSON.parse(await this.deps.blobs.readText(blob)) as SystemSnapshot) : null;
   }
 
   /**
@@ -2384,7 +2777,17 @@ export class ChatService {
   private async systemFor(row: SessionRow, info: ModelInfo, tools: DescribedTool[], stored: SystemSnapshot | null, rebuild: boolean): Promise<SystemSnapshot> {
     const overrides = this.deps.promptOverrides();
     const person = await this.deps.person(row.userId);
-    const safeguards = safeguardsBlock(this.deps.settings().safeguards, person.safeguards, info.tier, overrides);
+    // Co-op: nothing of the host's own goes into a shared session's prompt (no memory, name or personal instructions),
+    // and the safeguards are the strictest any participant's admin set for them.
+    const shared = (await this.deps.coop?.isShared(row.id)) ?? false;
+    let guard = person.safeguards;
+    if (shared && guard !== 'on') {
+      for (const p of await this.deps.coop!.list(row.id)) {
+        const userId = participantUserId(p.id);
+        if (userId && userId !== row.userId && (await this.deps.person(userId)).safeguards === 'on') guard = 'on';
+      }
+    }
+    const safeguards = safeguardsBlock(this.deps.settings().safeguards, guard, info.tier, overrides);
     const live = tools.filter((t) => t.name.startsWith('mcp__')).map(toolDef);
     // Kept while the set of connector tools and the tier stay the same: a compact prompt may have cut their descriptions.
     const known = stored?.tier === info.tier ? (stored.mcpTools ?? []) : [];
@@ -2392,7 +2795,7 @@ export class ChatService {
     const sent = (mcpTools: ToolDef[]) => tools.map((t) => mcpTools.find((m) => m.name === t.name) ?? toolDef(t));
     const hash = (defs: ToolDef[]) => createHash('sha256').update(JSON.stringify(defs)).digest('hex');
     // The person's memory as it is now: a change to it rebuilds the prompt at the next turn.
-    const memory = this.deps.memory ? await this.deps.memory.digest(row, await this.memoryAccess(row), { tier: info.tier, has: (name) => tools.some((t) => t.name === name) }).catch(() => null) : null;
+    const memory = this.deps.memory && !shared ? await this.deps.memory.digest(row, await this.memoryAccess(row), { tier: info.tier, has: (name) => tools.some((t) => t.name === name) }).catch(() => null) : null;
     const memoryHash = memory ? createHash('sha256').update(memory).digest('hex') : '';
     const current =
       stored &&
@@ -2408,8 +2811,9 @@ export class ChatService {
     const skillBudget = Math.max(2000, info.contextLength * 0.04);
     const code = row.mode === 'chat' ? null : await this.deps.codeContext?.(row);
     const date = this.date();
-    // A fresh temporary chat knows nothing about the person, as on a new install; admin text and safeguards stay.
-    const personal = usesPersonalContext(row);
+    // A fresh temporary chat knows nothing about the person, as on a new install; admin text and safeguards stay. Nor does
+    // a co-op session: what it knows is shared with everyone in it.
+    const personal = usesPersonalContext(row) && !shared;
     const context: PromptContext = {
       mode: row.mode,
       tier: info.tier,
@@ -2449,7 +2853,9 @@ export class ChatService {
       ...(memoryHash ? { memoryHash } : {}),
     };
     const blob = await this.deps.blobs.putText(JSON.stringify(snapshot), 'application/json');
-    await this.deps.repo.update(row.id, { systemSnapshot: blob.sha256 });
+    const lane = this.laneOf(row.id);
+    if (lane) await this.deps.repo.setLane(row.id, lane, blob.sha256);
+    else await this.deps.repo.update(row.id, { systemSnapshot: blob.sha256 });
     return snapshot;
   }
 
@@ -2471,7 +2877,7 @@ export class ChatService {
   }
 
   /** Adapts stored history to what the model can consume; tool results longer than `resultChars` keep their start and end. */
-  private async prepareHistory(history: Message[], info: ModelInfo, resultChars: number, imageIds = false): Promise<Message[]> {
+  private async prepareHistory(history: Message[], info: ModelInfo, resultChars: number, imageIds = false, senders?: Map<string, { name: string; host: boolean }>): Promise<Message[]> {
     const out: Message[] = [];
     // A model with no eyes still gets the ids, so it can have an attached image edited.
     const unseen = (sha: string) => ({ type: 'text' as const, text: `[An image${imageIds ? ` (${imageId(sha)})` : ''} was attached, but this model cannot view images.]` });
@@ -2499,6 +2905,13 @@ export class ChatService {
           if (p.type === 'image' && imageIds) parts.push({ type: 'text', text: `[Image ${imageId(p.blob)}]` });
         }
       }
+      // Co-op: who wrote it, first, in a tag their own (escaped) text can't produce.
+      // A message from someone who left keeps a name of its own: never the host's.
+      const sender = senders && m.role === 'user' && m.kind === 'normal' ? (m.author ? (senders.get(m.author) ?? { name: 'someone who left', host: false }) : senders.get('')) : undefined;
+      // After Atelier's own notes at the front of the message, before the person's words.
+      // (A person's own text is escaped, so only Atelier's notes start with the tag.)
+      const words = parts.findIndex((p) => !(p.type === 'text' && p.text.startsWith('<context-update>')));
+      if (sender) parts.splice(words === -1 ? parts.length : words, 0, { type: 'text', text: senderTag(sender.name, sender.host) });
       out.push({ ...m, parts });
     }
     // Computer use keeps the newest screenshots only (a compact model sees one), and old generated images leave too.
@@ -2578,12 +2991,19 @@ export class ChatService {
       messages = stubOldResults(messages, Math.ceil((usage.used - run.threshold * MID_REPLY_TARGET) * usage.charsPerToken));
       usage = await this.measure(run, messages, false);
     }
-    if (usage.used > run.threshold && !run.compactionFailed && (await this.autoCompact(run))) {
+    // Co-op: a summary is for everyone and stays, so only the host's turns write one. A guest's model whose window is
+    // smaller sees the newest part of the conversation instead, for this request only.
+    const guestLane = !!this.laneOf(run.sessionId);
+    if (usage.used > run.threshold && !run.compactionFailed && !guestLane && (await this.autoCompact(run))) {
       messages = await this.forModel(run);
       usage = await this.measure(run, messages);
     }
     if (usage.used > run.threshold) {
       messages = stubOldResults(messages, Math.ceil((usage.used - run.threshold) * usage.charsPerToken));
+      usage = await this.measure(run, messages, false);
+    }
+    if (guestLane && usage.used > run.threshold) {
+      messages = messages.slice(tailStart(messages, Math.max(0, (run.threshold - run.fixedTokens) * usage.charsPerToken)));
       usage = await this.measure(run, messages, false);
     }
     this.emit(run.sessionId, { type: 'context', context: usage });
@@ -2595,7 +3015,7 @@ export class ChatService {
     const { resultChars, tailChars } = roomBudgets(run.threshold - run.fixedTokens);
     const history = await this.deps.repo.history(run.sessionId);
     const sent = run.mainSessionId ? withSideChatNote(history, await this.mainConversation(run.mainSessionId, tailChars)) : history;
-    return this.prepareHistory(sent, run.model.info, resultChars, run.tools.some((t) => t.name === 'GenerateImage' || t.name === 'SaveImage' || t.name === 'GenerateVideo'));
+    return this.prepareHistory(sent, run.model.info, resultChars, run.tools.some((t) => t.name === 'GenerateImage' || t.name === 'SaveImage' || t.name === 'GenerateVideo'), await this.senders(run.sessionId));
   }
 
   /** A side chat's note: the main conversation as it stands, its reply in progress too, in at most `maxChars`. */

@@ -1656,8 +1656,8 @@ describe('messages sent while the agent works', () => {
     await chat.send(s.id, [{ type: 'text', text: 'read the file' }]);
     await tool;
     const { id } = await chat.queue(s.id, [{ type: 'text', text: 'never mind' }]);
-    expect(chat.unqueue(s.id, id)).toEqual([{ type: 'text', text: 'never mind' }]);
-    expect(chat.unqueue(s.id, id)).toEqual([]);
+    expect(await chat.unqueue(s.id, id)).toEqual([{ type: 'text', text: 'never mind' }]);
+    expect(await chat.unqueue(s.id, id)).toEqual([]);
     await chat.queue(s.id, [{ type: 'text', text: 'second thought' }]);
     await chat.stop(s.id);
     expect((await chat.snapshot(s.id)).outbox).toEqual([]);

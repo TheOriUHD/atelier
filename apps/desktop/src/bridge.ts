@@ -36,6 +36,8 @@ export type BackendToMain =
   | { kind: 'link'; problem: LinkProblem | null }
   /** The built-in backend made a folder on this machine one of the person's (the agent moved a session there): main trusts it too. */
   | { kind: 'trusted'; root: string }
+  /** Co-op (ARCHITECTURE §24): the sessions with a room open on this computer, which keep it awake for the guests. */
+  | { kind: 'coop-awake'; sessionIds: string[] }
   /** `size` is the whole file's, which `bytes` is all or a range of. */
   | { kind: 'blob'; id: number; found: true; bytes: Uint8Array<ArrayBuffer>; mime: string; size: number }
   | { kind: 'blob'; id: number; found: false };

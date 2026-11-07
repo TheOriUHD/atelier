@@ -5,7 +5,7 @@
 import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { messageText, type Message, type Mode, type Part, type SessionSummary, type TemporaryMode } from '@atelier/protocol';
 import type { Db } from '../store/db.ts';
-import { messages, sessions } from '../store/schema.ts';
+import { messageReactions, messages, sessionLanes, sessions } from '../store/schema.ts';
 import { newId } from '../util/ids.ts';
 import { NOT_TEMPORARY_SQL, notTemporary } from './temporary.ts';
 
@@ -57,6 +57,8 @@ export function toMessage(r: MessageRow): Message {
     error: r.error ?? null,
     kind: r.kind,
     summarizesThroughId: r.summarizesThroughId,
+    ...(r.author ? { author: r.author } : {}),
+    ...(r.answerWith ? { answerWith: r.answerWith } : {}),
     createdAt: r.createdAt,
   };
 }
@@ -281,6 +283,8 @@ export class SessionRepo {
       error: m.error,
       kind: m.kind,
       summarizesThroughId: m.summarizesThroughId,
+      author: m.author ?? null,
+      answerWith: m.answerWith ?? null,
       searchText: searchTextOf(m.parts),
       createdAt,
     });
@@ -349,6 +353,43 @@ export class SessionRepo {
   }
 
   /** Model-visible history: the active branch starting at the nearest compaction summary. */
+  /** Co-op: the frozen system prompt (a blob) of one lane of a shared session, if it has one (chat-service.ts lanes). */
+  async lane(sessionId: string, lane: string): Promise<string | null> {
+    const [row] = await this.db.select({ snapshot: sessionLanes.systemSnapshot }).from(sessionLanes).where(and(eq(sessionLanes.sessionId, sessionId), eq(sessionLanes.lane, lane)));
+    return typeof row?.snapshot === 'string' ? row.snapshot : null;
+  }
+
+  async setLane(sessionId: string, lane: string, snapshot: string | null): Promise<void> {
+    await this.db
+      .insert(sessionLanes)
+      .values({ sessionId, lane, systemSnapshot: snapshot, updatedAt: Date.now() })
+      .onConflictDoUpdate({ target: [sessionLanes.sessionId, sessionLanes.lane], set: { systemSnapshot: snapshot, updatedAt: Date.now() } });
+  }
+
+  /** The session moved folders (or its prompt must be built again): every lane's prompt too. */
+  /** Co-op: puts an emoji on a message (`on`) or takes it off. */
+  async react(sessionId: string, messageId: string, participantId: string, emoji: string, on: boolean): Promise<void> {
+    if (on) await this.db.insert(messageReactions).values({ sessionId, messageId, participantId, emoji, createdAt: Date.now() }).onConflictDoNothing();
+    else await this.db.delete(messageReactions).where(and(eq(messageReactions.messageId, messageId), eq(messageReactions.participantId, participantId), eq(messageReactions.emoji, emoji)));
+  }
+
+  /** Co-op: the emoji on a session's messages, by message, in the order they were first put. */
+  async reactions(sessionId: string): Promise<Record<string, { emoji: string; participants: string[] }[]>> {
+    const rows = await this.db.select().from(messageReactions).where(eq(messageReactions.sessionId, sessionId)).orderBy(messageReactions.createdAt);
+    const out: Record<string, { emoji: string; participants: string[] }[]> = {};
+    for (const r of rows) {
+      const list = (out[r.messageId] ??= []);
+      const entry = list.find((e) => e.emoji === r.emoji);
+      if (entry) entry.participants.push(r.participantId);
+      else list.push({ emoji: r.emoji, participants: [r.participantId] });
+    }
+    return out;
+  }
+
+  async clearLanes(sessionId: string): Promise<void> {
+    await this.db.delete(sessionLanes).where(eq(sessionLanes.sessionId, sessionId));
+  }
+
   async history(sessionId: string): Promise<Message[]> {
     const session = await this.getRow(sessionId);
     if (!session) throw new Error(`Session ${sessionId} not found`);

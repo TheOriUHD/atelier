@@ -80,7 +80,8 @@ export class SecretStore {
 
   async list(usedBy: (id: string) => string[]): Promise<SecretSummary[]> {
     const rows = await this.db.select().from(secrets).all();
-    return rows.map((r) => ({
+    // Co-op's room tokens, invite secrets and device key are kept here encrypted, but they are no one's to manage.
+    return rows.filter((r) => !r.id.startsWith('coop-')).map((r) => ({
       id: r.id,
       label: r.label,
       kind: r.kind,
@@ -107,7 +108,8 @@ export class SecretStore {
 
   /** Resolves a `${secret:<id>}` written in settings. A person's own secrets never resolve there, whoever wrote the setting. */
   forSettings(id: string): Promise<string | undefined> {
-    return isPersonalSecret(id) ? Promise.resolve(undefined) : this.get(id);
+    // Co-op's keys (the device key, room tokens) are never anyone's to put in a setting.
+    return isPersonalSecret(id) || id.startsWith('coop-') ? Promise.resolve(undefined) : this.get(id);
   }
 
   async has(id: string): Promise<boolean> {

@@ -86,8 +86,11 @@ function migrateStore(local: AttachmentStore, store: AttachmentStore, stored: st
   local.target = store;
 }
 
-/** Files attached to the composer. Upload completions belong to the original scoped draft, not the current page. */
-export function useAttachments(draftKey?: string) {
+/**
+ * Files attached to the composer. Upload completions belong to the original scoped draft, not the current page.
+ * `uploadFor`: the session the files are uploaded for (a co-op session on someone else's computer stores them there).
+ */
+export function useAttachments(draftKey?: string, uploadFor?: string) {
   const scope = useDraftScope(!!draftKey);
   const stored = draftKey && scope ? `${scope}|${draftKey}` : null;
   const local = useMemo(() => createStore(null, draftKey), [draftKey]);
@@ -131,13 +134,13 @@ export function useAttachments(draftKey?: string) {
         void file.text().then((t) => patch(key, { lines: t.split('\n').length }));
       }
       try {
-        const ref = await uploader.call('files.upload', { name: base.name, mime, dataBase64: await readBase64(file) });
+        const ref = await uploader.call('files.upload', { name: base.name, mime, dataBase64: await readBase64(file), ...(uploadFor ? { sessionId: uploadFor } : {}) });
         patch(key, { status: 'ready', file: ref });
       } catch (error) {
         patch(key, { status: 'error', error: describeError(error).message });
       }
     }));
-  }, [setItems, patch]);
+  }, [setItems, patch, uploadFor]);
 
   const remove = useCallback((key: string) => {
     setItems((list) => list.filter((a) => a.key !== key));
