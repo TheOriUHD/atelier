@@ -1,16 +1,17 @@
 /**
  * The wordmarks (ARCHITECTURE §25): ATELIER in big block letters, painted left to right in the clay gradient, and CLI
  * beside it drawn with command-line prompts (`>_`), its last `_` a blinking cursor: for the setup's first screen and
- * `atelier --version`. The whole is 76 columns wide and shows from 79; narrower terminals get ATELIER alone, then a small one.
+ * `atelier --version`. The whole is 75 columns wide and shows from 78; narrower terminals get ATELIER alone, then a small one.
  */
 import type { Paint } from '../style.ts';
 
+/** ATELIER in solid blocks, flat like CLI beside it (no shadow lines). */
 export const BIG = [
-  ' █████╗ ████████╗███████╗██╗     ██╗███████╗██████╗ ',
-  '██╔══██╗╚══██╔══╝██╔════╝██║     ██║██╔════╝██╔══██╗',
-  '███████║   ██║   █████╗  ██║     ██║█████╗  ██████╔╝',
-  '██╔══██║   ██║   ██╔══╝  ██║     ██║██╔══╝  ██╔══██╗',
-  '██║  ██║   ██║   ███████╗███████╗██║███████╗██║  ██║',
+  ' █████  ████████ ███████ ██      ██ ███████ ██████ ',
+  '██   ██    ██    ██      ██      ██ ██      ██   ██',
+  '███████    ██    █████   ██      ██ █████   ██████ ',
+  '██   ██    ██    ██      ██      ██ ██      ██   ██',
+  '██   ██    ██    ███████ ███████ ██ ███████ ██   ██',
 ];
 
 /** C, L and I as pixels (`#`), each drawn as a prompt, `>_`, on the five rows of ATELIER's letters. */
@@ -27,7 +28,7 @@ export const TAGLINE = 'Your AI workspace, in your terminal.';
  * past the stroke), so the wordmark stays in place while it is painted.
  */
 export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = true): string[] {
-  const withCli = columns >= 79;
+  const withCli = columns >= 78;
   if (columns < 54) return smallBanner(paint);
   const wordWidth = [...BIG[0]!].length;
   const rows = BIG.map((row, i) => (withCli ? `${row}  ${BIG_CLI[i]}` : row));
