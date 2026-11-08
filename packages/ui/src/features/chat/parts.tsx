@@ -89,20 +89,14 @@ export function useNow(active: boolean): number {
 }
 
 /** "12s", "36m 32s", "2h 5m". */
-export function formatElapsed(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-}
+export { formatElapsed } from '@atelier/client/phase.ts';
+import { formatElapsed } from '@atelier/client/phase.ts';
 
 export const elapsed = (now: number, since: number) => formatElapsed(now - since);
 
 /** First string argument of a call, e.g. the path or query, shown after the tool name. */
-export function inputPreview(input: unknown): string {
-  if (!input || typeof input !== 'object') return '';
-  return Object.values(input).find((v): v is string => typeof v === 'string') ?? '';
-}
+export { inputPreview } from '@atelier/client/phase.ts';
+import { inputPreview } from '@atelier/client/phase.ts';
 
 const isActive = (step: ActivityStepView) => (step.kind === 'tool' ? step.running : step.active);
 

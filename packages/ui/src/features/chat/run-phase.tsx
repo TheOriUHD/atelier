@@ -9,43 +9,8 @@ import { cn } from '../../components/ui/index.ts';
 import { reducedMotionClass } from '../../components/ui/styles.ts';
 import './run-phase.css';
 
-export interface PhaseStep {
-  /** Seconds into the phase from which this text is shown. */
-  after: number;
-  /** UI copy, shown without the trailing ellipsis. */
-  text: string;
-}
-
-export const PHASE_TEXTS: Record<RunPhase, readonly PhaseStep[]> = {
-  retrying: [{ after: 0, text: 'Waiting to reconnect' }],
-  // A model whose own service thinks before it answers (ChatGPT's higher effort settings, which can take minutes).
-  thinking: [
-    { after: 0, text: 'Thinking' },
-    { after: 120, text: 'Still thinking, a high effort setting can take a few minutes' },
-    { after: 600, text: 'Still thinking, this is taking much longer than usual' },
-  ],
-  // A model writing a long tool call is silent too, so the first line doesn't claim a fault.
-  quiet: [
-    { after: 0, text: 'No output for a minute, it may be writing a long call' },
-    { after: 120, text: 'Still no output, the model may have stalled. Stop ends the turn' },
-    { after: 600, text: 'No output for ten minutes, the model has probably stalled' },
-  ],
-  loading: [
-    { after: 0, text: 'Loading the model' },
-    { after: 20, text: 'Still loading the model, a large one takes a while' },
-    { after: 60, text: 'Still loading, this is taking longer than usual' },
-  ],
-  reading: [
-    { after: 0, text: 'Reading the conversation' },
-    { after: 20, text: 'Still reading, a long conversation takes a while' },
-    { after: 60, text: 'Still reading, this is taking longer than usual' },
-  ],
-  waking: [
-    { after: 0, text: 'Waking your codespace' },
-    { after: 30, text: 'Still waking it, a codespace can take a minute' },
-    { after: 90, text: 'Still waking it, this is taking longer than usual' },
-  ],
-};
+export { PHASE_TEXTS, type PhaseStep } from '@atelier/client/phase.ts';
+import { PHASE_TEXTS } from '@atelier/client/phase.ts';
 
 /** The phase's current text, starting over when the phase changes; null without one. */
 export function usePhaseText(phase: RunPhase | null): string | null {

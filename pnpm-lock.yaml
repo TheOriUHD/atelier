@@ -155,6 +155,15 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  packages/client:
+    dependencies:
+      '@atelier/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      zustand:
+        specifier: 5.0.15
+        version: 5.0.15(@types/react@19.3.0)(immer@11.1.21)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0))
+
   packages/core:
     dependencies:
       '@atelier/protocol':
@@ -239,6 +248,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@atelier/client':
+        specifier: workspace:*
+        version: link:../client
       '@atelier/protocol':
         specifier: workspace:*
         version: link:../protocol

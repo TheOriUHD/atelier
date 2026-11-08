@@ -4,13 +4,13 @@
  */
 import { createContext, useContext, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { AudioLines, Bot, Compass, Film, FolderInput, ListChecks, Maximize2, MessageSquare } from 'lucide-react';
-import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolCallPart, type ToolResultPart } from '@atelier/protocol';
+import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolResultPart } from '@atelier/protocol';
 import { Badge, DiffStat, Icon, IconButton, ThinkingDots, cn } from '../../components/ui/index.ts';
 import { queuedLabel, useLiveSession, type LiveSessionState } from '../../lib/live-session.ts';
 import { blobUrl } from '../../lib/platform.ts';
 import { useWorkspaces } from '../../lib/queries.ts';
 import { Markdown, OpenFilePath } from '../chat/markdown.tsx';
-import { Chevron, MessageError, ProviderStopped, Summary, ThinkingBlock, ThinkingText, TranscriptDetail, detailClass, elapsed, inputPreview, useNow } from '../chat/parts.tsx';
+import { Chevron, MessageError, ProviderStopped, Summary, ThinkingBlock, ThinkingText, TranscriptDetail, detailClass, elapsed, useNow } from '../chat/parts.tsx';
 import { LINE } from '../chat/rows.ts';
 import { isStreaming, stepView, toolResults, turnItems, type ActivityStepView } from '../chat/turns.ts';
 import { ChangeView } from './change-view.tsx';
@@ -18,14 +18,15 @@ import { DiffCard, editRows, placedEditRows, writeRows } from './inline-diff.tsx
 import { displayPath, languageOf } from './paths.ts';
 import { workspaceLabel } from './workspaces.ts';
 import { TodoList } from './todo-widget.tsx';
-import { OWN_CARD, activityLabel, failedCount, messageTargetKind } from './activity-summary.ts';
+import { OWN_CARD, activityLabel, failedCount } from './activity-summary.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
 import { SearchResults } from './search-results.tsx';
 import { WithViewedImages } from '../chat/images.tsx';
-import { parseSearchResult } from './search-result.ts';
 import { CommandCode } from './command-code.tsx';
 import { navigatorNotes } from '../coop/coop.ts';
 import { MEMORY_TOOLS, MemoryStep } from '../chat/memory-steps.tsx';
+import { activitySummary, asRecord, backgroundId, backgroundSummary, bashResult, changedLines, count, messageReceipt, resultText, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
+export { activitySummary, actionWords, asRecord, backgroundId, backgroundSummary, bashResult, computerActions, messageReceipt, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
 
 export type ToolStep = Extract<ActivityStepView, { kind: 'tool' }>;
 
@@ -52,21 +53,8 @@ function useStartsOpen(byDefault: boolean): boolean {
   return useContext(TranscriptDetail) === 'verbose' || byDefault;
 }
 
-export const asRecord = (input: unknown): Record<string, unknown> => (input && typeof input === 'object' ? (input as Record<string, unknown>) : {});
-export const str = (value: unknown): string => (typeof value === 'string' ? value : '');
-const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-function resultText(result: ToolResultPart | undefined): string {
-  return result?.content.flatMap((c) => (c.type === 'text' ? [c.text] : [])).join('\n') ?? '';
-}
-
 /** A Bash call that started its command in the background. */
 const isBackground = (step: ActivityStepView): step is ToolStep => step.kind === 'tool' && step.call.name === 'Bash' && asRecord(step.call.input).run_in_background === true;
-
-/** The id Bash gave a command it started in the background, from its result. */
-export function backgroundId(result: ToolResultPart | undefined): string | null {
-  return /Started in the background with ID (\S+?)\./.exec(resultText(result))?.[1] ?? null;
-}
 
 /**
  * A run of tool calls (and the thinking between them), one card each. Commands started in the background one after
@@ -263,22 +251,6 @@ export function ActivityList({ steps }: { steps: ActivityStepView[] }) {
   );
 }
 
-const TASK_STATUS: Record<Exclude<BackgroundTask['status'], 'running'>, string> = { done: 'Done', failed: 'Failed', stopped: 'Stopped' };
-
-/** "Done", "Exit code 1", "Stopped": how a finished task ended. */
-export function taskOutcome(task: BackgroundTask): string {
-  if (task.status === 'running') return 'Running';
-  if (task.status === 'failed' && task.exitCode !== null) return `Exit code ${task.exitCode}`;
-  return TASK_STATUS[task.status];
-}
-
-/** "2 background commands completed, 1 running". */
-export function backgroundSummary(completed: number, running: number): string {
-  const noun = (n: number) => `${n} background ${n === 1 ? 'command' : 'commands'}`;
-  if (!completed) return `${noun(running)} running`;
-  return running ? `${noun(completed)} completed, ${running} running` : `${noun(completed)} completed`;
-}
-
 /** Commands started in the background in a row: how many finished and how many run, each one a click from its output. */
 function BackgroundCommandsCard({ steps }: { steps: ToolStep[] }) {
   const session = useContext(SessionTasks)!;
@@ -316,146 +288,6 @@ function BackgroundCommandsCard({ steps }: { steps: ToolStep[] }) {
       )}
     </div>
   );
-}
-
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace('#', String(n)));
-
-/**
- * What a run of tool calls did, in a line: "Ran 34 commands, read app.ts", "Created 2 files, ran 5 commands". Phrases
- * come in the order their tools were first used.
- */
-export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'input'>[], root: string | null): string {
-  const groups = new Map<string, Pick<ToolCallPart, 'name' | 'input'>[]>();
-  for (const call of calls) {
-    const group = call.name === 'Glob' ? 'Grep' : call.name;
-    groups.set(group, [...(groups.get(group) ?? []), call]);
-  }
-  const file = (call: Pick<ToolCallPart, 'input'>) => {
-    const path = displayPath(str(asRecord(call.input).file_path), root);
-    return path.slice(path.lastIndexOf('/') + 1);
-  };
-  const files = (list: Pick<ToolCallPart, 'input'>[]) => [...new Set(list.map(file))];
-  const phrases = [...groups].map(([name, list]) => {
-    const n = list.length;
-    switch (name) {
-      case 'Bash':
-        return plural(n, 'ran a command', 'ran # commands');
-      case 'ViewedImage':
-        return files(list).length === 1 ? `looked at ${file(list[0]!)}` : `looked at ${files(list).length} images`;
-      case 'Read':
-        return files(list).length === 1 ? `read ${file(list[0]!)}` : `read ${files(list).length} files`;
-      case 'Write':
-        return files(list).length === 1 ? `created ${file(list[0]!)}` : `created ${files(list).length} files`;
-      case 'Edit':
-        return files(list).length === 1 ? `edited ${file(list[0]!)}` : `edited ${files(list).length} files`;
-      case 'SaveImage':
-        return files(list).length === 1 ? `saved ${file(list[0]!)}` : `saved ${files(list).length} images`;
-      case 'SaveVideo':
-        return files(list).length === 1 ? `saved ${file(list[0]!)}` : `saved ${files(list).length} videos`;
-      case 'SaveAudio':
-        return files(list).length === 1 ? `saved ${file(list[0]!)}` : `saved ${files(list).length} sounds`;
-      case 'Grep':
-        return plural(n, 'searched the code', 'searched the code # times');
-      case 'WebSearch':
-        return plural(n, 'searched the web', 'searched the web # times');
-      case 'WebFetch':
-        return plural(n, 'fetched a page', 'fetched # pages');
-      case 'BashOutput':
-        return 'checked command output';
-      case 'KillShell':
-        return plural(n, 'stopped a command', 'stopped # commands');
-      case 'TaskStop':
-        return plural(n, 'stopped a background task', 'stopped # background tasks');
-      case 'ChangeDirectory':
-        return 'changed folder';
-      case 'AddConnector':
-        return plural(n, 'added a connector', 'added # connectors');
-      case 'ComputerAccess':
-        return 'asked to use apps';
-      case 'ComputerApps':
-        return 'looked up apps';
-      case 'OpenApp':
-        return n === 1 ? `opened ${str(asRecord(list[0]!.input).app)}` : `opened ${n} apps`;
-      case 'Screenshot':
-        return plural(n, 'took a screenshot', 'took # screenshots');
-      case 'FullControl':
-        return list.some((c) => asRecord(c.input).action === 'request') ? 'took over the mouse and keyboard' : 'handed back the mouse and keyboard';
-      case 'ComputerAction': {
-        const actions = list.reduce((sum, c) => sum + computerActions(c.input).length, 0);
-        return plural(actions, 'used the computer once', 'used the computer # times');
-      }
-      case 'SendMessage':
-        return n === 1 ? `messaged ${messageTargetKind(str(asRecord(list[0]!.input).to))}` : `sent ${n} messages`;
-      case 'ListSessions':
-        return 'looked up sessions';
-      case 'Time':
-        return 'checked the time';
-      case 'Usage':
-        return 'checked usage';
-      case 'TodoWrite':
-        return 'updated the task list';
-      default:
-        return `used ${name}`;
-    }
-  });
-  const line = phrases.join(', ');
-  return line.charAt(0).toUpperCase() + line.slice(1);
-}
-
-export function computerActions(input: unknown): Record<string, unknown>[] {
-  const actions = asRecord(input).actions;
-  return Array.isArray(actions) ? actions.map(asRecord) : [];
-}
-
-const ACTION_WORDS: Record<string, string> = {
-  left_click: 'Clicked',
-  right_click: 'Right-clicked',
-  middle_click: 'Middle-clicked',
-  double_click: 'Double-clicked',
-  triple_click: 'Triple-clicked',
-  mouse_move: 'Moved the pointer',
-  left_click_drag: 'Dragged',
-  scroll: 'Scrolled',
-  type: 'Typed',
-  key: 'Pressed',
-  wait: 'Waited',
-  screenshot: 'Took a screenshot',
-  zoom: 'Zoomed in',
-  cursor_position: 'Checked the pointer',
-};
-
-const ACTION_WORDS_AHEAD: Record<string, string> = {
-  left_click: 'Click',
-  right_click: 'Right-click',
-  middle_click: 'Middle-click',
-  double_click: 'Double-click',
-  triple_click: 'Triple-click',
-  mouse_move: 'Move the pointer',
-  left_click_drag: 'Drag',
-  scroll: 'Scroll',
-  type: 'Type',
-  key: 'Press',
-  wait: 'Wait',
-  screenshot: 'Take a screenshot',
-  zoom: 'Zoom in',
-  cursor_position: 'Check the pointer',
-};
-
-/**
- * One ComputerAction step in words: its own summary when it gave one, else what it is, done ("Pressed cmd+s") or, on a
- * prompt, ahead ("Press cmd+s").
- */
-export function actionWords(action: Record<string, unknown>, ahead = false): string {
-  if (str(action.summary)) return str(action.summary);
-  const words = (ahead ? ACTION_WORDS_AHEAD : ACTION_WORDS)[str(action.action)] ?? str(action.action);
-  return action.action === 'key' ? `${words} ${str(action.text)}` : words;
-}
-
-/** Lines an Edit or Write call adds and removes. */
-function changedLines(call: Pick<ToolCallPart, 'name' | 'input'>): { added: number; removed: number } {
-  const input = asRecord(call.input);
-  const rows = call.name === 'Edit' ? editRows(str(input.old_string), str(input.new_string)) : call.name === 'Write' ? writeRows(str(input.content)) : [];
-  return { added: rows.filter((r) => r.kind === 'add').length, removed: rows.filter((r) => r.kind === 'remove').length };
 }
 
 /** A run of tool calls as one summary line (what it did, +/− lines changed) that opens to a card per call. */
@@ -502,109 +334,6 @@ function ToolCard({ step }: { step: ToolStep }) {
       return <OneLineCard step={step} detail={step.result ? <SearchResults text={resultText(step.result)} failed={!!step.result.isError} className="mt-2" /> : undefined} />;
     default:
       return <OneLineCard step={step} />;
-  }
-}
-
-/** Lines of a listing, without the note a tool appends after a blank line ("[Results truncated …]"). */
-const listed = (text: string) => text.split('\n\n')[0]!.split('\n').filter(Boolean).length;
-
-function globMeta(result: string): string {
-  return result.startsWith('No files found') ? 'no files' : count(listed(result), 'file');
-}
-
-function grepMeta(result: string): string {
-  if (/^No (files|matches) found/.test(result)) return 'no matches';
-  const files = /^Found (\d+) files/.exec(result);
-  if (files) return count(Number(files[1]), 'file');
-  const counts = /(\d+) matching lines in (\d+) files/.exec(result);
-  if (counts) return `${count(Number(counts[1]), 'match', 'matches')} in ${count(Number(counts[2]), 'file')}`;
-  return count(listed(result), 'line');
-}
-
-interface ToolSummary {
-  verb: string;
-  target: string;
-  meta?: string;
-}
-
-/** What a call did, to what, and (once it has a result) what came back: "Read src/app.ts · 40 lines". */
-export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: string | null, root: string | null): ToolSummary {
-  const input = asRecord(call.input);
-  switch (call.name) {
-    case 'ViewedImage':
-      return { verb: 'Looked at', target: displayPath(str(input.file_path), root) };
-    case 'Read': {
-      const lines = result?.match(/^\s*\d+\t/gm)?.length ?? 0;
-      return { verb: 'Read', target: displayPath(str(input.file_path), root), ...(lines ? { meta: count(lines, 'line') } : {}) };
-    }
-    case 'Glob':
-      return { verb: 'Searched for', target: str(input.pattern), ...(result != null ? { meta: globMeta(result) } : {}) };
-    case 'Grep': {
-      const where = str(input.path) ? ` in ${displayPath(str(input.path), root)}` : '';
-      return { verb: 'Searched for', target: `${str(input.pattern)}${where}`, ...(result != null ? { meta: grepMeta(result) } : {}) };
-    }
-    case 'Edit':
-    case 'Write':
-      return { verb: call.name, target: displayPath(str(input.file_path), root) };
-    case 'SaveImage':
-    case 'SaveVideo':
-    case 'SaveAudio':
-      return { verb: result === null ? 'Save' : 'Saved', target: displayPath(str(input.file_path), root) };
-    case 'Bash':
-      return { verb: 'Ran', target: str(input.description) || str(input.command) };
-    case 'BashOutput':
-      return { verb: 'Checked the output of', target: str(input.bash_id) };
-    case 'KillShell':
-      return { verb: 'Stopped', target: str(input.shell_id) };
-    case 'TaskStop': {
-      const ids = Array.isArray(input.task_ids) ? input.task_ids.length : 0;
-      return { verb: 'Stopped', target: input.all === true ? 'all background tasks' : ids > 1 ? `${ids} background tasks` : str(input.task_id) || str(Array.isArray(input.task_ids) ? input.task_ids[0] : '') };
-    }
-    case 'ChangeDirectory':
-      return { verb: 'Moved to', target: str(input.path) || 'another folder' };
-    case 'AddConnector':
-      return { verb: 'Added connector', target: str(input.name) || str(input.url) };
-    case 'ComputerAccess':
-      return { verb: 'Asked to use', target: (Array.isArray(input.apps) ? input.apps : []).map(str).filter(Boolean).join(', ') };
-    case 'ComputerApps':
-      return { verb: 'Looked up apps', target: str(input.query) };
-    case 'OpenApp':
-      return { verb: 'Opened', target: str(input.app) };
-    case 'Screenshot':
-      return { verb: 'Took a screenshot', target: str(input.display) };
-    case 'FullControl':
-      return input.action === 'release' ? { verb: 'Handed back the mouse and keyboard', target: '' } : { verb: 'Took over the mouse and keyboard', target: '' };
-    case 'ComputerAction': {
-      const actions = computerActions(input);
-      return { verb: actions.length === 1 ? actionWords(actions[0]!) : `${actions.length} actions:`, target: actions.length === 1 ? '' : actions.map((a) => actionWords(a)).join(', ') };
-    }
-    case 'WebFetch':
-      return { verb: 'Fetched', target: str(input.url) };
-    case 'WebSearch': {
-      const view = result != null ? parseSearchResult(result) : null;
-      const meta = view?.via ? `${count(view.rows.length, 'result')} · ${view.via}` : view && view.rows.length === 0 && result?.startsWith('No results') ? 'no results' : undefined;
-      return { verb: 'Searched the web for', target: str(input.query), ...(meta ? { meta } : {}) };
-    }
-    case 'TodoWrite': {
-      const todos = (input.todos ?? []) as Todo[];
-      return { verb: 'Updated the task list', target: '', meta: `${todos.filter((t) => t.status === 'completed').length} of ${todos.length} done` };
-    }
-    case 'AskUser':
-      return { verb: 'Asked', target: count(Array.isArray(input.questions) ? input.questions.length : 0, 'question') };
-    case 'Agent':
-      return { verb: 'Delegated', target: str(input.description) };
-    case 'SendMessage': {
-      const sent = result != null ? messageReceipt(result) : null;
-      return { verb: `Messaged ${sent?.kind ?? messageTargetKind(str(input.to))}`, target: '', ...(sent ? { meta: sent.title } : {}) };
-    }
-    case 'ListSessions':
-      return { verb: 'Looked up sessions', target: str(input.query) };
-    case 'Time':
-      return { verb: 'Checked', target: 'the time' };
-    case 'Usage':
-      return { verb: 'Checked', target: 'plan usage' };
-    default:
-      return { verb: call.name, target: inputPreview(input) };
   }
 }
 
@@ -780,16 +509,6 @@ export function NavigatorNotes({ text }: { text: string }) {
       ))}
     </>
   );
-}
-
-/** Splits a Bash result into the command's output and the exit status the tool appends after a blank line. */
-export function bashResult(text: string): { output: string; exitCode: number | null; note: string | null } {
-  const cut = text.lastIndexOf('\n\n');
-  const notes = text.slice(cut + 2);
-  const exit = /^Exit code (-?\d+)\.$/m.exec(notes);
-  if (cut === -1 || (!exit && !notes.startsWith('Timed out'))) return { output: text, exitCode: null, note: null };
-  const output = text.slice(0, cut);
-  return { output: output === '(no output)' ? '' : output, exitCode: exit ? Number(exit[1]) : null, note: exit ? null : notes.split('\n')[0]! };
 }
 
 /** Bash: what it does, the command, its output while it runs and after, and how it exited. */
@@ -1026,14 +745,6 @@ export function MovedNotice({ notice }: { notice: Extract<Notice, { kind: 'moved
       </span>
     </div>
   );
-}
-
-/** Where a SendMessage result says the message went: "Sent to the session "Fix login" (id …)." and what happens next. */
-export function messageReceipt(result: string): { kind: string; title: string; id: string; status: string } | null {
-  const m = /^Sent to (the session|the sub-agent|your parent session) "([\s\S]*)" \((?:id|task) (\S+)\)\.\s*([\s\S]*)$/.exec(result);
-  if (!m) return null;
-  const kind = { 'the session': 'another session', 'the sub-agent': 'a sub-agent', 'your parent session': 'the parent session' }[m[1]!]!;
-  return { kind, title: m[2]!, id: m[3]!, status: m[4]!.trim() };
 }
 
 /** A sent message: where it went (title and id) and what it said, then what the result reported. */

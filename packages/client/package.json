@@ -1,0 +1,19 @@
+{
+  "name": "@atelier/client",
+  "version": "0.1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@atelier/protocol": "workspace:*",
+    "zustand": "5.0.15"
+  }
+}
