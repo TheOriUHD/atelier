@@ -6,10 +6,12 @@
  */
 import { contract, createRpcClient, RpcError, type AppContract, type DeviceInfo, type RpcClient, type UserSummary } from '@atelier/protocol';
 import { createLiveSessions, wsTransport, type LiveSessions, type ReconnectingTransport } from '@atelier/client';
+import { diagnose } from '@atelier/core/device';
 import type { CliConfig } from '../config.ts';
 import { cliDevice } from '../daemon/daemon.ts';
 import { connectService, serviceTransport, type ServiceLink } from '../daemon/client.ts';
 import { credentialStore, tokenName } from '../keychain.ts';
+import { networkProgram } from './known.ts';
 import type { CliPaths } from '../paths.ts';
 import { USER_AGENT } from '../runtime.ts';
 
@@ -67,12 +69,29 @@ export async function connect(p: CliPaths, config: CliConfig, options: { service
   // ATELIER_TOKEN (a script, CI) goes before the stored one and isn't kept.
   const token = process.env.ATELIER_TOKEN || (await store.get(tokenName(serverUrl)));
   if (!token) throw new NeedsSetup('signed-out', `Sign in to ${new URL(serverUrl).host} first: atelier login`);
-  const transport = wsTransport({ serverUrl, headers: () => ({ Authorization: `Bearer ${token}`, 'User-Agent': USER_AGENT }) });
+  // The tries go on until the server answers. Before the first answer, a word on stderr says why it waits: most often
+  // macOS asking whether the program may reach the local network (it only asks a program that keeps running).
+  let answered = false;
+  const waiting = (failures: number) => {
+    if (failures !== 2 || answered) return;
+    void diagnose(serverUrl).then((problem) => {
+      if (answered) return;
+      const host = new URL(serverUrl).host;
+      process.stderr.write(
+        problem.localNetwork
+          ? `macOS is asking whether “${networkProgram()}” may reach ${host} on your local network: choose Allow. Chose Don’t Allow before? Switch “${networkProgram()}” on under System Settings › Privacy & Security › Local Network. Still trying…\n`
+          : `${problem.message} Still trying… (Ctrl+C stops)\n`,
+      );
+    });
+  };
+  const transport = wsTransport({ serverUrl, headers: () => ({ Authorization: `Bearer ${token}`, 'User-Agent': USER_AGENT }), onFailures: waiting });
   const rpc = createRpcClient(contract, transport);
   let user: UserSummary;
   try {
     user = await rpc.call('account.get', {});
+    answered = true;
   } catch (e) {
+    answered = true;
     transport.close();
     if (errorCode(e) === 'unauthenticated') throw new NeedsSetup('signed-out', `Your sign-in to ${new URL(serverUrl).host} ended. Sign in again: atelier login`);
     throw e;

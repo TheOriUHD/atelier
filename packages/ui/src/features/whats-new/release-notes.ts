@@ -33,7 +33,11 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         body: 'A terminal shows a code and a link; approve it on this server’s page where you are signed in, with a password, a passkey or single sign-on. Approve only a code your own terminal shows. It then appears under Active sessions as Atelier CLI.',
       },
     ],
-    also: ['The terminal lends this computer’s folders to the server like the desktop app does, and can stay available at login (atelier daemon keep).', 'Meet Pip, the terminal app’s mascot.'],
+    also: [
+      'The terminal lends this computer’s folders to the server like the desktop app does, and can stay available at login (atelier daemon keep).',
+      'On a Mac, macOS asks once whether “atelier” may reach a server on your local network; the answer holds for later versions.',
+      'Meet Pip, the terminal app’s mascot.',
+    ],
   },
   {
     version: '0.5.2',

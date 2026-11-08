@@ -1220,7 +1220,14 @@ with a note; questions skipped; plans declined.
 **Shipping** (`apps/cli/scripts`): one esbuild bundle (`dist/atelier.mjs`, React's devtools stubbed) with the licenses of
 what is in it; a package per platform (darwin, linux, windows × x64, arm64) holds `bin/atelier` (a launcher that follows
 its link), the official Node.js 24 build (checked against nodejs.org's SHASUMS256.txt), the bundle and the runner builds
-(its own and the Linux and macOS ones for SSH hosts). `atelier-cli.json` lists each package's sha512 and size; each package
+(its own and the Linux and macOS ones for SSH hosts). On macOS the Node binary is named `atelier`, given its own LC_UUID
+and an embedded Info.plist (`__TEXT,__info_plist`, `dev.atelier.cli`, `scripts/macho.mjs`), and signed again as
+`dev.atelier.cli` (Developer ID, hardened runtime with V8's JIT exceptions; ad hoc for a local build). Local network
+privacy (Apple's TN3179) asks a program started from iTerm and most terminal apps by itself, not the terminal; it
+keys the answer to the signing identifier, so later versions keep it, and a shared UUID (every copy of a Node.js
+release) is what TN3179 says makes it misbehave. macOS shows the question only to a running program and turns
+connections down while it is open, so the setup tries again every 2 seconds and a server connection says why it
+waits. `atelier-cli.json` lists each package's sha512 and size; each package
 has a `.sig` from the release key (`atelier-update:v1\n<file>\n<sha512>`, Ed25519), checked by `atelier update` before
 it unpacks into `versions/<v>` and moves the link. The release builds them on the Mac, renders `install-cli.sh` and
 `install-cli.ps1` with each package's sha256, publishes the packages to the feed's channel folder and the scripts to

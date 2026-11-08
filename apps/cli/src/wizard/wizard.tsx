@@ -168,6 +168,23 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
     scan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // macOS turns connections down while its question about the local network is open, and asks only a program that is
+  // still running (Apple's TN3179): so keep checking every 2 seconds, and scan again once the person allowed it.
+  useEffect(() => {
+    if (!blocked) return;
+    let stop = false;
+    void (async () => {
+      while (!stop) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (stop || (await localNetworkBlocked())) continue;
+        if (stop) return;
+        setBlocked(false);
+        return rescan();
+      }
+    })();
+    return () => void (stop = true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocked]);
 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') finish(null);
@@ -228,6 +245,28 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
     if (step.s === 'checking') void checkServer(step.typed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.s === 'checking' ? step.typed : null]);
+  // While macOS asks (or until the person switches Atelier CLI on), try the server every 2 seconds and go on once it answers.
+  useEffect(() => {
+    if (step.s !== 'blocked') return;
+    const typed = step.typed;
+    let stop = false;
+    void (async () => {
+      while (!stop) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (stop) return;
+        const answered = await resolveServer(typed, healthCheck()).then(
+          () => true,
+          () => false,
+        );
+        if (!answered || stop) continue;
+        setBlocked(false);
+        rescan();
+        return setStep({ s: 'checking', typed });
+      }
+    })();
+    return () => void (stop = true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step.s === 'blocked' ? step.typed : null]);
 
   // Browser sign-in: poll until the person approves it in the browser.
   useEffect(() => {
@@ -346,7 +385,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                       : scanning
                         ? 'Looking for servers on your network…'
                         : blocked
-                          ? paint.fg('warn', `macOS hasn’t let “${networkProgram()}” reach your local network yet: allow it when macOS asks, or turn it on under System Settings › Privacy & Security › Local Network.`)
+                          ? paint.fg('warn', `macOS hasn’t let “${networkProgram()}” reach your local network yet: choose Allow when macOS asks, or switch it on under System Settings › Privacy & Security › Local Network.`)
                           : 'No server found on your network (one elsewhere works too).',
                   )}
                 </Text>
@@ -385,23 +424,26 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
         const program = networkProgram();
         const host = /^[a-z][a-z\d+.-]*:\/\//i.test(step.typed) ? new URL(step.typed).host : step.typed;
         return {
-          title: 'macOS asks before Atelier reaches your network',
+          title: `Allow “${program}” on your local network`,
           content: (
             <Box flexDirection="column">
-              <Text>{`${host} is on your local network, and macOS asks each program before it may reach devices there; Atelier runs as “${program}”, so the switch for ${terminalApp()} doesn’t cover it.`}</Text>
-              <Box marginY={1}>
-                <Text>{`When macOS asks whether “${program}” may find and connect to devices on your local network, choose ${paint.bold('Allow')}. If you said no before, turn ${paint.bold(`“${program}”`)} on under ${paint.bold('System Settings › Privacy & Security › Local Network')}. Then try again.`}</Text>
+              <Text>{`${host} is on your local network, and macOS asks each program once before it reaches devices there. Atelier runs as “${program}”, which asks for itself: what ${terminalApp()} may do doesn’t count for it.`}</Text>
+              <Box marginY={1} flexDirection="column">
+                <Text>{`macOS asks: Allow “${program}” to find devices on local networks? Choose ${paint.bold('Allow')}, and this goes on by itself.`}</Text>
+                <Text>{`No question, or you chose Don’t Allow? Switch ${paint.bold(`“${program}”`)} on under ${paint.bold('System Settings › Privacy & Security › Local Network')}.`}</Text>
               </Box>
-              <Choices
-                paint={paint}
-                choices={[
-                  { value: 'open', label: 'Open the Local Network settings' },
-                  { value: 'again', label: 'Try again' },
-                  { value: 'other', label: 'Another address' },
-                ]}
-                onPick={(v) => (v === 'open' ? openLocalNetworkSettings() : v === 'again' ? (rescan(), setStep({ s: 'checking', typed: step.typed })) : (setTyping(true), setStep({ s: 'address' })))}
-                onCancel={() => setStep({ s: 'address' })}
-              />
+              <Text>{paint.fg('muted', `Trying ${host} again every 2 seconds…`)}</Text>
+              <Box marginTop={1}>
+                <Choices
+                  paint={paint}
+                  choices={[
+                    { value: 'open', label: 'Open the Local Network settings' },
+                    { value: 'other', label: 'Another address' },
+                  ]}
+                  onPick={(v) => (v === 'open' ? openLocalNetworkSettings() : (setTyping(true), setStep({ s: 'address' })))}
+                  onCancel={() => setStep({ s: 'address' })}
+                />
+              </Box>
             </Box>
           ),
         };

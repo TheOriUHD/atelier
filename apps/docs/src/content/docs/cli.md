@@ -177,10 +177,13 @@ macOS keychain, the Secret Service on Linux (GNOME Keyring, KWallet) or DPAPI on
 `atelier doctor` checks the install, the server, the sign-in, the background service, the colours and Shift+Enter, and
 says what to do. `/bug` copies the versions and where the logs are (no messages, no keys).
 
-- **"macOS asks before Atelier reaches your network":** macOS asks each program before it reaches devices on your local
-  network, and a server at home (or a domain that leads there) is one. The installed app asks as **atelier**, once:
-  choose Allow. If you said no, turn "atelier" on under System Settings › Privacy & Security › Local Network (the setup
-  can open that pane); your terminal app's switch doesn't cover it. The network search for servers needs the same.
+- **"Allow “atelier” on your local network":** macOS asks each program once before it reaches devices on your local
+  network, and a server at home (or a domain that leads there) is one. In iTerm, Ghostty and most other terminal apps
+  the program asks for itself, so your terminal app's switch doesn't cover it; Terminal and SSH sessions are let
+  through. The question reads "Allow “atelier” to find devices on local networks?": choose Allow, and the setup goes
+  on by itself. If you chose Don't Allow, switch "atelier" on under System Settings › Privacy & Security › Local
+  Network (the setup can open that pane). The answer holds for later versions. The network search for servers needs
+  the same.
 - **"This server signs terminals in with a password only":** the server is older than 0.6.0. Update it, or sign in with
   your password (an account made by single sign-on sets one in Settings › Account).
 - **Shift+Enter sends the message:** the terminal can't tell it from Enter. Use Alt+Enter or Ctrl+J, or `/terminal-setup`.

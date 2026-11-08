@@ -34,8 +34,9 @@ export async function knownServers(config: CliConfig, dir = desktopDataDir()): P
 }
 
 /**
- * The program macOS asks about local network access for: each program asks for itself, so the terminal app's switch
- * doesn't cover it. The installed app's is `atelier` (its Node, signed as Atelier); a copy built from source runs as `node`.
+ * The name macOS asks about local network access under, in its question and in System Settings: the program's file
+ * name. In a terminal app other than Terminal each program asks for itself, so the terminal app's switch doesn't cover
+ * it. The installed app's Node is named `atelier`; a copy built from source runs as `node`.
  */
 export const networkProgram = (execPath = process.execPath) => basename(execPath).replace(/\.exe$/i, '');
 

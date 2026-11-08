@@ -8,20 +8,24 @@
 // their sha512 and size (the update check reads it; the release signs each package). Node comes from nodejs.org,
 // checked against its SHASUMS256.txt, and is kept in a cache between releases.
 //
-// On a Mac, `--sign` signs the macOS binaries with the Developer ID in the keychain as `dev.atelier.cli`: macOS asks
-// each program before it reaches the local network, and Node.js's own signature made that "node", a program the person
-// never allowed (an Atelier server at home couldn't be reached). Signed as Atelier, macOS asks for "atelier" once, and
-// the answer holds across updates. Only V8's two exceptions to the hardened runtime are kept (JIT code); Node's own
-// signature also allows debugging and loading unsigned libraries, which Atelier doesn't need. `--notarize` then has
-// Apple notarize them (notarytool, the keychain profile `atelier-notary` or APPLE_KEYCHAIN_PROFILE).
+// On macOS, local network privacy asks each program before it reaches devices on the network (an Atelier server at
+// home): in a terminal app other than Terminal, the program itself, by its code signature. Node.js's own build was a
+// program called "node" with the UUID every copy of that release shares. So the macOS binary is branded first
+// (macho.mjs: its own UUID, an embedded Info.plist as `dev.atelier.cli`, as Apple's TN3179 asks) and signed again as
+// `dev.atelier.cli`: `--sign` with the Developer ID in the keychain, keeping only V8's two exceptions to the hardened
+// runtime (JIT code; Node's own signature also allows debugging and loading unsigned libraries, which Atelier doesn't
+// need), else ad hoc for a local build. macOS then asks once for "atelier", and the answer holds across updates.
+// `--notarize` then has Apple notarize them (notarytool, the keychain profile `atelier-notary` or
+// APPLE_KEYCHAIN_PROFILE). Branding needs codesign, so it only happens on a Mac.
 //
 //   node apps/cli/scripts/package.mjs --version 0.6.0 --runners runner/bin --out <dir> [--only darwin-arm64] [--sign] [--notarize]
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { brandMachO, cliInfoPlist, uuidFor } from './macho.mjs';
 
 export const NODE_VERSION = '24.22.2';
 export const TARGETS = [
@@ -58,9 +62,15 @@ function signingIdentity() {
   return name;
 }
 
-function signMac(binary, identity, entitlements) {
-  execFileSync('codesign', ['--force', '--sign', identity, '--identifier', 'dev.atelier.cli', '--options', 'runtime', '--timestamp', '--entitlements', entitlements, binary], { stdio: 'pipe' });
+/** Brands the macOS Node as Atelier CLI (see the top) and signs it: with the Developer ID, or ad hoc without one. */
+function brandMac(binary, { version, target, identity, entitlements }) {
+  const uuid = uuidFor('dev.atelier.cli', version, target.key, NODE_VERSION);
+  writeFileSync(binary, brandMachO(readFileSync(binary), { plist: cliInfoPlist(version), uuid }));
+  const how = identity ? ['--sign', identity, '--options', 'runtime', '--timestamp', '--entitlements', entitlements] : ['--sign', '-'];
+  execFileSync('codesign', ['--force', ...how, '--identifier', 'dev.atelier.cli', binary], { stdio: 'pipe' });
   execFileSync('codesign', ['--verify', '--strict', binary], { stdio: 'pipe' });
+  // `codesign -dv` reports on stderr.
+  if (!/Info\.plist entries=\d+/.test(spawnSync('codesign', ['-dv', binary], { encoding: 'utf8' }).stderr)) throw new Error(`codesign didn't bind the Info.plist in ${binary}`);
 }
 
 const POSIX_LAUNCHER = `#!/bin/sh
@@ -148,8 +158,9 @@ async function main() {
       const binary = join(dir, 'node', 'bin', 'atelier');
       copyFileSync(join(node, 'bin', 'node'), binary);
       chmodSync(binary, 0o755);
+      if (target.key.startsWith('darwin') && process.platform !== 'darwin') console.warn(`${name}: not branded or signed (that needs a Mac)`);
+      if (target.key.startsWith('darwin') && process.platform === 'darwin') brandMac(binary, { version, target, identity, entitlements });
       if (identity && target.key.startsWith('darwin')) {
-        signMac(binary, identity, entitlements);
         const kept = join(work, 'signed', target.key);
         mkdirSync(kept, { recursive: true });
         copyFileSync(binary, join(kept, 'atelier'));

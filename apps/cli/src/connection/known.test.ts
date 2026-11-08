@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { CliConfig } from '../config.ts';
-import { knownServers, terminalApp } from './known.ts';
+import { knownServers, networkProgram, terminalApp } from './known.ts';
 
 let dir = '';
 afterEach(async () => dir && (await rm(dir, { recursive: true, force: true })));
@@ -28,4 +28,9 @@ it('names the terminal app macOS asks about', () => {
   expect(terminalApp({ TERM_PROGRAM: 'Apple_Terminal' })).toBe('Terminal');
   expect(terminalApp({ TERM_PROGRAM: 'vscode', CURSOR_TRACE_ID: 'x' })).toBe('Cursor');
   expect(terminalApp({})).toBe('your terminal app');
+});
+
+it('names the program macOS asks about by its file name: atelier when installed, else the Node it runs on', () => {
+  expect(networkProgram('/Users/ada/.local/share/atelier/versions/0.6.0/node/bin/atelier')).toBe('atelier');
+  expect(networkProgram('/opt/homebrew/bin/node')).toBe('node');
 });
