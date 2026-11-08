@@ -1,7 +1,7 @@
 /**
- * The wordmarks (ARCHITECTURE §25): "ATELIER CLI" in big block letters for the setup wizard's splash and `atelier
- * --version`, painted left to right in the clay gradient, and a two-line one for the session header. The big one
- * needs 73 columns; narrower terminals get ATELIER alone, then the small one.
+ * The wordmarks (ARCHITECTURE §25): ATELIER in big block letters, painted left to right in the clay gradient, and CLI
+ * beside it drawn with command-line prompts (`>_`), its last `_` a blinking cursor: for the setup's first screen and
+ * `atelier --version`. The whole needs 79 columns; narrower terminals get ATELIER alone, then a small one.
  */
 import type { Paint } from '../style.ts';
 
@@ -14,7 +14,9 @@ export const BIG = [
   '╚═╝  ╚═╝   ╚═╝   ╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝',
 ];
 
-export const BIG_CLI = [' ██████╗██╗     ██╗', '██╔════╝██║     ██║', '██║     ██║     ██║', '██║     ██║     ██║', '╚██████╗███████╗██║', ' ╚═════╝╚══════╝╚═╝'];
+/** C, L and I as pixels (`#`), each drawn as a prompt, `>_`: five rows beside ATELIER's letters, none under its shadow. */
+const CLI_PIXELS = [' ### #    #', '#    #    #', '#    #    #', '#    #    #', ' ### #### #', '           '];
+export const BIG_CLI = CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  '));
 
 export const SMALL = ['▄▀█ ▀█▀ █▀▀ █   █ █▀▀ █▀█   █▀▀ █   █', '█▀█  █  ██▄ █▄▄ █ ██▄ █▀▄   █▄▄ █▄▄ █'];
 
@@ -25,19 +27,27 @@ export const TAGLINE = 'Your AI workspace, in your terminal.';
  * past the stroke aren't there yet, the stroke's edge is in the lightest colour. Every line keeps its full width (blank
  * past the stroke), so the wordmark stays in place while it is painted.
  */
-export function bigBanner(paint: Paint, columns: number, reveal = 1): string[] {
-  const withCli = columns >= 76;
+export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = true): string[] {
+  const withCli = columns >= 79;
   if (columns < 54) return smallBanner(paint);
   const wordWidth = [...BIG[0]!].length;
   const rows = BIG.map((row, i) => (withCli ? `${row}  ${BIG_CLI[i]}` : row));
   const width = Math.max(...rows.map((r) => [...r].length));
   const edge = reveal >= 1 ? width : Math.round(reveal * (width + 2));
-  const lines = rows.map((row) => {
+  // The last `_` (the foot of the I) is the prompt's cursor.
+  const cursorAt = { row: 4, x: [...rows[4]!].lastIndexOf('_') };
+  const lines = rows.map((row, r) => {
     const chars = [...row.padEnd(width)];
-    // Each column's colour is the one it has when finished: the gradient over ATELIER, CLI muted.
+    // Each column's colour is the one it has when finished: the gradient over ATELIER; in CLI, > in clay and _ in grey.
     const word = paint.gradient(chars.slice(0, wordWidth).join(''));
-    const painted = [...splitPainted(word), ...chars.slice(wordWidth).map((ch) => (ch === ' ' ? ' ' : paint.fg('muted', ch)))];
-    return painted.map((cell, x) => (x >= edge ? ' ' : x >= edge - 2 && chars[x] !== ' ' ? paint.hex(paint.p.gradient[0], chars[x]!) : cell)).join('');
+    const cli = chars.slice(wordWidth).map((ch, i) => {
+      if (r === cursorAt.row && wordWidth + i === cursorAt.x && !cursor) return ' ';
+      return ch === '>' ? paint.fg('accent', ch) : ch === '_' ? paint.fg('muted', ch) : ch;
+    });
+    const painted = [...splitPainted(word), ...cli];
+    // The brush's tip, in the light colour, only while it paints: finished, every cell has its own colour.
+    const tip = (x: number) => reveal < 1 && x >= edge - 2 && chars[x] !== ' ';
+    return painted.map((cell, x) => (x >= edge ? ' ' : tip(x) ? paint.hex(paint.p.gradient[0], chars[x]!) : cell)).join('');
   });
   if (!withCli) lines.push(`${' '.repeat(wordWidth - 3)}${paint.fg('muted', reveal >= 1 ? 'CLI' : '   ')}`);
   return lines;

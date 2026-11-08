@@ -49,6 +49,8 @@ it.skipIf(!SERVER || !canRun())('signs in to an older server with the password a
   const s = await openScreen({ cwd: project, env: env(), command: cliCommand() });
   try {
     await s.waitFor('Where should Atelier run?', 60_000);
+    // The network search is done (a server it finds goes in at the top of the list).
+    await s.waitFor(/Found (one server|\d+ servers) on your network|No server found|reach your local network/, 30_000);
     await s.select(/^(Another server|An Atelier server)/);
     await s.press('enter');
     await s.waitFor('The address you open it at');

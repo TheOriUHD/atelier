@@ -71,6 +71,8 @@ it.skipIf(!ready())('signs in through the browser, lends the folder and works in
   try {
     // The first start after a build fills Node's compile cache: on a cold machine that takes a while.
     await s.waitFor('Where should Atelier run?', 60_000);
+    // The network search is done (a server it finds goes in at the top of the list).
+    await s.waitFor(/Found (one server|\d+ servers) on your network|No server found|reach your local network/, 30_000);
     show('where', s);
     // Servers found on the network come first; another one is typed.
     await s.select(/^(Another server|An Atelier server)/);

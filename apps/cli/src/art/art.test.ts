@@ -9,8 +9,8 @@ const colour = new Paint(palette('dark', 3));
 
 describe('the wordmarks', () => {
   it('fits the terminal: ATELIER CLI, ATELIER alone, then the small one', () => {
-    expect(Math.max(...bigBanner(colour, 80).map(width))).toBe(73);
-    const narrow = bigBanner(colour, 70);
+    expect(Math.max(...bigBanner(colour, 80).map(width))).toBe(76);
+    const narrow = bigBanner(colour, 76);
     expect(Math.max(...narrow.map(width))).toBeLessThanOrEqual(52);
     expect(strip(narrow.at(-1)!).trim()).toBe('CLI');
     expect(bigBanner(colour, 50)).toEqual(smallBanner(colour));
@@ -23,6 +23,18 @@ describe('the wordmarks', () => {
     expect(half.map((l) => [...l].length)).toEqual(full.map((l) => [...l].length));
     expect(half[2]!.slice(0, 30)).toBe(full[2]!.slice(0, 30));
     expect(bigBanner(colour, 80, 0).map(strip).every((l) => l.trim() === '')).toBe(true);
+    // Finished, no cell keeps the brush tip's light colour: CLI's last cells are its own clay and grey.
+    // eslint-disable-next-line no-control-regex -- ANSI codes are control characters.
+    const colours = (line: string) => [...line.matchAll(/\x1b\[([0-9;]*)m[^\x1b ]/g)].map((m) => m[1]);
+    for (const row of bigBanner(colour, 80).slice(0, 5)) expect(new Set(colours(row).slice(-4)).size).toBe(2);
+  });
+  it('draws CLI with prompts, its last _ a cursor that blinks', () => {
+    const plain = bigBanner(colour, 80).map(strip);
+    expect(plain[0]!.endsWith('  >_>_>_  >_        >_')).toBe(true);
+    expect(plain[4]!.endsWith('  >_>_>_  >_>_>_>_  >_')).toBe(true);
+    const off = bigBanner(colour, 80, 1, false).map(strip);
+    expect(off[4]!.trimEnd()).toBe(plain[4]!.slice(0, -1).trimEnd());
+    expect(off.slice(0, 4)).toEqual(plain.slice(0, 4));
   });
 });
 
