@@ -1,7 +1,7 @@
 /**
- * The wordmarks (ARCHITECTURE §25): ATELIER in big block letters with their shadow, painted left to right in the clay
- * gradient, and CLI beside it drawn with command-line prompts (`>_`) and a shadow of colons, its last `_` a blinking cursor: for the setup's first screen and
- * `atelier --version`. The whole is 77 columns wide and shows from 79; narrower terminals get ATELIER alone, then a small one.
+ * The wordmarks (ARCHITECTURE §25): "ATELIER CLI" in big block letters for the setup's first screen and `atelier
+ * --version`, ATELIER in the clay gradient and CLI in an ochre one of its own (the colour of Pip's brush), painted in
+ * from the left. The big one needs 73 columns; narrower terminals get ATELIER alone, then a two-line one.
  */
 import type { Paint } from '../style.ts';
 
@@ -14,57 +14,38 @@ export const BIG = [
   '╚═╝  ╚═╝   ╚═╝   ╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝',
 ];
 
-/** C, L and I as pixels (`#`), each drawn as a prompt, `>_`, on the five rows of ATELIER's letters. */
-const CLI_PIXELS = [' ### #    #', '#    #    #', '#    #    #', '#    #    #', ' ### #### #'];
-const CLI_LETTERS = CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  '));
-/**
- * CLI with its own shadow, in command-line dots rather than ATELIER's lines: a colon one row down and one column right
- * of every letter cell, where that cell is empty. Its last row is ATELIER's shadow row, so both are six rows tall.
- */
-export const BIG_CLI = Array.from({ length: BIG.length }, (_, r) =>
-  Array.from({ length: Math.max(...CLI_LETTERS.map((l) => l.length)) + 1 }, (_, x) => {
-    const own = CLI_LETTERS[r]?.[x] ?? ' ';
-    if (own !== ' ') return own;
-    return (CLI_LETTERS[r - 1]?.[x - 1] ?? ' ') !== ' ' ? ':' : ' ';
-  }).join(''),
-);
+export const BIG_CLI = [' ██████╗██╗     ██╗', '██╔════╝██║     ██║', '██║     ██║     ██║', '██║     ██║     ██║', '╚██████╗███████╗██║', ' ╚═════╝╚══════╝╚═╝'];
 
 export const SMALL = ['▄▀█ ▀█▀ █▀▀ █   █ █▀▀ █▀█   █▀▀ █   █', '█▀█  █  ██▄ █▄▄ █ ██▄ █▀▄   █▄▄ █▄▄ █'];
 
 export const TAGLINE = 'Your AI workspace, in your terminal.';
+
+/** CLI's colours: ochre, light to deep, a little apart from ATELIER's clay. */
+const CLI_GRADIENT = { dark: ['#F5D58E', '#E6B86A', '#C9963F'], light: ['#C9963F', '#A87A2A', '#86601C'] } as const;
 
 /**
  * The big wordmark for a terminal `columns` wide. `reveal` (0–1) paints it in from the left, as a brush would: letters
  * past the stroke aren't there yet, the stroke's edge is in the lightest colour. Every line keeps its full width (blank
  * past the stroke), so the wordmark stays in place while it is painted.
  */
-export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = true): string[] {
-  const withCli = columns >= 79;
+export function bigBanner(paint: Paint, columns: number, reveal = 1): string[] {
+  const withCli = columns >= 76;
   if (columns < 54) return smallBanner(paint);
   const wordWidth = [...BIG[0]!].length;
   const rows = BIG.map((row, i) => (withCli ? `${row}  ${BIG_CLI[i]}` : row));
   const width = Math.max(...rows.map((r) => [...r].length));
   const edge = reveal >= 1 ? width : Math.round(reveal * (width + 2));
-  // The last `_` (the foot of the I) is the prompt's cursor.
-  const last = CLI_PIXELS.length - 1;
-  const cursorAt = { row: last, x: [...rows[last]!].lastIndexOf('_') };
-  const lines = rows.map((row, r) => {
+  const lines = rows.map((row) => {
     const chars = [...row.padEnd(width)];
-    // Each column's colour is the one it has when finished: the gradient over ATELIER; in CLI, > in clay and _ in grey.
+    // Each column's colour is the one it has when finished: the clay gradient over ATELIER, the ochre one over CLI.
     const word = paint.gradient(chars.slice(0, wordWidth).join(''));
-    const cli = chars.slice(wordWidth).map((ch, i) => {
-      if (r === cursorAt.row && wordWidth + i === cursorAt.x && !cursor) return ' ';
-      // Bold, so the thin glyphs hold their own beside the solid blocks; the shadow faint.
-      if (ch === '>') return paint.bold(paint.fg('accent', ch));
-      if (ch === '_') return paint.bold(paint.fg('muted', ch));
-      return ch === ':' ? paint.fg('faint', ch) : ch;
-    });
-    const painted = [...splitPainted(word), ...cli];
+    const cli = paint.gradient(chars.slice(wordWidth).join(''), CLI_GRADIENT[paint.p.shade]);
+    const painted = [...splitPainted(word), ...splitPainted(cli)];
     // The brush's tip, in the light colour, only while it paints: finished, every cell has its own colour.
     const tip = (x: number) => reveal < 1 && x >= edge - 2 && chars[x] !== ' ';
     return painted.map((cell, x) => (x >= edge ? ' ' : tip(x) ? paint.hex(paint.p.gradient[0], chars[x]!) : cell)).join('');
   });
-  if (!withCli) lines.push(`${' '.repeat(wordWidth - 3)}${paint.fg('muted', reveal >= 1 ? 'CLI' : '   ')}`);
+  if (!withCli) lines.push(`${' '.repeat(wordWidth - 3)}${reveal >= 1 ? paint.gradient('CLI', CLI_GRADIENT[paint.p.shade]) : '   '}`);
   return lines;
 }
 

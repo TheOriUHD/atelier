@@ -78,17 +78,15 @@ interface Props {
 const platformName = () => (process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux');
 const hostOf = (url: string) => URL.parse(url)?.host ?? url;
 
-/** The wordmark painted in from the left once, then CLI's cursor blinking, and the tagline. */
+/** The wordmark painted in from the left once, and the tagline. */
 function Banner({ paint, columns, motion }: { paint: Paint; columns: number; motion: boolean }) {
-  const moving = motion && paint.p.depth > 0;
-  const [painted, setPainted] = useState(!moving);
+  const [painted, setPainted] = useState(!motion || paint.p.depth === 0);
   const { frame } = useAnimation({ interval: 50, isActive: !painted });
-  const { frame: blink } = useAnimation({ interval: 530, isActive: painted && moving });
   if (!painted && frame >= 30) setPainted(true);
   const reveal = painted ? 1 : Math.min(1, frame / 30);
   return (
     <Box flexDirection="column" alignItems="center" marginTop={1}>
-      <Text>{bigBanner(paint, columns, reveal, blink % 2 === 0).join('\n')}</Text>
+      <Text>{bigBanner(paint, columns, reveal).join('\n')}</Text>
       <Text>{paint.fg('secondary', TAGLINE)}</Text>
     </Box>
   );
