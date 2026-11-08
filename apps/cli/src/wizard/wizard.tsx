@@ -9,7 +9,8 @@ import { Box, Text, render, useApp, useAnimation, useInput, useWindowSize } from
 import { useEffect, useRef, useState } from 'react';
 import { contract, createRpcClient, DEFAULT_BASE_URLS, PROVIDER_LABELS, type AppContract, type AppInfo, type ModelInfo, type PermissionMode, type ProviderType, type RpcClient, type TerminalSignInStart, type UserSummary } from '@atelier/protocol';
 import { wsTransport, type ReconnectingTransport } from '@atelier/client';
-import { applyLending, changeLending, healthCheck, resolveServer, scanNetwork, type FoundServer } from '@atelier/core/device';
+import { applyLending, changeLending, diagnose, healthCheck, resolveServer, scanNetwork, type FoundServer } from '@atelier/core/device';
+import { knownServers, localNetworkBlocked, openLocalNetworkSettings, terminalApp, type KnownServer } from '../connection/known.ts';
 import { bigBanner, TAGLINE } from '../art/banner.ts';
 import { drawPip, PIP_HELLO, PIP_IDLE } from '../art/mascot.ts';
 import { qrLines } from '../art/qr.ts';
@@ -36,6 +37,7 @@ type Step =
   | { s: 'where' }
   | { s: 'address' }
   | { s: 'checking'; typed: string }
+  | { s: 'blocked'; typed: string }
   | { s: 'first-admin'; serverUrl: string; field: number; values: Record<string, string>; error?: string }
   | { s: 'method'; error?: string }
   | { s: 'browser'; start: TerminalSignInStart; opened: boolean }
@@ -56,6 +58,7 @@ const CRUMB: Partial<Record<Step['s'], Crumb>> = {
   where: 'connect',
   address: 'connect',
   checking: 'connect',
+  blocked: 'connect',
   'first-admin': 'sign in',
   method: 'sign in',
   browser: 'sign in',
@@ -127,6 +130,11 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
   const [step, setStep] = useState<Step>(start === 'login' && initial.connection?.mode === 'server' ? { s: 'checking', typed: initial.connection.serverUrl } : start === 'connect' ? { s: 'where' } : { s: 'splash' });
   const [found, setFound] = useState<FoundServer[]>([]);
   const [scanning, setScanning] = useState(true);
+  const [known, setKnown] = useState<KnownServer[]>([]);
+  /** macOS refuses this terminal the local network (null: not known yet). */
+  const [blocked, setBlocked] = useState<boolean | null>(null);
+  /** On the address step: typing one in instead of picking a known or found server. */
+  const [typing, setTyping] = useState(false);
   const [server, setServer] = useState<{ url: string; info: AppInfo | null } | null>(null);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [mode, setMode] = useState<'server' | 'local' | null>(initial.connection?.mode ?? null);
@@ -147,7 +155,11 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
 
   // Look for servers on the network while the person reads the first screens.
   useEffect(() => {
-    void scanNetwork({ interfaces: networkInterfaces(), fetch, onFound: (s) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s])) }).finally(() => setScanning(false));
+    void knownServers(initial).then(setKnown);
+    void scanNetwork({ interfaces: networkInterfaces(), fetch, onFound: (s) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s])) })
+      .then((all) => (all.length ? null : localNetworkBlocked().then(setBlocked)))
+      .finally(() => setScanning(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useInput((input, key) => {
@@ -195,8 +207,13 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
       if (status.setupRequired) return setStep({ s: 'first-admin', serverUrl: url, field: 0, values: {} });
       setStep({ s: 'method' });
     } catch (e) {
+      // Why it failed, in words: no such name, refused, a certificate, or (macOS) the terminal kept off the local network.
+      const guess = /^[a-z][a-z\d+.-]*:\/\//i.test(typed) ? typed : `https://${typed}`;
+      const problem = await diagnose(guess).catch(() => null);
+      if (problem?.localNetwork) return setStep({ s: 'blocked', typed });
       setStep({ s: 'address' });
-      setNote(`Couldn’t reach Atelier at ${typed}: ${describe(e)}`);
+      setTyping(true);
+      setNote(`Couldn’t reach Atelier at ${typed}: ${problem && problem.code !== 'WEBSOCKET' && !problem.code.startsWith('HTTP_2') ? problem.message : describe(e)}`);
     }
   };
   const [note, setNote] = useState<string | null>(null);
@@ -259,6 +276,14 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
     setStep({ s: 'model', models: models.filter((m) => !m.hidden) });
   };
 
+  // Servers to pick from: the one the desktop app uses and the one used before, then those found on the network (by
+  // the address they say people use, when they say one).
+  const candidates: Choice<string>[] = [
+    ...known.map((k) => ({ value: k.url, label: new URL(k.url).host, hint: k.why })),
+    ...found
+      .filter((f) => !known.some((k) => k.url === (f.publicUrl ?? f.url)))
+      .map((f) => ({ value: f.publicUrl ?? f.url, label: f.publicUrl ? new URL(f.publicUrl).host : f.host, hint: `Atelier ${f.version ?? ''} on your network${f.publicUrl ? `, at ${f.host}` : ''}` })),
+  ];
   const crumb = CRUMB[step.s] ?? null;
   const frameKeys = 'enter continue · esc back · ctrl+c quit';
   const pip = drawPip(initial.motion && depth ? PIP_IDLE[frame % PIP_IDLE.length]! : 'base', depth);
@@ -306,7 +331,18 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                 onCancel={() => setStep({ s: 'look' })}
               />
               <Box marginTop={1}>
-                <Text>{paint.fg('muted', found.length ? `Found on your network: ${found.map((f) => `${paint.fg('good', '●')} ${new URL(f.url).host}${f.version ? ` (${f.version})` : ''}`).join('   ')}` : scanning ? 'Looking for servers on your network…' : 'No server found on your network (one elsewhere works too).')}</Text>
+                <Text>
+                  {paint.fg(
+                    'muted',
+                    found.length || known.length
+                      ? `${known.length ? `${known.map((k) => `${paint.fg('good', '●')} ${new URL(k.url).host} (${k.why})`).join('   ')}   ` : ''}${found.length ? `Found on your network: ${found.map((f) => `${paint.fg('good', '●')} ${f.publicUrl ? new URL(f.publicUrl).host : f.host}${f.version ? ` (${f.version})` : ''}`).join('   ')}` : ''}`
+                      : scanning
+                        ? 'Looking for servers on your network…'
+                        : blocked
+                          ? paint.fg('warn', `macOS isn’t letting ${terminalApp()} search your local network: turn ${terminalApp()} on under System Settings › Privacy & Security › Local Network.`)
+                          : 'No server found on your network (one elsewhere works too).',
+                  )}
+                </Text>
               </Box>
             </Box>
           ),
@@ -317,17 +353,52 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
           content: (
             <Box flexDirection="column">
               {note && <Text>{paint.fg('bad', note)}</Text>}
-              {found.length > 0 && <Choices paint={paint} numbered choices={[...found.map((f) => ({ value: f.url, label: new URL(f.url).host, hint: `Atelier ${f.version ?? ''}` })), { value: '', label: 'Another address…' }]} onPick={(v) => (v ? (setNote(null), setStep({ s: 'checking', typed: v })) : setFound([]))} onCancel={() => setStep({ s: 'where' })} />}
-              {found.length === 0 && (
+              {candidates.length > 0 && !typing && (
+                <Choices
+                  paint={paint}
+                  numbered
+                  showHints="all"
+                  choices={[...candidates, { value: '', label: 'Another address…' }]}
+                  onPick={(v) => (v ? (setNote(null), setStep({ s: 'checking', typed: v })) : setTyping(true))}
+                  onCancel={() => setStep({ s: 'where' })}
+                />
+              )}
+              {(candidates.length === 0 || typing) && (
                 <>
                   <Text>The address you open it at in the browser:</Text>
-                  <TextLine paint={paint} placeholder="atelier.example.com" initial={initial.connection?.mode === 'server' ? initial.connection.serverUrl : ''} onSubmit={(v) => v.trim() && (setNote(null), setStep({ s: 'checking', typed: v.trim() }))} onCancel={() => setStep({ s: 'where' })} />
+                  <TextLine paint={paint} placeholder="atelier.example.com" initial={initial.connection?.mode === 'server' ? initial.connection.serverUrl : ''} onSubmit={(v) => v.trim() && (setNote(null), setStep({ s: 'checking', typed: v.trim() }))} onCancel={() => (candidates.length ? setTyping(false) : setStep({ s: 'where' }))} />
                   <Text>{paint.fg('muted', 'https:// is tried first; http:// only for addresses on your own network.')}</Text>
                 </>
               )}
+              {scanning && <Text>{paint.fg('faint', 'Still looking on your network…')}</Text>}
             </Box>
           ),
         };
+      case 'blocked': {
+        const app = terminalApp();
+        const host = /^[a-z][a-z\d+.-]*:\/\//i.test(step.typed) ? new URL(step.typed).host : step.typed;
+        return {
+          title: `macOS is keeping ${app} off your network`,
+          content: (
+            <Box flexDirection="column">
+              <Text>{`${host} is on your local network, and macOS hasn’t allowed ${app} to reach devices there. Everything started in ${app}, Atelier included, is held back the same way.`}</Text>
+              <Box marginY={1}>
+                <Text>{`Turn ${paint.bold(app)} on under ${paint.bold('System Settings › Privacy & Security › Local Network')}, then try again. If it still can’t reach it, quit ${app} and open it again.`}</Text>
+              </Box>
+              <Choices
+                paint={paint}
+                choices={[
+                  { value: 'open', label: 'Open the Local Network settings' },
+                  { value: 'again', label: 'Try again' },
+                  { value: 'other', label: 'Another address' },
+                ]}
+                onPick={(v) => (v === 'open' ? openLocalNetworkSettings() : v === 'again' ? setStep({ s: 'checking', typed: step.typed }) : (setTyping(true), setStep({ s: 'address' })))}
+                onCancel={() => setStep({ s: 'address' })}
+              />
+            </Box>
+          ),
+        };
+      }
       case 'checking':
         return { title: 'Checking the server…', content: <Text>{paint.fg('muted', `Asking ${step.typed} whether it is Atelier…`)}</Text> };
       case 'first-admin': {

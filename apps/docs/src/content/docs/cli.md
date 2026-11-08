@@ -177,6 +177,10 @@ macOS keychain, the Secret Service on Linux (GNOME Keyring, KWallet) or DPAPI on
 `atelier doctor` checks the install, the server, the sign-in, the background service, the colours and Shift+Enter, and
 says what to do. `/bug` copies the versions and where the logs are (no messages, no keys).
 
+- **"macOS is keeping iTerm off your network"** (or Terminal, Ghostty…): macOS asks each app before it may reach devices
+  on your local network, and a server at home (or a domain that leads there) is one. Turn the terminal app on under
+  System Settings › Privacy & Security › Local Network; the setup can open that pane. The same holds for the network
+  search for servers. A background service started at login (`atelier daemon keep`) is asked about as `node`.
 - **"This server signs terminals in with a password only":** the server is older than 0.6.0. Update it, or sign in with
   your password (an account made by single sign-on sets one in Settings › Account).
 - **Shift+Enter sends the message:** the terminal can't tell it from Enter. Use Alt+Enter or Ctrl+J, or `/terminal-setup`.

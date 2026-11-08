@@ -11,6 +11,8 @@ export interface FoundServer {
   host: string;
   version: string | null;
   name: string | null;
+  /** The address the server says people use (its `ATELIER_BASE_URL`, servers from 0.6.0), when it says one. */
+  publicUrl?: string | null;
 }
 
 export type Interfaces = NodeJS.Dict<NetworkInterfaceInfo[]>;
@@ -40,6 +42,7 @@ const Health = z.object({
   app: z.literal('atelier'),
   version: z.string().max(40).optional(),
   name: z.string().max(80).optional(),
+  url: z.string().max(200).optional(),
 });
 
 /** Answers are tiny; anything bigger isn't Atelier's health check. */
@@ -83,7 +86,8 @@ export async function scanNetwork({ interfaces, fetch: fetchFn, onFound, port = 
       const url = `http://${ip}:${port}`;
       const health = await probe(fetchFn, url, AbortSignal.any([deadline, AbortSignal.timeout(timeoutMs)]));
       if (!health || deadline.aborted) continue;
-      const server = { url, host: ip === '127.0.0.1' ? 'This computer' : `${ip}:${port}`, version: health.version ?? null, name: health.name ?? null };
+      const publicUrl = health.url && /^https?:\/\/[^/]+$/.test(health.url) ? health.url : null;
+      const server = { url, host: ip === '127.0.0.1' ? 'This computer' : `${ip}:${port}`, version: health.version ?? null, name: health.name ?? null, ...(publicUrl ? { publicUrl } : {}) };
       found.push(server);
       onFound?.(server);
     }

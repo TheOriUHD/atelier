@@ -77,11 +77,16 @@ describe('scanNetwork', () => {
       'http://192.168.77.28:7340': () => new Response('<html>router</html>'),
       'http://192.168.77.29:7340': () => new Response('{}', { status: 500 }),
       'http://192.168.77.30:7340': () => Response.json({ ok: true, app: 'atelier', padding: 'x'.repeat(5000) }),
+      // A server from 0.6.0 says the address people use; one that says something else than an origin isn't believed.
+      'http://192.168.77.31:7340': atelier({ ok: true, app: 'atelier', version: '0.6.0', url: 'https://atelier.example.com' }),
+      'http://192.168.77.32:7340': atelier({ ok: true, app: 'atelier', version: '0.6.0', url: 'javascript:alert(1)' }),
     });
     const found = await scanNetwork({ interfaces: HOME, fetch: fetchFn as unknown as typeof fetch, onFound });
     expect(found).toEqual([
       { url: 'http://127.0.0.1:7340', host: 'This computer', version: '0.1.8', name: 'Studio' },
       { url: 'http://192.168.77.25:7340', host: '192.168.77.25:7340', version: '0.1.8', name: null },
+      { url: 'http://192.168.77.31:7340', host: '192.168.77.31:7340', version: '0.6.0', name: null, publicUrl: 'https://atelier.example.com' },
+      { url: 'http://192.168.77.32:7340', host: '192.168.77.32:7340', version: '0.6.0', name: null },
     ]);
     expect(onFound.mock.calls.map(([s]) => s)).toEqual(found);
   });

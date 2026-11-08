@@ -77,6 +77,7 @@ it.skipIf(!ready())('signs in through the browser, lends the folder and works in
     await s.waitFor('Where should Atelier run?');
     await s.press('enter');
     await s.waitFor('Which server?');
+    show('address', s);
     // Servers found on the network come first; another address is typed.
     if (s.text().includes('Another address')) {
       await s.select(/^Another address/);
