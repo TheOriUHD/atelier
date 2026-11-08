@@ -69,7 +69,8 @@ afterAll(async () => {
 it.skipIf(!ready())('signs in through the browser, lends the folder and works in it', { timeout: 240_000 }, async () => {
   const s = await openScreen({ cwd: project, env: env(), command: cliCommand() });
   try {
-    await s.waitFor('press enter to begin');
+    // The first start after a build fills Node's compile cache: on a cold machine that takes a while.
+    await s.waitFor('press enter to begin', 60_000);
     await s.press('enter');
     await s.waitFor('How should it look?');
     await s.press('enter');

@@ -47,7 +47,8 @@ const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', HOME: home, USERPR
 it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answers', { timeout: 180_000 }, async () => {
   const s = await openScreen({ cwd: project, env: env(), command: cliCommand() });
   try {
-    await s.waitFor('press enter to begin');
+    // The first start after a build fills Node's compile cache: on a cold machine that takes a while.
+    await s.waitFor('press enter to begin', 60_000);
     show('splash', s);
     await s.press('enter');
     await s.waitFor('How should it look?');
