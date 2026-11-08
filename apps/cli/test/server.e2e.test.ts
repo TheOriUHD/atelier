@@ -115,7 +115,7 @@ it.skipIf(!ready())('signs in through the browser, lends the folder and works in
     await s.waitFor('Ada @ 127.0.0.1', 30_000);
     await s.waitFor(/● 127\.0\.0\.1/, 30_000);
     show('session', s);
-    await s.type(`call Write {"file_path": "${join(project, 'notes.md')}", "content": "from the server\\n"}`);
+    await s.type(`call Write {"file_path": "${join(project, 'notes.md').replace(/\\/g, '\\\\')}", "content": "from the server\\n"}`);
     await s.press('enter');
     await s.waitFor(/Create .*notes\.md\?/, 60_000);
     await s.press('enter');

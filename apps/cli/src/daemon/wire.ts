@@ -51,6 +51,8 @@ export type ServiceFrame = z.infer<typeof ServiceFrame>;
 /** Reads a socket's lines as frames; lines that aren't one are dropped. */
 export function onFrames<T>(socket: Socket, schema: z.ZodType<T>, handle: (frame: T) => void): void {
   const lines = createInterface({ input: socket, crlfDelay: Infinity });
+  // readline passes the socket's errors on to itself and throws them when nothing listens; the socket's owner handles them.
+  lines.on('error', () => undefined);
   lines.on('line', (line) => {
     if (line.length > 64 * 1024 * 1024) return;
     try {

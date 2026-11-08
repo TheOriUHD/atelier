@@ -16,7 +16,10 @@ function talk(path: string, frame: unknown): Promise<unknown[]> {
   return new Promise((resolve) => {
     const replies: unknown[] = [];
     const s = connect(path, () => s.write(`${JSON.stringify(frame)}\n`));
-    createInterface({ input: s }).on('line', (l) => {
+    const lines = createInterface({ input: s });
+    // readline passes the socket's errors on and throws them when nothing listens on it.
+    lines.on('error', () => undefined);
+    lines.on('line', (l) => {
       replies.push(JSON.parse(l));
       if (replies.length === 1) setTimeout(() => (s.destroy(), resolve(replies)), 100);
     });
