@@ -1217,7 +1217,8 @@ terminal's own (`tui/commands.ts`) plus `slash.list`, sent as text for `expandSl
 goes into the next message as a context part. Print mode (`-p`) answers prompts by itself: `--allow` patterns, else deny
 with a note; questions skipped; plans declined.
 
-**Shipping** (`apps/cli/scripts`): one esbuild bundle (`dist/atelier.mjs`, React's devtools stubbed) with the licenses of
+**Shipping** (`apps/cli/scripts`): one esbuild bundle (`dist/atelier.mjs`, React's devtools stubbed, and Ink's word wrap
+made to drop the space a wrapped row would start with; the build stops if Ink's code changes) with the licenses of
 what is in it; a package per platform (darwin, linux, windows × x64, arm64) holds `bin/atelier` (a launcher that follows
 its link), the official Node.js 24 build (checked against nodejs.org's SHASUMS256.txt), the bundle and the runner builds
 (its own and the Linux and macOS ones for SSH hosts). On macOS the Node binary is named `atelier`, given its own LC_UUID

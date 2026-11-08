@@ -43,27 +43,30 @@ To remove it, delete the versions folder and the command, and `~/.atelier/cli` f
 
 ## The first start
 
-`atelier` in a project folder starts the setup the first time:
+`atelier` in a project folder starts the setup the first time. It takes four short screens:
 
-1. **How it should look:** matching the terminal, dark, light, or no colour.
-2. **Where Atelier runs:**
-   - **An Atelier server (recommended).** Models and keys are set up once, on the server. Sessions show up in the browser,
-     the desktop app and on your phone. This computer lends the folders you open, through the background service
-     (below). Servers on your network are found by themselves; another one is typed in (`https://` is tried first,
-     `http://` only for addresses on your own network).
-   - **Only this computer.** Atelier runs here with your own models and keys, kept in `~/.atelier/cli`. Sessions stay
-     in the terminal. Ollama, LM Studio and llama.cpp running here are offered; ChatGPT plans and GitHub Copilot sign in
-     with a code; Anthropic, OpenAI, Mistral, Mistral Vibe and OpenAI-compatible services take an API key.
-3. **Signing in to the server:**
-   - **In the browser** (servers from 0.6.0): the terminal shows a code, a link and a QR code. You approve it on the
-     server's page where you are signed in, so passwords, passkeys and single sign-on all work, and so does a terminal
-     with no browser (an SSH session: open the link on your phone).
-   - **Username and password**, or **an invite code**, which makes your account.
-   - A server that has no account yet asks for its setup token, and you make the first admin.
-4. **What this computer lends the server:** new empty folders for sessions started without one, and your skills and
-   instructions from `~/.claude` and `~/.atelier`.
-5. **The model** new sessions start with, and **how much it asks** (Auto, Ask or Accept edits).
-6. **Your terminal:** where Shift+Enter needs a setting (VS Code, Cursor, Windows Terminal), it can add it.
+1. **Where Atelier runs.** Atelier servers on your network are listed by themselves, with the one you used before;
+   pick one, type another address (`https://` is tried first, `http://` only for addresses on your own network), or
+   choose **Only this computer**.
+   - **With a server (recommended)**, models and keys are set up once, on the server, and sessions show up in the
+     browser, the desktop app and on your phone. This computer lends the folders you open, through the background
+     service (below).
+   - **Only this computer** runs Atelier here with your own models and keys, kept in `~/.atelier/cli`, and sessions stay
+     in the terminal. Ollama, LM Studio and llama.cpp running here are offered; ChatGPT plans and GitHub Copilot sign
+     in with a code; Anthropic, OpenAI, Mistral, Mistral Vibe and OpenAI-compatible services take an API key.
+2. **Signing in to the server.** A server from 0.6.0 shows a code, its link and a QR code right away: approve it on the
+   server's page where you are signed in, so passwords, passkeys and single sign-on all work, and so does a terminal
+   with no browser (an SSH session: open the link on your phone). Enter opens the page here; `p` signs in with your
+   username and password instead (both on one screen), `i` with an invite code, which makes your account. An older
+   server asks for the username and password. A server that has no account yet asks for its setup token, and you make
+   the first admin.
+3. **What this computer lends the server:** new empty folders for sessions started without one, and your skills and
+   instructions from `~/.claude` and `~/.atelier` (Space switches each).
+4. **The model** new sessions start with (typing filters the list) and **how much it asks** (←/→: Auto, Ask or Accept
+   edits).
+
+The last screen sums it up and starts the session. Where Shift+Enter needs a setting in your terminal (VS Code, Cursor,
+Windows Terminal), it offers to add it. The colours follow your terminal; `/theme` changes them.
 
 Each part can be run again: `atelier setup`, `atelier login`, `atelier connect <address>` (or `--local`).
 

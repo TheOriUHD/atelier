@@ -48,15 +48,9 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
   const s = await openScreen({ cwd: project, env: env(), command: cliCommand() });
   try {
     // The first start after a build fills Node's compile cache: on a cold machine that takes a while.
-    await s.waitFor('press enter to begin', 60_000);
-    show('splash', s);
-    await s.press('enter');
-    await s.waitFor('How should it look?');
-    show('look', s);
-    await s.press('enter');
-    await s.waitFor('Where should Atelier run?');
+    await s.waitFor('Where should Atelier run?', 60_000);
     show('where', s);
-    await s.press('down');
+    await s.select(/^Only this computer/);
     await s.press('enter');
     await s.waitFor('What should Atelier call you?', 30_000);
     await s.type('Ada');
@@ -72,13 +66,10 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
     await s.waitFor(/Added Ollama with \d+ models/, 30_000);
     show('providers added', s);
     await s.press('enter');
-    await s.waitFor('Which model should new sessions use?', 30_000);
+    await s.waitFor('Which model, and how much should it ask?', 30_000);
     show('model', s);
-    await s.select(/^Fake Chat|fake-chat/i);
-    await s.press('enter');
-    await s.waitFor('How much should it ask?');
-    await s.press('enter');
-    await s.waitFor('Your terminal');
+    await s.type('fake-chat');
+    await s.waitFor('/ fake-chat');
     await s.press('enter');
     await s.waitFor('All set');
     show('done', s);

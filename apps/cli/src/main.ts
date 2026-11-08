@@ -153,7 +153,7 @@ async function main(argv: string[]): Promise<number> {
         process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
         return e instanceof NeedsSetup ? 3 : 1;
       }
-      const next = await setup(p, config, e.reason === 'signed-out' ? 'login' : 'all', shade);
+      const next = await setup(p, config, e.reason === 'signed-out' ? 'login' : 'all', shade, 'session');
       if (!next) return 1;
       config = next;
     }
@@ -238,20 +238,20 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (ended.kind === 'logout') return logout(p, config);
-    const next = await setup(p, config, ended.step, shade);
+    const next = await setup(p, config, ended.step, shade, 'session');
     return next ? main(argv) : 0;
   } finally {
     conn.close();
   }
 }
 
-async function setup(p: ReturnType<typeof cliPaths>, config: CliConfig, start: 'all' | 'login' | 'connect', shade: Shade): Promise<CliConfig | null> {
+async function setup(p: ReturnType<typeof cliPaths>, config: CliConfig, start: 'all' | 'login' | 'connect', shade: Shade, afterwards: 'session' | 'exit' = 'exit'): Promise<CliConfig | null> {
   if (!process.stdin.isTTY) {
     process.stderr.write('Setup needs a terminal to ask in. Run atelier setup in one.\n');
     return null;
   }
   const { runSetup } = await import('./wizard/wizard.tsx');
-  return runSetup(p, config, start, shade);
+  return runSetup(p, config, start, shade, afterwards);
 }
 
 async function logout(p: ReturnType<typeof cliPaths>, config: CliConfig): Promise<number> {

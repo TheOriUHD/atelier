@@ -1,21 +1,27 @@
 /**
- * `atelier setup` (ARCHITECTURE §25): the first-run wizard, full screen. Where Atelier runs (a server, recommended, or
- * only this computer), finding and checking the server, setting up a new one with its setup token, signing in (in the
- * browser with a code, with a password, or with an invite), what this computer lends, providers when standalone, the
- * model, the permission mode and the terminal's Shift+Enter. Each part can be run again on its own.
+ * `atelier setup` (ARCHITECTURE §25): the first-run wizard, full screen, in as few screens as it can:
+ *   1. the wordmark and where Atelier runs: a server found on the network or used before, another one typed in, or only
+ *      this computer;
+ *   2. signing in: the browser code (servers from 0.6.0), else username and password on one screen, or an invite; a
+ *      new server's first admin with its setup token;
+ *   3. what this computer lends the server (standalone: your name, then providers);
+ *   4. the model and the mode;
+ *   5. a summary, with Shift+Enter set up where the terminal needs it.
+ * Each part can be run again on its own (`atelier login`, `atelier connect`).
  */
 import { hostname, networkInterfaces } from 'node:os';
-import { Box, Text, render, useApp, useAnimation, useInput, useWindowSize } from 'ink';
+import { Box, Text, render, useAnimation, useApp, useInput, useWindowSize } from 'ink';
 import { useEffect, useRef, useState } from 'react';
 import { contract, createRpcClient, DEFAULT_BASE_URLS, PROVIDER_LABELS, type AppContract, type AppInfo, type ModelInfo, type PermissionMode, type ProviderType, type RpcClient, type TerminalSignInStart, type UserSummary } from '@atelier/protocol';
 import { wsTransport, type ReconnectingTransport } from '@atelier/client';
 import { applyLending, changeLending, diagnose, healthCheck, resolveServer, scanNetwork, type FoundServer } from '@atelier/core/device';
 import { knownServers, localNetworkBlocked, networkProgram, openLocalNetworkSettings, terminalApp, type KnownServer } from '../connection/known.ts';
 import { bigBanner, TAGLINE } from '../art/banner.ts';
-import { drawPip, PIP_HELLO, PIP_IDLE } from '../art/mascot.ts';
+import { drawPip, PIP_IDLE } from '../art/mascot.ts';
 import { qrLines } from '../art/qr.ts';
-import { updateConfig, writePrivate, type CliConfig, type Theme } from '../config.ts';
-import { describe, errorCode } from '../connection/connect.ts';
+import { DAB_FRAMES } from '../art/words.ts';
+import { updateConfig, writePrivate, type CliConfig } from '../config.ts';
+import { describe } from '../connection/connect.ts';
 import { cliDevice } from '../daemon/daemon.ts';
 import { connectService, serviceTransport } from '../daemon/client.ts';
 import { credentialStore, tokenName } from '../keychain.ts';
@@ -23,118 +29,143 @@ import type { CliPaths } from '../paths.ts';
 import { USER_AGENT, VERSION } from '../runtime.ts';
 import { colorDepth, Paint, palette, type Shade } from '../style.ts';
 import { openUrl } from '../term.ts';
-import { Choices, TextLine, type Choice } from '../tui/inputs.tsx';
+import { Choices, FilterList, Form, TextLine, type Choice, type ListItem } from '../tui/inputs.tsx';
 import { MODE_WORDS } from '../tui/session.ts';
 import { shortPath } from '../tui/views.tsx';
 import { setupTerminal, terminalName } from '../commands/terminal-setup.ts';
-import { Frame, type Crumb } from './frame.tsx';
+import { Frame, LOCAL_CRUMBS, SERVER_CRUMBS } from './frame.tsx';
 
 export type SetupStart = 'all' | 'login' | 'connect';
 
 type Step =
-  | { s: 'splash' }
-  | { s: 'look' }
-  | { s: 'where' }
+  | { s: 'start' }
   | { s: 'address' }
   | { s: 'checking'; typed: string }
   | { s: 'blocked'; typed: string }
-  | { s: 'first-admin'; serverUrl: string; field: number; values: Record<string, string>; error?: string }
-  | { s: 'method'; error?: string }
-  | { s: 'browser'; start: TerminalSignInStart; opened: boolean }
-  | { s: 'password'; field: number; values: Record<string, string>; error?: string }
-  | { s: 'invite'; field: number; values: Record<string, string>; error?: string }
+  | { s: 'first-admin'; serverUrl: string; error?: string }
+  | { s: 'browser'; start: TerminalSignInStart | null; opened: boolean }
+  | { s: 'password'; error?: string }
+  | { s: 'invite'; error?: string }
   | { s: 'device' }
   | { s: 'local-account'; error?: string }
   | { s: 'providers'; note?: string }
   | { s: 'provider-key'; type: ProviderType; error?: string; busy?: boolean }
   | { s: 'provider-code'; label: string; code: string; url: string }
   | { s: 'model'; models: ModelInfo[] }
-  | { s: 'mode' }
-  | { s: 'terminal'; note?: string }
-  | { s: 'done' };
+  | { s: 'done'; note?: string };
 
-const CRUMB: Partial<Record<Step['s'], Crumb>> = {
-  look: 'look',
-  where: 'connect',
-  address: 'connect',
-  checking: 'connect',
-  blocked: 'connect',
-  'first-admin': 'sign in',
-  method: 'sign in',
-  browser: 'sign in',
-  password: 'sign in',
-  invite: 'sign in',
-  'local-account': 'sign in',
-  device: 'this computer',
-  providers: 'this computer',
-  'provider-key': 'this computer',
-  'provider-code': 'this computer',
-  model: 'model',
-  mode: 'model',
-  terminal: 'terminal',
+/** Which breadcrumb each step is (the last one's length: all done). */
+const SERVER_AT: Partial<Record<Step['s'], number>> = { address: 0, checking: 0, blocked: 0, 'first-admin': 1, browser: 1, password: 1, invite: 1, device: 2, model: 3, done: 4 };
+const LOCAL_AT: Partial<Record<Step['s'], number>> = { 'local-account': 1, providers: 2, 'provider-key': 2, 'provider-code': 2, model: 3, done: 4 };
+
+const MODE_HINTS: Partial<Record<PermissionMode, string>> = {
+  auto: 'A reviewing model lets through what you asked for and asks you about the rest.',
+  default: 'Asks you before every edit and command.',
+  acceptEdits: 'Edits files freely; commands still ask.',
 };
+const MODES = Object.keys(MODE_HINTS) as PermissionMode[];
 
 interface Props {
   paths: CliPaths;
   config: CliConfig;
   start: SetupStart;
   shade: Shade;
+  /** A session starts after it (the first start, or /setup in one), or the command ends. */
+  afterwards: 'session' | 'exit';
   onDone(config: CliConfig | null): void;
 }
 
 const platformName = () => (process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux');
+const hostOf = (url: string) => URL.parse(url)?.host ?? url;
 
-function Splash({ paint, columns, motion, onNext }: { paint: Paint; columns: number; motion: boolean; onNext(): void }) {
-  const { frame } = useAnimation({ interval: 60, isActive: motion && paint.p.depth > 0 });
-  const reveal = motion ? Math.min(1, frame / 28) : 1;
-  const pipFrame = motion ? (frame < 40 ? 'base' : PIP_HELLO[Math.floor((frame - 40) / 3) % PIP_HELLO.length]!) : 'base';
-  useInput((_i, key) => key.return && onNext());
+/** The wordmark painted in from the left once, and the tagline. */
+function Banner({ paint, columns, motion }: { paint: Paint; columns: number; motion: boolean }) {
+  const [painted, setPainted] = useState(!motion || paint.p.depth === 0);
+  const { frame } = useAnimation({ interval: 50, isActive: !painted });
+  if (!painted && frame >= 30) setPainted(true);
+  const reveal = painted ? 1 : Math.min(1, frame / 30);
   return (
-    <Box flexDirection="column" alignItems="center" width={columns} marginTop={1}>
+    <Box flexDirection="column" alignItems="center" marginTop={1}>
       <Text>{bigBanner(paint, columns, reveal).join('\n')}</Text>
-      <Box marginTop={1}>
-        <Text>{drawPip(pipFrame, paint.p.depth).join('\n')}</Text>
-      </Box>
       <Text>{paint.fg('secondary', TAGLINE)}</Text>
-      <Box marginTop={1}>
-        <Text>{paint.fg('muted', reveal >= 1 ? 'press enter to begin' : ' ')}</Text>
-      </Box>
     </Box>
   );
 }
 
-/** One field after another (hidden for passwords and tokens). */
-function Fields({ paint, fields, step, values, onValue, onBack }: { paint: Paint; fields: { name: string; label: string; mask?: boolean; placeholder?: string; initial?: string }[]; step: number; values: Record<string, string>; onValue(name: string, value: string): void; onBack(): void }) {
+/** The code to approve in the browser, with its link and QR code. Enter opens the page; p and i sign in another way. */
+function BrowserSignIn({ paint, start, opened, rows, onOpen, onPassword, onInvite, onBack }: { paint: Paint; start: TerminalSignInStart | null; opened: boolean; rows: number; onOpen(): void; onPassword(): void; onInvite(): void; onBack(): void }) {
+  useInput((input, key) => {
+    if (key.return && start) return onOpen();
+    if (key.escape) return onBack();
+    if (input === 'p') return onPassword();
+    if (input === 'i') return onInvite();
+  });
+  if (!start) return <Text>{paint.fg('muted', 'Asking the server for a code…')}</Text>;
+  const big = [...start.code].map((ch) => (ch === '-' ? ' ' : ch)).join(' ');
+  // The QR code only where the window is tall enough for it and the frame around it.
+  const qr = qrLines(start.verifyUrlComplete, paint.p.shade);
+  const roomForQr = rows >= qr.length + 14;
   return (
-    <Box flexDirection="column">
-      {fields.slice(0, step).map((f) => (
-        <Text key={f.name}>{`${paint.fg('good', '✓')} ${f.label}  ${paint.fg('muted', f.mask ? '•'.repeat(Math.min(12, values[f.name]?.length ?? 0)) : (values[f.name] ?? ''))}`}</Text>
-      ))}
-      {fields[step] && (
-        <Box flexDirection="column" marginTop={step ? 1 : 0}>
-          <Text>{fields[step].label}</Text>
-          <TextLine key={fields[step].name} paint={paint} mask={!!fields[step].mask} placeholder={fields[step].placeholder ?? ''} initial={fields[step].initial ?? values[fields[step].name] ?? ''} onSubmit={(v) => v.trim() && onValue(fields[step]!.name, fields[step]!.mask ? v : v.trim())} onCancel={onBack} />
+    <Box flexDirection="row" gap={3}>
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
+        <Text>{opened ? 'Your browser has the page open. Approve the terminal there if it shows this code:' : 'Open this page where you are signed in, and approve the terminal if it shows this code:'}</Text>
+        <Box marginY={1} borderStyle="round" borderColor={paint.p.depth ? paint.p.accent : undefined} paddingX={2} alignSelf="flex-start">
+          <Text>{paint.bold(paint.fg('accent', big))}</Text>
+        </Box>
+        <Text wrap="truncate-middle">{paint.fg('info', start.verifyUrlComplete)}</Text>
+        <Text>{paint.fg('muted', roomForQr ? 'Or scan the code with your phone. It works for 10 minutes.' : 'The code works for 10 minutes. A taller window shows a QR code for your phone.')}</Text>
+        <Box marginTop={1}>
+          <Text>{`${paint.fg('accent', '◎')} ${paint.fg('secondary', 'Waiting for you to approve it…')}`}</Text>
+        </Box>
+      </Box>
+      {roomForQr && (
+        <Box flexShrink={0}>
+          <Text>{qr.join('\n')}</Text>
         </Box>
       )}
     </Box>
   );
 }
 
-function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
+/** The model list (typing filters it) and the mode beside it (←/→). */
+function ModelStep({ paint, models, local, model, mode, rows, onDone, onBack }: { paint: Paint; models: ModelInfo[]; local: boolean; model: string | undefined; mode: PermissionMode; rows: number; onDone(model: string | undefined, mode: PermissionMode): void; onBack(): void }) {
+  const [chosenMode, setChosenMode] = useState<PermissionMode>(MODES.includes(mode) ? mode : 'auto');
+  useInput((_input, key) => {
+    const i = MODES.indexOf(chosenMode);
+    if (key.leftArrow) setChosenMode(MODES[(i - 1 + MODES.length) % MODES.length]!);
+    if (key.rightArrow) setChosenMode(MODES[(i + 1) % MODES.length]!);
+  });
+  const items: ListItem<string>[] = [
+    { value: '', label: local ? 'The first one that works' : 'My account’s default', aside: local ? 'Atelier picks' : 'the one the browser and the app start with' },
+    ...models.map((m) => ({ value: m.ref, label: m.displayName, group: m.personal ? 'Your models' : m.providerId, ...(m.available === false ? { aside: 'its computer is away' } : {}) })),
+  ];
+  const modes = MODES.map((m) => (m === chosenMode ? paint.bold(paint.fg('accent', `‹ ${MODE_WORDS[m]} ›`)) : paint.fg('muted', `  ${MODE_WORDS[m]}  `))).join(' ');
+  return (
+    <Box flexDirection="column">
+      {models.length === 0 && <Text>{paint.fg('warn', local ? 'No models yet: go back and add a provider, or add one later with atelier setup.' : 'This server has no models for you yet. An admin adds providers in Settings › Admin › Providers.')}</Text>}
+      <FilterList paint={paint} items={items} rows={rows} initial={model ?? ''} onPick={(v) => onDone(v || undefined, chosenMode)} onCancel={onBack} />
+      <Box marginTop={1} flexDirection="column">
+        <Text>{`${paint.bold('Mode')}  ${modes}`}</Text>
+        <Box paddingLeft={6}>
+          <Text>{paint.fg('muted', `${MODE_HINTS[chosenMode]} Shift+Tab switches it in a session.`)}</Text>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Props) {
   const { exit } = useApp();
-  const { columns } = useWindowSize();
+  const { columns, rows } = useWindowSize();
   const [config, setConfig] = useState(initial);
-  const [theme, setTheme] = useState<Theme>(initial.theme === 'plain' ? 'plain' : initial.theme);
-  const depth = theme === 'plain' ? 0 : colorDepth();
-  const paint = new Paint(palette(theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : shade, depth));
-  const [step, setStep] = useState<Step>(start === 'login' && initial.connection?.mode === 'server' ? { s: 'checking', typed: initial.connection.serverUrl } : start === 'connect' ? { s: 'where' } : { s: 'splash' });
+  const depth = initial.theme === 'plain' ? 0 : colorDepth();
+  const paint = new Paint(palette(initial.theme === 'light' ? 'light' : initial.theme === 'dark' ? 'dark' : shade, depth));
+  const [step, setStep] = useState<Step>(start === 'login' && initial.connection?.mode === 'server' ? { s: 'checking', typed: initial.connection.serverUrl } : { s: 'start' });
   const [found, setFound] = useState<FoundServer[]>([]);
   const [scanning, setScanning] = useState(true);
   const [known, setKnown] = useState<KnownServer[]>([]);
   /** macOS refuses this terminal the local network (null: not known yet). */
   const [blocked, setBlocked] = useState<boolean | null>(null);
-  /** On the address step: typing one in instead of picking a known or found server. */
-  const [typing, setTyping] = useState(false);
   const [server, setServer] = useState<{ url: string; info: AppInfo | null } | null>(null);
   const [user, setUser] = useState<UserSummary | null>(null);
   const [mode, setMode] = useState<'server' | 'local' | null>(initial.connection?.mode ?? null);
@@ -143,7 +174,10 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
   const [client, setClient] = useState<RpcClient<AppContract> | null>(null);
   const [lend, setLend] = useState({ scratch: true, home: true });
   const [deviceName] = useState(`${hostname().replace(/\.local$/, '')} · terminal`);
-  const [chosenModel, setChosenModel] = useState<string | undefined>(initial.model);
+  const [chosenModel, setChosenModel] = useState<{ ref: string; name: string } | undefined>(initial.model ? { ref: initial.model, name: initial.model } : undefined);
+  const [note, setNote] = useState<string | null>(null);
+  /** The username tried last: kept when a password was wrong. */
+  const [username, setUsername] = useState(initial.connection?.mode === 'server' ? (initial.connection.username ?? '') : '');
   const { frame } = useAnimation({ interval: 140, isActive: depth > 0 && initial.motion });
 
   const finish = (result: CliConfig | null) => {
@@ -153,7 +187,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
   };
   const save = async (change: (c: CliConfig) => CliConfig) => setConfig(await updateConfig(paths.config, change));
 
-  // Look for servers on the network while the person reads the first screens.
+  // Look for servers on the network while the person reads the first screen.
   // Scanning starts as true; a scan again (after the person allowed the network) sets it first.
   const scan = () =>
     void scanNetwork({ interfaces: networkInterfaces(), fetch, onFound: (s) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s])) })
@@ -220,6 +254,18 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
     setStep({ s: 'device' });
   };
 
+  /** Signing in: the browser code where the server has it, else the password. */
+  const startBrowser = async () => {
+    setStep({ s: 'browser', start: null, opened: false });
+    try {
+      const startInfo = await rpc().call('auth.terminalStart', { deviceName, platform: platformName() });
+      setStep({ s: 'browser', start: startInfo, opened: false });
+    } catch (e) {
+      setStep({ s: 'password', error: describe(e) });
+    }
+  };
+  const signInStep = () => (server?.info?.terminalSignIn ? void startBrowser() : setStep({ s: 'password' }));
+
   const checkServer = async (typed: string) => {
     try {
       const resolved = await resolveServer(typed, healthCheck());
@@ -228,24 +274,24 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
       const info = await rpc().call('app.info', {});
       setServer({ url, info });
       const status = await rpc().call('auth.status', {});
-      if (status.setupRequired) return setStep({ s: 'first-admin', serverUrl: url, field: 0, values: {} });
-      setStep({ s: 'method' });
+      setMode('server');
+      if (status.setupRequired) return setStep({ s: 'first-admin', serverUrl: url });
+      if (info.terminalSignIn) return void startBrowser();
+      setStep({ s: 'password' });
     } catch (e) {
       // Why it failed, in words: no such name, refused, a certificate, or (macOS) the terminal kept off the local network.
       const guess = /^[a-z][a-z\d+.-]*:\/\//i.test(typed) ? typed : `https://${typed}`;
       const problem = await diagnose(guess).catch(() => null);
       if (problem?.localNetwork) return setStep({ s: 'blocked', typed });
       setStep({ s: 'address' });
-      setTyping(true);
       setNote(`Couldn’t reach Atelier at ${typed}: ${problem && problem.code !== 'WEBSOCKET' && !problem.code.startsWith('HTTP_2') ? problem.message : describe(e)}`);
     }
   };
-  const [note, setNote] = useState<string | null>(null);
   useEffect(() => {
     if (step.s === 'checking') void checkServer(step.typed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.s === 'checking' ? step.typed : null]);
-  // While macOS asks (or until the person switches Atelier CLI on), try the server every 2 seconds and go on once it answers.
+  // While macOS asks (or until the person switches it on), try the server every 2 seconds and go on once it answers.
   useEffect(() => {
     if (step.s !== 'blocked') return;
     const typed = step.typed;
@@ -269,18 +315,20 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
   }, [step.s === 'blocked' ? step.typed : null]);
 
   // Browser sign-in: poll until the person approves it in the browser.
+  const pollToken = step.s === 'browser' ? step.start?.pollToken : null;
   useEffect(() => {
-    if (step.s !== 'browser') return;
+    if (step.s !== 'browser' || !step.start) return;
+    const { interval, pollToken: token } = step.start;
     let stop = false;
     const poll = async () => {
       while (!stop) {
-        await new Promise((r) => setTimeout(r, step.start.interval * 1000));
+        await new Promise((r) => setTimeout(r, interval * 1000));
         if (stop) return;
         try {
-          const r = await rpc().call('auth.terminalPoll', { pollToken: step.start.pollToken });
+          const r = await rpc().call('auth.terminalPoll', { pollToken: token });
           if (r.state === 'approved') return void (await signedIn(r));
-          if (r.state === 'denied') return setStep({ s: 'method', error: 'The sign-in was denied in the browser.' });
-          if (r.state === 'expired') return setStep({ s: 'method', error: 'The code expired. Start again.' });
+          if (r.state === 'denied') return setStep({ s: 'password', error: 'The sign-in was turned down in the browser. Sign in with your password, or press Esc and try again.' });
+          if (r.state === 'expired') return void startBrowser();
         } catch {
           // A dropped connection: the next poll goes through the reconnected socket.
         }
@@ -289,17 +337,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
     void poll();
     return () => void (stop = true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step.s === 'browser' ? step.start.pollToken : null]);
-
-  const startBrowser = async () => {
-    try {
-      const startInfo = await rpc().call('auth.terminalStart', { deviceName, platform: platformName() });
-      const opened = openUrl(startInfo.verifyUrlComplete);
-      setStep({ s: 'browser', start: startInfo, opened });
-    } catch (e) {
-      setStep({ s: 'method', error: describe(e) });
-    }
-  };
+  }, [pollToken]);
 
   const toLocal = async () => {
     setMode('local');
@@ -322,109 +360,82 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
     setStep({ s: 'model', models: models.filter((m) => !m.hidden) });
   };
 
-  // Servers to pick from: the one the desktop app uses and the one used before, then those found on the network (by
-  // the address they say people use, when they say one).
-  const candidates: Choice<string>[] = [
-    ...known.map((k) => ({ value: k.url, label: new URL(k.url).host, hint: k.why })),
+  const lendNow = async () => {
+    const device = await cliDevice(paths);
+    if (device.name !== deviceName) await writePrivate(paths.device, `${JSON.stringify({ ...device, name: deviceName }, null, 2)}\n`);
+    await changeLending(paths.lending, server!.url, (current) => applyLending(applyLending(current, { kind: 'scratch', allowed: lend.scratch }), { kind: 'home', allowed: lend.home }));
+    await rpc().call('devices.register', { ...device, name: deviceName }).catch(() => undefined);
+    await toModel();
+  };
+
+  // The first screen's servers: the one the desktop app uses and the one used before, then those found on the network
+  // (by the address they say people use, when they say one).
+  const servers: Choice<string>[] = [
+    ...known.map((k) => ({ value: k.url, label: hostOf(k.url), aside: k.why })),
     ...found
       .filter((f) => !known.some((k) => k.url === (f.publicUrl ?? f.url)))
-      .map((f) => ({ value: f.publicUrl ?? f.url, label: f.publicUrl ? new URL(f.publicUrl).host : f.host, hint: `Atelier ${f.version ?? ''} on your network${f.publicUrl ? `, at ${f.host}` : ''}` })),
+      .map((f) => ({ value: f.publicUrl ?? f.url, label: f.publicUrl ? hostOf(f.publicUrl) : f.host, aside: `Atelier ${f.version ?? ''} on your network${f.publicUrl ? `, at ${f.host}` : ''}` })),
   ];
-  const crumb = CRUMB[step.s] ?? null;
-  const frameKeys = 'enter continue · esc back · ctrl+c quit';
-  const pip = drawPip(initial.motion && depth ? PIP_IDLE[frame % PIP_IDLE.length]! : 'base', depth);
+  const crumbs = mode === 'local' ? LOCAL_CRUMBS : SERVER_CRUMBS;
+  const at = (mode === 'local' ? LOCAL_AT : SERVER_AT)[step.s];
+  const spinner = paint.fg('accent', DAB_FRAMES[frame % DAB_FRAMES.length]!);
+  const showPip = columns >= 96 && step.s !== 'browser';
+  const pip = showPip ? drawPip(initial.motion && depth ? PIP_IDLE[frame % PIP_IDLE.length]! : 'base', depth) : null;
+  const keys = (extra = 'enter continue') => `${extra} · esc back · ctrl+c quit`;
 
-  if (step.s === 'splash') return <Splash paint={paint} columns={columns} motion={initial.motion} onNext={() => setStep({ s: 'look' })} />;
-
-  const body = (() => {
+  const body = ((): { title: string; keys: string; content: React.ReactNode } => {
     switch (step.s) {
-      case 'look': {
-        const choices: Choice<Theme>[] = [
-          { value: 'auto', label: 'Match the terminal', hint: `it looks ${shade} here` },
-          { value: 'dark', label: 'Dark' },
-          { value: 'light', label: 'Light' },
-          { value: 'plain', label: 'No colour', hint: 'for screen readers and plain terminals' },
-        ];
-        const sample = new Paint(palette(theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : shade, theme === 'plain' ? 0 : colorDepth()));
+      case 'start': {
+        const status = scanning
+          ? `${spinner} ${paint.fg('muted', 'Looking for Atelier servers on your network…')}`
+          : blocked
+            ? paint.fg('warn', `macOS hasn’t let “${networkProgram()}” reach your local network yet: choose Allow when it asks, or switch it on under System Settings › Privacy & Security › Local Network.`)
+            : found.length
+              ? paint.fg('muted', `Found ${found.length === 1 ? 'one server' : `${found.length} servers`} on your network.`)
+              : paint.fg('muted', 'No server found on your network; one elsewhere works too.');
         return {
-          title: 'How should it look?',
+          title: 'Where should Atelier run?',
+          keys: '↑/↓ choose · enter continue · ctrl+c quit',
           content: (
-            <Box flexDirection="row" gap={4}>
-              <Choices paint={paint} choices={choices} initial={['auto', 'dark', 'light', 'plain'].indexOf(theme)} onMove={(i) => setTheme(choices[i]!.value)} onPick={(t) => void save((c) => ({ ...c, theme: t })).then(() => setStep({ s: 'where' }))} onCancel={() => setStep({ s: 'splash' })} />
-              <Box flexDirection="column">
-                <Text>{`${sample.fg('accent', '◆')} I'll slow the wave down.`}</Text>
-                <Text>{`${sample.fg('good', '●')} ${sample.bold('Edited')} shaders/water.fsh ${sample.fg('added', '+1')} ${sample.fg('removed', '−1')}`}</Text>
-                <Text>{sample.bg(sample.p.removedBg, sample.fg('removed', '41 - ') + 'float t = time * 2.0;')}</Text>
-                <Text>{sample.bg(sample.p.addedBg, sample.fg('added', '41 + ') + 'float t = time * 0.8;')}</Text>
+            <Box flexDirection="column">
+              <Text>{paint.fg('secondary', 'With an Atelier server, models and keys are set up once and your sessions follow you to the browser and the desktop app. This computer lends the folders you open.')}</Text>
+              <Box marginY={1}>
+                <Choices
+                  paint={paint}
+                  choices={[
+                    ...servers,
+                    { value: 'other', label: servers.length ? 'Another server…' : 'An Atelier server…', aside: 'type its address' },
+                    { value: 'local', label: 'Only this computer', aside: 'your own models and keys, kept here' },
+                  ]}
+                  onPick={(v) => (v === 'other' ? (setNote(null), setStep({ s: 'address' })) : v === 'local' ? void toLocal().catch((e: unknown) => setNote(describe(e))) : (setNote(null), setStep({ s: 'checking', typed: v })))}
+                />
               </Box>
+              <Text>{status}</Text>
             </Box>
           ),
         };
       }
-      case 'where':
-        return {
-          title: 'Where should Atelier run?',
-          content: (
-            <Box flexDirection="column">
-              <Choices
-                paint={paint}
-                showHints="all"
-                choices={[
-                  { value: 'server', label: 'An Atelier server  (recommended)', hint: 'Models and keys are set up once, on the server. Sessions follow you to the browser, the desktop app and your phone. This computer lends the folders you open.' },
-                  { value: 'local', label: 'Only this computer', hint: 'Your own models and keys, kept here. Sessions stay in the terminal.' },
-                ]}
-                onPick={(v) => (v === 'server' ? (setMode('server'), setStep({ s: 'address' })) : void toLocal().catch((e: unknown) => setNote(describe(e))))}
-                onCancel={() => setStep({ s: 'look' })}
-              />
-              <Box marginTop={1}>
-                <Text>
-                  {paint.fg(
-                    'muted',
-                    found.length || known.length
-                      ? `${known.length ? `${known.map((k) => `${paint.fg('good', '●')} ${new URL(k.url).host} (${k.why})`).join('   ')}   ` : ''}${found.length ? `Found on your network: ${found.map((f) => `${paint.fg('good', '●')} ${f.publicUrl ? new URL(f.publicUrl).host : f.host}${f.version ? ` (${f.version})` : ''}`).join('   ')}` : ''}`
-                      : scanning
-                        ? 'Looking for servers on your network…'
-                        : blocked
-                          ? paint.fg('warn', `macOS hasn’t let “${networkProgram()}” reach your local network yet: choose Allow when macOS asks, or switch it on under System Settings › Privacy & Security › Local Network.`)
-                          : 'No server found on your network (one elsewhere works too).',
-                  )}
-                </Text>
-              </Box>
-            </Box>
-          ),
-        };
       case 'address':
         return {
           title: 'Which server?',
+          keys: keys(),
           content: (
             <Box flexDirection="column">
               {note && <Text>{paint.fg('bad', note)}</Text>}
-              {candidates.length > 0 && !typing && (
-                <Choices
-                  paint={paint}
-                  numbered
-                  showHints="all"
-                  choices={[...candidates, { value: '', label: 'Another address…' }]}
-                  onPick={(v) => (v ? (setNote(null), setStep({ s: 'checking', typed: v })) : setTyping(true))}
-                  onCancel={() => setStep({ s: 'where' })}
-                />
-              )}
-              {(candidates.length === 0 || typing) && (
-                <>
-                  <Text>The address you open it at in the browser:</Text>
-                  <TextLine paint={paint} placeholder="atelier.example.com" initial={initial.connection?.mode === 'server' ? initial.connection.serverUrl : ''} onSubmit={(v) => v.trim() && (setNote(null), setStep({ s: 'checking', typed: v.trim() }))} onCancel={() => (candidates.length ? setTyping(false) : setStep({ s: 'where' }))} />
-                  <Text>{paint.fg('muted', 'https:// is tried first; http:// only for addresses on your own network.')}</Text>
-                </>
-              )}
-              {scanning && <Text>{paint.fg('faint', 'Still looking on your network…')}</Text>}
+              <Text>The address you open it at in the browser:</Text>
+              <TextLine paint={paint} placeholder="atelier.example.com" initial={initial.connection?.mode === 'server' ? initial.connection.serverUrl : ''} onSubmit={(v) => v.trim() && (setNote(null), setStep({ s: 'checking', typed: v.trim() }))} onCancel={() => setStep({ s: 'start' })} />
+              <Text>{paint.fg('muted', 'https:// is tried first; http:// only for addresses on your own network.')}</Text>
             </Box>
           ),
         };
+      case 'checking':
+        return { title: 'Which server?', keys: 'ctrl+c quit', content: <Text>{`${spinner} ${paint.fg('muted', `Checking ${hostOf(step.typed)}…`)}`}</Text> };
       case 'blocked': {
         const program = networkProgram();
-        const host = /^[a-z][a-z\d+.-]*:\/\//i.test(step.typed) ? new URL(step.typed).host : step.typed;
+        const host = hostOf(/^[a-z][a-z\d+.-]*:\/\//i.test(step.typed) ? step.typed : `https://${step.typed}`);
         return {
           title: `Allow “${program}” on your local network`,
+          keys: keys('enter pick'),
           content: (
             <Box flexDirection="column">
               <Text>{`${host} is on your local network, and macOS asks each program once before it reaches devices there. Atelier runs as “${program}”, which asks for itself: what ${terminalApp()} may do doesn’t count for it.`}</Text>
@@ -432,7 +443,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                 <Text>{`macOS asks: Allow “${program}” to find devices on local networks? Choose ${paint.bold('Allow')}, and this goes on by itself.`}</Text>
                 <Text>{`No question, or you chose Don’t Allow? Switch ${paint.bold(`“${program}”`)} on under ${paint.bold('System Settings › Privacy & Security › Local Network')}.`}</Text>
               </Box>
-              <Text>{paint.fg('muted', `Trying ${host} again every 2 seconds…`)}</Text>
+              <Text>{`${spinner} ${paint.fg('muted', `Trying ${host} again every 2 seconds…`)}`}</Text>
               <Box marginTop={1}>
                 <Choices
                   paint={paint}
@@ -440,190 +451,149 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                     { value: 'open', label: 'Open the Local Network settings' },
                     { value: 'other', label: 'Another address' },
                   ]}
-                  onPick={(v) => (v === 'open' ? openLocalNetworkSettings() : (setTyping(true), setStep({ s: 'address' })))}
-                  onCancel={() => setStep({ s: 'address' })}
+                  onPick={(v) => (v === 'open' ? openLocalNetworkSettings() : setStep({ s: 'address' }))}
+                  onCancel={() => setStep({ s: 'start' })}
                 />
               </Box>
             </Box>
           ),
         };
       }
-      case 'checking':
-        return { title: 'Checking the server…', content: <Text>{paint.fg('muted', `Asking ${step.typed} whether it is Atelier…`)}</Text> };
-      case 'first-admin': {
-        const fields = [
-          { name: 'token', label: 'The setup token from the server’s log', mask: true },
-          { name: 'name', label: 'Your name' },
-          { name: 'username', label: 'Username', placeholder: 'lowercase, like ada' },
-          { name: 'password', label: 'Password (at least 10 characters)', mask: true },
-        ];
+      case 'first-admin':
         return {
-          title: `${new URL(step.serverUrl).host} isn’t set up yet`,
+          title: `${hostOf(step.serverUrl)} isn’t set up yet`,
+          keys: keys('tab next field · enter continue'),
           content: (
             <Box flexDirection="column">
-              <Text>{paint.fg('muted', 'You make its first account here, the admin. The setup token is printed in the server’s log (`docker compose logs atelier`).')}</Text>
+              <Text>{paint.fg('muted', 'You make its first account here, the admin. The setup token is printed in the server’s log (docker compose logs atelier).')}</Text>
               {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
-              <Fields
-                paint={paint}
-                fields={fields}
-                step={step.field}
-                values={step.values}
-                onBack={() => setStep({ s: 'address' })}
-                onValue={(name, value) => {
-                  const values = { ...step.values, [name]: value };
-                  if (step.field + 1 < fields.length) return setStep({ ...step, field: step.field + 1, values, error: undefined });
-                  void rpc()
-                    .call('auth.setup', { setupToken: values.token!, name: values.name!, username: values.username!, password: values.password!, clientKind: serverKind() })
-                    .then(signedIn)
-                    .catch((e: unknown) => setStep({ ...step, field: errorCode(e) === 'invalid_setup_token' ? 0 : 2, values, error: describe(e) }));
-                }}
-              />
-            </Box>
-          ),
-        };
-      }
-      case 'method': {
-        const browser = !!server?.info?.terminalSignIn;
-        return {
-          title: `Sign in to ${server ? new URL(server.url).host : 'the server'}`,
-          content: (
-            <Box flexDirection="column">
-              {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
-              {!browser && <Text>{paint.fg('muted', `This server (Atelier ${server?.info?.version ?? 'older'}) signs terminals in with a password only. Version ${VERSION} adds signing in through the browser.`)}</Text>}
-              <Choices
-                paint={paint}
-                showHints="all"
-                choices={[
-                  ...(browser ? [{ value: 'browser', label: 'In the browser  (recommended)', hint: 'Approve this terminal where you are signed in: a password, a passkey or single sign-on all work.' }] : []),
-                  { value: 'password', label: 'With my username and password' },
-                  { value: 'invite', label: 'I have an invite code', hint: 'makes your account' },
-                ]}
-                onPick={(v) => (v === 'browser' ? void startBrowser() : v === 'password' ? setStep({ s: 'password', field: 0, values: {} }) : setStep({ s: 'invite', field: 0, values: {} }))}
-                onCancel={() => setStep({ s: 'address' })}
-              />
-            </Box>
-          ),
-        };
-      }
-      case 'browser': {
-        const code = step.start.code;
-        const big = [...code].map((ch) => (ch === '-' ? ' ' : ch)).join(' ');
-        return {
-          title: 'Approve this terminal in the browser',
-          content: (
-            <Box flexDirection="row" gap={3}>
-              <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
-                <Text>{step.opened ? 'Your browser opened the page. Check that it shows this code:' : 'Open this page where you are signed in:'}</Text>
-                <Text>{paint.fg('info', step.start.verifyUrlComplete)}</Text>
-                <Box marginY={1} borderStyle="round" borderColor={paint.p.depth ? paint.p.accent : undefined} paddingX={2}>
-                  <Text>{paint.bold(paint.fg('accent', big))}</Text>
-                </Box>
-                <Text>{paint.fg('muted', 'Or scan it with your phone. The code works for 10 minutes.')}</Text>
-                <Text>{`${paint.fg('accent', '◎')} ${paint.fg('secondary', 'Waiting for you to approve it…')}`}</Text>
+              <Box marginTop={1}>
+                <Form
+                  paint={paint}
+                  fields={[
+                    { name: 'token', label: 'Setup token', mask: true },
+                    { name: 'name', label: 'Your name' },
+                    { name: 'username', label: 'Username', placeholder: 'lowercase, like ada' },
+                    { name: 'password', label: 'Password', mask: true, placeholder: 'at least 10 characters' },
+                  ]}
+                  onCancel={() => setStep({ s: 'start' })}
+                  onSubmit={(v) =>
+                    void rpc()
+                      .call('auth.setup', { setupToken: v.token!, name: v.name!, username: v.username!.toLowerCase(), password: v.password!, clientKind: serverKind() })
+                      .then(signedIn)
+                      .catch((e: unknown) => setStep({ s: 'first-admin', serverUrl: step.serverUrl, error: describe(e) }))
+                  }
+                />
               </Box>
-              <Text>{qrLines(step.start.verifyUrlComplete, paint.p.shade).join('\n')}</Text>
             </Box>
           ),
         };
-      }
-      case 'password': {
-        const fields = [
-          { name: 'username', label: 'Username', initial: initial.connection?.mode === 'server' ? (initial.connection.username ?? '') : '' },
-          { name: 'password', label: 'Password', mask: true },
-        ];
+      case 'browser':
         return {
-          title: `Sign in to ${server ? new URL(server.url).host : 'the server'}`,
+          title: `Sign in to ${server ? hostOf(server.url) : 'the server'}`,
+          keys: 'enter open the page · p password instead · i invite code · esc back',
+          content: (
+            <BrowserSignIn
+              paint={paint}
+              start={step.start}
+              opened={step.opened}
+              rows={rows}
+              onOpen={() => step.start && setStep({ ...step, opened: openUrl(step.start.verifyUrlComplete) })}
+              onPassword={() => setStep({ s: 'password' })}
+              onInvite={() => setStep({ s: 'invite' })}
+              onBack={() => setStep({ s: 'start' })}
+            />
+          ),
+        };
+      case 'password': {
+        return {
+          title: `Sign in to ${server ? hostOf(server.url) : 'the server'}`,
+          keys: keys('tab next field · enter sign in'),
           content: (
             <Box flexDirection="column">
               {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
-              <Fields
-                paint={paint}
-                fields={fields}
-                step={step.field}
-                values={step.values}
-                onBack={() => setStep({ s: 'method' })}
-                onValue={(name, value) => {
-                  const values = { ...step.values, [name]: value };
-                  if (step.field + 1 < fields.length) return setStep({ ...step, field: step.field + 1, values, error: undefined });
-                  void rpc()
-                    .call('auth.login', { username: values.username!.toLowerCase(), password: values.password!, clientKind: serverKind() })
-                    .then(signedIn)
-                    .catch((e: unknown) => setStep({ s: 'password', field: 1, values, error: describe(e) }));
-                }}
-              />
+              {!server?.info?.terminalSignIn && <Text>{paint.fg('muted', `This server (Atelier ${server?.info?.version ?? 'older'}) signs terminals in with a password. From ${VERSION} on, it can also approve them in the browser.`)}</Text>}
+              <Box marginTop={1}>
+                <Form
+                  key={step.error ?? 'form'}
+                  paint={paint}
+                  fields={[
+                    { name: 'username', label: 'Username', initial: username },
+                    { name: 'password', label: 'Password', mask: true },
+                  ]}
+                  extra={{ label: 'I have an invite code instead', onPick: () => setStep({ s: 'invite' }) }}
+                  onCancel={() => (server?.info?.terminalSignIn ? void startBrowser() : setStep({ s: 'start' }))}
+                  onSubmit={(v) => {
+                    setUsername(v.username!);
+                    void rpc()
+                      .call('auth.login', { username: v.username!.toLowerCase(), password: v.password!, clientKind: serverKind() })
+                      .then(signedIn)
+                      .catch((e: unknown) => setStep({ s: 'password', error: describe(e) }));
+                  }}
+                />
+              </Box>
             </Box>
           ),
         };
       }
-      case 'invite': {
-        const fields = [
-          { name: 'invite', label: 'Invite code', placeholder: 'XXXX-XXXX-XXXX-XXXX' },
-          { name: 'name', label: 'Your name' },
-          { name: 'username', label: 'Username' },
-          { name: 'password', label: 'Password (at least 10 characters)', mask: true },
-        ];
+      case 'invite':
         return {
           title: 'Make your account',
+          keys: keys('tab next field · enter continue'),
           content: (
             <Box flexDirection="column">
               {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
-              <Fields
+              <Form
+                key={step.error ?? 'form'}
                 paint={paint}
-                fields={fields}
-                step={step.field}
-                values={step.values}
-                onBack={() => setStep({ s: 'method' })}
-                onValue={(name, value) => {
-                  const values = { ...step.values, [name]: value };
-                  if (step.field + 1 < fields.length) return setStep({ ...step, field: step.field + 1, values, error: undefined });
+                fields={[
+                  { name: 'invite', label: 'Invite code', placeholder: 'XXXX-XXXX-XXXX-XXXX' },
+                  { name: 'name', label: 'Your name' },
+                  { name: 'username', label: 'Username', placeholder: 'lowercase, like ada' },
+                  { name: 'password', label: 'Password', mask: true, placeholder: 'at least 10 characters' },
+                ]}
+                onCancel={() => signInStep()}
+                onSubmit={(v) =>
                   void rpc()
-                    .call('auth.acceptInvite', { invite: values.invite!, name: values.name!, username: values.username!.toLowerCase(), password: values.password!, clientKind: serverKind() })
+                    .call('auth.acceptInvite', { invite: v.invite!, name: v.name!, username: v.username!.toLowerCase(), password: v.password!, clientKind: serverKind() })
                     .then(signedIn)
-                    .catch((e: unknown) => setStep({ s: 'invite', field: 0, values, error: describe(e) }));
-                }}
+                    .catch((e: unknown) => setStep({ s: 'invite', error: describe(e) }))
+                }
               />
             </Box>
           ),
         };
-      }
       case 'device':
         return {
           title: 'What this computer lends the server',
+          keys: 'space switch · enter continue · esc back',
           content: (
             <Box flexDirection="column">
-              <Text>{`Signed in as ${paint.bold(user?.name ?? '')}. This computer shows on the server as ${paint.bold(deviceName)}.`}</Text>
-              <Box marginTop={1} flexDirection="column">
+              <Text>{`Signed in as ${paint.bold(user?.name ?? '')}.`}</Text>
+              <Text>{`The server lists this computer as ${paint.bold(deviceName)}.`}</Text>
+              <Box marginY={1}>
                 <Choices
                   paint={paint}
-                  showHints="all"
+                  numbered={false}
+                  initial={1}
                   choices={[
-                    { value: 'scratch', label: `${lend.scratch ? '☒' : '☐'} New empty folders here`, hint: 'for sessions started without a folder (the browser’s “No folder”)' },
-                    { value: 'home', label: `${lend.home ? '☒' : '☐'} Your skills and instructions`, hint: 'from ~/.claude and ~/.atelier, as in the desktop app' },
-                    { value: 'go', label: 'Continue' },
+                    { value: 'folders', label: `${paint.fg('good', '[✓]')} Folders you open in the terminal`, aside: 'asked once for each', disabled: true },
+                    { value: 'scratch', label: `${lend.scratch ? paint.fg('good', '[✓]') : '[ ]'} New empty folders`, aside: 'for sessions started without one' },
+                    { value: 'home', label: `${lend.home ? paint.fg('good', '[✓]') : '[ ]'} Your skills and instructions`, aside: '~/.claude and ~/.atelier' },
                   ]}
-                  initial={2}
-                  onPick={(v) => {
-                    if (v === 'scratch' || v === 'home') return setLend({ ...lend, [v]: !lend[v] });
-                    void (async () => {
-                      const device = await cliDevice(paths);
-                      if (device.name !== deviceName) await writePrivate(paths.device, `${JSON.stringify({ ...device, name: deviceName }, null, 2)}\n`);
-                      await changeLending(paths.lending, server!.url, (current) => applyLending(applyLending(current, { kind: 'scratch', allowed: lend.scratch }), { kind: 'home', allowed: lend.home }));
-                      await rpc().call('devices.register', { ...device, name: deviceName }).catch(() => undefined);
-                      await toModel();
-                    })().catch((e: unknown) => setNote(describe(e)));
-                  }}
-                  onCancel={() => setStep({ s: 'method' })}
+                  onToggle={(v) => (v === 'scratch' || v === 'home') && setLend({ ...lend, [v]: !lend[v] })}
+                  onPick={() => void lendNow().catch((e: unknown) => setNote(describe(e)))}
+                  onCancel={() => signInStep()}
                 />
               </Box>
-              <Box marginTop={1}>
-                <Text>{paint.fg('warn', 'Folders you open in the terminal let your server’s sessions run commands as you on this computer. Only connect to a server you trust like that.')}</Text>
-              </Box>
+              <Text>{paint.fg('warn', 'Folders you open let your server’s sessions run commands as you on this computer. Only connect to a server you trust like that.')}</Text>
             </Box>
           ),
         };
       case 'local-account':
         return {
           title: 'What should Atelier call you?',
+          keys: keys(),
           content: (
             <Box flexDirection="column">
               {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
@@ -637,18 +607,19 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                     .then((r) => (setUser(r.user), setStep({ s: 'providers' })))
                     .catch((e: unknown) => setStep({ s: 'local-account', error: describe(e) }))
                 }
-                onCancel={() => setStep({ s: 'where' })}
+                onCancel={() => setStep({ s: 'start' })}
               />
               <Text>{paint.fg('muted', 'Everything stays on this computer, in ~/.atelier/cli.')}</Text>
             </Box>
           ),
         };
       case 'providers':
-        return { title: 'Which models?', content: <Providers paint={paint} rpc={client!} note={step.note} onAdd={(type) => setStep({ s: 'provider-key', type })} onCode={(label, code, url) => setStep({ s: 'provider-code', label, code, url })} onNext={() => void toModel()} onBack={() => setStep({ s: 'where' })} /> };
+        return { title: 'Which models?', keys: keys(), content: <Providers paint={paint} rpc={client!} note={step.note} onAdd={(type) => setStep({ s: 'provider-key', type })} onCode={(label, code, url) => setStep({ s: 'provider-code', label, code, url })} onNext={() => void toModel()} onBack={() => setStep({ s: 'start' })} /> };
       case 'provider-key': {
         const keyless = step.type === 'ollama' || step.type === 'llamacpp' || step.type === 'openai-compatible';
         return {
           title: `Add ${PROVIDER_LABELS[step.type]}`,
+          keys: keys(),
           content: (
             <Box flexDirection="column">
               {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
@@ -673,7 +644,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                 }}
                 onCancel={() => setStep({ s: 'providers' })}
               />
-              {step.busy && <Text>{paint.fg('muted', 'Checking it…')}</Text>}
+              {step.busy && <Text>{`${spinner} ${paint.fg('muted', 'Checking it…')}`}</Text>}
             </Box>
           ),
         };
@@ -681,100 +652,91 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
       case 'provider-code':
         return {
           title: `Sign in to ${step.label}`,
+          keys: 'esc back · ctrl+c quit',
           content: (
             <Box flexDirection="column">
               <Text>{`Open ${paint.fg('info', step.url)} and enter`}</Text>
-              <Box marginY={1} borderStyle="round" borderColor={paint.p.depth ? paint.p.accent : undefined} paddingX={2}>
+              <Box marginY={1} borderStyle="round" borderColor={paint.p.depth ? paint.p.accent : undefined} paddingX={2} alignSelf="flex-start">
                 <Text>{paint.bold(paint.fg('accent', step.code))}</Text>
               </Box>
-              <Text>{paint.fg('muted', 'Waiting for the sign-in… (esc goes back)')}</Text>
+              <Text>{`${spinner} ${paint.fg('muted', 'Waiting for the sign-in…')}`}</Text>
               <CodeWait rpc={client!} label={step.label} onDone={(n) => setStep({ s: 'providers', note: n })} />
             </Box>
           ),
         };
-      case 'model': {
-        const items: Choice<string>[] = [{ value: '', label: 'My account’s default', hint: 'what the browser and the app start Code sessions with' }, ...step.models.slice(0, 30).map((m) => ({ value: m.ref, label: m.displayName, hint: m.ref }))];
+      case 'model':
         return {
-          title: 'Which model should new sessions use?',
-          content: step.models.length ? (
-            <Choices paint={paint} choices={items} numbered={false} initial={Math.max(0, items.findIndex((i) => i.value === chosenModel))} onPick={(v) => void save((c) => ({ ...c, model: v || undefined })).then(() => (setChosenModel(v || undefined), setStep({ s: 'mode' })))} onCancel={() => setStep(mode === 'local' ? { s: 'providers' } : { s: 'device' })} />
-          ) : (
-            <Box flexDirection="column">
-              <Text>{paint.fg('warn', mode === 'local' ? 'No models yet: add a provider first.' : 'This server has no models for you yet. An admin adds providers in Settings › Admin › Providers.')}</Text>
-              <Choices paint={paint} choices={[{ value: 'go', label: 'Continue anyway' }, { value: 'back', label: 'Back' }]} onPick={(v) => (v === 'go' ? setStep({ s: 'mode' }) : setStep(mode === 'local' ? { s: 'providers' } : { s: 'device' }))} />
-            </Box>
-          ),
-        };
-      }
-      case 'mode':
-        return {
-          title: 'How much should it ask?',
+          title: 'Which model, and how much should it ask?',
+          keys: '↑/↓ model · ←/→ mode · type to filter · enter continue · esc back',
           content: (
-            <Choices
+            <ModelStep
               paint={paint}
-              showHints="all"
-              choices={(['auto', 'default', 'acceptEdits'] as PermissionMode[]).map((m) => ({
-                value: m,
-                label: `${MODE_WORDS[m]}${m === 'auto' ? '  (recommended)' : ''}`,
-                hint: m === 'auto' ? 'A reviewing model lets through what you asked for and asks you about the rest.' : m === 'default' ? 'Asks you before every edit and command.' : 'Edits files freely; commands still ask.',
-              }))}
-              onPick={(m) => void save((c) => ({ ...c, permissionMode: m })).then(() => setStep({ s: 'terminal' }))}
-              onCancel={() => setStep({ s: 'model', models: [] })}
+              models={step.models}
+              local={mode === 'local'}
+              model={chosenModel?.ref}
+              mode={config.permissionMode ?? 'auto'}
+              // The frame, the title and the mode take about 20 rows.
+              rows={Math.max(4, Math.min(12, rows - 22))}
+              onBack={() => setStep(mode === 'local' ? { s: 'providers' } : { s: 'device' })}
+              onDone={(m, permissionMode) =>
+                void save((c) => ({ ...c, model: m, permissionMode })).then(() => {
+                  setChosenModel(m ? { ref: m, name: step.models.find((x) => x.ref === m)?.displayName ?? m } : undefined);
+                  setStep({ s: 'done' });
+                })
+              }
             />
           ),
         };
-      case 'terminal': {
-        const name = terminalName();
+      case 'done': {
+        const term = terminalName();
+        const modelName = chosenModel ? chosenModel.name : mode === 'local' ? 'The first model that works' : 'Your account’s default model';
         return {
-          title: 'Your terminal',
+          title: 'All set',
+          keys: 'enter pick · esc back · ctrl+c quit',
           content: (
             <Box flexDirection="column">
-              {step.note && <Text>{paint.fg('good', step.note)}</Text>}
-              <Text>{`New lines: Alt+Enter and Ctrl+J work everywhere. ${name.shiftEnter === 'native' ? `${name.label} sends Shift+Enter as it is.` : name.shiftEnter === 'setup' ? `Shift+Enter needs a setting in ${name.label}.` : ''}`}</Text>
+              <Text>{`${paint.fg('good', '✓')} ${mode === 'server' ? `Connected to ${server ? hostOf(server.url) : ''} as ${user?.name ?? ''}` : `Running on this computer, as ${user?.name ?? 'you'}`}`}</Text>
+              <Text>{`${paint.fg('good', '✓')} ${modelName} · ${MODE_WORDS[config.permissionMode ?? 'auto']}`}</Text>
+              {step.note ? <Text>{`${paint.fg('good', '✓')} ${step.note}`}</Text> : term.shiftEnter === 'setup' && <Text>{paint.fg('muted', `New lines: Alt+Enter or Ctrl+J. Shift+Enter needs a setting in ${term.label}.`)}</Text>}
               <Box marginTop={1}>
                 <Choices
                   paint={paint}
+                  numbered={false}
                   choices={[
-                    ...(name.shiftEnter === 'setup' ? [{ value: 'setup', label: `Set up Shift+Enter in ${name.label}` }] : []),
-                    { value: 'go', label: 'Continue' },
+                    afterwards === 'session' ? { value: 'go', label: `Start in ${shortPath(process.cwd())}` } : { value: 'go', label: 'Done', aside: `run ${paint.fg('accent', 'atelier')} in a project folder; /help says what you can do` },
+                    ...(term.shiftEnter === 'setup' && !step.note ? [{ value: 'shift', label: `Set up Shift+Enter in ${term.label}` }] : []),
+                    ...(afterwards === 'session' ? [{ value: 'quit', label: 'Quit for now', aside: 'everything is saved' }] : []),
                   ]}
-                  onPick={(v) => (v === 'setup' ? void setupTerminal().then((n) => setStep({ s: 'terminal', note: n })) : setStep({ s: 'done' }))}
-                  onCancel={() => setStep({ s: 'mode' })}
+                  onPick={(v) => (v === 'shift' ? void setupTerminal().then((n) => setStep({ s: 'done', note: n })) : finish(v === 'go' ? config : null))}
+                  onCancel={() => void toModel()}
                 />
               </Box>
             </Box>
           ),
         };
       }
-      case 'done':
-        return {
-          title: 'All set',
-          content: (
-            <Box flexDirection="column">
-              <Text>{`${paint.fg('good', '✓')} ${mode === 'server' ? `Connected to ${server ? new URL(server.url).host : ''} as ${user?.name ?? ''}` : `Running on this computer, as ${user?.name ?? 'you'}`}`}</Text>
-              <Text>{`${paint.fg('good', '✓')} Model: ${chosenModel ?? 'your account’s default'}`}</Text>
-              <Text>{`${paint.fg('good', '✓')} Mode: ${MODE_WORDS[config.permissionMode ?? 'auto']}`}</Text>
-              <Box marginTop={1}>
-                <Text>{`Run ${paint.fg('accent', 'atelier')} in a project folder. ${paint.fg('muted', '/help shows what you can do.')}`}</Text>
-              </Box>
-              <Choices paint={paint} choices={[{ value: 'start', label: `Start now in ${shortPath(process.cwd())}` }, { value: 'quit', label: 'Done' }]} onPick={(v) => finish(v === 'start' ? config : { ...config, connection: config.connection })} />
-            </Box>
-          ),
-        };
       default:
-        return { title: '', content: null };
+        return { title: '', keys: '', content: null };
     }
   })();
 
+  const first = step.s === 'start';
   return (
-    <Frame paint={paint} columns={columns} crumb={crumb} title={body.title} keys={frameKeys}>
-      <Box flexDirection="row" gap={2}>
-        {/* Keyed by the step, so a list's cursor starts fresh on each one. */}
-        <Box key={step.s} flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
-          {note && step.s !== 'address' && <Text>{paint.fg('bad', note)}</Text>}
-          {body.content}
-        </Box>
-        {columns >= 96 && step.s !== 'browser' && step.s !== 'look' && <Text>{pip.join('\n')}</Text>}
+    <Frame
+      paint={paint}
+      columns={columns}
+      crumbs={first ? undefined : crumbs}
+      at={at ?? 0}
+      title={body.title}
+      keys={body.keys}
+      // The wordmark on the first screen of a first setup, where there is room for it.
+      top={first && start === 'all' && rows >= 30 ? <Banner paint={paint} columns={columns} motion={initial.motion} /> : undefined}
+      pip={pip}
+    >
+      {/* Keyed by the step, so a list's cursor starts fresh on each one. */}
+      <Box key={step.s} flexDirection="column">
+        {note && step.s !== 'address' && <Text>{paint.fg('bad', note)}</Text>}
+        {body.content}
       </Box>
     </Frame>
   );
@@ -859,10 +821,10 @@ function CodeWait({ rpc, label, onDone }: { rpc: RpcClient<AppContract>; label: 
   return null;
 }
 
-export function runSetup(paths: CliPaths, config: CliConfig, start: SetupStart, shade: Shade): Promise<CliConfig | null> {
+export function runSetup(paths: CliPaths, config: CliConfig, start: SetupStart, shade: Shade, afterwards: 'session' | 'exit' = 'exit'): Promise<CliConfig | null> {
   return new Promise((resolve) => {
     let result: CliConfig | null = null;
-    const instance = render(<Wizard paths={paths} config={config} start={start} shade={shade} onDone={(c) => (result = c)} />, { alternateScreen: true, exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' } });
+    const instance = render(<Wizard paths={paths} config={config} start={start} shade={shade} afterwards={afterwards} onDone={(c) => (result = c)} />, { alternateScreen: true, exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' } });
     void instance.waitUntilExit().then(() => resolve(result));
   });
 }

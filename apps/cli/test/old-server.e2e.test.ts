@@ -48,37 +48,23 @@ it.skipIf(!SERVER || !canRun())('signs in to an older server with the password a
 
   const s = await openScreen({ cwd: project, env: env(), command: cliCommand() });
   try {
-    await s.waitFor('press enter to begin', 60_000);
+    await s.waitFor('Where should Atelier run?', 60_000);
+    await s.select(/^(Another server|An Atelier server)/);
     await s.press('enter');
-    await s.waitFor('How should it look?');
-    await s.press('enter');
-    await s.waitFor('Where should Atelier run?');
-    await s.press('enter');
-    await s.waitFor('Which server?');
-    if (s.text().includes('Another address')) {
-      await s.select(/^Another address/);
-      await s.press('enter');
-    }
     await s.waitFor('The address you open it at');
     await s.type(url);
     await s.press('enter');
-    await s.waitFor('signs terminals in with a password only', 30_000);
-    await s.press('enter');
-    await s.waitFor('Username');
+    // A 0.5 server: username and password on one screen.
+    await s.waitFor('signs terminals in with a password', 30_000);
     await s.type('ada');
     await s.press('enter');
-    await s.waitFor('Password');
     await s.type('ada-password-1');
     await s.press('enter');
     await s.waitFor('What this computer lends the server', 30_000);
     await s.press('enter');
-    await s.waitFor('Which model should new sessions use?', 30_000);
-    await s.press('enter');
-    await s.waitFor('How much should it ask?');
-    await s.select(/^Ask/);
-    await s.press('enter');
-    await s.waitFor('Your terminal');
-    await s.select(/^Continue/);
+    await s.waitFor('Which model, and how much should it ask?', 30_000);
+    await s.press('right');
+    await s.waitFor('‹ Ask ›');
     await s.press('enter');
     await s.waitFor('All set');
     await s.press('enter');

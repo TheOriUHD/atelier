@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { drawPip } from '../art/mascot.ts';
 import type { Paint } from '../style.ts';
 import { Choices, Panel } from './inputs.tsx';
+import { PipBox } from './pip.tsx';
 import { shortPath } from './views.tsx';
 
 function Trust({ paint, root, server, onAnswer }: { paint: Paint; root: string; server: string | null; onAnswer(yes: boolean): void }) {
@@ -18,7 +19,7 @@ function Trust({ paint, root, server, onAnswer }: { paint: Paint; root: string; 
   if (answered) return null;
   return (
     <Box flexDirection="row" gap={2}>
-      <Text>{drawPip('lookRight', paint.p.depth).join('\n')}</Text>
+      <PipBox lines={drawPip('lookRight', paint.p.depth)} />
       <Panel paint={paint} title={`Work in ${shortPath(root)}?`} tone="warn">
         <Text>Atelier reads, edits and runs commands in this folder, and reads its CLAUDE.md, AGENTS.md, settings and hooks.</Text>
         {server && <Text>{paint.fg('warn', `Sessions on ${server} can run commands as you here. Only say yes for a server you trust like that.`)}</Text>}

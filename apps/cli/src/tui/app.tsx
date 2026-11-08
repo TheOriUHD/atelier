@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { initialLiveState, liveContext, liveStatus, type LiveSessionState } from '@atelier/client';
 import { effortChoices, shownEffort, type Effort, type ModelInfo, type Part, type PermissionMode, type WorkspaceSummary } from '@atelier/protocol';
 import { drawPip, PIP_HELLO } from '../art/mascot.ts';
+import { PipBox } from './pip.tsx';
 import { TIPS } from '../art/words.ts';
 import { updateConfig, type CliConfig } from '../config.ts';
 import type { Connected } from '../connection/connect.ts';
@@ -441,7 +442,7 @@ export function App(props: AppProps) {
     if (overlay.kind === 'model') {
       const items: PickItem<ModelInfo>[] = models
         .filter((m) => !m.hidden)
-        .map((m) => ({ value: m, label: m.displayName, hint: `${m.ref}${m.personal ? ' · yours' : ''}${m.available === false ? ' · its computer is away' : ''}`, group: m.personal ? 'Your models' : m.providerId, current: m.ref === model?.ref }));
+        .map((m) => ({ value: m, label: m.displayName, ...(m.available === false ? { hint: 'its computer is away' } : {}), group: m.personal ? 'Your models' : m.providerId, current: m.ref === model?.ref }));
       return <ListPicker paint={paint} title="Model" items={items} onCancel={close} onPick={(m) => (close(), void commandCtx.setModel(m))} />;
     }
     if (overlay.kind === 'effort') {
@@ -592,7 +593,7 @@ function PipDance({ paint }: { paint: Paint }) {
   if (frame >= PIP_HELLO.length * 2) return null;
   return (
     <Box marginBottom={1}>
-      <Text>{`${drawPip(PIP_HELLO[frame % PIP_HELLO.length]!, paint.p.depth).join('\n')}`}</Text>
+      <PipBox lines={drawPip(PIP_HELLO[frame % PIP_HELLO.length]!, paint.p.depth)} />
       <Text>{paint.fg('accentSoft', '  Hi! I’m Pip.')}</Text>
     </Box>
   );

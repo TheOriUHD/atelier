@@ -70,26 +70,16 @@ it.skipIf(!ready())('signs in through the browser, lends the folder and works in
   const s = await openScreen({ cwd: project, env: env(), command: cliCommand() });
   try {
     // The first start after a build fills Node's compile cache: on a cold machine that takes a while.
-    await s.waitFor('press enter to begin', 60_000);
+    await s.waitFor('Where should Atelier run?', 60_000);
+    show('where', s);
+    // Servers found on the network come first; another one is typed.
+    await s.select(/^(Another server|An Atelier server)/);
     await s.press('enter');
-    await s.waitFor('How should it look?');
-    await s.press('enter');
-    await s.waitFor('Where should Atelier run?');
-    await s.press('enter');
-    await s.waitFor('Which server?');
-    show('address', s);
-    // Servers found on the network come first; another address is typed.
-    if (s.text().includes('Another address')) {
-      await s.select(/^Another address/);
-      await s.press('enter');
-    }
     await s.waitFor('The address you open it at');
     await s.type(serverUrl);
     await s.press('enter');
-    await s.waitFor('Sign in to 127.0.0.1', 30_000);
-    show('method', s);
-    await s.press('enter');
-    const shown = await s.waitFor(/Approve this terminal in the browser/, 30_000);
+    // A server from 0.6.0 shows the code to approve right away.
+    const shown = await s.waitFor(/Waiting for you to approve it/, 30_000);
     show('browser', s);
     const code = /code=([0-9A-Z]{4}-[0-9A-Z]{4})/.exec(shown.replace(/\s+│\s+/g, ''))?.[1];
     expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
@@ -99,16 +89,16 @@ it.skipIf(!ready())('signs in through the browser, lends the folder and works in
     await s.waitFor('What this computer lends the server', 30_000);
     show('device', s);
     await s.press('enter');
-    await s.waitFor('Which model should new sessions use?', 30_000);
-    await s.select(/fake-chat/);
-    await s.press('enter');
-    await s.waitFor('How much should it ask?');
-    await s.select(/^Ask/);
-    await s.press('enter');
-    await s.waitFor('Your terminal');
-    await s.select(/^Continue/);
+    await s.waitFor('Which model, and how much should it ask?', 30_000);
+    await s.type('fake-chat');
+    await s.waitFor('/ fake-chat');
+    // Ask, so the Write below asks first.
+    await s.press('right');
+    await s.waitFor('‹ Ask ›');
+    show('model', s);
     await s.press('enter');
     await s.waitFor('All set');
+    show('done', s);
     await s.press('enter');
     await s.waitFor('Work in', 30_000);
     show('trust', s);

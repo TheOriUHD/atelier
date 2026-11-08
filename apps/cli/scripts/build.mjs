@@ -2,11 +2,42 @@
 // (dist/LICENSES.txt, for `atelier licenses`). The packaging step (scripts/package.mjs) puts it beside Node and the runner.
 import { build } from 'esbuild';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
+
+// Ink wraps text keeping the whitespace it breaks at (wrap-ansi with `trim: false`, so indentation survives), which
+// starts every wrapped row with a space: "and\n reads its CLAUDE.md". The bundled copy drops that one space from the
+// rows a wrap made, and keeps each line's own indentation. The build stops if Ink's code no longer looks as expected.
+const INK_WRAP = `        wrappedText = wrapAnsi(text, maxWidth, {
+            trim: false,
+            hard: true,
+        });`;
+const inkWrap = {
+  name: 'ink-wrap',
+  setup(b) {
+    b.onLoad({ filter: /[\\/]ink[\\/]build[\\/]wrap-text\.js$/ }, async (args) => {
+      const source = await readFile(args.path, 'utf8');
+      if (!source.includes(INK_WRAP)) throw new Error(`Ink's wrap-text.js changed: look at ${args.path} and scripts/build.mjs`);
+      const wrap = `        wrappedText = wrapAnsi(text, maxWidth, { trim: false, hard: true });
+        // How many rows each line of the text became: the rows after a line's first one were made by the wrap.
+        const plain = (line) => line.replace(/\\u001B\\[[0-9;]*m|\\u001B\\]8;[^\\u0007\\u001B]*(?:\\u0007|\\u001B\\\\)/g, '');
+        const counts = text.split('\\n').map((line) => wrapAnsi(plain(line), maxWidth, { trim: false, hard: true }).split('\\n').length);
+        const rows = wrappedText.split('\\n');
+        if (rows.length === counts.reduce((a, n) => a + n, 0)) {
+            let at = 0;
+            for (const n of counts) {
+                for (let i = at + 1; i < at + n; i++) rows[i] = rows[i].replace(/^((?:\\u001B\\[[0-9;]*m)*) /, '$1');
+                at += n;
+            }
+            wrappedText = rows.join('\\n');
+        }`;
+      return { contents: source.replace(INK_WRAP, wrap), loader: 'js', resolveDir: dirname(args.path) };
+    });
+  },
+};
 await rm(join(root, 'dist'), { recursive: true, force: true });
 await mkdir(join(root, 'dist'), { recursive: true });
 const result = await build({
@@ -22,6 +53,7 @@ const result = await build({
   logLevel: 'warning',
   // Ink loads React's devtools only when asked to (DEV=true); a stub stands in for them.
   alias: { 'react-devtools-core': './scripts/devtools-stub.mjs' },
+  plugins: [inkWrap],
   define: { 'process.env.NODE_ENV': '"production"' },
   banner: { js: "import { createRequire as createBundleRequire } from 'node:module'; const require = createBundleRequire(import.meta.url);" },
 });

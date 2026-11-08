@@ -1,11 +1,11 @@
 /**
- * The session's header: Pip beside the wordmark, the version, model, where it runs and the folder. Pip moves while it
+ * The session's header: Pip beside the name, the version, model, where it runs and the folder. Pip moves while it
  * is the live part of the screen (before the first message); printed into the scrollback, it holds still.
  */
 import { Box, Text, useAnimation } from 'ink';
 import { drawPip, PIP_IDLE, PIP_STEP_MS, type PipFrame } from '../art/mascot.ts';
-import { smallBanner } from '../art/banner.ts';
 import type { Paint } from '../style.ts';
+import { PipBox } from './pip.tsx';
 
 export interface HeaderInfo {
   version: string;
@@ -17,20 +17,24 @@ export interface HeaderInfo {
 }
 
 function Lines({ info, paint, pip }: { info: HeaderInfo; paint: Paint; pip: string[] }) {
+  // The name in plain letters (block letters this small break apart in terminals with line spacing), beside Pip's face.
   const right = [
-    ...smallBanner(paint).map((l, i) => (i === 0 ? `${l}  ${paint.fg('muted', `v${info.version}`)}` : l)),
-    '',
-    `${paint.fg('text', info.model)}`,
+    `${paint.bold(paint.gradient('Atelier'))} ${paint.bold('CLI')}  ${paint.fg('muted', `v${info.version}`)}`,
+    paint.fg('text', info.model),
     paint.fg('secondary', info.where),
     paint.fg('muted', `${info.folder}${info.branch ? ` · ${info.branch}` : ''}`),
   ];
   return (
     <Box flexDirection="row" marginBottom={1}>
-      <Box width={18} flexShrink={0} flexDirection="column">
-        <Text>{pip.join('\n')}</Text>
+      <Box width={18} flexShrink={0}>
+        <PipBox lines={pip} />
       </Box>
-      <Box flexDirection="column">
-        <Text>{right.join('\n')}</Text>
+      <Box flexDirection="column" marginTop={1} flexShrink={1} minWidth={0}>
+        {right.map((line, i) => (
+          <Text key={i} wrap="truncate-end">
+            {line}
+          </Text>
+        ))}
       </Box>
     </Box>
   );

@@ -15,9 +15,14 @@ describe('the wordmarks', () => {
     expect(strip(narrow.at(-1)!).trim()).toBe('CLI');
     expect(bigBanner(colour, 50)).toEqual(smallBanner(colour));
   });
-  it('paints in from the left', () => {
+  it('paints in from the left, in place', () => {
     const half = bigBanner(colour, 80, 0.5).map(strip);
-    expect(half.every((l) => [...l].length < 50)).toBe(true);
+    const full = bigBanner(colour, 80).map(strip);
+    expect(half.every((l) => l.trimEnd().length < 50)).toBe(true);
+    // Every line keeps its width while it is painted, and what is painted is where it ends up.
+    expect(half.map((l) => [...l].length)).toEqual(full.map((l) => [...l].length));
+    expect(half[2]!.slice(0, 30)).toBe(full[2]!.slice(0, 30));
+    expect(bigBanner(colour, 80, 0).map(strip).every((l) => l.trim() === '')).toBe(true);
   });
 });
 
@@ -31,7 +36,9 @@ describe('Pip', () => {
   it('is drawn in half blocks, 16 wide and 7 tall, plain without colour', () => {
     const plain = drawPip('base', 0);
     expect(plain).toHaveLength(7);
-    expect(plain.every((l) => width(l) <= 16)).toBe(true);
+    // Every line of every frame is 16 wide, so nothing beside Pip moves as it does.
+    for (const frame of Object.keys(PIP_FRAMES) as (keyof typeof PIP_FRAMES)[]) expect(drawPip(frame, 3).map(width)).toEqual(Array(7).fill(16));
+    expect(plain.every((l) => width(l) === 16)).toBe(true);
     expect(plain.join('')).toMatch(/^[ ▀▄█]+$/);
     expect(drawPip('blink', 3).join('')).toContain('\x1b[38;2;');
   });

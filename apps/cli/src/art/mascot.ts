@@ -124,7 +124,8 @@ export function drawPip(frame: PipFrame | readonly string[], depth: Depth): stri
       else if (fa === fb) line += `\x1b[${sgr(fa!, depth)}m█\x1b[39m`;
       else line += `\x1b[${sgr(fa!, depth)};${sgr(fb!, depth, true)}m▀\x1b[39;49m`;
     }
-    out.push(line.replace(/ +$/, ''));
+    // Every line as wide as the sprite: a frame with less on its right mustn't change the width of what is drawn.
+    out.push(line + ' '.repeat(Math.max(0, PIP_WIDTH - Math.max(top.length, bottom.length))));
   }
   return out;
 }
