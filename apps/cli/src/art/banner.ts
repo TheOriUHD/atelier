@@ -1,22 +1,33 @@
 /**
- * The wordmarks (ARCHITECTURE §25): ATELIER in big block letters, painted left to right in the clay gradient, and CLI
- * beside it drawn with command-line prompts (`>_`), its last `_` a blinking cursor: for the setup's first screen and
- * `atelier --version`. The whole is 75 columns wide and shows from 78; narrower terminals get ATELIER alone, then a small one.
+ * The wordmarks (ARCHITECTURE §25): ATELIER in big block letters with their shadow, painted left to right in the clay
+ * gradient, and CLI beside it drawn with command-line prompts (`>_`) and a shadow of colons, its last `_` a blinking cursor: for the setup's first screen and
+ * `atelier --version`. The whole is 77 columns wide and shows from 79; narrower terminals get ATELIER alone, then a small one.
  */
 import type { Paint } from '../style.ts';
 
-/** ATELIER in solid blocks, flat like CLI beside it (no shadow lines). */
 export const BIG = [
-  ' █████  ████████ ███████ ██      ██ ███████ ██████ ',
-  '██   ██    ██    ██      ██      ██ ██      ██   ██',
-  '███████    ██    █████   ██      ██ █████   ██████ ',
-  '██   ██    ██    ██      ██      ██ ██      ██   ██',
-  '██   ██    ██    ███████ ███████ ██ ███████ ██   ██',
+  ' █████╗ ████████╗███████╗██╗     ██╗███████╗██████╗ ',
+  '██╔══██╗╚══██╔══╝██╔════╝██║     ██║██╔════╝██╔══██╗',
+  '███████║   ██║   █████╗  ██║     ██║█████╗  ██████╔╝',
+  '██╔══██║   ██║   ██╔══╝  ██║     ██║██╔══╝  ██╔══██╗',
+  '██║  ██║   ██║   ███████╗███████╗██║███████╗██║  ██║',
+  '╚═╝  ╚═╝   ╚═╝   ╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝',
 ];
 
 /** C, L and I as pixels (`#`), each drawn as a prompt, `>_`, on the five rows of ATELIER's letters. */
 const CLI_PIXELS = [' ### #    #', '#    #    #', '#    #    #', '#    #    #', ' ### #### #'];
-export const BIG_CLI = CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  '));
+const CLI_LETTERS = CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  '));
+/**
+ * CLI with its own shadow, in command-line dots rather than ATELIER's lines: a colon one row down and one column right
+ * of every letter cell, where that cell is empty. Its last row is ATELIER's shadow row, so both are six rows tall.
+ */
+export const BIG_CLI = Array.from({ length: BIG.length }, (_, r) =>
+  Array.from({ length: Math.max(...CLI_LETTERS.map((l) => l.length)) + 1 }, (_, x) => {
+    const own = CLI_LETTERS[r]?.[x] ?? ' ';
+    if (own !== ' ') return own;
+    return (CLI_LETTERS[r - 1]?.[x - 1] ?? ' ') !== ' ' ? ':' : ' ';
+  }).join(''),
+);
 
 export const SMALL = ['▄▀█ ▀█▀ █▀▀ █   █ █▀▀ █▀█   █▀▀ █   █', '█▀█  █  ██▄ █▄▄ █ ██▄ █▀▄   █▄▄ █▄▄ █'];
 
@@ -28,7 +39,7 @@ export const TAGLINE = 'Your AI workspace, in your terminal.';
  * past the stroke), so the wordmark stays in place while it is painted.
  */
 export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = true): string[] {
-  const withCli = columns >= 78;
+  const withCli = columns >= 79;
   if (columns < 54) return smallBanner(paint);
   const wordWidth = [...BIG[0]!].length;
   const rows = BIG.map((row, i) => (withCli ? `${row}  ${BIG_CLI[i]}` : row));
@@ -43,9 +54,10 @@ export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = tr
     const word = paint.gradient(chars.slice(0, wordWidth).join(''));
     const cli = chars.slice(wordWidth).map((ch, i) => {
       if (r === cursorAt.row && wordWidth + i === cursorAt.x && !cursor) return ' ';
-      // Bold, so the thin glyphs hold their own beside the solid blocks.
+      // Bold, so the thin glyphs hold their own beside the solid blocks; the shadow faint.
       if (ch === '>') return paint.bold(paint.fg('accent', ch));
-      return ch === '_' ? paint.bold(paint.fg('muted', ch)) : ch;
+      if (ch === '_') return paint.bold(paint.fg('muted', ch));
+      return ch === ':' ? paint.fg('faint', ch) : ch;
     });
     const painted = [...splitPainted(word), ...cli];
     // The brush's tip, in the light colour, only while it paints: finished, every cell has its own colour.
