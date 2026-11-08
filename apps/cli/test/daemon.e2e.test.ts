@@ -3,14 +3,14 @@
  * secret, so the token is the lock), welcomes one with it, says how it stands, and stops when asked.
  */
 import { spawn } from 'node:child_process';
-import { readFile, rm, mkdtemp } from 'node:fs/promises';
+import { readFile, mkdtemp } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { expect, it } from 'vitest';
-import { socketPath } from '../src/paths.ts';
-import { BUNDLE, canRun } from './harness.ts';
+import { servicePath } from '../src/paths.ts';
+import { BUNDLE, canRun, ended, removeAll } from './harness.ts';
 
 function talk(path: string, frame: unknown): Promise<unknown[]> {
   return new Promise((resolve) => {
@@ -32,12 +32,13 @@ it.skipIf(!canRun())('lets in only its own user’s clients, and stops when aske
   const dir = await mkdtemp(join(tmpdir(), 'atelier-cli-daemon-'));
   const env = { ...process.env, HOME: dir, USERPROFILE: dir, ATELIER_CLI_DIR: join(dir, 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '' };
   const child = spawn(process.execPath, [BUNDLE, 'daemon', 'run', '--local'], { env, stdio: 'ignore' });
-  const where = socketPath(join(dir, 'cli'));
+  let where = '';
   try {
     // Under a full test run the backend can take a while to start.
     for (let i = 0; i < 300 && !(await readFile(join(dir, 'cli', 'run', 'daemon.token'), 'utf8').catch(() => '')); i++) await new Promise((r) => setTimeout(r, 100));
     for (let i = 0; i < 300; i++) {
-      if ((await talk(where, { t: 'status' })).length) break;
+      where = (await servicePath(join(dir, 'cli'))) ?? '';
+      if (where && (await talk(where, { t: 'status' })).length) break;
       await new Promise((r) => setTimeout(r, 100));
     }
     const want = { mode: 'local' };
@@ -59,7 +60,7 @@ it.skipIf(!canRun())('lets in only its own user’s clients, and stops when aske
     });
     await stopped;
   } finally {
-    child.kill();
-    await rm(dir, { recursive: true, force: true });
+    await ended(child);
+    await removeAll(dir);
   }
 });

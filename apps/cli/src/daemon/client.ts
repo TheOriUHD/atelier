@@ -8,7 +8,7 @@ import { connect as netConnect, type Socket } from 'node:net';
 import { join } from 'node:path';
 import type { RpcMessage } from '@atelier/protocol';
 import type { ReconnectingTransport } from '@atelier/client';
-import { socketPath, type CliPaths } from '../paths.ts';
+import { checkPlace, servicePath, type CliPaths } from '../paths.ts';
 import { selfCommand, VERSION } from '../runtime.ts';
 import { onFrames, sameWant, sendFrame, ServiceFrame, type ClientFrame, type ServiceStatus, type Want } from './wire.ts';
 
@@ -33,9 +33,14 @@ function open(path: string): Promise<Socket> {
 
 /** Connects and says hello; null when no service answers at all. */
 async function hello(p: CliPaths, want: Want): Promise<ServiceLink | null> {
+  const where = await servicePath(p.dir);
+  if (!where) return null;
+  // Only a socket in a place that is this user's alone gets the token.
+  const wrong = await checkPlace(where);
+  if (wrong) throw new ServiceError(`The background service's socket can't be trusted: ${wrong}`);
   let socket: Socket;
   try {
-    socket = await open(socketPath(p.dir));
+    socket = await open(where);
   } catch {
     return null;
   }

@@ -6,11 +6,11 @@
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { BUNDLE, canRun, cliCommand, openScreen, type Screen } from './harness.ts';
+import { BUNDLE, canRun, cliCommand, ended, openScreen, removeAll, type Screen } from './harness.ts';
 
 const show = (title: string, s: Screen) => process.env.SHOW_SCREENS && console.log(`\n===== ${title} =====\n${s.text()}\n`);
 let home: string;
@@ -30,7 +30,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  ollama?.kill();
+  await ended(ollama);
   if (home) {
     // The background service of this test's folder.
     try {
@@ -38,7 +38,7 @@ afterAll(async () => {
     } catch {
       // Not running.
     }
-    await rm(home, { recursive: true, force: true });
+    await removeAll(home);
   }
 });
 

@@ -21,3 +21,31 @@ it('keeps secrets in a file only this user reads where asked to (or with no keyr
   await store.delete(name);
   expect(await (await credentialStore(file, { ATELIER_CLI_CREDENTIALS: 'file' })).get(name)).toBeNull();
 });
+
+it.skipIf(process.platform === 'win32')('trusts a socket only in a folder that is this user’s alone', async () => {
+  const { checkPlace } = await import('./paths.ts');
+  const { chmod, mkdir } = await import('node:fs/promises');
+  dir = await mkdtemp(join(tmpdir(), 'atelier-cli-place-'));
+  const run = join(dir, 'run');
+  await mkdir(run, { mode: 0o700 });
+  expect(await checkPlace(join(run, 'daemon.sock'))).toBeNull();
+  await chmod(run, 0o777);
+  expect(await checkPlace(join(run, 'daemon.sock'))).toMatch(/isn't yours alone/);
+  // Someone else's folder: another user id.
+  await chmod(run, 0o700);
+  expect(await checkPlace(join(run, 'daemon.sock'), (process.getuid?.() ?? 0) + 1)).toMatch(/isn't yours alone/);
+});
+
+it('finds the Windows service by the random pipe name it wrote, and nothing else', async () => {
+  const { newPipeName, pipeFile, servicePath } = await import('./paths.ts');
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  dir = await mkdtemp(join(tmpdir(), 'atelier-cli-pipe-'));
+  expect(await servicePath(dir, 'win32')).toBeNull();
+  const name = newPipeName(dir);
+  expect(name).toMatch(/^\\\\\.\\pipe\\atelier-cli-[0-9a-f]{8}-[0-9a-f]{24}$/);
+  await mkdir(join(dir, 'run'));
+  await writeFile(pipeFile(dir), name);
+  expect(await servicePath(dir, 'win32')).toBe(name);
+  await writeFile(pipeFile(dir), '\\\\.\\pipe\\someone-elses');
+  expect(await servicePath(dir, 'win32')).toBeNull();
+});

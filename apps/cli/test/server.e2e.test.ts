@@ -7,13 +7,13 @@
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { contract, createRpcClient, type AppContract, type RpcClient } from '@atelier/protocol';
 import { wsTransport } from '@atelier/client';
-import { BUNDLE, canRun, cliCommand, openScreen, type Screen } from './harness.ts';
+import { BUNDLE, canRun, cliCommand, ended, openScreen, removeAll, type Screen } from './harness.ts';
 
 const SERVER = join(import.meta.dirname, '../../server/dist/server.mjs');
 const ready = () => canRun() && existsSync(SERVER);
@@ -62,8 +62,8 @@ afterAll(async () => {
       // Not running.
     }
   }
-  for (const c of children) c.kill();
-  if (home) await rm(home, { recursive: true, force: true });
+  await Promise.all(children.map(ended));
+  if (home) await removeAll(home);
 });
 
 it.skipIf(!ready())('signs in through the browser, lends the folder and works in it', { timeout: 240_000 }, async () => {

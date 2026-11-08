@@ -14,6 +14,17 @@ export const canRun = () => existsSync(hostRunnerBinary(RUNNER_DIR)) && existsSy
 /** The line that starts the built app in the test's shell (sh, or cmd.exe on Windows). */
 export const cliCommand = (args = '') => (process.platform === 'win32' ? `"${process.execPath}" "${BUNDLE}" ${args}` : `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(BUNDLE)} ${args}`).trim();
 
+/** Ends a child process and waits until it is gone (Windows keeps its files locked until then). */
+export async function ended(child: import('node:child_process').ChildProcess | undefined): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  const gone = new Promise((r) => child.once('exit', r));
+  child.kill();
+  await Promise.race([gone, new Promise((r) => setTimeout(r, 5000))]);
+}
+
+/** Removes a test's folder; Windows may hold files a moment after their process ended. */
+export const removeAll = (dir: string) => import('node:fs/promises').then(({ rm }) => rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 }));
+
 export const KEYS = {
   enter: '\r',
   esc: '\x1b',

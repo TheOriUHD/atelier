@@ -20,7 +20,7 @@ import { AesGcmCipher, createBackend, type Backend } from '@atelier/core';
 import { createDeviceLink, deviceServices, readLending, readTrustedFolders, type DeviceLinkState } from '@atelier/core/device';
 import { readConfig, readJson, writePrivate } from '../config.ts';
 import { credentialStore, LOCAL_KEY, tokenName, type CredentialStore } from '../keychain.ts';
-import { paths as cliPaths, socketPath, type CliPaths } from '../paths.ts';
+import { checkPlace, newPipeName, paths as cliPaths, pipeFile, servicePath, socketPath, type CliPaths } from '../paths.ts';
 import { runnerDir, USER_AGENT, VERSION } from '../runtime.ts';
 import { ClientFrame, onFrames, sameWant, sendFrame, type ServiceStatus, type Want } from './wire.ts';
 
@@ -96,16 +96,26 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
   const logFile = join(p.logs, 'daemon.log');
   if (((await stat(logFile).catch(() => null))?.size ?? 0) > 5 * 1024 * 1024) await rename(logFile, `${logFile}.1`).catch(() => undefined);
   const log = logTo(logFile);
-  const where = socketPath(p.dir);
-  if (process.platform !== 'win32') await mkdir(dirname(where), { recursive: true, mode: 0o700 });
+  const windows = process.platform === 'win32';
 
   // Another service may have started a moment earlier (two terminals opened together): leave it to that one.
-  if (await answers(where)) {
+  const running = await servicePath(p.dir);
+  if (running && (await answers(running))) {
     log.info('another service is running; leaving');
     log.end();
     return;
   }
-  if (process.platform !== 'win32' && existsSync(where)) await unlink(where).catch(() => undefined);
+  const where = windows ? newPipeName(p.dir) : socketPath(p.dir);
+  if (!windows) {
+    await mkdir(dirname(where), { recursive: true, mode: 0o700 });
+    const wrong = await checkPlace(where);
+    if (wrong) {
+      log.error(`not starting: ${wrong}`);
+      log.end();
+      throw new Error(wrong);
+    }
+    if (existsSync(where)) await unlink(where).catch(() => undefined);
+  }
 
   const token = randomBytes(32).toString('hex');
   await writePrivate(join(p.run, 'daemon.token'), token);
@@ -242,7 +252,7 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
     awake(false);
     deviceLink?.close({ exiting: true });
     await backend?.dispose().catch((e: unknown) => log.error('dispose failed', e));
-    if (process.platform !== 'win32') await unlink(where).catch(() => undefined);
+    if (!windows) await unlink(where).catch(() => undefined);
     log.end();
     setTimeout(() => process.exit(0), 200).unref();
   };
@@ -251,7 +261,8 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
     server.once('error', reject);
     server.listen(where, () => resolve());
   });
-  if (process.platform !== 'win32') await chmod(where, 0o600).catch(() => undefined);
+  if (!windows) await chmod(where, 0o600).catch(() => undefined);
+  else await writePrivate(pipeFile(p.dir), where);
   log.info(`listening (${options.want.mode}${options.want.mode === 'server' ? ` ${options.want.serverUrl}` : ''}), version ${VERSION}`);
 
   setInterval(() => {
