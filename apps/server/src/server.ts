@@ -223,8 +223,8 @@ app.get(
   async (c, next) => (sameOrigin(c, 'a WebSocket') ? next() : c.json({ code: 'bad_origin', message: 'Cross-site WebSocket refused.' }, 403)),
   upgradeWebSocket((c) => {
     const token = tokenOf(c);
-    // Browsers bring the session cookie; the desktop app's relay sends its token as a header.
-    const client: ClientInfo = { ...clientOf(c), clientKind: getCookie(c, COOKIE) ? 'web' : 'desktop' };
+    // Browsers bring the session cookie; the desktop app's relay and the terminal app send their token as a header.
+    const client: ClientInfo = { ...clientOf(c), clientKind: getCookie(c, COOKIE) ? 'web' : /^Atelier CLI\b/.test(c.req.header('user-agent') ?? '') ? 'cli' : 'desktop' };
     const origin = originOf(c);
     let disconnect: (() => void) | undefined;
     const handlers = new Set<(m: RpcMessage) => void>();

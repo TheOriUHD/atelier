@@ -66,7 +66,7 @@ export interface ClientInfo {
 }
 
 /** How a sign-in was proven; the activity log says which. */
-export type SignInMethod = 'password' | 'passkey' | 'oidc' | 'invite' | 'setup';
+export type SignInMethod = 'password' | 'passkey' | 'oidc' | 'invite' | 'setup' | 'terminal';
 
 export interface Authenticated {
   user: UserSummary;
@@ -167,8 +167,8 @@ export class AccountService {
     return { token: await this.startSession(row.id, client, 'password'), user: toUserSummary(row) };
   }
 
-  /** Signs in someone who proved who they are another way (a passkey, an identity provider); the account must still be active. */
-  async signInAs(userId: string, client: ClientInfo, method: 'passkey' | 'oidc' = 'passkey'): Promise<{ token: string; user: UserSummary }> {
+  /** Signs in someone who proved who they are another way (a passkey, an identity provider, a terminal they approved where they are signed in); the account must still be active. */
+  async signInAs(userId: string, client: ClientInfo, method: 'passkey' | 'oidc' | 'terminal' = 'passkey'): Promise<{ token: string; user: UserSummary }> {
     const row = await this.row(userId);
     try {
       this.assertActive(row);

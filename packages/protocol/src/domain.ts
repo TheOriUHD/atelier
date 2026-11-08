@@ -675,5 +675,7 @@ export const AppInfo = z.object({
   videoGeneration: z.boolean().optional(),
   /** This backend can generate speech, music and sound effects, and plays them from its blobs. */
   audioGeneration: z.boolean().optional(),
+  /** A server that signs terminals in through the browser (`auth.terminalStart`, its /link page); absent on older ones. */
+  terminalSignIn: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

@@ -61,7 +61,8 @@ export const UserSummary = z.object({
 });
 export type UserSummary = z.infer<typeof UserSummary>;
 
-export const ClientKind = z.enum(['web', 'desktop']);
+/** Who a sign-in is for: a browser (cookie), the desktop app or the terminal app (each keeps its own token). */
+export const ClientKind = z.enum(['web', 'desktop', 'cli']);
 export type ClientKind = z.infer<typeof ClientKind>;
 
 export const AuthSessionSummary = z.object({
@@ -105,6 +106,57 @@ export function normalizeInviteCode(input: string): string | null {
 }
 
 /** `A1B2C3D4E5F6G7H8` → `A1B2-C3D4-E5F6-G7H8`. */
+/**
+ * Signing in a terminal through the browser (ARCHITECTURE §25): the terminal asks for a code, shows it with a link, and
+ * a person signed in on the server approves it on its /link page. 8 symbols (40 bits) of the invite codes' alphabet,
+ * shown as two groups of four; a request lasts 10 minutes and gives out its token once.
+ */
+export const TERMINAL_CODE_LENGTH = 8;
+export const TERMINAL_SIGN_IN_PATH = '/link';
+
+/** The 8 symbols of a terminal sign-in code however it was typed, or null when it can't be one. */
+export function normalizeTerminalCode(input: string): string | null {
+  const code = input
+    .toUpperCase()
+    .replace(/[\s\-\u2010-\u2015]+/g, '')
+    .replace(/O/g, '0')
+    .replace(/[IL]/g, '1');
+  return /^[0-9A-HJKMNP-TV-Z]{8}$/.test(code) ? code : null;
+}
+
+export const TerminalSignInStart = z.object({
+  /** What the person compares on the page: `K7QF-3MZD`. */
+  code: z.string(),
+  /** Only the terminal knows it; it polls with it and gets the token once. */
+  pollToken: z.string(),
+  /** The page to open: `<server>/link`, and the same with the code filled in. */
+  verifyUrl: z.string(),
+  verifyUrlComplete: z.string(),
+  expiresAt: z.number(),
+  /** Seconds between polls. */
+  interval: z.number(),
+});
+export type TerminalSignInStart = z.infer<typeof TerminalSignInStart>;
+
+export const TerminalSignInPoll = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('pending') }),
+  z.object({ state: z.literal('denied') }),
+  z.object({ state: z.literal('expired') }),
+  z.object({ state: z.literal('approved'), token: z.string(), user: UserSummary }),
+]);
+export type TerminalSignInPoll = z.infer<typeof TerminalSignInPoll>;
+
+/** What the /link page shows about a request before the person approves it. */
+export const TerminalSignInRequest = z.object({
+  code: z.string(),
+  deviceName: z.string(),
+  platform: z.string(),
+  ip: z.string(),
+  createdAt: z.number(),
+  expiresAt: z.number(),
+});
+export type TerminalSignInRequest = z.infer<typeof TerminalSignInRequest>;
+
 export function formatInviteCode(code: string): string {
   return code.replace(/(.{4})(?=.)/g, '$1-');
 }

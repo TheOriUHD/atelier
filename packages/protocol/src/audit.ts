@@ -13,6 +13,8 @@ export const AUDIT_KINDS = [
   'signin.success',
   'signin.failed',
   'signin.blocked',
+  'signin.terminal_approved',
+  'signin.terminal_denied',
   'account.created',
   'account.updated',
   'account.role_changed',

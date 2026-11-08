@@ -15,6 +15,7 @@ import { ArtifactsPage } from '../features/artifacts/artifacts-page.tsx';
 import { ImagesPage } from '../features/images/images-page.tsx';
 import { CUSTOMIZE_TABS, CustomizePage, type CustomizeSearch } from '../features/customize/customize-page.tsx';
 import { JoinPage } from '../features/coop/join-page.tsx';
+import { TerminalLinkPage, type TerminalLinkSearch } from '../features/auth/terminal-link-page.tsx';
 
 /** Overlays addressable from any page: `?settings=providers&row=providers.add`. */
 export interface RootSearch {
@@ -75,6 +76,13 @@ const customizeRoute = createRoute({
  * (apps/desktop/src/main.ts sets the hash), and so does a link pasted into the address.
  */
 const joinRoute = createRoute({ getParentRoute: () => rootRoute, path: '/join/$fragment', component: JoinPage, remountDeps: ({ params }) => params.fragment });
+/** `#/link?code=…`: approving a terminal that signs in through the browser (`atelier login`). */
+const linkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/link',
+  component: TerminalLinkPage,
+  validateSearch: (search: Record<string, unknown>): TerminalLinkSearch => (typeof search.code === 'string' ? { code: search.code } : {}),
+});
 // The sign-in gate handles invite links; someone already signed in just lands at home.
 const inviteRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -97,6 +105,7 @@ const routeTree = rootRoute.addChildren([
   imagesRoute,
   customizeRoute,
   joinRoute,
+  linkRoute,
   inviteRoute,
 ]);
 

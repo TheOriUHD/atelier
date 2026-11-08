@@ -55,6 +55,7 @@ import {
   type UserSummary,
 } from '@atelier/protocol';
 import { AccountError, AccountService, type Authenticated, type ClientInfo } from '../accounts/account-service.ts';
+import { TerminalSignIns } from '../accounts/terminal-sign-in.ts';
 import { DeviceRepo, toDeviceSummary } from '../accounts/device-repo.ts';
 import { AuditLog } from '../audit/audit-log.ts';
 import { auditEntry, isSkip, type AuditEnv } from '../audit/audit-rules.ts';
@@ -301,6 +302,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   // The admin activity log is for shared servers: a backend with one person has nobody to account to, and writes nothing.
   const audit = new AuditLog(db, { enabled: () => !local, onError: (message, error) => platform.logger.error(message, error) });
   const accounts = new AccountService(db, () => settings.effective.server.signup, audit);
+  // Terminals signing in through the browser (servers only; a desktop's own backend has nobody to approve them).
+  const terminalSignIns = new TerminalSignIns(accounts, local ? null : audit);
   const screenLock = new ScreenLock(join(platform.dataDir, 'screen-lock.json'));
   if (local) await screenLock.load();
   // A device coming or going changes which of its user's workspaces are available, and what its windows offer.
@@ -1939,6 +1942,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       usageLimits: true,
       videoGeneration: true,
       audioGeneration: true,
+      terminalSignIn: platform.surface === 'web',
     }),
 
     // ---------------------------------------------------------------- sign-in
@@ -1958,6 +1962,24 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       accountErrors(async () => {
         localOnly();
         return signIn(ctx, await accounts.signInOwner({ ...ctx.connection().client, clientKind }));
+      }),
+    'auth.terminalStart': async (input, ctx) =>
+      accountErrors(async () => {
+        if (platform.surface !== 'web') throw appError('unsupported', 'Only a server signs terminals in through the browser.');
+        const c = ctx.connection();
+        return terminalSignIns.start(input, c.client, c.origin ?? '');
+      }),
+    'auth.terminalPoll': ({ pollToken }, ctx) =>
+      accountErrors(async () => {
+        const result = await terminalSignIns.poll(pollToken, ctx.connection().client);
+        if (result.state === 'approved') await signIn(ctx, result);
+        return result;
+      }),
+    'auth.terminalRequest': ({ code }, ctx) => accountErrors(async () => terminalSignIns.describe(code, me(ctx), ctx.connection().client)),
+    'auth.terminalDecide': ({ code, approve }, ctx) =>
+      accountErrors(async () => {
+        terminalSignIns.decide(code, approve, me(ctx), ctx.connection().client);
+        return { ok: true as const };
       }),
 
     // ---------------------------------------------------------------- screen lock

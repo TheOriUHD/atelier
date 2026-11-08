@@ -526,7 +526,7 @@ const first = (ua: string, list: [RegExp, string][]) => list.find(([re]) => re.t
 
 /** "Chrome on macOS", "Atelier Desktop on Windows". */
 function clientName(session: Pick<AuthSessionSummary, 'clientKind' | 'userAgent'>): string {
-  const app = session.clientKind === 'desktop' ? 'Atelier Desktop' : (first(session.userAgent, BROWSERS) ?? 'Browser');
+  const app = session.clientKind === 'desktop' ? 'Atelier Desktop' : session.clientKind === 'cli' ? 'Atelier CLI' : (first(session.userAgent, BROWSERS) ?? 'Browser');
   const os = first(session.userAgent, SYSTEMS);
   return os ? `${app} on ${os}` : app;
 }

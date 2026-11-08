@@ -52,6 +52,9 @@ import {
   AuthStatus,
   AutoLockMinutes,
   ClientKind,
+  TerminalSignInPoll,
+  TerminalSignInRequest,
+  TerminalSignInStart,
   DeviceSummary,
   IdentitySummary,
   InviteSummary,
@@ -164,6 +167,14 @@ export const contract = {
     'auth.setupLocal': { input: z.object({ name: z.string().trim().min(1).max(80), clientKind: ClientKind }), output: SignedIn },
     /** "Run on this computer" only: signs the owner in without a password (the backend is reachable only through the app). */
     'auth.localSignIn': { input: z.object({ clientKind: ClientKind }), output: SignedIn },
+    /** Servers: a terminal asks to be signed in through the browser (ARCHITECTURE §25); it shows the code and link it gets. */
+    'auth.terminalStart': { input: z.object({ deviceName: z.string().trim().min(1).max(120), platform: z.string().trim().min(1).max(40) }), output: TerminalSignInStart },
+    /** The terminal asks how its request stands; once approved, the answer signs this connection in and carries the token, once. */
+    'auth.terminalPoll': { input: z.object({ pollToken: z.string().min(16).max(200) }), output: TerminalSignInPoll },
+    /** Signed in: what asks with this code, for the /link page. */
+    'auth.terminalRequest': { input: z.object({ code: z.string().min(1).max(40) }), output: TerminalSignInRequest },
+    /** Signed in: approve the terminal (it is signed in as you) or deny it. */
+    'auth.terminalDecide': { input: z.object({ code: z.string().min(1).max(40), approve: z.boolean() }), output: Ok },
 
     // The screen lock of "Run on this computer" (status and unlock are public, so a locked app can ask).
     'lock.status': { input: Empty, output: ScreenLockStatus },
@@ -841,6 +852,8 @@ export const PUBLIC_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNa
   'auth.signup',
   'auth.setupLocal',
   'auth.localSignIn',
+  'auth.terminalStart',
+  'auth.terminalPoll',
   'lock.status',
   'lock.unlock',
 ]);

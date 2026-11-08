@@ -35,7 +35,7 @@ export const authSessions = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    clientKind: text('client_kind', { enum: ['web', 'desktop'] }).notNull(),
+    clientKind: text('client_kind', { enum: ['web', 'desktop', 'cli'] }).notNull(),
     deviceId: text('device_id'),
     userAgent: text('user_agent').notNull().default(''),
     ip: text('ip').notNull().default(''),
