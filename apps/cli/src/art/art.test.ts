@@ -26,15 +26,17 @@ describe('the wordmarks', () => {
     // Finished, no cell keeps the brush tip's light colour: CLI's last cells are its own clay and grey.
     // eslint-disable-next-line no-control-regex -- ANSI codes are control characters.
     const colours = (line: string) => [...line.matchAll(/\x1b\[([0-9;]*)m[^\x1b ]/g)].map((m) => m[1]);
-    for (const row of bigBanner(colour, 80).slice(0, 5)) expect(new Set(colours(row).slice(-4)).size).toBe(2);
+    for (const row of bigBanner(colour, 80)) expect(new Set(colours(row).slice(-4)).size).toBe(2);
   });
-  it('draws CLI with prompts, its last _ a cursor that blinks', () => {
+  it('draws CLI with prompts as tall as ATELIER, its last _ a cursor that blinks', () => {
     const plain = bigBanner(colour, 80).map(strip);
+    expect(plain).toHaveLength(6);
     expect(plain[0]!.endsWith('  >_>_>_  >_        >_')).toBe(true);
-    expect(plain[4]!.endsWith('  >_>_>_  >_>_>_>_  >_')).toBe(true);
+    expect(plain.slice(1, 5).every((l) => l.endsWith('>_        >_        >_'))).toBe(true);
+    expect(plain[5]!.endsWith('  >_>_>_  >_>_>_>_  >_')).toBe(true);
     const off = bigBanner(colour, 80, 1, false).map(strip);
-    expect(off[4]!.trimEnd()).toBe(plain[4]!.slice(0, -1).trimEnd());
-    expect(off.slice(0, 4)).toEqual(plain.slice(0, 4));
+    expect(off[5]!.trimEnd()).toBe(plain[5]!.slice(0, -1).trimEnd());
+    expect(off.slice(0, 5)).toEqual(plain.slice(0, 5));
   });
 });
 
