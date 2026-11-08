@@ -46,19 +46,25 @@ describe('the wordmarks', () => {
 
 describe('Pip', () => {
   it('has frames of one size, and every step of its loops is a frame', () => {
-    const heights = Object.values(PIP_FRAMES).map((f) => f.length);
-    expect(new Set(heights).size).toBe(1);
-    expect(Object.values(PIP_FRAMES).every((f) => f.every((row) => row.length === 16))).toBe(true);
+    expect(Object.values(PIP_FRAMES).every((f) => f.length === 12 && f.every((row) => row.length === 12))).toBe(true);
     for (const step of [...PIP_IDLE, ...PIP_BUSY, ...PIP_HELLO]) expect(PIP_FRAMES[step]).toBeDefined();
   });
-  it('is drawn in half blocks, 16 wide and 7 tall, plain without colour', () => {
+  it('is drawn in half blocks, 12 wide and 6 tall, its eyes holes without colour', () => {
+    for (const frame of Object.keys(PIP_FRAMES) as (keyof typeof PIP_FRAMES)[]) expect(drawPip(frame, 3).map(width)).toEqual(Array(6).fill(12));
     const plain = drawPip('base', 0);
-    expect(plain).toHaveLength(7);
-    // Every line of every frame is 16 wide, so nothing beside Pip moves as it does.
-    for (const frame of Object.keys(PIP_FRAMES) as (keyof typeof PIP_FRAMES)[]) expect(drawPip(frame, 3).map(width)).toEqual(Array(7).fill(16));
-    expect(plain.every((l) => width(l) === 16)).toBe(true);
+    expect(plain).toHaveLength(6);
     expect(plain.join('')).toMatch(/^[ ▀▄█]+$/);
+    // The eyes are holes, across two rows of half blocks.
+    expect(plain[2]).toContain('█▀▀██▀▀█');
+    expect(plain[3]).toContain('██▄▄██▄▄██');
     expect(drawPip('blink', 3).join('')).toContain('\x1b[38;2;');
+  });
+  it('has no pixel on its own: each touches another', () => {
+    for (const rows of Object.values(PIP_FRAMES)) {
+      const on = (r: number, c: number) => (rows[r]?.[c] ?? '.') !== '.';
+      for (let r = 0; r < rows.length; r++)
+        for (let c = 0; c < 12; c++) if (on(r, c)) expect(on(r - 1, c) || on(r + 1, c) || on(r, c - 1) || on(r, c + 1)).toBe(true);
+    }
   });
 });
 

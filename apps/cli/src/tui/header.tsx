@@ -3,7 +3,7 @@
  * is the live part of the screen (before the first message); printed into the scrollback, it holds still.
  */
 import { Box, Text, useAnimation } from 'ink';
-import { drawPip, PIP_IDLE, PIP_STEP_MS, type PipFrame } from '../art/mascot.ts';
+import { drawPip, PIP_IDLE, PIP_STEP_MS, PIP_WIDTH, type PipFrame } from '../art/mascot.ts';
 import type { Paint } from '../style.ts';
 import { PipBox } from './pip.tsx';
 
@@ -26,7 +26,7 @@ function Lines({ info, paint, pip }: { info: HeaderInfo; paint: Paint; pip: stri
   ];
   return (
     <Box flexDirection="row" marginBottom={1}>
-      <Box width={18} flexShrink={0}>
+      <Box width={PIP_WIDTH + 3} flexShrink={0}>
         <PipBox lines={pip} />
       </Box>
       <Box flexDirection="column" marginTop={1} flexShrink={1} minWidth={0}>
