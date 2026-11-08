@@ -42,6 +42,14 @@ afterAll(async () => {
   }
 });
 
+/** The terminal app's saved settings. */
+const saved = (): { fullscreen?: boolean } => {
+  try {
+    return JSON.parse(readFileSync(join(home, '.atelier', 'cli', 'config.json'), 'utf8')) as { fullscreen?: boolean };
+  } catch {
+    return {};
+  }
+};
 const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '', NO_UPDATE_CHECK: '1' });
 
 it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answers', { timeout: 180_000 }, async () => {
@@ -79,8 +87,17 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
     await s.waitFor('Work in', 30_000);
     show('trust', s);
     await s.press('enter');
+    // Asked once: the fullscreen view. In it, the footer is the screen's last line from the start.
+    await s.waitFor('Try the fullscreen view?', 30_000);
+    show('fullscreen?', s);
+    await s.press('enter');
     await s.waitFor('Ask about shader', 30_000);
     show('session', s);
+    const screen = s.text().split('\n');
+    expect(screen).toHaveLength(40);
+    expect(screen.at(-1)).toContain('⏵⏵');
+    expect(screen.slice(0, 10).join('\n')).toContain('Atelier');
+    expect(saved().fullscreen).toBe(true);
     await s.type('hello there');
     await s.press('enter');
     await s.waitFor(/hello there/i);
@@ -97,6 +114,13 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
     await s.waitFor(/Created .*notes\.md/, 30_000);
     show('written', s);
     expect(readFileSync(join(project, 'notes.md'), 'utf8')).toBe('waves: slower\n');
+    // /fullscreen switches to the classic view: the same session goes on.
+    await s.type('/fullscreen');
+    await s.press('enter');
+    await s.waitFor(() => saved().fullscreen === false, 30_000);
+    // The classic view prints into the terminal below the shell's line, the conversation included.
+    await s.waitFor(() => s.text().includes('exec "') && s.text().includes('hello there') && s.text().includes('⏵⏵'), 30_000);
+    show('classic again', s);
     await s.press('ctrlD');
   } finally {
     await s.close();

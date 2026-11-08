@@ -48,7 +48,8 @@ export interface Screen {
   all(): string;
   type(text: string): Promise<void>;
   press(key: keyof typeof KEYS, times?: number): Promise<void>;
-  waitFor(match: string | RegExp, timeoutMs?: number): Promise<string>;
+  /** Until the screen shows `match` (text or a pattern), or `match()` says so. */
+  waitFor(match: string | RegExp | (() => boolean), timeoutMs?: number): Promise<string>;
   /** Moves a choice list's cursor (›) down to the row matching `row`. */
   select(row: RegExp, max?: number): Promise<void>;
   close(): Promise<void>;
@@ -88,7 +89,7 @@ export async function openScreen(options: { cwd: string; env: NodeJS.ProcessEnv;
       const deadline = Date.now() + timeoutMs;
       for (;;) {
         const text = screen.all();
-        if (typeof match === 'string' ? text.includes(match) : match.test(text)) return text;
+        if (typeof match === 'function' ? match() : typeof match === 'string' ? text.includes(match) : match.test(text)) return text;
         if (Date.now() > deadline) throw new Error(`Timed out waiting for ${String(match)}. The screen:\n${screen.text()}`);
         await sleep(100);
       }

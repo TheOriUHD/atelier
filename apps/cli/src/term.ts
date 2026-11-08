@@ -60,6 +60,18 @@ export function openUrl(url: string): boolean {
 export const FOCUS_ON = `${ESC}[?1004h`;
 export const FOCUS_OFF = `${ESC}[?1004l`;
 export const CLEAR_ALL = `${ESC}[2J${ESC}[3J${ESC}[H`;
+/** Wheel reports in the fullscreen view (button events, SGR coordinates). */
+export const MOUSE_ON = `${ESC}[?1000h${ESC}[?1006h`;
+export const MOUSE_OFF = `${ESC}[?1000l${ESC}[?1006l`;
+
+/**
+ * The input in raw mode before an Ink screen starts. Ink asks the terminal about the kitty keyboard protocol as it
+ * starts and turns raw mode on a moment later; a local terminal answers sooner, and the answer was echoed onto the
+ * screen as `^[[?0u`. In raw mode nothing is echoed, and Ink reads the answer when it starts reading.
+ */
+export function holdInput(): void {
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+}
 
 /**
  * The background colour, by asking the terminal (OSC 11) before Ink takes the input; `COLORFGBG` otherwise. Dark when

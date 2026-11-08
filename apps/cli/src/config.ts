@@ -36,6 +36,13 @@ export const CliConfig = z.object({
   keepAvailable: z.boolean().default(false),
   /** The animated mascot and banner (off: still pictures). */
   motion: z.boolean().default(true),
+  /**
+   * The fullscreen view: the conversation scrolls in the window and the message box stays at the bottom, with nothing
+   * printed into the terminal's own history. Absent: asked once, at the first session.
+   */
+  fullscreen: z.boolean().optional(),
+  /** In the fullscreen view the mouse wheel scrolls; the terminal then selects text with Option (Shift) held. */
+  mouse: z.boolean().default(true),
   /** The editor Ctrl+G opens; absent: $VISUAL, $EDITOR, then a sensible default. */
   editor: z.string().optional(),
   /** Stable or beta updates. */

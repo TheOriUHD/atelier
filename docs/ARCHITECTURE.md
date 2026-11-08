@@ -1175,7 +1175,13 @@ terminal coding agents do, with Ink (React for terminals, no native module): fin
 terminal's scrollback (`<Static>`), and only what is still moving (streaming text, running steps, the status line, the
 prompt it waits on, the message box, the footer) is redrawn. A row is final when its message ended, a later part of it
 began, or (a tool call) its result came (`tui/rows.ts`); when the printed rows change (rewind, a branch, compaction,
-Ctrl+O) the screen is cleared and printed again.
+Ctrl+O) the screen is cleared and printed again. The fullscreen view (asked once, `/fullscreen`, `ATELIER_FULLSCREEN`)
+uses the alternate screen instead: the conversation is a window (`tui/scroller.tsx`: `overflow` hidden and
+`contentOffsetY`, sized with `useBoxMetrics`) that follows the newest lines, holds its place while scrolled up, and
+scrolls with Page Up/Down and the wheel. The wheel comes as SGR mouse reports (`?1000h`, `?1006h`); `tui/mouse.ts`
+stands between the terminal and Ink, takes them out, and reads only while Ink has raw mode on, so an editor Ink hands the
+terminal to gets the keys. Before any Ink screen starts the input goes into raw mode, so the terminal's answer to Ink's
+kitty keyboard query isn't echoed (`^[[?0u`).
 
 **Two ways to run, like the desktop app.**
 - **With a server:** the TUI opens `/api/ws` with the terminal's bearer token (`ClientKind 'cli'`, user agent `Atelier

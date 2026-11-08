@@ -15,7 +15,7 @@ const SERVER = process.env.OLD_SERVER;
 const base = 14000 + Math.floor(Math.random() * 1000);
 let home = '';
 let children: ChildProcess[] = [];
-const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '' });
+const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', ATELIER_FULLSCREEN: '0', HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '' });
 
 afterAll(async () => {
   if (home) {

@@ -82,6 +82,7 @@ Skills and commands of the folder and your account are listed in the same menu a
 | `/review` | Review the changes not committed yet |
 | `/config` (`/settings`) | Look, notifications, editor, transcript |
 | `/theme` | Dark, light, plain |
+| `/fullscreen` | Switch between the fullscreen and the classic view (the session goes on) |
 | `/statusline <command> \| import \| off` | A command whose output is the status line |
 | `/login` | Sign in again (or as someone else) |
 | `/logout` | Sign this terminal out |

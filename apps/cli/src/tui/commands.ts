@@ -18,7 +18,7 @@ import { KEY_HELP } from './keys.ts';
 import { todoLines, type TranscriptView } from './views.tsx';
 
 export type Overlay = { kind: 'model' } | { kind: 'effort' } | { kind: 'resume' } | { kind: 'rewind' } | { kind: 'config' } | { kind: 'mode' } | { kind: 'theme' };
-export type AppExit = { kind: 'quit'; keepRunning?: boolean } | { kind: 'setup'; step: 'login' | 'connect' | 'all' } | { kind: 'logout' };
+export type AppExit = { kind: 'quit'; keepRunning?: boolean } | { kind: 'setup'; step: 'login' | 'connect' | 'all' } | { kind: 'logout' } | { kind: 'restart'; sessionId: string | null };
 
 export interface CommandContext {
   conn: Connected;
@@ -27,6 +27,8 @@ export interface CommandContext {
   columns: number;
   folder: WorkspaceSummary;
   config: CliConfig;
+  /** The fullscreen view is on in this run. */
+  fullscreen: boolean;
   models: ModelInfo[];
   sessionId: string | null;
   live(): LiveSessionState | null;
@@ -346,6 +348,18 @@ export const COMMANDS: Command[] = [
   { name: 'review', description: 'Review the changes not committed yet', run: (ctx) => ctx.send(REVIEW_PROMPT) },
   { name: 'config', description: 'Look, notifications, editor, transcript', aliases: ['settings'], run: (ctx) => ctx.open({ kind: 'config' }) },
   { name: 'theme', description: 'Dark, light, plain', run: (ctx) => ctx.open({ kind: 'theme' }) },
+  {
+    name: 'fullscreen',
+    // No argument hint: Enter in the menu runs it (on or off may still follow).
+    description: 'Switch between the fullscreen and the classic view (the session goes on)',
+    run: async (ctx, args) => {
+      const a = args.trim().toLowerCase();
+      const on = a === 'on' ? true : a === 'off' ? false : !ctx.fullscreen;
+      await ctx.saveConfig((c) => ({ ...c, fullscreen: on }));
+      if (on === ctx.fullscreen) return ctx.print(`The fullscreen view is ${on ? 'on' : 'off'} already.`);
+      ctx.exit({ kind: 'restart', sessionId: ctx.sessionId });
+    },
+  },
   {
     name: 'statusline',
     description: 'A command whose output is the status line',

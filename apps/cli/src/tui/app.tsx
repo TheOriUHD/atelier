@@ -22,7 +22,7 @@ import { describe } from '../connection/connect.ts';
 import type { CliPaths } from '../paths.ts';
 import { VERSION } from '../runtime.ts';
 import type { Paint } from '../style.ts';
-import { clipboardImage, notify, setTitle } from '../term.ts';
+import { clipboardImage, MOUSE_OFF, MOUSE_ON, notify, setTitle } from '../term.ts';
 import { COMMANDS, findCommand, type AppExit, type CommandContext, type Overlay } from './commands.ts';
 import { Composer, type ComposerKey, type SlashItem } from './composer.tsx';
 import { Footer } from './footer.tsx';
@@ -30,7 +30,9 @@ import { LiveHeader, StillHeader, type HeaderInfo } from './header.tsx';
 import { appendHistory, readHistory } from './history.ts';
 import { ListPicker, when, type PickItem } from './pickers.tsx';
 import { PendingPrompt } from './prompts.tsx';
+import type { Wheel } from './mouse.ts';
 import { buildRows, finalCount, type LocalRow, type Row } from './rows.ts';
+import { Scroller } from './scroller.tsx';
 import { clearScreen } from './screen.ts';
 import { EFFORT_WORDS, MODE_CYCLE, MODE_WORDS } from './session.ts';
 import { StatusLine } from './status.tsx';
@@ -51,6 +53,10 @@ export interface AppProps {
   mode?: PermissionMode | undefined;
   /** A newer version is out (said under the tip). */
   notice?: Promise<string | null>;
+  /** The fullscreen view: the conversation scrolls in the window, the message box stays at the bottom. */
+  fullscreen?: boolean;
+  /** The mouse wheel, in the fullscreen view. */
+  wheel?: Wheel | null;
   onExit(next: AppExit): void;
 }
 
@@ -73,8 +79,11 @@ const textOf = (parts: Part[]) => parts.flatMap((p) => (p.type === 'text' ? [p.t
 export function App(props: AppProps) {
   const { conn, paint, folder, paths } = props;
   const { exit, suspendTerminal } = useApp();
-  const { columns } = useWindowSize();
+  const { columns, rows: screenRows } = useWindowSize();
+  const fullscreen = !!props.fullscreen;
   const [config, setConfig] = useState(props.config);
+  /** Sent messages so far: the fullscreen view goes back to the bottom with each. */
+  const [sent, setSent] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(props.initialSessionId);
   const state = useLive(conn, sessionId);
   const [local, setLocal] = useState<LocalRow[]>([]);
@@ -194,14 +203,15 @@ export function App(props: AppProps) {
     const keys = staticItems.map((i) => i.key);
     const before = printed.current;
     const same = before.every((k, i) => keys[i] === k);
-    if (!same) {
+    if (!same && !fullscreen) {
       clearScreen();
       setEpoch((e) => e + 1);
     }
     printed.current = keys;
-  }, [staticItems]);
+  }, [staticItems, fullscreen]);
 
   const reprint = () => {
+    if (fullscreen) return;
     clearScreen();
     printed.current = [];
     setEpoch((e) => e + 1);
@@ -229,6 +239,7 @@ export function App(props: AppProps) {
   const sendText = useCallback(
     async (text: string, how: 'send' | 'join' = 'send') => {
       setStarted(true);
+      setSent((n) => n + 1);
       const id = await ensureSession();
       const extra = shellOutput.current.splice(0).map((t) => ({ type: 'context' as const, text: t }));
       const parts: Part[] = [...attachments.map((a) => a.part), ...extra, ...(text ? [{ type: 'text' as const, text }] : [])];
@@ -254,6 +265,7 @@ export function App(props: AppProps) {
     columns,
     folder,
     config,
+    fullscreen,
     models,
     sessionId,
     live: () => (sessionId ? state : null),
@@ -338,7 +350,12 @@ export function App(props: AppProps) {
     const file = join(tmpdir(), `atelier-message-${process.pid}.md`);
     writeFileSync(file, '');
     const editor = config.editor || process.env.VISUAL || process.env.EDITOR || (process.platform === 'win32' ? 'notepad' : 'vi');
-    await suspendTerminal(async () => void spawnSync(editor, [file], { stdio: 'inherit', shell: true }));
+    // The wheel reports go off while the editor has the terminal.
+    await suspendTerminal(async () => {
+      if (props.wheel) process.stdout.write(MOUSE_OFF);
+      spawnSync(editor, [file], { stdio: 'inherit', shell: true });
+      if (props.wheel) process.stdout.write(MOUSE_ON);
+    });
     const text = readFileSync(file, 'utf8').replace(/\n+$/, '');
     unlinkSync(file);
     if (text) setInject({ text });
@@ -502,87 +519,124 @@ export function App(props: AppProps) {
   const queued = outbox.length;
   const contextPercent = context ? Math.round((context.used / context.limit) * 100) : null;
 
+  // The header and the tip; in the classic view only before the first message (then it is printed with the rest).
+  const top = (
+    <Box flexDirection="column">
+      {started ? <StillHeader info={headerInfo} paint={paint} /> : <LiveHeader info={headerInfo} paint={paint} motion={config.motion} />}
+      {!started && (
+        <Box marginBottom={1}>
+          <Text>{paint.fg('muted', `Tip: ${TIPS[config.tipIndex % TIPS.length]}`)}</Text>
+        </Box>
+      )}
+      {notice && (
+        <Box marginBottom={1}>
+          <Text>{paint.fg('accentSoft', notice)}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+  // What is still being written: the reply's rows, what runs, the todos, waiting messages.
+  const going = (
+    <>
+    {pip > 0 && <PipDance key={pip} paint={paint} />}
+    {live.map((row) =>
+      row.kind === 'text' ? (
+        <TextRow key={row.key} text={row.text} ctx={ctx} />
+      ) : row.kind === 'thinking' ? (
+        <ThinkingRow key={row.key} text={row.text} seconds={null} ctx={ctx} live />
+      ) : row.kind === 'tool' ? (
+        <ToolRow key={row.key} call={row.call} result={row.result} ctx={ctx} running={running && !row.result} {...(state.toolOutput[row.call.id] !== undefined ? { output: state.toolOutput[row.call.id] } : {})} />
+      ) : (
+        <RowView key={row.key} row={row} ctx={ctx} />
+      ),
+    )}
+    {status && !state.pending && <StatusLine status={status} paint={paint} now={now} />}
+    {showTodos && running && state.todos.length > 0 && state.todos.some((t) => t.status !== 'completed') && (
+      <Box flexDirection="column" marginBottom={1} marginLeft={2}>
+        <Text>{todoLines(state.todos, paint).join('\n')}</Text>
+      </Box>
+    )}
+    {outbox.map((m) => (
+      <Text key={m.id}>{paint.fg('muted', `  ⏳ ${textOf(m.parts).split('\n')[0]!.slice(0, columns - 10)}`)}</Text>
+    ))}
+    {queued > 0 && <Text>{paint.fg('faint', '  waits for this reply · ↑ takes it back · ctrl+s sends into it')}</Text>}
+    {state.status === 'error' && state.error && <Text>{paint.fg('bad', state.error)}</Text>}
+    </>
+  );
+  // The message box (or the question waiting for an answer, or a list to pick from) and the footer.
+  const below = (
+    <>
+    {state.pending ? (
+      <PendingPrompt pending={state.pending} ctx={ctx} respond={respond} />
+    ) : overlay ? (
+      // eslint-disable-next-line react-hooks/refs -- the pickers' handlers use refs when picked, not while drawn.
+      pickers()
+    ) : (
+      <Composer
+        paint={paint}
+        columns={columns}
+        active={!state.pending && !overlay}
+        placeholder={running ? 'Type to queue a message' : started ? 'Ask for a change, or /help' : `Ask about ${basename(folder.root)}, or /help`}
+        commands={[...COMMANDS.filter((c) => !c.hidden).map((c) => ({ name: c.name, description: c.description, ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}) })), ...slash.filter((s) => !findCommand(s.name))]}
+        findFiles={(query) => conn.rpc.call('workspaces.findFiles', { workspaceId: folder.id, query })}
+        history={history}
+        suggestion={running ? null : state.suggestion}
+        attachments={attachments.map((a) => a.name)}
+        onSubmit={(text, how) => void run(text, how)}
+        onShell={runShell}
+        onKey={onKey}
+        onAttachPath={attachFile}
+        inject={inject}
+      />
+    )}
+    <Footer
+      paint={paint}
+      columns={columns}
+      info={{
+        mode,
+        contextPercent,
+        where: conn.mode === 'server' ? new URL(conn.serverUrl!).host : 'this computer',
+        link: conn.mode === 'server' ? link : undefined,
+        connected,
+        model: model?.displayName ?? 'no model',
+        effort: effort ? EFFORT_WORDS[effort] : null,
+        queued,
+        tasks: state.tasks.filter((t) => t.status === 'running').length,
+        hint,
+        statusLine,
+      }}
+    />
+    </>
+  );
+
+  if (fullscreen) {
+    // Older rows than these are left out of the window (the whole session: /export).
+    const shown = rows.slice(Math.max(0, done - 400), done);
+    return (
+      <Box flexDirection="column" width={columns} height={screenRows}>
+        <Scroller paint={paint} wheel={props.wheel ?? null} active={!state.pending && !overlay} follow={sent}>
+          {top}
+          {done > shown.length && <Text>{paint.fg('faint', `${done - shown.length} earlier steps aren’t shown here; /export writes the whole session to a file.`)}</Text>}
+          {shown.map((row) => (
+            <RowView key={row.key} row={row} ctx={ctx} />
+          ))}
+          {going}
+        </Scroller>
+        <Box flexDirection="column" flexShrink={0}>
+          {below}
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <>
       <Static key={epoch} items={staticItems}>
         {(item) => <Box key={item.key}>{item.kind === 'header' ? <StillHeader info={headerInfo} paint={paint} /> : <RowView row={item.row} ctx={ctx} />}</Box>}
       </Static>
-      {!started && (
-        <Box flexDirection="column">
-          <LiveHeader info={headerInfo} paint={paint} motion={config.motion} />
-          <Box marginBottom={1}>
-            <Text>{paint.fg('muted', `Tip: ${TIPS[config.tipIndex % TIPS.length]}`)}</Text>
-          </Box>
-          {notice && (
-            <Box marginBottom={1}>
-              <Text>{paint.fg('accentSoft', notice)}</Text>
-            </Box>
-          )}
-        </Box>
-      )}
-      {pip > 0 && <PipDance key={pip} paint={paint} />}
-      {live.map((row) =>
-        row.kind === 'text' ? (
-          <TextRow key={row.key} text={row.text} ctx={ctx} />
-        ) : row.kind === 'thinking' ? (
-          <ThinkingRow key={row.key} text={row.text} seconds={null} ctx={ctx} live />
-        ) : row.kind === 'tool' ? (
-          <ToolRow key={row.key} call={row.call} result={row.result} ctx={ctx} running={running && !row.result} {...(state.toolOutput[row.call.id] !== undefined ? { output: state.toolOutput[row.call.id] } : {})} />
-        ) : (
-          <RowView key={row.key} row={row} ctx={ctx} />
-        ),
-      )}
-      {status && !state.pending && <StatusLine status={status} paint={paint} now={now} />}
-      {showTodos && running && state.todos.length > 0 && state.todos.some((t) => t.status !== 'completed') && (
-        <Box flexDirection="column" marginBottom={1} marginLeft={2}>
-          <Text>{todoLines(state.todos, paint).join('\n')}</Text>
-        </Box>
-      )}
-      {outbox.map((m) => (
-        <Text key={m.id}>{paint.fg('muted', `  ⏳ ${textOf(m.parts).split('\n')[0]!.slice(0, columns - 10)}`)}</Text>
-      ))}
-      {queued > 0 && <Text>{paint.fg('faint', '  waits for this reply · ↑ takes it back · ctrl+s sends into it')}</Text>}
-      {state.status === 'error' && state.error && <Text>{paint.fg('bad', state.error)}</Text>}
-      {state.pending ? (
-        <PendingPrompt pending={state.pending} ctx={ctx} respond={respond} />
-      ) : overlay ? (
-        // eslint-disable-next-line react-hooks/refs -- the pickers' handlers use refs when picked, not while drawn.
-        pickers()
-      ) : (
-        <Composer
-          paint={paint}
-          columns={columns}
-          active={!state.pending && !overlay}
-          placeholder={running ? 'Type to queue a message' : started ? 'Ask for a change, or /help' : `Ask about ${basename(folder.root)}, or /help`}
-          commands={[...COMMANDS.filter((c) => !c.hidden).map((c) => ({ name: c.name, description: c.description, ...(c.argumentHint ? { argumentHint: c.argumentHint } : {}) })), ...slash.filter((s) => !findCommand(s.name))]}
-          findFiles={(query) => conn.rpc.call('workspaces.findFiles', { workspaceId: folder.id, query })}
-          history={history}
-          suggestion={running ? null : state.suggestion}
-          attachments={attachments.map((a) => a.name)}
-          onSubmit={(text, how) => void run(text, how)}
-          onShell={runShell}
-          onKey={onKey}
-          onAttachPath={attachFile}
-          inject={inject}
-        />
-      )}
-      <Footer
-        paint={paint}
-        columns={columns}
-        info={{
-          mode,
-          contextPercent,
-          where: conn.mode === 'server' ? new URL(conn.serverUrl!).host : 'this computer',
-          link: conn.mode === 'server' ? link : undefined,
-          connected,
-          model: model?.displayName ?? 'no model',
-          effort: effort ? EFFORT_WORDS[effort] : null,
-          queued,
-          tasks: state.tasks.filter((t) => t.status === 'running').length,
-          hint,
-          statusLine,
-        }}
-      />
+      {!started && top}
+      {going}
+      {below}
     </>
   );
 }

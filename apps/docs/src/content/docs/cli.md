@@ -85,6 +85,12 @@ commands as you in that folder, as a desktop app's trusted folder does ([Securit
 - **The line while it works** says what it is doing and for how long, how many tokens so far, and what it waits on (a
   local model loading, a retry, a place in line).
 - **Footer:** the mode, how full the context is, the connection, the model and effort.
+- **Fullscreen or classic.** The first session asks once. In the fullscreen view Atelier takes the whole window: the
+  conversation scrolls above with the trackpad, the mouse wheel or Page Up/Down, and the message box stays at the
+  bottom; to select text with the mouse, hold Option (⌥) on a Mac or Shift elsewhere. In the classic view the
+  conversation prints into the terminal and its own scrollback. `/fullscreen` switches and the session goes on;
+  `ATELIER_FULLSCREEN=1` or `0` decides for one start, and `ATELIER_NO_MOUSE=1` leaves the mouse to the terminal (Page
+  Up/Down still scroll).
 
 | Key | What it does |
 |---|---|

@@ -20,8 +20,9 @@ import { credentialStore, tokenName } from './keychain.ts';
 import { paths as cliPaths } from './paths.ts';
 import { VERSION } from './runtime.ts';
 import { colorDepth, Paint, palette, type Shade } from './style.ts';
-import { backgroundShade, FOCUS_OFF } from './term.ts';
+import { backgroundShade, FOCUS_OFF, holdInput, MOUSE_OFF, MOUSE_ON } from './term.ts';
 import type { AppExit } from './tui/commands.ts';
+import { mouseInput } from './tui/mouse.ts';
 import { setInstance } from './tui/screen.ts';
 import { defaultCodeModel, modeFrom } from './tui/session.ts';
 
@@ -208,31 +209,62 @@ async function main(argv: string[]): Promise<number> {
     await updateConfig(p.config, (c) => ({ ...c, tipIndex: c.tipIndex + 1 }));
     const notice = updateNotice(p, config).catch(() => null);
     const { App } = await import('./tui/app.tsx');
-    let exit: AppExit = { kind: 'quit' };
-    const instance = render(
-      createElement(App, {
-        conn,
-        paths: p,
-        config,
-        paint,
-        folder,
-        branch,
-        models,
-        model,
-        initialSessionId: sessionId,
-        initialPrompt: values.resume && !sessionId ? null : prompt || null,
-        mode,
-        notice,
-        onExit: (next: AppExit) => (exit = next),
-      }),
-      { exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' }, incrementalRendering: true, maxFps: 30, isScreenReaderEnabled: !!values['screen-reader'] },
-    );
-    setInstance(instance);
-    await instance.waitUntilExit();
-    setInstance(null);
-    process.stdout.write(FOCUS_OFF);
+    const screenReader = !!values['screen-reader'];
+    // The fullscreen view: asked once (ATELIER_FULLSCREEN=1 or 0 decides without asking).
+    const wantsFullscreen = (c: CliConfig) => (process.env.ATELIER_FULLSCREEN ? process.env.ATELIER_FULLSCREEN !== '0' : c.fullscreen);
+    if (wantsFullscreen(config) === undefined && process.stdout.isTTY && !screenReader) {
+      const { askFullscreen } = await import('./tui/fullscreen-ask.tsx');
+      const answer = await askFullscreen(paint);
+      if (answer !== null) config = await updateConfig(p.config, (c) => ({ ...c, fullscreen: answer }));
+    }
+    let openSession = sessionId;
+    let firstPrompt = values.resume && !sessionId ? null : prompt || null;
+    let ended: AppExit = { kind: 'quit' };
+    // Once more after /fullscreen: the same session, in the other view.
+    for (;;) {
+      const fullscreen = !!wantsFullscreen(config) && !screenReader && !!process.stdout.isTTY;
+      const mouse = fullscreen && config.mouse && !process.env.ATELIER_NO_MOUSE ? mouseInput(process.stdin) : null;
+      let exit: AppExit = { kind: 'quit' };
+      holdInput();
+      const instance = render(
+        createElement(App, {
+          conn,
+          paths: p,
+          config,
+          paint,
+          folder,
+          branch,
+          models,
+          model,
+          initialSessionId: openSession,
+          initialPrompt: firstPrompt,
+          mode,
+          notice,
+          fullscreen,
+          wheel: mouse?.wheel ?? null,
+          onExit: (next: AppExit) => (exit = next),
+        }),
+        { exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' }, incrementalRendering: true, maxFps: 30, isScreenReaderEnabled: screenReader, alternateScreen: fullscreen, ...(mouse ? { stdin: mouse.stdin } : {}) },
+      );
+      if (mouse) {
+        process.stdout.write(MOUSE_ON);
+        process.once('exit', () => process.stdout.write(MOUSE_OFF));
+      }
+      setInstance(instance);
+      await instance.waitUntilExit();
+      setInstance(null);
+      if (mouse) {
+        process.stdout.write(MOUSE_OFF);
+        mouse.close();
+      }
+      process.stdout.write(FOCUS_OFF);
+      ended = exit as AppExit;
+      if (ended.kind !== 'restart') break;
+      openSession = ended.sessionId;
+      firstPrompt = null;
+      config = await readConfig(p.config);
+    }
     conn.close();
-    const ended = exit as AppExit;
     if (ended.kind === 'quit') {
       if (ended.keepRunning) process.stdout.write(`${paint.fg('muted', 'The reply goes on in the background. atelier -c picks this session up again.')}\n`);
       return 0;

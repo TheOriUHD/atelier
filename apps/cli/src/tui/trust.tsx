@@ -5,6 +5,7 @@ import { drawPip } from '../art/mascot.ts';
 import type { Paint } from '../style.ts';
 import { Choices, Panel } from './inputs.tsx';
 import { PipBox } from './pip.tsx';
+import { holdInput } from '../term.ts';
 import { shortPath } from './views.tsx';
 
 function Trust({ paint, root, server, onAnswer }: { paint: Paint; root: string; server: string | null; onAnswer(yes: boolean): void }) {
@@ -42,6 +43,7 @@ function Trust({ paint, root, server, onAnswer }: { paint: Paint; root: string; 
 export function askTrust(paint: Paint, root: string, server: string | null): Promise<boolean> {
   return new Promise((resolve) => {
     let yes = false;
+    holdInput();
     const instance = render(<Trust paint={paint} root={root} server={server} onAnswer={(a) => (yes = a)} />, { exitOnCtrlC: true });
     void instance.waitUntilExit().then(
       () => resolve(yes),

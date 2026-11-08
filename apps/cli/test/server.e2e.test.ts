@@ -27,7 +27,7 @@ let children: ChildProcess[] = [];
 let admin: RpcClient<AppContract>;
 let closeAdmin = () => {};
 
-const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '' });
+const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', ATELIER_FULLSCREEN: '0', HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '' });
 
 beforeAll(async () => {
   if (!ready()) return;

@@ -28,7 +28,7 @@ import { credentialStore, tokenName } from '../keychain.ts';
 import type { CliPaths } from '../paths.ts';
 import { USER_AGENT, VERSION } from '../runtime.ts';
 import { colorDepth, Paint, palette, type Shade } from '../style.ts';
-import { openUrl } from '../term.ts';
+import { holdInput, openUrl } from '../term.ts';
 import { Choices, FilterList, Form, TextLine, type Choice, type ListItem } from '../tui/inputs.tsx';
 import { MODE_WORDS } from '../tui/session.ts';
 import { shortPath } from '../tui/views.tsx';
@@ -875,6 +875,7 @@ export function SignInWait({ rpc, kind, onDone }: { rpc: RpcClient<AppContract>;
 export function runSetup(paths: CliPaths, config: CliConfig, start: SetupStart, shade: Shade, afterwards: 'session' | 'exit' = 'exit'): Promise<CliConfig | null> {
   return new Promise((resolve) => {
     let result: CliConfig | null = null;
+    holdInput();
     const instance = render(<Wizard paths={paths} config={config} start={start} shade={shade} afterwards={afterwards} onDone={(c) => (result = c)} />, { alternateScreen: true, exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' } });
     void instance.waitUntilExit().then(() => resolve(result));
   });
