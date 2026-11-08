@@ -50,7 +50,7 @@ type Step =
   | { s: 'local-account'; error?: string }
   | { s: 'providers'; note?: string }
   | { s: 'provider-key'; type: ProviderType; error?: string; busy?: boolean }
-  | { s: 'provider-code'; label: string; code: string; url: string }
+  | { s: 'provider-code'; kind: 'chatgpt' | 'copilot'; url: string; code?: string; opened: boolean }
   | { s: 'model'; models: ModelInfo[] }
   | { s: 'done'; note?: string };
 
@@ -614,7 +614,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
           ),
         };
       case 'providers':
-        return { title: 'Which models?', keys: keys(), content: <Providers paint={paint} rpc={client!} note={step.note} onAdd={(type) => setStep({ s: 'provider-key', type })} onCode={(label, code, url) => setStep({ s: 'provider-code', label, code, url })} onNext={() => void toModel()} onBack={() => setStep({ s: 'start' })} /> };
+        return { title: 'Which models?', keys: keys(), content: <Providers paint={paint} rpc={client!} note={step.note} onAdd={(type) => setStep({ s: 'provider-key', type })} onCode={(sign) => setStep({ s: 'provider-code', ...sign })} onNext={() => void toModel()} onBack={() => setStep({ s: 'start' })} /> };
       case 'provider-key': {
         const keyless = step.type === 'ollama' || step.type === 'llamacpp' || step.type === 'openai-compatible';
         return {
@@ -649,21 +649,34 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
           ),
         };
       }
-      case 'provider-code':
+      case 'provider-code': {
+        const label = PROVIDER_LABELS[step.kind];
         return {
-          title: `Sign in to ${step.label}`,
+          title: `Sign in to ${label}`,
           keys: 'esc back · ctrl+c quit',
           content: (
             <Box flexDirection="column">
-              <Text>{`Open ${paint.fg('info', step.url)} and enter`}</Text>
-              <Box marginY={1} borderStyle="round" borderColor={paint.p.depth ? paint.p.accent : undefined} paddingX={2} alignSelf="flex-start">
-                <Text>{paint.bold(paint.fg('accent', step.code))}</Text>
+              {step.code ? (
+                <>
+                  <Text>{step.opened ? 'Your browser opened the page. Enter this code there:' : 'Open this page and enter the code:'}</Text>
+                  <Box marginY={1} borderStyle="round" borderColor={paint.p.depth ? paint.p.accent : undefined} paddingX={2} alignSelf="flex-start">
+                    <Text>{paint.bold(paint.fg('accent', step.code))}</Text>
+                  </Box>
+                </>
+              ) : (
+                <Box marginBottom={1}>
+                  <Text>{step.opened ? `Your browser opened the ${label} sign-in. Sign in there, and this goes on by itself.` : `Open this page and sign in to ${label}; this goes on by itself:`}</Text>
+                </Box>
+              )}
+              <Text>{paint.fg(step.opened ? 'muted' : 'info', step.opened ? `If it didn’t open: ${step.url}` : step.url)}</Text>
+              <Box marginTop={1}>
+                <Text>{`${spinner} ${paint.fg('muted', 'Waiting for the sign-in…')}`}</Text>
               </Box>
-              <Text>{`${spinner} ${paint.fg('muted', 'Waiting for the sign-in…')}`}</Text>
-              <CodeWait rpc={client!} label={step.label} onDone={(n) => setStep({ s: 'providers', note: n })} />
+              <SignInWait rpc={client!} kind={step.kind} onDone={(n) => setStep({ s: 'providers', note: n })} />
             </Box>
           ),
         };
+      }
       case 'model':
         return {
           title: 'Which model, and how much should it ask?',
@@ -743,7 +756,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
 }
 
 /** Standalone: what is set up, what was found on this computer, and what can be added. */
-function Providers({ paint, rpc, note, onAdd, onCode, onNext, onBack }: { paint: Paint; rpc: RpcClient<AppContract>; note?: string | undefined; onAdd(type: ProviderType): void; onCode(label: string, code: string, url: string): void; onNext(): void; onBack(): void }) {
+function Providers({ paint, rpc, note, onAdd, onCode, onNext, onBack }: { paint: Paint; rpc: RpcClient<AppContract>; note?: string | undefined; onAdd(type: ProviderType): void; onCode(sign: { kind: 'chatgpt' | 'copilot'; url: string; code?: string; opened: boolean }): void; onNext(): void; onBack(): void }) {
   const [state, setState] = useState<{ configured: { id: string; name: string; models: number }[]; detected: { type: ProviderType; baseUrl: string; label: string }[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -763,20 +776,29 @@ function Providers({ paint, rpc, note, onAdd, onCode, onNext, onBack }: { paint:
     setRefresh((r) => r + 1);
   };
   const signIn = async (kind: 'chatgpt' | 'copilot') => {
+    // Signed in already (a sign-in that finished after the setup stopped looking): the provider is all that is missing.
+    const status = kind === 'copilot' ? await rpc.call('copilot.status', {}) : await rpc.call('chatgpt.status', {});
+    if (status.signedIn) {
+      setBusy(PROVIDER_LABELS[kind]);
+      await rpc.call('providers.save', { id: kind, type: kind, name: PROVIDER_LABELS[kind], baseUrl: DEFAULT_BASE_URLS[kind], headers: {}, enabled: true }).catch(() => undefined);
+      setBusy(null);
+      setState(null);
+      return setRefresh((r) => r + 1);
+    }
     if (kind === 'copilot') {
       const r = await rpc.call('copilot.signIn', {});
-      openUrl(r.verificationUri);
-      onCode('GitHub Copilot', r.userCode, r.verificationUri);
+      onCode({ kind, url: r.verificationUri, code: r.userCode, opened: openUrl(r.verificationUri) });
     } else {
+      // A browser sign-in, as OpenAI's Codex does it; a code only where the backend can't take the browser's answer.
       const r = await rpc.call('chatgpt.signIn', {});
-      openUrl(r.url);
-      onCode('ChatGPT Plan', r.userCode ?? 'Sign in in the browser that opened', r.url);
+      onCode({ kind, url: r.url, ...(r.userCode ? { code: r.userCode } : {}), opened: openUrl(r.url) });
     }
   };
   const choices: Choice<string>[] = [
     ...state.detected.map((d) => ({ value: `detected:${d.baseUrl}`, label: `Add ${d.label} found here`, hint: d.baseUrl })),
-    { value: 'chatgpt', label: 'Sign in with a ChatGPT plan' },
-    { value: 'copilot', label: 'Sign in with GitHub Copilot' },
+    // Plans already added aren't offered again.
+    ...(state.configured.some((c) => c.id === 'chatgpt') ? [] : [{ value: 'chatgpt', label: 'Sign in with a ChatGPT plan' }]),
+    ...(state.configured.some((c) => c.id === 'copilot') ? [] : [{ value: 'copilot', label: 'Sign in with GitHub Copilot' }]),
     ...(['anthropic', 'openai', 'mistral', 'mistral-vibe', 'openai-compatible', 'ollama'] as ProviderType[]).map((t) => ({ value: `add:${t}`, label: `Add ${PROVIDER_LABELS[t]}${t === 'openai-compatible' ? ' (OpenRouter, LM Studio, …)' : ''}` })),
     { value: 'next', label: state.configured.length ? 'Continue' : 'Continue without models', ...(state.configured.length ? {} : { hint: 'add one later with atelier setup' }) },
   ];
@@ -803,21 +825,50 @@ function Providers({ paint, rpc, note, onAdd, onCode, onNext, onBack }: { paint:
   );
 }
 
-/** Waits for a ChatGPT or Copilot sign-in to finish (their own status says), then goes back to the list. */
-function CodeWait({ rpc, label, onDone }: { rpc: RpcClient<AppContract>; label: string; onDone(note: string): void }) {
+/**
+ * Waits for a ChatGPT or Copilot sign-in to finish (their own status says), adds the provider as the desktop app does,
+ * and goes back to the list. Esc ends the sign-in. The check runs on its own clock: the wizard redraws many times a
+ * second (Pip, the spinner), and a timer that started over with each redraw never fired.
+ */
+export function SignInWait({ rpc, kind, onDone }: { rpc: RpcClient<AppContract>; kind: 'chatgpt' | 'copilot'; onDone(note: string): void }) {
+  const done = useRef(onDone);
   useEffect(() => {
-    const timer = setInterval(() => {
-      const check = label === 'GitHub Copilot' ? rpc.call('copilot.status', {}) : rpc.call('chatgpt.status', {});
-      void check
-        .then((s) => {
-          if (s.signedIn) onDone(`Signed in to ${label}.`);
-          else if (s.error && !s.signingIn) onDone(`${label}: ${s.error}`);
-        })
-        .catch(() => undefined);
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [rpc, label, onDone]);
-  useInput((_i, key) => key.escape && onDone(''));
+    done.current = onDone;
+  });
+  useEffect(() => {
+    let finished = false;
+    const label = PROVIDER_LABELS[kind];
+    const finish = (note: string) => {
+      if (finished) return;
+      finished = true;
+      clearInterval(timer);
+      done.current(note);
+    };
+    const check = async () => {
+      const s = kind === 'copilot' ? await rpc.call('copilot.status', {}) : await rpc.call('chatgpt.status', {});
+      if (finished) return;
+      if (s.signedIn) {
+        finished = true;
+        clearInterval(timer);
+        await rpc
+          .call('providers.save', { id: kind, type: kind, name: label, baseUrl: DEFAULT_BASE_URLS[kind], headers: {}, enabled: true })
+          .then(
+            () => done.current(`Added ${label}.`),
+            (e: unknown) => done.current(`Signed in, but ${label} couldn’t be added: ${describe(e)}`),
+          );
+      } else if (s.error && !s.signingIn) finish(`${label}: ${s.error}`);
+    };
+    const timer = setInterval(() => void check().catch(() => undefined), 1000);
+    return () => {
+      finished = true;
+      clearInterval(timer);
+    };
+  }, [rpc, kind]);
+  useInput((_i, key) => {
+    if (!key.escape) return;
+    void (kind === 'copilot' ? rpc.call('copilot.cancel', {}) : rpc.call('chatgpt.cancel', {})).catch(() => undefined);
+    done.current('');
+  });
   return null;
 }
 
