@@ -31,8 +31,9 @@ it.skipIf(!canRun())('lets in only its own user’s clients, and stops when aske
   const child = spawn(process.execPath, [BUNDLE, 'daemon', 'run', '--local'], { env, stdio: 'ignore' });
   const where = socketPath(join(dir, 'cli'));
   try {
-    for (let i = 0; i < 100 && !(await readFile(join(dir, 'cli', 'run', 'daemon.token'), 'utf8').catch(() => '')); i++) await new Promise((r) => setTimeout(r, 100));
-    for (let i = 0; i < 100; i++) {
+    // Under a full test run the backend can take a while to start.
+    for (let i = 0; i < 300 && !(await readFile(join(dir, 'cli', 'run', 'daemon.token'), 'utf8').catch(() => '')); i++) await new Promise((r) => setTimeout(r, 100));
+    for (let i = 0; i < 300; i++) {
       if ((await talk(where, { t: 'status' })).length) break;
       await new Promise((r) => setTimeout(r, 100));
     }
@@ -44,13 +45,14 @@ it.skipIf(!canRun())('lets in only its own user’s clients, and stops when aske
     expect(welcome).toMatchObject({ t: 'welcome', status: { want, busy: 0 } });
     // A stop from someone with the token ends it.
     const stopped = new Promise((r) => child.once('exit', r));
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
       const s = connect(where, () => {
         s.write(`${JSON.stringify({ t: 'hello', token, version: 'x', want })}\n${JSON.stringify({ t: 'stop' })}\n`);
         // Read what it says, or the end of the stream never comes.
         s.resume();
         s.on('close', () => resolve());
       });
+      s.on('error', async (e) => reject(new Error(`${e.message}\n${await readFile(join(dir, 'cli', 'logs', 'daemon.log'), 'utf8').catch(() => 'no log')}`)));
     });
     await stopped;
   } finally {

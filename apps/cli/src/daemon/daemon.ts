@@ -259,4 +259,7 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
     if (Date.now() - lastClientAt >= idleMs) void stop('idle');
   }, Math.min(30_000, idleMs)).unref();
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => void stop(signal));
+  // A failure in one client's handling is logged, not the end of the service for every terminal.
+  process.on('unhandledRejection', (e) => log.error('unhandled rejection', e));
+  process.on('uncaughtException', (e) => log.error('uncaught exception', e));
 }
