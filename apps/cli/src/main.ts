@@ -175,7 +175,9 @@ async function main(argv: string[]): Promise<number> {
     const models = await conn.rpc.call('models.list', {}).catch(() => []);
     const wantedModel = typeof values.model === 'string' ? values.model : config.model;
     const { findModel } = await import('./tui/session.ts');
-    const model = (wantedModel && findModel(models, wantedModel)) || (await defaultCodeModel(conn.rpc, models, config.model));
+    const named = wantedModel ? findModel(models, wantedModel) : undefined;
+    const model = named ?? (await defaultCodeModel(conn.rpc, models, config.model));
+    if (wantedModel && !named) process.stderr.write(`${paint.fg('warn', `The model “${wantedModel}” isn’t one you can use here${model ? `; using ${model.displayName} (${model.ref})` : ''}. atelier models lists them.`)}\n`);
     const modeWord = (values.mode ?? values['permission-mode']) as string | undefined;
     const mode: PermissionMode | undefined = modeWord ? (modeFrom(modeWord) ?? undefined) : undefined;
     const effort = typeof values.effort === 'string' ? (values.effort === 'extra' ? 'xhigh' : values.effort) as Effort : undefined;

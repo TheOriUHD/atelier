@@ -43,6 +43,15 @@ export async function trustFolder(c: Connected, p: CliPaths, root: string): Prom
     const list = await readJson(p.trusted, z.array(z.string()), []);
     if (!list.some((t) => samePath(t, root))) await writePrivate(p.trusted, `${JSON.stringify([...list, root], null, 2)}\n`);
   }
-  const added = await c.rpc.call('workspaces.addLocal', { path: root });
+  // The device link may still be coming up (the background service just started): try again for a few seconds.
+  let added: WorkspaceSummary | null = null;
+  for (let attempt = 0; !added; attempt++) {
+    try {
+      added = await c.rpc.call('workspaces.addLocal', { path: root });
+    } catch (e) {
+      if (c.mode !== 'server' || attempt >= 8) throw e;
+      await new Promise((r) => setTimeout(r, 750));
+    }
+  }
   return added.trusted === false ? c.rpc.call('workspaces.trust', { id: added.id }) : added;
 }
