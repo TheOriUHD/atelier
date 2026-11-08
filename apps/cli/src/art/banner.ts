@@ -14,9 +14,14 @@ export const BIG = [
   '╚═╝  ╚═╝   ╚═╝   ╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝',
 ];
 
-/** C, L and I as pixels (`#`), each drawn as a prompt, `>_`: six rows, as tall as ATELIER with its shadow. */
-const CLI_PIXELS = [' ### #    #', '#    #    #', '#    #    #', '#    #    #', '#    #    #', ' ### #### #'];
-export const BIG_CLI = CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  '));
+/**
+ * C, L and I as pixels (`#`), each drawn as a prompt, `>_`, on the five rows of ATELIER's letters, and under them a
+ * shadow row in ATELIER's own lines. A sixth row of prompts would end lower than ATELIER: `_` sits at the foot of a
+ * cell, where ATELIER's bottom, `╚═╝`, is in the middle of one.
+ */
+const CLI_PIXELS = [' ### #    #', '#    #    #', '#    #    #', '#    #    #', ' ### #### #'];
+const CLI_SHADOW = '  ╚═════╝ ╚═══════╝ ╚═╝';
+export const BIG_CLI = [...CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  ')), CLI_SHADOW];
 
 export const SMALL = ['▄▀█ ▀█▀ █▀▀ █   █ █▀▀ █▀█   █▀▀ █   █', '█▀█  █  ██▄ █▄▄ █ ██▄ █▀▄   █▄▄ █▄▄ █'];
 
@@ -35,7 +40,7 @@ export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = tr
   const width = Math.max(...rows.map((r) => [...r].length));
   const edge = reveal >= 1 ? width : Math.round(reveal * (width + 2));
   // The last `_` (the foot of the I) is the prompt's cursor.
-  const last = BIG.length - 1;
+  const last = CLI_PIXELS.length - 1;
   const cursorAt = { row: last, x: [...rows[last]!].lastIndexOf('_') };
   const lines = rows.map((row, r) => {
     const chars = [...row.padEnd(width)];
@@ -43,8 +48,10 @@ export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = tr
     const word = paint.gradient(chars.slice(0, wordWidth).join(''));
     const cli = chars.slice(wordWidth).map((ch, i) => {
       if (r === cursorAt.row && wordWidth + i === cursorAt.x && !cursor) return ' ';
-      // Bold, so the thin glyphs hold their own beside the solid blocks.
-      return ch === '>' ? paint.bold(paint.fg('accent', ch)) : ch === '_' ? paint.bold(paint.fg('muted', ch)) : ch;
+      // Bold, so the thin glyphs hold their own beside the solid blocks; the shadow in clay, as ATELIER's is.
+      if (ch === '>') return paint.bold(paint.fg('accent', ch));
+      if (ch === '_') return paint.bold(paint.fg('muted', ch));
+      return ch === ' ' ? ch : paint.fg('accent', ch);
     });
     const painted = [...splitPainted(word), ...cli];
     // The brush's tip, in the light colour, only while it paints: finished, every cell has its own colour.
