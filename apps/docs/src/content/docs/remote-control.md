@@ -13,7 +13,8 @@ Nobody else's account can open your conversations either way, and admins cannot 
 
 :::caution[Not the Remote Control environment]
 Code and Cowork also have an environment called **Remote Control**, in the menu above the composer next to Local, Cloud
-and SSH. That one chooses *where a session runs*: in a folder on another of your computers, through its desktop app. This
+and SSH. That one chooses *where a session runs*: in a folder on another of your computers, through its desktop app or
+[Atelier CLI](/cli/#the-background-service) (`atelier daemon keep` keeps a computer available with no terminal open). This
 page is about *who can open the conversation*. See
 [Two things called Remote control](#two-things-called-remote-control).
 :::

@@ -197,9 +197,27 @@ app holds a token in secure storage. Only a hash of the token is stored on the s
   once; the open windows show the sign-in screen.
 
 **Active sessions** (**Settings › Account**) lists every browser and app signed in to your account: **Device** (such as
-"Chrome on macOS" or "Atelier Desktop on Windows", with **Current** on this one), **IP address**, **Created** and **Last
+"Chrome on macOS", "Atelier Desktop on Windows" or "Atelier CLI", with **Current** on this one), **IP address**, **Created** and **Last
 seen**. **Revoke** signs one out. The IP address is the one Atelier sees; behind a proxy that needs
 `ATELIER_TRUSTED_PROXIES` to be the visitor's, not the proxy's (see [Run a server](/self-hosting/#atelier_base_url-and-atelier_trusted_proxies)).
+
+### Signing in a terminal
+
+[Atelier CLI](/cli/) signs in through the browser, so it works for every account however it signs in (a password, a
+passkey or an identity provider), and on a computer with no browser:
+
+1. The terminal asks the server for a request and shows a code (`K7QF-3MZD`), a link to the server's **`#/link`** page
+   and a QR code of it.
+2. Signed in on that page, you see which computer asks, from which address and when, compare the code, and **Approve**
+   or **Deny**.
+3. The terminal's next look gets a sign-in of its own for your account, once. It shows under **Active sessions** as
+   "Atelier CLI", like any other sign-in.
+
+A request lasts 10 minutes and its code is 8 letters and digits; wrong codes count against you and your address, and
+one address may have only a few requests open. What the page can't stop is someone sending you a code of theirs to
+approve: that would sign *their* terminal in as you. Approve only a terminal you just started yourself, showing the same
+code. Approvals and denials go into the [activity log](#the-activity-log) (`signin.terminal_approved`,
+`signin.terminal_denied`). The terminal can also sign in with a password or an invite code.
 
 ### Rate limits and lockouts
 

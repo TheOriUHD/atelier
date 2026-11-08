@@ -128,6 +128,8 @@ atelier/
       prompts/          {chat,work,code}.{full,compact}.md, subagent, compaction, title, web-fetch, memory-update,
                         auto-mode, safeguards.*; fragments/, notes/, strings/
       evals/            tasks.ts, fixtures/, reports/, run.ts (`pnpm eval`), search.ts, ssh.ts
+    client/     # @atelier/client: no DOM, no React. What every client of the backend shares: live sessions (snapshot + seq'd
+                #   events, `createLiveSessions`), the transcript's words for tool calls and runs, diff rows, a Node WebSocket transport
     ui/
       theme/            GENERATED from design/tokens/tokens.json: tokens.css (vars, light/dark), tailwind.css (@theme), colors.json
       src/app/          router (TanStack Router), shell, sidebar, command palette, shortcuts dialog
@@ -139,6 +141,7 @@ atelier/
     desktop/    # Electron main + preload + backend/remote entries (utilityProcess); electron-builder config;
                 #   bundles runner builds (its own OS's, plus Linux and macOS ones to upload to SSH hosts)
     server/     # Hono + ws; auth; serves ui build; update feed; Dockerfile (bundles gh CLI + linux runner; `sandbox` and `updater` targets)
+    cli/        # Atelier CLI (§25): Ink TUI, setup wizard, background service, print mode; packaged with Node.js and the runners
     site/       # the public website (static, Cloudflare Worker)
     docs/       # the documentation site (Astro Starlight)
   runner/       # Go module: cmd/atelier-runner, internal/{rpc,fsops,walk,grep,glob,watch,shell,proc,pty,sys}
@@ -1164,6 +1167,65 @@ Several people (four at most, the host included) work in one session: the same c
 **What a guest's turn may do** (from the security review). In Accept edits (the most a guest's turn gets), an edit to a protected target (`.git/`, `.claude/`, `.atelier/`, `.vscode/`, shell startup files, `PermissionContext.guest` in `engine.ts`) asks the host: such edits make tools run commands. A guest's message that joins someone else's turn (`takeOutbox`) marks the rest of that turn as a guest's (`guestJoined`), and sub-agents started meanwhile keep it (`guestAgents`). A guest from another computer may store 100 files or 200 MB a day and send messages of at most 1 MB of JSON; anyone may have at most 20 messages waiting. `coop-*` secrets never resolve in settings; avatars must be image data URLs; a removed person's session rules go with them.
 
 **Trust.** A guest's own model reads what the session reads, and runs on the guest's computer: the host's folder content goes to the guest's provider when they answer with their own. A host's computer could misuse a guest's lent model, so a guest's computer gives it only the model they chose, under their limits, and connector calls only as allowed above.
+
+## 25. Atelier CLI
+
+A third client of the same backend, for the terminal (`apps/cli`, the command `atelier`). It draws a Code session the way
+terminal coding agents do, with Ink (React for terminals, no native module): finished transcript rows go once into the
+terminal's scrollback (`<Static>`), and only what is still moving (streaming text, running steps, the status line, the
+prompt it waits on, the message box, the footer) is redrawn. A row is final when its message ended, a later part of it
+began, or (a tool call) its result came (`tui/rows.ts`); when the printed rows change (rewind, a branch, compaction,
+Ctrl+O) the screen is cleared and printed again.
+
+**Two ways to run, like the desktop app.**
+- **With a server:** the TUI opens `/api/ws` with the terminal's bearer token (`ClientKind 'cli'`, user agent `Atelier
+  CLI/<v>`), calls `devices.register` on every (re)connect, and the person's folder is lent to the server by a device link
+  (§21) with the same consent (`lending.json`) and trust list as the desktop's, from `@atelier/core/device`
+  (`createDeviceLink`, `deviceServices`, moved there from `apps/desktop/src`). The folder is trusted after a question
+  (`trusted-folders.json`), then `workspaces.addLocal` reaches it through the device's runner.
+- **On its own:** the backend runs locally (`createBackend`, surface `desktop`, the local owner) with its config in
+  `~/.atelier/cli` and its data in `~/.atelier/cli/data`, separate from the desktop app's (whose secrets are sealed by
+  Electron and whose backend owns `~/.atelier/data`). Secrets use `AesGcmCipher` with a key in the system's store.
+
+**The background service** (`atelier daemon`, `src/daemon`): one process per person and connection, started detached by
+the first terminal that needs it, so several terminals share one SQLite database (standalone) or one device link (the
+server keeps one per account and device), and replies outlive their terminal. It listens on a Unix socket in
+`~/.atelier/cli/run` (`0700`/`0600`; a named pipe on Windows) and speaks JSON lines; a client's first line must carry the
+32-byte token in `run/daemon.token` before anything reaches the backend, because `auth.localSignIn` needs no secret. A
+newer terminal or one wanting another connection stops an idle service and starts its own. It exits 10 minutes after the
+last client with nothing running (`busy` counts sessions running or waiting), keeps the computer awake while replies run
+(`caffeinate`, `systemd-inhibit`), and `atelier daemon keep` makes it a login service (launchd, systemd `--user`, Task
+Scheduler).
+
+**Signing a terminal in** (`accounts/terminal-sign-in.ts`), in the manner of RFC 8628:
+- `auth.terminalStart` (public) makes a request: an 8-symbol code from the invite codes' alphabet (40 bits), a poll token
+  of which only the sha256 is kept, and the links `<origin>/#/link` and `…?code=`. It lasts 10 minutes, in memory.
+- `auth.terminalRequest` and `auth.terminalDecide` (signed in) are the `#/link` page's: what asks (device name, platform,
+  address, when) and the answer. Wrong codes count per person and per address (8 in 15 minutes). One address may have 5
+  requests open and start 20 in 15 minutes.
+- `auth.terminalPoll` (public) answers `pending`, `denied`, `expired`, or, once, a new sign-in for the approver
+  (`signInAs(…, 'terminal')`, `ClientKind 'cli'`), which also signs the polling connection in.
+- Audit kinds `signin.terminal_approved` and `signin.terminal_denied`; `app.info.terminalSignIn` says a server has it.
+
+**Shared client code** (`packages/client`): the live-session state (`applyEvent`, `fromSnapshot`, `needsReload`) and its
+subscription machinery as a factory the app wraps in hooks and the terminal uses as is; the tool summaries, diff rows,
+turn grouping, run phases and live status the app's transcript uses, so both say "Edited x · +1 −1".
+
+**What it shows and asks.** Prompts answer `chat.respond` with the same payloads as the app's cards (permission with
+remember scopes, plan approval into a mode, questions, folder moves, connectors, elicitations). Slash commands are the
+terminal's own (`tui/commands.ts`) plus `slash.list`, sent as text for `expandSlash`. `!cmd` runs locally and its output
+goes into the next message as a context part. Print mode (`-p`) answers prompts by itself: `--allow` patterns, else deny
+with a note; questions skipped; plans declined.
+
+**Shipping** (`apps/cli/scripts`): one esbuild bundle (`dist/atelier.mjs`, React's devtools stubbed) with the licenses of
+what is in it; a package per platform (darwin, linux, windows × x64, arm64) holds `bin/atelier` (a launcher that follows
+its link), the official Node.js 24 build (checked against nodejs.org's SHASUMS256.txt), the bundle and the runner builds
+(its own and the Linux and macOS ones for SSH hosts). `atelier-cli.json` lists each package's sha512 and size; each package
+has a `.sig` from the release key (`atelier-update:v1\n<file>\n<sha512>`, Ed25519), checked by `atelier update` before
+it unpacks into `versions/<v>` and moves the link. The release builds them on the Mac, renders `install-cli.sh` and
+`install-cli.ps1` with each package's sha256, publishes the packages to the feed's channel folder and the scripts to
+`cli/` (served at `/cli` and `/cli.ps1`), and runs the end-to-end tests (`apps/cli/test`: the real app in a pseudo-terminal
+from the runner's PTY, read with `@xterm/headless`) on the Linux and Windows machines.
 
 ## 20. Decisions
 

@@ -192,7 +192,7 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
         log.info(`device link ${state}`);
       },
     });
-    deviceLink.setToken(await store.get(tokenName(serverUrl)));
+    deviceLink.setToken(process.env.ATELIER_TOKEN || (await store.get(tokenName(serverUrl))));
   }
 
   const server = createServer((socket) => {

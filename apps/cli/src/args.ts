@@ -46,6 +46,7 @@ export const COMMAND_HELP: [string, string][] = [
   ['atelier doctor', 'Check that everything works'],
   ['atelier models', 'The models you can use'],
   ['atelier sessions', 'Your Code sessions'],
+  ['atelier token', 'Print this terminal’s sign-in, for ATELIER_TOKEN in CI'],
   ['atelier update [--beta]', 'Update to the newest version'],
   ['atelier daemon status|stop|keep|unkeep', 'The background service (keep: start it at login)'],
   ['atelier completion <bash|zsh|fish|pwsh>', 'Shell completion'],

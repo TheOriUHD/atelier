@@ -43,6 +43,7 @@ jobs:
       - run: pnpm test
       - run: pnpm --filter @atelier/server build
       - run: pnpm --filter @atelier/desktop build
+      - run: pnpm --filter @atelier/cli build
       - run: pnpm exec playwright install --with-deps chromium
       # Electron fetches its binary on first launch; do it here so no test spends its time budget on the download.
       - run: node apps/desktop/node_modules/electron/install.js

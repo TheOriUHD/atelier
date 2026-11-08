@@ -108,6 +108,20 @@ async function main(argv: string[]): Promise<number> {
       process.stdout.write(await readFile(join(here(), 'LICENSES.txt'), 'utf8').catch(() => 'The licenses are in THIRD_PARTY_NOTICES.md of the source.\n'));
       return 0;
     }
+    case 'token': {
+      if (config.connection?.mode !== 'server') {
+        process.stderr.write('This terminal isn’t connected to a server.\n');
+        return 1;
+      }
+      const token = await (await credentialStore(p.credentials)).get(tokenName(config.connection.serverUrl));
+      if (!token) {
+        process.stderr.write('Not signed in: atelier login\n');
+        return 3;
+      }
+      process.stderr.write(`This is your sign-in to ${new URL(config.connection.serverUrl).host}: anyone with it works as you. Keep it in your CI's secrets (ATELIER_TOKEN); signing this terminal out ends it.\n`);
+      process.stdout.write(`${token}\n`);
+      return 0;
+    }
     case 'status':
     case 'models':
     case 'sessions':
@@ -126,11 +140,8 @@ async function main(argv: string[]): Promise<number> {
     const piped = Buffer.concat(chunks).toString('utf8').trim();
     input = [prompt, piped].filter(Boolean).join('\n\n');
   }
-  if (typeof values.server === 'string') config = { ...config, connection: { mode: 'server', serverUrl: values.server } };
-  if (process.env.ATELIER_TOKEN && config.connection?.mode === 'server') {
-    const store = await credentialStore(p.credentials);
-    if (!(await store.get(tokenName(config.connection.serverUrl)))) await store.set(tokenName(config.connection.serverUrl), process.env.ATELIER_TOKEN);
-  }
+  const server = typeof values.server === 'string' ? values.server : process.env.ATELIER_SERVER;
+  if (server) config = { ...config, connection: { mode: 'server', serverUrl: server.replace(/\/$/, '') } };
 
   let conn: Connected;
   for (;;) {

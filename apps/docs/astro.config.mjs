@@ -22,7 +22,7 @@ export default defineConfig({
       sidebar: [
         {
           label: 'Start here',
-          items: ['getting-started', 'install', 'providers', 'models', 'local-models', 'chatgpt'],
+          items: ['getting-started', 'install', 'cli', 'providers', 'models', 'local-models', 'chatgpt'],
         },
         {
           label: 'Using Atelier',
@@ -42,7 +42,7 @@ export default defineConfig({
         },
         {
           label: 'Under the hood',
-          items: ['how-it-works', 'reference/tools', 'reference/settings'],
+          items: ['how-it-works', 'reference/tools', 'reference/settings', 'reference/cli'],
         },
         { label: 'About', items: ['faq', 'license'] },
       ],

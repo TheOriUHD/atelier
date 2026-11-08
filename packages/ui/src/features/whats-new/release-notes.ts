@@ -19,6 +19,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.6.0',
+    intro: 'Atelier CLI: a Code session in your terminal, on your own Atelier server or on its own.',
+    highlights: [
+      {
+        icon: SquareTerminal,
+        title: 'Atelier in the terminal',
+        body: 'Run atelier in a project folder for a Code session there, with the same tools, permissions and models. Connected to your server it uses the server’s models and keys, and its sessions open here too. Install it with curl -fsSL https://updates.atelierhq.dev/cli | sh.',
+      },
+      {
+        icon: KeyRound,
+        title: 'Terminals sign in through the browser',
+        body: 'A terminal shows a code and a link; approve it on this server’s page where you are signed in, with a password, a passkey or single sign-on. Approve only a code your own terminal shows. It then appears under Active sessions as Atelier CLI.',
+      },
+    ],
+    also: ['The terminal lends this computer’s folders to the server like the desktop app does, and can stay available at login (atelier daemon keep).', 'Meet Pip, the terminal app’s mascot.'],
+  },
+  {
     version: '0.5.2',
     intro: 'Mistral’s models, GLM above all, work through long coding tasks instead of stopping or saving half-written files.',
     highlights: [

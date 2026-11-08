@@ -314,6 +314,20 @@ computer. Turning off the home folder in the desktop app (**Settings › System*
 - **ChatGPT Chat** keeps a browser session with your chatgpt.com sign-in in its own storage in the app's profile folder.
   Treat that folder like a browser profile.
 
+## The terminal app
+
+- [Atelier CLI](/cli/) lends a server the folders you trust in it as the desktop app does (a trusted folder lets the
+  server's sessions run commands as you there), through the same device link and the same consent per server
+  (`~/.atelier/cli/lending.json`). The first time in a folder it asks, and says so.
+- Its background service listens on a socket only you can open (`~/.atelier/cli/run`, `0700`/`0600`; a named pipe on
+  Windows), and a client must first show the token in `run/daemon.token`, readable by you only. On this computer alone
+  the service runs the backend, whose `auth.localSignIn` needs no secret, so the token is what keeps other users'
+  processes out. Processes of your own user can read the token, as they can read the database.
+- Your sign-in to a server and the key for API keys kept on this computer are in the system's store (macOS keychain,
+  Secret Service, DPAPI), else in a file only you can read.
+- Signing in through the browser: approve only a code your own terminal shows ([Accounts](/accounts/#signing-in-a-terminal)).
+- Print mode (`atelier -p`) allows nothing that would ask unless `--allow` names it.
+
 ## The web server
 
 ### The web server's headers

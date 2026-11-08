@@ -32,7 +32,8 @@ no cookies of their own.
 | **ChatGPT Chat** | `chatgpt.com`, in a hidden browser window | Your messages and attachments typed into the page, plus everything the chatgpt.com page itself loads | Do not use that provider. **Remove** it from **Settings › Admin › Providers** to clear its browser session |
 | Code Browser pane | The pages you open in it, and their icons | Ordinary page requests | Do not open pages in it |
 | Finding servers on your network | The private /24 networks of this computer, port 7340 (first-run screen only) | `GET /api/health` | It runs only on the **Connect to a server** form |
-| Your Atelier server | The server you connected the desktop app to | Everything you do in the app | Choose **Run on this computer** |
+| Your Atelier server | The server you connected the desktop app or the terminal app to | Everything you do in the app | Choose **Run on this computer** (in the terminal: **Only this computer**) |
+| **Terminal app update check** | `updates.atelierhq.dev/<stable or beta>/atelier-cli.json`, at most once a day, only for a copy the installer put there; `atelier update` also asks the server's `/updates` when connected | A GET; your IP. An update then fetches its `.sig` and the package. | `ATELIER_NO_UPDATE_CHECK=1` |
 | SSH hosts and codespaces | The host you connect to | The runner program (uploaded once), the commands, and the file contents the agent reads there | Do not connect |
 | Commands the agent runs | Whatever they contact (`git push`, `npm install`, `curl`) | Whatever the command sends | Your permission mode and rules |
 | Git actions in the Code panel | Your Git remote for **Push**; GitHub, through `gh`, for **Open pull request** | What `git push` and `gh pr create` send, with the credentials those programs already have | Do not use those buttons |

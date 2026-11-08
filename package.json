@@ -28,7 +28,7 @@
     "notices": "node deploy/ship/notices.mjs",
     "notices:check": "node deploy/ship/notices.mjs --check",
     "prompts:show": "node packages/core/scripts/show-prompt.mjs",
-    "docs:generate": "UPDATE_DOCS=1 vitest run packages/core/src/prompts/published.test.ts packages/ui/src/features/settings/settings-reference.test.ts"
+    "docs:generate": "UPDATE_DOCS=1 vitest run packages/core/src/prompts/published.test.ts packages/ui/src/features/settings/settings-reference.test.ts apps/cli/src/reference.test.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

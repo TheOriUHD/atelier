@@ -139,6 +139,19 @@ Read, Write, Edit, Glob, Grep and Bash, plus a task list, questions to you, sub-
 
 Cowork works through a longer task in a folder and leaves the files it makes there. Pick a folder, describe the task and watch its steps beside the conversation. It ends with cards for the files it wrote, and a system notification tells you when it finishes, fails or needs you while you are in another window.
 
+### Atelier CLI
+
+A Code session in the terminal, laid out the way terminal coding agents are: the same tools, permissions and models,
+with a setup wizard and Pip, a small animated mascot. Connected to an Atelier server, it uses the server's models and keys
+and lends the server the folder you work in; its sessions open in the browser and the desktop app too. It also runs on
+its own. `atelier -p` answers one prompt for scripts and CI.
+
+```sh
+curl -fsSL https://updates.atelierhq.dev/cli | sh      # Windows: irm https://updates.atelierhq.dev/cli.ps1 | iex
+```
+
+See [Atelier CLI](https://docs.atelierhq.dev/cli/).
+
 ### Co-op
 
 Work in one session with up to three other people: the same conversation and folder, everyone writing and watching the agent work. Send a link and let each person in after comparing four emoji; there is no account. Each person answers with the host's models (within a daily limit the host sets) or their own, which run on their own computer. The host approves what touches their computer. Ask another model for a second opinion, let one look over every edit as navigator, or give an agent a parallel track in its own git worktree. Between computers, co-op passes through an end-to-end encrypted relay that can't read it; on a team server it needs nothing from outside. See [Co-op](https://docs.atelierhq.dev/co-op/).

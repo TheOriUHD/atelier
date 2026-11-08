@@ -25,7 +25,8 @@ backend. Atelier is in beta; macOS is the most tested platform, Windows and Linu
 
 Download it from [atelierhq.dev/download](https://atelierhq.dev/download/); the [install guide](/install/) has the
 details for each system. If someone gave you an Atelier server's address, you don't need to install anything: open it in
-a browser, or choose **Connect to a server** in the desktop app.
+a browser, or choose **Connect to a server** in the desktop app. Prefer the terminal? [Atelier CLI](/cli/) is a Code
+session there, with a server or on its own.
 
 ## Choose where Atelier keeps your chats
 

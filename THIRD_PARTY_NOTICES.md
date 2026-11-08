@@ -5578,6 +5578,7 @@ SOFTWARE.
 
 - **marked** 16.4.2 (MIT): https://marked.js.org
 - **marked** 18.1.1 (MIT): https://marked.js.org
+- **marked** 18.1.3 (MIT): https://marked.js.org
 
 ```text
 # License information

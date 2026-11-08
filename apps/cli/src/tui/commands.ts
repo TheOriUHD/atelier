@@ -14,6 +14,7 @@ import { VERSION } from '../runtime.ts';
 import type { Paint } from '../style.ts';
 import { copy, openUrl } from '../term.ts';
 import { EFFORT_WORDS, findModel, MODE_WORDS, modeFrom } from './session.ts';
+import { KEY_HELP } from './keys.ts';
 import { todoLines, type TranscriptView } from './views.tsx';
 
 export type Overlay = { kind: 'model' } | { kind: 'effort' } | { kind: 'resume' } | { kind: 'rewind' } | { kind: 'config' } | { kind: 'mode' } | { kind: 'theme' };
@@ -86,21 +87,7 @@ export const COMMANDS: Command[] = [
     run: (ctx) => {
       const { paint } = ctx;
       const rows = COMMANDS.filter((c) => !c.hidden).map((c) => `  ${paint.fg('accent', `/${c.name}`.padEnd(16))}${c.argumentHint ? paint.fg('muted', `${c.argumentHint} `) : ''}${c.description}`);
-      const keys = [
-        ['Enter', 'send (while a reply runs: it waits its turn)'],
-        ['Ctrl+S', 'send into the reply that is running'],
-        ['Shift+Enter, Alt+Enter, Ctrl+J', 'new line'],
-        ['Esc', 'stop the reply · twice: go back to an earlier message'],
-        ['Shift+Tab', 'Auto → Ask → Accept edits → Plan'],
-        ['Ctrl+O', 'show thinking, then every step in full'],
-        ['Ctrl+T', 'show or hide the task list'],
-        ['Ctrl+R', 'search what you sent before'],
-        ['Ctrl+G', 'write the message in your editor'],
-        ['Ctrl+V', 'paste an image'],
-        ['@', 'a file in this folder'],
-        ['!', 'run a command here; its output goes with your next message'],
-        ['Ctrl+C twice, Ctrl+D', 'quit'],
-      ].map(([k, v]) => `  ${paint.fg('accent', k!.padEnd(32))}${v}`);
+      const keys = KEY_HELP.map(([k, v]) => `  ${paint.fg('accent', k.padEnd(32))}${v}`);
       ctx.print([paint.bold('Commands'), ...rows, '', paint.bold('Keys'), ...keys]);
     },
   },

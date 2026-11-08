@@ -42,6 +42,13 @@ platform, Windows and Linux less so. Experimental features are marked as such in
 The desktop app runs on macOS 13 or later (Apple silicon and Intel), Windows 10 and 11 (x64 and ARM64) and Linux (`.deb` and
 AppImage, x86-64 and ARM64). The web app runs in a browser, served by an Atelier server you host. See [Install](/install/).
 
+### Is there a command-line version?
+
+Yes: [Atelier CLI](/cli/), a Code session in the terminal laid out like the terminal coding agents you may know, with the
+same tools, permissions and models as the app. It works on its own, but connected to an Atelier server it uses the
+server's models and keys, and its sessions open in the browser and the desktop app too. Install it with
+`curl -fsSL https://updates.atelierhq.dev/cli | sh`.
+
 ### Is there a mobile app?
 
 No. There is no iOS or Android app, but the web app has a phone layout below 768 pixels wide, so you can open your own

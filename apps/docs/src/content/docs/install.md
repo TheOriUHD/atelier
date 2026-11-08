@@ -4,7 +4,8 @@ description: Install the Atelier desktop app on macOS, Windows or Linux, and fin
 ---
 
 The desktop app runs on macOS, Windows and Linux. If someone runs an Atelier server for you
-([Self-hosting](/self-hosting/)), you can also use it from a browser with no installation.
+([Self-hosting](/self-hosting/)), you can also use it from a browser with no installation. For the terminal there is
+[Atelier CLI](/cli/): `curl -fsSL https://updates.atelierhq.dev/cli | sh` (Windows: `irm https://updates.atelierhq.dev/cli.ps1 | iex`).
 
 ## Where the downloads come from
 

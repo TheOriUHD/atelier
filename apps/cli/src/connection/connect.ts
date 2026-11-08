@@ -64,7 +64,8 @@ export async function connect(p: CliPaths, config: CliConfig, options: { service
 
   const serverUrl = connection.serverUrl;
   const store = await credentialStore(p.credentials);
-  const token = await store.get(tokenName(serverUrl));
+  // ATELIER_TOKEN (a script, CI) goes before the stored one and isn't kept.
+  const token = process.env.ATELIER_TOKEN || (await store.get(tokenName(serverUrl)));
   if (!token) throw new NeedsSetup('signed-out', `Sign in to ${new URL(serverUrl).host} first: atelier login`);
   const transport = wsTransport({ serverUrl, headers: () => ({ Authorization: `Bearer ${token}`, 'User-Agent': USER_AGENT }) });
   const rpc = createRpcClient(contract, transport);
