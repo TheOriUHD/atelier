@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Writes `<package>.sig` beside every package (.exe, .dmg, .zip, .deb, .AppImage) in a folder, in the format the desktop
+ * Writes `<package>.sig` beside every package (.exe, .dmg, .zip, .deb, .AppImage, and the terminal app's .tar.gz) in a folder, in the format the desktop
  * app checks (apps/desktop/src/update-signature.ts), with the update-signing key: ATELIER_UPDATE_KEY (a file), by default
  * ~/.atelier-release/update-signing.key, or ATELIER_UPDATE_KEY_PEM (the key's text, for CI).
  *
@@ -27,7 +27,7 @@ try {
   console.error(`no update-signing key (${process.env.ATELIER_UPDATE_KEY ?? DEFAULT_KEY}): ${e.message}`);
   process.exit(1);
 }
-const packages = readdirSync(dir).filter((n) => /\.(exe|dmg|zip|deb|AppImage)$/.test(n) && statSync(join(dir, n)).isFile());
+const packages = readdirSync(dir).filter((n) => /\.(exe|dmg|zip|deb|AppImage|tar\.gz)$/.test(n) && statSync(join(dir, n)).isFile());
 if (!packages.length) {
   console.error(`no packages in ${dir}`);
   process.exit(1);

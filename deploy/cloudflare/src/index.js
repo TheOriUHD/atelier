@@ -81,6 +81,12 @@ export default {
       if (res.status === 200 || res.status === 206) res.headers.set('content-type', 'text/x-shellscript; charset=utf-8');
       return res;
     }
+    // The terminal app's installers (deploy/ship/cli-install.*.tmpl): `curl -fsSL …/cli | sh`, `irm …/cli.ps1 | iex`.
+    if ((first === 'cli' || first === 'cli.ps1') && rest.length === 0) {
+      const res = await file(request, env, first === 'cli' ? 'cli/install.sh' : 'cli/install.ps1', 'public, max-age=60');
+      if (res.status === 200 || res.status === 206) res.headers.set('content-type', first === 'cli' ? 'text/x-shellscript; charset=utf-8' : 'text/plain; charset=utf-8');
+      return res;
+    }
     // Its binaries, one folder per version.
     if (first === 'setup' && rest.length === 2 && SETUP_VERSION.test(rest[0]) && SETUP_FILE.test(rest[1])) return file(request, env, `setup/${rest[0]}/${rest[1]}`);
     return text('Not found', 404);

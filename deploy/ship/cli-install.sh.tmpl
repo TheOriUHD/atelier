@@ -1,0 +1,79 @@
+#!/bin/sh
+# Atelier CLI. It downloads the terminal app for this computer, checks its checksum, and installs it for you alone:
+# into ~/.local/share/atelier/versions/@VERSION@, with the command at ~/.local/bin/atelier. No sudo.
+#
+#   curl -fsSL https://updates.atelierhq.dev/cli | sh
+#
+# It is short, so read it first if you like. To pin what you run, download it and compare its sha256 with the one on
+# the release page, then run the file: sh install-cli.sh. `atelier update` keeps it up to date afterwards.
+set -eu
+
+VERSION="@VERSION@"
+CHANNEL="@CHANNEL@"
+BASE="${ATELIER_CLI_BASE:-https://updates.atelierhq.dev}/$CHANNEL"
+SUMS="@SUMS@"
+
+say() { printf '%s\n' "$*" >&2; }
+fail() { say "atelier: $*"; exit 1; }
+
+case "$(uname -s)" in
+  Linux) os=linux ;;
+  Darwin) os=darwin ;;
+  *) fail "unsupported system: $(uname -s) (Linux and macOS here; Windows: irm https://updates.atelierhq.dev/cli.ps1 | iex)" ;;
+esac
+case "$(uname -m)" in
+  x86_64|amd64) arch=x64 ;;
+  aarch64|arm64) arch=arm64 ;;
+  *) fail "unsupported processor: $(uname -m)" ;;
+esac
+# A Mac with Apple silicon running this under Rosetta still gets the arm64 build.
+if [ "$os" = darwin ] && [ "$arch" = x64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ]; then arch=arm64; fi
+name="atelier-cli-$VERSION-$os-$arch.tar.gz"
+
+command -v curl >/dev/null 2>&1 || fail "curl is needed to download Atelier"
+command -v tar >/dev/null 2>&1 || fail "tar is needed to unpack Atelier"
+want=$(printf '%s\n' "$SUMS" | awk -v n="$name" '$2 == n { print $1 }')
+[ -n "$want" ] || fail "no build of Atelier CLI for $os/$arch"
+
+data="${XDG_DATA_HOME:-${HOME:?}/.local/share}/atelier"
+bin="${HOME:?}/.local/bin"
+mkdir -p "$data/versions" "$bin"
+tmp=$(mktemp -d "$data/.download.XXXXXX") || fail "cannot write to $data"
+trap 'rm -rf "$tmp"' EXIT INT TERM
+
+say "Downloading Atelier CLI $VERSION for $os/$arch ..."
+curl -fSL --progress-bar "$BASE/$name" -o "$tmp/$name" || fail "download failed: $BASE/$name"
+
+if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$tmp/$name" | awk '{ print $1 }')
+elif command -v shasum >/dev/null 2>&1; then got=$(shasum -a 256 "$tmp/$name" | awk '{ print $1 }')
+else fail "sha256sum or shasum is needed to check the download"; fi
+[ "$got" = "$want" ] || fail "the download does not match its checksum (got $got, expected $want); nothing was installed"
+
+mkdir "$tmp/unpacked"
+tar -xzf "$tmp/$name" -C "$tmp/unpacked"
+rm -rf "$data/versions/$VERSION"
+mv "$tmp/unpacked/atelier-cli-$VERSION-$os-$arch" "$data/versions/$VERSION"
+ln -sfn "$data/versions/$VERSION/bin/atelier" "$bin/atelier.new"
+mv -f "$bin/atelier.new" "$bin/atelier"
+# Older versions beyond the newest three go.
+ls -1t "$data/versions" 2>/dev/null | tail -n +4 | while read -r old; do rm -rf "$data/versions/$old"; done
+trap - EXIT INT TERM
+rm -rf "$tmp"
+
+say ""
+say "Installed Atelier CLI $VERSION: $bin/atelier"
+case ":$PATH:" in
+  *":$bin:"*) ;;
+  *)
+    shell_name=$(basename "${SHELL:-sh}")
+    case "$shell_name" in
+      zsh) rc="$HOME/.zshrc" ;;
+      bash) rc="$HOME/.bashrc" ;;
+      fish) rc="$HOME/.config/fish/config.fish" ;;
+      *) rc="$HOME/.profile" ;;
+    esac
+    say "$bin is not on your PATH. Add it with:"
+    if [ "$shell_name" = fish ]; then say "  fish_add_path $bin"; else say "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $rc"; fi
+    ;;
+esac
+say "Then run: atelier  (in a project folder; the first start sets it up)"

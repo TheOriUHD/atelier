@@ -11,6 +11,9 @@ export const RUNNER_DIR = join(import.meta.dirname, '../../../runner/bin');
 export const BUNDLE = join(import.meta.dirname, '../dist/atelier.mjs');
 export const canRun = () => existsSync(hostRunnerBinary(RUNNER_DIR)) && existsSync(BUNDLE);
 
+/** The line that starts the built app in the test's shell (sh, or cmd.exe on Windows). */
+export const cliCommand = (args = '') => (process.platform === 'win32' ? `"${process.execPath}" "${BUNDLE}" ${args}` : `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(BUNDLE)} ${args}`).trim();
+
 export const KEYS = {
   enter: '\r',
   esc: '\x1b',
@@ -47,7 +50,7 @@ export async function openScreen(options: { cwd: string; env: NodeJS.ProcessEnv;
   const rows = options.rows ?? 40;
   const runner = await RunnerClient.spawn({ binaryPath: hostRunnerBinary(RUNNER_DIR), roots: [options.cwd], env: { ...options.env, TERM: 'xterm-256color' } });
   const term = new xterm.Terminal({ cols, rows, scrollback: 5000, allowProposedApi: true });
-  const { ptyId } = await runner.call('pty.open', { cwd: options.cwd, cols, rows, ...(process.platform === 'win32' ? {} : { shell: '/bin/sh' }) });
+  const { ptyId } = await runner.call('pty.open', { cwd: options.cwd, cols, rows, shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh' });
   runner.on('pty.data', (n) => n.ptyId === ptyId && term.write(Buffer.from(n.b64, 'base64')));
   // Answers the terminal's own questions (the background colour) the way a dark terminal would.
   term.onData((reply) => void runner.call('pty.write', { ptyId, data: reply }).catch(() => undefined));

@@ -3,8 +3,9 @@
  * order, how many at a time, which are already there, and what a failed put does. Tests: deploy/ship/upload.test.ts.
  */
 
-export const isFeedFile = (n) => /^latest.*\.ya?ml$/.test(n);
-export const isPackage = (n) => /\.(exe|dmg|zip|deb|AppImage)$/.test(n);
+/** The update files: the desktop apps' (electron-builder's latest*.yml) and the terminal app's manifest. */
+export const isFeedFile = (n) => /^latest.*\.ya?ml$/.test(n) || n === 'atelier-cli.json';
+export const isPackage = (n) => /\.(exe|dmg|zip|deb|AppImage|tar\.gz)$/.test(n);
 export const isDiskImage = (n) => /\.dmg$/.test(n);
 const isBlockmap = (n) => /\.blockmap$/.test(n);
 

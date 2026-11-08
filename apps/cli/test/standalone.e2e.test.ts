@@ -10,7 +10,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { BUNDLE, canRun, openScreen, type Screen } from './harness.ts';
+import { BUNDLE, canRun, cliCommand, openScreen, type Screen } from './harness.ts';
 
 const show = (title: string, s: Screen) => process.env.SHOW_SCREENS && console.log(`\n===== ${title} =====\n${s.text()}\n`);
 let home: string;
@@ -45,7 +45,7 @@ afterAll(async () => {
 const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '', NO_UPDATE_CHECK: '1' });
 
 it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answers', { timeout: 180_000 }, async () => {
-  const s = await openScreen({ cwd: project, env: env(), command: `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(BUNDLE)}` });
+  const s = await openScreen({ cwd: project, env: env(), command: cliCommand() });
   try {
     await s.waitFor('press enter to begin');
     show('splash', s);
@@ -108,7 +108,7 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
     await s.close();
   }
   // The next start goes straight to the session screen, and -c picks the session up.
-  const again = await openScreen({ cwd: project, env: env(), command: `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(BUNDLE)} -c` });
+  const again = await openScreen({ cwd: project, env: env(), command: cliCommand('-c') });
   try {
     await again.waitFor('hello there', 30_000);
     show('continued', again);

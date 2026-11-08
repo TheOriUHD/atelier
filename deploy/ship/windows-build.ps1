@@ -39,4 +39,15 @@ foreach ($dir in 'win-unpacked', 'win-arm64-unpacked') {
   }
 }
 Get-ChildItem "$Root\src\apps\desktop\release" -File | Select-Object Name, Length | Format-Table -AutoSize | Out-String
+
+Step 'terminal app'
+# The terminal app in a real pseudo-terminal (ConPTY), on this computer and with a server: apps/cli/test.
+Set-Location "$Root\src"
+pnpm --filter @atelier/cli build 2>&1 | Select-Object -Last 2
+Check 'the terminal app bundle'
+pnpm --filter @atelier/server build 2>&1 | Select-Object -Last 2
+Check 'the server bundle'
+$env:ATELIER_NO_BROWSER = '1'
+npx vitest run apps/cli 2>&1 | Select-Object -Last 15
+Check 'the terminal app tests'
 Step 'done'

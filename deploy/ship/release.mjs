@@ -7,13 +7,14 @@
  *   pnpm release 0.1.11              run again after a failure: finished steps are skipped (~/.atelier-release/builds/<version>/state.json)
  *
  * Flags: --yes (publish without asking; it also lets the Linux and Windows packages go to the update feed while the Mac is
- * still building, see --no-stage), --no-stage, --skip qa,e2e,linux,windows,mac,image,installer,docs (comma list), --trailer "<line>"
+ * still building, see --no-stage), --no-stage, --skip qa,e2e,linux,windows,mac,cli,image,installer,docs (comma list), --trailer "<line>"
  * (added to the commits it makes). The browser and desktop end-to-end tests run on the Linux machine beside the builds.
  *
  * Where things are built (all settable with environment variables, see CONFIG below):
  *   Linux packages, the tests and the server image   a Linux machine over ssh (ATELIER_RELEASE_LINUX, default atelier-linux)
  *   the Windows installer                             a Windows machine over ssh (ATELIER_RELEASE_WINDOWS, default atelier-win)
  *   the macOS apps (signed, notarized)                this Mac, in a clean worktree of the tag, while the others build
+ *   the terminal app (all six platforms)              this Mac too: a bundle, Node.js from nodejs.org and the runners
  * The update-signing key and the Apple credentials never leave this Mac. Nothing leaves it either until you answer the
  * question before "publish": the git push, the GitHub release, the update feed, the website and the docs.
  */
@@ -42,6 +43,7 @@ import {
   parseVersion,
   readAppVersion,
   releaseNotes,
+  renderCliInstaller,
   renderInstaller,
   repoFromRemote,
   setAppVersion,
@@ -221,6 +223,7 @@ async function main() {
     ['linux', () => buildLinux({ tag, version, work, artifacts, log: log('linux'), skipImage: skipped('image'), skipE2e: skipped('e2e'), imageBase: imageNames(repo, tag, prerelease).base })],
     ['windows', () => buildWindows({ tag, version, work, artifacts, log: log('windows') })],
     ['mac', () => buildMac({ version, tree, artifacts, log: log('mac') })],
+    ['cli', () => buildCli({ version, channel, tree, work, artifacts, log: log('cli') })],
   ].filter(([name]) => !skipped(name));
   const results = await Promise.allSettled(
     builds.map(([name, fn]) =>
@@ -236,8 +239,9 @@ async function main() {
   if (failed.length) throw new Error(`Not everything built. Fix it and run the same command again: finished steps are kept.\n\n${failed.join('\n\n')}`);
 
   // 6. One folder with everything, checked, with signatures -----------------------------------------------------------
-  const platforms = ['linux', 'windows', 'mac'].filter((p) => !skipped(p));
+  const platforms = ['linux', 'windows', 'mac', 'cli'].filter((p) => !skipped(p));
   const installerFiles = skipped('installer') ? null : join(work, 'installer');
+  const cliFiles = skipped('cli') ? null : join(work, 'cli-installer');
   await once('assemble', 'collect, check and sign the files', () => assemble({ version, platforms, artifacts, publish, log: log('sign') }));
   const notes = releaseNotes(readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8'), version);
 
@@ -265,7 +269,10 @@ async function main() {
   }
   await Promise.all([
     ...(installerFiles ? [once('installer-publish', 'server installer (atelier-setup and install script)', () => publishInstaller({ version, prerelease, dir: installerFiles, log: log('installer-publish') }))] : []),
-    once('github', 'GitHub release', () => githubRelease({ tag, version, repo, prerelease, publish, notesFile, extra: installerFiles ? [join(installerFiles, 'install.sh')] : [], log: log('github') })),
+    ...(cliFiles ? [once('cli-publish', 'terminal app install scripts', () => publishCliInstaller({ version, prerelease, dir: cliFiles, log: log('cli-publish') }))] : []),
+    once('github', 'GitHub release', () =>
+      githubRelease({ tag, version, repo, prerelease, publish, notesFile, extra: [...(installerFiles ? [join(installerFiles, 'install.sh')] : []), ...(cliFiles ? [join(cliFiles, 'install-cli.sh'), join(cliFiles, 'install-cli.ps1')] : [])], log: log('github') }),
+    ),
     once('feed', `update feed (${channel})`, () => exec('node', ['deploy/cloudflare/publish.mjs', publish, channel], { log: log('feed') })),
   ]);
   if (!prerelease) {
@@ -277,7 +284,7 @@ async function main() {
   }
 
   // 9. Look at what is live --------------------------------------------------------------------------------------------
-  const problems = await step('verify what is live', () => verifyLive({ version, tag, channel, repo, publish, installerFiles }));
+  const problems = await step('verify what is live', () => verifyLive({ version, tag, channel, repo, publish, installerFiles, cliFiles }));
   summary(work, problems, { repo, tag, channel, version, prerelease });
   if (problems.length) process.exitCode = 1;
   else {
@@ -450,15 +457,17 @@ function prepare({ version, tag, trailer }) {
   const files = {
     app: join(ROOT, 'packages/protocol/src/app.ts'),
     pkg: join(ROOT, 'apps/desktop/package.json'),
+    cliPkg: join(ROOT, 'apps/cli/package.json'),
     changelog: join(ROOT, 'CHANGELOG.md'),
   };
   const date = new Date();
   const today = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   writeFileSync(files.app, setAppVersion(readFileSync(files.app, 'utf8'), version));
   writeFileSync(files.pkg, setPackageVersion(readFileSync(files.pkg, 'utf8'), version));
+  writeFileSync(files.cliPkg, setPackageVersion(readFileSync(files.cliPkg, 'utf8'), version));
   // A prerelease leaves the changelog as it is: its changes are still the next release's.
   if (!isPrereleaseVersion(version)) writeFileSync(files.changelog, cutChangelog(readFileSync(files.changelog, 'utf8'), version, today));
-  git('add', files.app, files.pkg, ...(isPrereleaseVersion(version) ? [] : [files.changelog]));
+  git('add', files.app, files.pkg, files.cliPkg, ...(isPrereleaseVersion(version) ? [] : [files.changelog]));
   git('commit', '-m', `release: ${version}${trailer}`);
   git('tag', '-a', tag, '-m', `Atelier ${version}`);
   return git('rev-parse', 'HEAD');
@@ -715,6 +724,47 @@ async function buildInstaller({ version, tree, work, log }) {
   writeFileSync(join(out, 'SHA256SUMS'), Object.entries(sums).sort().map(([n, h]) => `${h}  ${n}`).join('\n') + '\n');
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// The terminal app: packages for all six platforms, built here (nothing in them is compiled per platform)
+
+async function buildCli({ version, channel, tree, work, artifacts, log }) {
+  await exec('pnpm', ['--filter', '@atelier/cli', 'build'], { cwd: tree, log });
+  const dest = join(artifacts, 'cli');
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+  await exec('node', ['apps/cli/scripts/package.mjs', '--version', version, '--runners', join(tree, 'runner/bin'), '--out', dest], { cwd: tree, log });
+  // The install scripts carry each package's sha256.
+  const out = join(work, 'cli-installer');
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  const sums = Object.fromEntries(readdirSync(dest).filter(isPackage).map((name) => [name, createHash('sha256').update(readFileSync(join(dest, name))).digest('hex')]));
+  writeFileSync(join(out, 'install-cli.sh'), renderCliInstaller(readFileSync(join(tree, 'deploy/ship/cli-install.sh.tmpl'), 'utf8'), version, channel, sums));
+  writeFileSync(join(out, 'install-cli.ps1'), renderCliInstaller(readFileSync(join(tree, 'deploy/ship/cli-install.ps1.tmpl'), 'utf8'), version, channel, sums));
+  await exec('sh', ['-n', join(out, 'install-cli.sh')], { log });
+  // The package for this Mac must at least start.
+  const mine = readdirSync(dest).find((n) => n.endsWith(`-${process.platform}-${process.arch}.tar.gz`));
+  if (mine) {
+    const check = join(work, 'cli-check');
+    rmSync(check, { recursive: true, force: true });
+    mkdirSync(check, { recursive: true });
+    await exec('tar', ['-xzf', join(dest, mine), '-C', check], { log });
+    const said = (await exec(join(check, mine.replace(/\.tar\.gz$/, ''), 'bin', 'atelier'), ['--version'], { log })).out.trim();
+    if (!said.endsWith(version)) throw new Error(`The packaged terminal app says it is ${said}, not ${version}.`);
+  }
+}
+
+async function publishCliInstaller({ version, prerelease, dir, log }) {
+  const bucket = process.env.ATELIER_RELEASES_BUCKET ?? 'atelier-releases';
+  const put = (key, file, type) => exec('npx', ['--yes', 'wrangler@4', 'r2', 'object', 'put', `${bucket}/${key}`, '--file', file, '--content-type', type, '--remote'], { cwd: join(ROOT, 'deploy/cloudflare'), log });
+  await put(`cli/${version}/install.sh`, join(dir, 'install-cli.sh'), 'text/x-shellscript');
+  await put(`cli/${version}/install.ps1`, join(dir, 'install-cli.ps1'), 'text/plain');
+  // /cli and /cli.ps1 always serve the newest stable ones.
+  if (!prerelease) {
+    await put('cli/install.sh', join(dir, 'install-cli.sh'), 'text/x-shellscript');
+    await put('cli/install.ps1', join(dir, 'install-cli.ps1'), 'text/plain');
+  }
+}
+
 /** The feed Worker serves /install and /setup/...: redeploy it only when its code changed since the previous release. */
 async function deployWorker({ tag, log }) {
   const previous = git('tag', '--list', 'v*', '--sort=-v:refname').split('\n').find((t) => t !== tag && /^v\d+\.\d+\.\d+$/.test(t));
@@ -735,7 +785,7 @@ async function publishInstaller({ version, prerelease, dir, log }) {
 // ---------------------------------------------------------------------------------------------------------------------
 // What is live
 
-async function verifyLive({ version, tag, channel, repo, publish, installerFiles }) {
+async function verifyLive({ version, tag, channel, repo, publish, installerFiles, cliFiles }) {
   const problems = [];
   const names = readdirSync(publish);
   // The update feed: each update file names this version; each package is there at its size, with its signature.
@@ -765,6 +815,17 @@ async function verifyLive({ version, tag, channel, repo, publish, installerFiles
     if (channel === 'stable') {
       const script = await fetch(`${CONFIG.feed}/install`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
       if (script !== readFileSync(join(installerFiles, 'install.sh'), 'utf8')) problems.push('installer: /install does not serve this release\'s script');
+    }
+  }
+  // The terminal app: its manifest names this version, and the install scripts are served (stable).
+  if (cliFiles) {
+    const manifest = await fetch(`${CONFIG.feed}/${channel}/atelier-cli.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (manifest?.version !== version) problems.push(`terminal app: ${channel}/atelier-cli.json does not say ${version}`);
+    if (channel === 'stable') {
+      for (const [route, file] of [['cli', 'install-cli.sh'], ['cli.ps1', 'install-cli.ps1']]) {
+        const script = await fetch(`${CONFIG.feed}/${route}`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
+        if (script !== readFileSync(join(cliFiles, file), 'utf8')) problems.push(`terminal app: /${route} does not serve this release's script`);
+      }
     }
   }
   // The GitHub release: published, with every file at its size.

@@ -1,0 +1,47 @@
+# Atelier CLI for Windows. It downloads the terminal app for this computer, checks its checksum, and installs it for
+# you alone: into %LOCALAPPDATA%\Atelier\cli\versions\@VERSION@, with the command at %LOCALAPPDATA%\Atelier\cli\bin.
+#
+#   irm https://updates.atelierhq.dev/cli.ps1 | iex
+#
+# It is short, so read it first if you like. `atelier update` keeps it up to date afterwards.
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$Version = '@VERSION@'
+$Channel = '@CHANNEL@'
+$Base = if ($env:ATELIER_CLI_BASE) { "$env:ATELIER_CLI_BASE/$Channel" } else { "https://updates.atelierhq.dev/$Channel" }
+$Sums = @"
+@SUMS@
+"@
+
+$arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'x64' }
+$name = "atelier-cli-$Version-windows-$arch.zip"
+$want = ($Sums -split "`n" | Where-Object { $_ -match [regex]::Escape($name) + '$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
+if (-not $want) { throw "No build of Atelier CLI for Windows $arch." }
+
+$root = Join-Path $env:LOCALAPPDATA 'Atelier\cli'
+$versions = Join-Path $root 'versions'
+$bin = Join-Path $root 'bin'
+New-Item -ItemType Directory -Force -Path $versions, $bin | Out-Null
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("atelier-cli-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+try {
+  Write-Host "Downloading Atelier CLI $Version for Windows $arch ..."
+  Invoke-WebRequest -UseBasicParsing -Uri "$Base/$name" -OutFile (Join-Path $tmp $name)
+  $got = (Get-FileHash -Algorithm SHA256 (Join-Path $tmp $name)).Hash.ToLower()
+  if ($got -ne $want) { throw "The download does not match its checksum (got $got, expected $want); nothing was installed." }
+  $target = Join-Path $versions $Version
+  if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+  Expand-Archive -LiteralPath (Join-Path $tmp $name) -DestinationPath $target -Force
+  Set-Content -Path (Join-Path $bin 'atelier.cmd') -Value "@echo off`r`n`"$target\bin\atelier.cmd`" %*" -Encoding ASCII
+  Get-ChildItem $versions -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Skip 3 | Remove-Item -Recurse -Force
+} finally {
+  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+}
+
+$path = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (-not ($path -split ';' | Where-Object { $_ -eq $bin })) {
+  [Environment]::SetEnvironmentVariable('Path', ($(if ($path) { "$path;" } else { '' }) + $bin), 'User')
+  Write-Host "Added $bin to your PATH (open a new terminal for it to count)."
+}
+Write-Host ""
+Write-Host "Installed Atelier CLI $Version. Run: atelier  (in a project folder; the first start sets it up)"

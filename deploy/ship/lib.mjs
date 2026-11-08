@@ -54,7 +54,7 @@ export function readPackageVersion(source) {
 }
 
 export function setPackageVersion(source, version) {
-  if (readPackageVersion(source) === null) throw new Error("Can't find the version in apps/desktop/package.json.");
+  if (readPackageVersion(source) === null) throw new Error("Can't find the version in the package.json.");
   return source.replace(/^( {2}"version": ")[^"]*(",)$/m, `$1${version}$2`);
 }
 
@@ -100,11 +100,17 @@ export function expectedFiles(version) {
     // One installer per architecture (electron-builder.yml, nsis.buildUniversalInstaller): latest.yml lists both.
     windows: [`Atelier-Setup-${v}-x64.exe`, `Atelier-Setup-${v}-x64.exe.blockmap`, `Atelier-Setup-${v}-arm64.exe`, `Atelier-Setup-${v}-arm64.exe.blockmap`, 'latest.yml'],
     mac: [...macPackages, ...blockmaps(macPackages), 'latest-mac.yml'],
+    // The terminal app (apps/cli/scripts/package.mjs): a package per platform and the manifest the update check reads.
+    cli: [...CLI_TARGETS.map((key) => cliPackage(v, key)), 'atelier-cli.json'],
   };
 }
 
+/** The terminal app's platforms, and its package's name for one. */
+export const CLI_TARGETS = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'linux-arm64', 'windows-x64', 'windows-arm64'];
+export const cliPackage = (version, key) => `atelier-cli-${version}-${key}.${key.startsWith('windows') ? 'zip' : 'tar.gz'}`;
+
 /** The packages (files that get a `.sig`) among names. */
-export const isPackage = (name) => /\.(exe|dmg|zip|deb|AppImage)$/.test(name);
+export const isPackage = (name) => /\.(exe|dmg|zip|deb|AppImage|tar\.gz)$/.test(name);
 export const isUpdateFile = (name) => /^latest.*\.ya?ml$/.test(name);
 
 /** electron-builder's update file: the version and each file with its sha512 (base64) and size. Its format is fixed and flat. */
@@ -157,7 +163,44 @@ export function checkRelease(dir, version, platforms = ['linux', 'windows', 'mac
       }
     }
   }
+  // The terminal app's manifest: this version, and each package with its size and sha512.
+  if (platforms.includes('cli') && existsSync(join(dir, 'atelier-cli.json'))) {
+    let manifest;
+    try {
+      manifest = JSON.parse(readFileSync(join(dir, 'atelier-cli.json'), 'utf8'));
+    } catch (e) {
+      problems.push(`atelier-cli.json: ${e.message}`);
+    }
+    if (manifest) {
+      if (manifest.version !== version) problems.push(`atelier-cli.json says version ${manifest.version}, not ${version}`);
+      for (const key of CLI_TARGETS) {
+        const entry = manifest.files?.[key];
+        if (!entry) problems.push(`atelier-cli.json has no ${key}`);
+        else if (entry.file !== cliPackage(version, key)) problems.push(`atelier-cli.json names ${entry.file} for ${key}`);
+        else if (existsSync(join(dir, entry.file)) && (statSync(join(dir, entry.file)).size !== entry.size || sha512Base64(join(dir, entry.file)) !== entry.sha512)) problems.push(`${entry.file} does not match atelier-cli.json`);
+      }
+    }
+  }
   return problems;
+}
+
+/**
+ * The terminal app's installers (deploy/ship/cli-install.sh.tmpl and cli-install.ps1.tmpl) for a version: the version,
+ * the channel its packages are in, and each package's sha256, so what they download is checked against what was released.
+ */
+export function renderCliInstaller(template, version, channel, sums) {
+  const lines = Object.entries(sums)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([name, sha]) => {
+      if (!/^atelier-cli-[0-9A-Za-z.-]+-(darwin|linux|windows)-(x64|arm64)\.(tar\.gz|zip)$/.test(name)) throw new Error(`Unexpected terminal app package ${name}.`);
+      if (!/^[0-9a-f]{64}$/.test(sha)) throw new Error(`${name} has no valid sha256.`);
+      return `${sha}  ${name}`;
+    });
+  if (lines.length === 0) throw new Error('The installer needs at least one package.');
+  if (!/^[0-9A-Za-z][0-9A-Za-z.-]*$/.test(version)) throw new Error(`"${version}" cannot be a version in the installer.`);
+  if (!['stable', 'beta'].includes(channel)) throw new Error(`"${channel}" is not a channel.`);
+  for (const marker of ['@VERSION@', '@CHANNEL@', '@SUMS@']) if (!template.includes(marker)) throw new Error(`The installer template lacks ${marker}.`);
+  return template.replaceAll('@VERSION@', version).replaceAll('@CHANNEL@', channel).replace('@SUMS@', `\n${lines.join('\n')}\n`);
 }
 
 /** `https://github.com/Owner/repo(.git)` or `git@github.com:Owner/repo.git` into `Owner/repo`. */
@@ -243,8 +286,11 @@ export function e2eScript({ name, lastFailed = false }) {
           `rm -rf ~/builds/${name}-e2e && cp -a ~/builds/${name} ~/builds/${name}-e2e && cd ~/builds/${name}-e2e`,
           'pnpm --filter @atelier/server build >/dev/null 2>&1',
           'pnpm --filter @atelier/desktop build >/dev/null 2>&1',
+          'pnpm --filter @atelier/cli build >/dev/null 2>&1',
           'pnpm exec playwright install chromium >/dev/null 2>&1',
           'node apps/desktop/node_modules/electron/install.js >/dev/null 2>&1',
+          // The terminal app in a real pseudo-terminal: set up on this machine, and with a server (apps/cli/test).
+          'ATELIER_NO_BROWSER=1 npx vitest run apps/cli/test 2>&1 | tail -15',
           run,
         ]),
   ].join('\n');

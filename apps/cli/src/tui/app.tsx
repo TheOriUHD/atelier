@@ -48,6 +48,8 @@ export interface AppProps {
   initialPrompt: string | null;
   /** Start in this mode (`--mode`). */
   mode?: PermissionMode | undefined;
+  /** A newer version is out (said under the tip). */
+  notice?: Promise<string | null>;
   onExit(next: AppExit): void;
 }
 
@@ -92,6 +94,10 @@ export function App(props: AppProps) {
   const [connected, setConnected] = useState(true);
   const [statusLine, setStatusLine] = useState<string | null>(null);
   const [pip, setPip] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    void props.notice?.then((n) => n && setNotice(n));
+  }, [props.notice]);
   const ctrlC = useRef(0);
   const escAt = useRef(0);
   const printed = useRef<string[]>([]);
@@ -506,6 +512,11 @@ export function App(props: AppProps) {
           <Box marginBottom={1}>
             <Text>{paint.fg('muted', `Tip: ${TIPS[config.tipIndex % TIPS.length]}`)}</Text>
           </Box>
+          {notice && (
+            <Box marginBottom={1}>
+              <Text>{paint.fg('accentSoft', notice)}</Text>
+            </Box>
+          )}
         </Box>
       )}
       {pip > 0 && <PipDance key={pip} paint={paint} />}

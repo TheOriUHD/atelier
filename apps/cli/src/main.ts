@@ -27,6 +27,18 @@ import { defaultCodeModel, modeFrom } from './tui/session.ts';
 
 module.enableCompileCache?.();
 const run = promisify(execFile);
+// `atelier licenses | head`: the reader went away, which is fine.
+process.stdout.on('error', (e: NodeJS.ErrnoException) => e.code === 'EPIPE' && process.exit(0));
+
+/** Once a day, an installed copy looks whether a newer one is out (a line under the tip; never in the way). */
+async function updateNotice(p: ReturnType<typeof cliPaths>, config: CliConfig): Promise<string | null> {
+  if (process.env.ATELIER_NO_UPDATE_CHECK || Date.now() - (config.checkedForUpdatesAt ?? 0) < 24 * 3600_000) return null;
+  const { latest, newer, publicFeed, selfInstalled } = await import('./update/update.ts');
+  if (!selfInstalled()) return null;
+  await updateConfig(p.config, (c) => ({ ...c, checkedForUpdatesAt: Date.now() }));
+  const manifest = await latest(publicFeed(config.channel), 2500).catch(() => null);
+  return manifest && newer(manifest.version, VERSION) ? `Atelier CLI ${manifest.version} is out: atelier update` : null;
+}
 
 async function main(argv: string[]): Promise<number> {
   const { values, positionals } = parse(argv);
@@ -181,6 +193,7 @@ async function main(argv: string[]): Promise<number> {
       () => null,
     );
     await updateConfig(p.config, (c) => ({ ...c, tipIndex: c.tipIndex + 1 }));
+    const notice = updateNotice(p, config).catch(() => null);
     const { App } = await import('./tui/app.tsx');
     let exit: AppExit = { kind: 'quit' };
     const instance = render(
@@ -196,6 +209,7 @@ async function main(argv: string[]): Promise<number> {
         initialSessionId: sessionId,
         initialPrompt: values.resume && !sessionId ? null : prompt || null,
         mode,
+        notice,
         onExit: (next: AppExit) => (exit = next),
       }),
       { exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' }, incrementalRendering: true, maxFps: 30, isScreenReaderEnabled: !!values['screen-reader'] },
