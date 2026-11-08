@@ -18,7 +18,7 @@ export { interpolate } from './util/interpolate.ts';
 export { networkCode } from './util/network-error.ts';
 // The device link, what it lends, and the person's say-so for each server.
 export { backoff } from './device/backoff.ts';
-export { createDeviceLink, insideTrusted, readTrustedFolders, trustedPath, type DeviceLinkOptions } from './device/link.ts';
+export { createDeviceLink, insideTrusted, readTrustedFolders, trustedPath, type DeviceLinkOptions, type DeviceLinkState } from './device/link.ts';
 export { deviceServices, lentHeaders, Refusal, withinAddress, withinSocketAddress, type DeviceServices, type DeviceServicesOptions } from './device/services.ts';
 export { applyLending, changeLending, connectorFingerprint, LendingChange, readLending } from './device/lending.ts';
 // Finding a server and saying what's wrong with the way to it.

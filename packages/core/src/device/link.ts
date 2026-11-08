@@ -46,8 +46,12 @@ export interface DeviceLinkOptions {
   /** What else this computer lends (version 2); without it, only runners for trusted folders. */
   services?: Pick<DeviceServices, 'hello' | 'request' | 'start' | 'scratchEnv'> & Partial<Pick<DeviceServices, 'watchHome' | 'lendingChanged'>>;
   openSocket?: OpenSocket;
+  /** How the link stands, for whoever shows it: connected, trying again, or turned down until a new token comes. */
+  onState?(state: DeviceLinkState): void;
   spawnRunner?: (binary: string, root: string, env?: Record<string, string>) => RunnerProcess;
 }
+
+export type DeviceLinkState = 'online' | 'connecting' | 'signed_out' | 'off';
 
 /** The folders the person trusted on this machine (`trusted-folders.json`, written by main's folder picker). */
 export function readTrustedFolders(path: string): Promise<string[]> {
@@ -209,12 +213,15 @@ export function createDeviceLink(options: DeviceLinkOptions) {
       stopRunners();
       if (code === SIGNED_OUT) {
         refused = true;
+        options.onState?.('signed_out');
         return;
       }
+      options.onState?.('connecting');
       timer = setTimeout(connect, backoff(++failures));
     };
     ws.onopen = () => {
       failures = 0;
+      options.onState?.('online');
       // The person's config here changing (a skill added, CLAUDE.md edited) makes the server read it again.
       stopWatch ??= options.services?.watchHome?.(() => send({ t: 'event', event: 'home.changed' }));
       // Says what it lends first; the server waits a moment for it before taking this for an older desktop.
@@ -252,6 +259,7 @@ export function createDeviceLink(options: DeviceLinkOptions) {
       old?.close();
       stopRunners();
       failures = 0;
+      options.onState?.(next ? 'connecting' : 'off');
       connect();
     },
     /**

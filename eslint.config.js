@@ -29,4 +29,10 @@ export default tseslint.config(
       'jsx-a11y/no-autofocus': 'off',
     },
   },
+  // The terminal app's screens are React too (Ink).
+  {
+    files: ['apps/cli/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: { ...reactHooks.configs.recommended.rules },
+  },
 );

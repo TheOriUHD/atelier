@@ -1,0 +1,345 @@
+/**
+ * Atelier CLI (ARCHITECTURE §25): `atelier` in a folder starts a Code session there, on this computer's own backend or
+ * an Atelier server's, laid out like Claude Code. This file reads the command line and sends it on: the session screen,
+ * print mode, the setup wizard, and the small commands.
+ */
+import module from 'node:module';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { render } from 'ink';
+import { createElement } from 'react';
+import type { Effort, PermissionMode } from '@atelier/protocol';
+import { helpText, parse } from './args.ts';
+import { bigBanner } from './art/banner.ts';
+import { drawPip } from './art/mascot.ts';
+import { readConfig, updateConfig, type CliConfig } from './config.ts';
+import { connect, describe, NeedsSetup, type Connected } from './connection/connect.ts';
+import { folderRoot, knownFolder, trustedHere, trustFolder } from './connection/folder.ts';
+import { connectService, stopService } from './daemon/client.ts';
+import { credentialStore, tokenName } from './keychain.ts';
+import { paths as cliPaths } from './paths.ts';
+import { VERSION } from './runtime.ts';
+import { colorDepth, Paint, palette, type Shade } from './style.ts';
+import { backgroundShade, FOCUS_OFF } from './term.ts';
+import type { AppExit } from './tui/commands.ts';
+import { setInstance } from './tui/screen.ts';
+import { defaultCodeModel, modeFrom } from './tui/session.ts';
+
+module.enableCompileCache?.();
+const run = promisify(execFile);
+
+async function main(argv: string[]): Promise<number> {
+  const { values, positionals } = parse(argv);
+  const p = cliPaths();
+  let config = await readConfig(p.config);
+  const plain = !!values.plain || !!values['screen-reader'] || config.theme === 'plain';
+  const depth = plain ? 0 : colorDepth();
+  const needsShade = config.theme === 'auto' && depth > 0 && process.stdin.isTTY;
+  const shade: Shade = config.theme === 'light' ? 'light' : config.theme === 'dark' ? 'dark' : needsShade ? await backgroundShade() : 'dark';
+  const paint = new Paint(palette(shade, depth));
+  if (plain) config = { ...config, motion: false };
+  const [command, ...rest] = positionals;
+
+  if (values.version) {
+    if (process.stdout.isTTY && !plain) process.stdout.write(`${bigBanner(paint, process.stdout.columns ?? 80).join('\n')}\n${paint.fg('muted', `Atelier CLI ${VERSION}`)}\n`);
+    else process.stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+  if (values.help || command === 'help') {
+    process.stdout.write(`${helpText(paint)}\n`);
+    return 0;
+  }
+
+  switch (command) {
+    case 'daemon':
+      return daemonCommand(rest, values, p, config);
+    case 'setup':
+      return (await setup(p, config, 'all', shade)) ? 0 : 1;
+    case 'login':
+      if (!config.connection || config.connection.mode !== 'server') {
+        process.stderr.write('This terminal isn’t connected to a server. atelier setup connects it.\n');
+        return 1;
+      }
+      return (await setup(p, config, 'login', shade)) ? 0 : 1;
+    case 'logout':
+      return logout(p, config);
+    case 'connect': {
+      if (values.local) {
+        await updateConfig(p.config, (c) => ({ ...c, connection: { mode: 'local' } }));
+        process.stdout.write('This terminal now works on this computer only.\n');
+        return 0;
+      }
+      if (rest[0]) config = { ...config, connection: { mode: 'server', serverUrl: rest[0].includes('://') ? rest[0] : `https://${rest[0]}` } };
+      return (await setup(p, config, rest[0] ? 'login' : 'connect', shade)) ? 0 : 1;
+    }
+    case 'doctor': {
+      const { runChecks } = await import('./commands/doctor.ts');
+      process.stdout.write(`${(await runChecks(p, paint)).join('\n')}\n`);
+      return 0;
+    }
+    case 'update':
+      return updateCommand(config, p, !!values.beta, paint);
+    case 'completion': {
+      const { completion } = await import('./commands/completion.ts');
+      const script = completion(rest[0] ?? '');
+      if (!script) {
+        process.stderr.write('Which shell? atelier completion bash|zsh|fish|pwsh\n');
+        return 1;
+      }
+      process.stdout.write(script);
+      return 0;
+    }
+    case 'licenses': {
+      const { readFile } = await import('node:fs/promises');
+      const { here } = await import('./runtime.ts');
+      const { join } = await import('node:path');
+      process.stdout.write(await readFile(join(here(), 'LICENSES.txt'), 'utf8').catch(() => 'The licenses are in THIRD_PARTY_NOTICES.md of the source.\n'));
+      return 0;
+    }
+    case 'status':
+    case 'models':
+    case 'sessions':
+      return listCommand(command, p, config, paint);
+    default:
+      break;
+  }
+
+  // A session: first make sure there is somewhere to run it.
+  const prompt = [command, ...rest].filter(Boolean).join(' ').trim();
+  const printMode = !!values.print || (!process.stdin.isTTY && !process.stdout.isTTY);
+  let input = prompt;
+  if (printMode && !process.stdin.isTTY) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+    const piped = Buffer.concat(chunks).toString('utf8').trim();
+    input = [prompt, piped].filter(Boolean).join('\n\n');
+  }
+  if (typeof values.server === 'string') config = { ...config, connection: { mode: 'server', serverUrl: values.server } };
+  if (process.env.ATELIER_TOKEN && config.connection?.mode === 'server') {
+    const store = await credentialStore(p.credentials);
+    if (!(await store.get(tokenName(config.connection.serverUrl)))) await store.set(tokenName(config.connection.serverUrl), process.env.ATELIER_TOKEN);
+  }
+
+  let conn: Connected;
+  for (;;) {
+    try {
+      conn = await connect(p, config);
+      break;
+    } catch (e) {
+      if (!(e instanceof NeedsSetup) || printMode || !process.stdin.isTTY) {
+        process.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+        return e instanceof NeedsSetup ? 3 : 1;
+      }
+      const next = await setup(p, config, e.reason === 'signed-out' ? 'login' : 'all', shade);
+      if (!next) return 1;
+      config = next;
+    }
+  }
+
+  try {
+    const root = await folderRoot(process.cwd());
+    let folder = await knownFolder(conn, root);
+    const trusted = conn.mode === 'local' || (folder && (await trustedHere(p, root)));
+    if (!folder || !trusted) {
+      if (printMode) {
+        process.stderr.write(`Atelier hasn’t worked in ${root} yet. Run atelier there once to say it may.\n`);
+        return 1;
+      }
+      const { askTrust } = await import('./tui/trust.tsx');
+      if (!(await askTrust(paint, root, conn.mode === 'server' ? new URL(conn.serverUrl!).host : null))) return 0;
+      folder = await trustFolder(conn, p, root);
+    }
+    const models = await conn.rpc.call('models.list', {}).catch(() => []);
+    const wantedModel = typeof values.model === 'string' ? values.model : config.model;
+    const { findModel } = await import('./tui/session.ts');
+    const model = (wantedModel && findModel(models, wantedModel)) || (await defaultCodeModel(conn.rpc, models, config.model));
+    const modeWord = (values.mode ?? values['permission-mode']) as string | undefined;
+    const mode: PermissionMode | undefined = modeWord ? (modeFrom(modeWord) ?? undefined) : undefined;
+    const effort = typeof values.effort === 'string' ? (values.effort === 'extra' ? 'xhigh' : values.effort) as Effort : undefined;
+
+    // Which session: the latest here (-c), one by id, or a new one.
+    let sessionId: string | null = typeof values.session === 'string' ? values.session : null;
+    if (values.continue || values.resume) {
+      const list = await conn.rpc.call('sessions.list', { mode: 'code', limit: 50 });
+      const here = list.filter((s) => s.workspaceId === folder.id).sort((a, b) => b.updatedAt - a.updatedAt);
+      if (values.resume && positionals[0] && list.some((s) => s.id === positionals[0])) sessionId = positionals[0]!;
+      else if (values.continue) sessionId = here[0]?.id ?? null;
+    }
+
+    if (printMode) {
+      if (!input) {
+        process.stderr.write('Nothing to ask: atelier -p "your prompt" (or pipe it in).\n');
+        return 1;
+      }
+      const { runPrint } = await import('./commands/print.ts');
+      const allow = ([] as string[]).concat((values.allow as string[] | string | undefined) ?? []);
+      return await runPrint({ conn, folder, prompt: input, format: (values['output-format'] as 'text' | 'json' | 'stream-json') ?? 'text', allow, mode, model: model?.ref, effort, sessionId });
+    }
+
+    const branch = await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: folder.root, timeout: 3000 }).then(
+      (r) => r.stdout.trim(),
+      () => null,
+    );
+    await updateConfig(p.config, (c) => ({ ...c, tipIndex: c.tipIndex + 1 }));
+    const { App } = await import('./tui/app.tsx');
+    let exit: AppExit = { kind: 'quit' };
+    const instance = render(
+      createElement(App, {
+        conn,
+        paths: p,
+        config,
+        paint,
+        folder,
+        branch,
+        models,
+        model,
+        initialSessionId: sessionId,
+        initialPrompt: values.resume && !sessionId ? null : prompt || null,
+        mode,
+        onExit: (next: AppExit) => (exit = next),
+      }),
+      { exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' }, incrementalRendering: true, maxFps: 30, isScreenReaderEnabled: !!values['screen-reader'] },
+    );
+    setInstance(instance);
+    await instance.waitUntilExit();
+    setInstance(null);
+    process.stdout.write(FOCUS_OFF);
+    conn.close();
+    const ended = exit as AppExit;
+    if (ended.kind === 'quit') {
+      if (ended.keepRunning) process.stdout.write(`${paint.fg('muted', 'The reply goes on in the background. atelier -c picks this session up again.')}\n`);
+      return 0;
+    }
+    if (ended.kind === 'logout') return logout(p, config);
+    const next = await setup(p, config, ended.step, shade);
+    return next ? main(argv) : 0;
+  } finally {
+    conn.close();
+  }
+}
+
+async function setup(p: ReturnType<typeof cliPaths>, config: CliConfig, start: 'all' | 'login' | 'connect', shade: Shade): Promise<CliConfig | null> {
+  if (!process.stdin.isTTY) {
+    process.stderr.write('Setup needs a terminal to ask in. Run atelier setup in one.\n');
+    return null;
+  }
+  const { runSetup } = await import('./wizard/wizard.tsx');
+  return runSetup(p, config, start, shade);
+}
+
+async function logout(p: ReturnType<typeof cliPaths>, config: CliConfig): Promise<number> {
+  if (config.connection?.mode !== 'server') {
+    process.stdout.write('This terminal works on this computer: there is no sign-in to end.\n');
+    return 0;
+  }
+  const url = config.connection.serverUrl;
+  const store = await credentialStore(p.credentials);
+  const token = await store.get(tokenName(url));
+  if (token) {
+    // Ends the sign-in on the server too, then forgets it here and stops lending this computer.
+    const { contract, createRpcClient } = await import('@atelier/protocol');
+    const { wsTransport } = await import('@atelier/client');
+    const transport = wsTransport({ serverUrl: url, headers: () => ({ Authorization: `Bearer ${token}` }) });
+    await createRpcClient(contract, transport)
+      .call('auth.logout', {})
+      .catch(() => undefined);
+    transport.close();
+  }
+  await store.delete(tokenName(url));
+  const link = await connectService(p, { mode: 'server', serverUrl: url }, { start: false }).catch(() => null);
+  if (link) await stopService(link, true);
+  process.stdout.write(`Signed out of ${new URL(url).host}.\n`);
+  return 0;
+}
+
+async function daemonCommand(rest: string[], values: Record<string, unknown>, p: ReturnType<typeof cliPaths>, config: CliConfig): Promise<number> {
+  const sub = rest[0];
+  if (sub === 'run') {
+    const { runDaemon } = await import('./daemon/daemon.ts');
+    await runDaemon({ want: typeof values.server === 'string' ? { mode: 'server', serverUrl: values.server } : { mode: 'local' }, paths: p });
+    return new Promise(() => undefined);
+  }
+  const want = config.connection?.mode === 'server' ? { mode: 'server' as const, serverUrl: config.connection.serverUrl } : { mode: 'local' as const };
+  if (sub === 'keep' || sub === 'unkeep') {
+    const { keepService, unkeepService } = await import('./commands/service.ts');
+    await updateConfig(p.config, (c) => ({ ...c, keepAvailable: sub === 'keep' }));
+    process.stdout.write(`${sub === 'keep' ? await keepService(want) : await unkeepService()}\n`);
+    return 0;
+  }
+  const link = await connectService(p, want, { start: false }).catch(() => null);
+  if (!link) {
+    process.stdout.write('The background service isn’t running.\n');
+    return 0;
+  }
+  if (sub === 'stop') {
+    const stopped = await stopService(link, !!values.force);
+    process.stdout.write(stopped ? 'Stopped the background service.\n' : `A reply is still running in it. atelier daemon stop --force stops it anyway.\n`);
+    return stopped ? 0 : 1;
+  }
+  const s = link.status;
+  process.stdout.write(`Background service ${s.version}, process ${s.pid}, since ${new Date(s.startedAt).toLocaleString()}\n  ${s.want.mode === 'server' ? `lends this computer to ${s.want.serverUrl} (link ${s.link ?? 'off'})` : 'runs the backend for this computer'}\n  ${s.clients} ${s.clients === 1 ? 'client' : 'clients'}, ${s.busy} ${s.busy === 1 ? 'reply' : 'replies'} running${s.keepAvailable ? ', kept running at login' : ''}\n`);
+  link.close();
+  return 0;
+}
+
+async function listCommand(command: 'status' | 'models' | 'sessions', p: ReturnType<typeof cliPaths>, config: CliConfig, paint: Paint): Promise<number> {
+  let conn: Connected;
+  try {
+    conn = await connect(p, config, { service: command === 'status' });
+  } catch (e) {
+    process.stderr.write(`${describe(e)}\n`);
+    return e instanceof NeedsSetup ? 3 : 1;
+  }
+  try {
+    if (command === 'models') {
+      const models = await conn.rpc.call('models.list', {});
+      for (const m of models.filter((x) => !x.hidden)) process.stdout.write(`${paint.fg('accent', m.ref.padEnd(44))} ${m.displayName}${m.personal ? paint.fg('muted', ' (yours)') : ''}\n`);
+    } else if (command === 'sessions') {
+      const list = await conn.rpc.call('sessions.list', { mode: 'code', limit: 50 });
+      for (const s of list) process.stdout.write(`${paint.fg('muted', s.id)}  ${s.title || 'Untitled'}${s.status === 'running' ? paint.fg('accent', '  running') : ''}\n`);
+    } else {
+      const info = await conn.rpc.call('app.info', {});
+      process.stdout.write(`${drawPip('base', paint.p.depth).join('\n')}\nAtelier CLI ${VERSION}\n${conn.mode === 'server' ? `Server ${conn.serverUrl} (Atelier ${info.version})` : `This computer (${p.backendData})`}\nSigned in as ${conn.user.name} (${conn.user.username})\n`);
+    }
+    return 0;
+  } finally {
+    conn.close();
+  }
+}
+
+async function updateCommand(config: CliConfig, p: ReturnType<typeof cliPaths>, beta: boolean, paint: Paint): Promise<number> {
+  const { activate, install, latest, newer, publicFeed, selfInstalled, serverFeed } = await import('./update/update.ts');
+  const channel = beta ? 'beta' : config.channel;
+  let feed = publicFeed(channel);
+  if (config.connection?.mode === 'server') {
+    const token = await (await credentialStore(p.credentials)).get(tokenName(config.connection.serverUrl));
+    if (token) {
+      const mirrored = serverFeed(config.connection.serverUrl, token, channel);
+      if (await latest(mirrored).then(() => true, () => false)) feed = mirrored;
+    }
+  }
+  const manifest = await latest(feed, 15_000);
+  if (!newer(manifest.version, VERSION)) {
+    process.stdout.write(`Atelier CLI ${VERSION} is the newest${channel === 'beta' ? ' (beta)' : ''}.\n`);
+    return 0;
+  }
+  if (!selfInstalled()) {
+    process.stdout.write(`Atelier CLI ${manifest.version} is out. This copy wasn’t installed with the installer; update it the way you installed it, or run: curl -fsSL https://updates.atelierhq.dev/cli | sh\n`);
+    return 0;
+  }
+  const target = await install(feed, manifest, p.updates, (t) => process.stdout.write(`${paint.fg('muted', t)}\n`));
+  await activate(target);
+  await updateConfig(p.config, (c) => ({ ...c, checkedForUpdatesAt: Date.now() }));
+  process.stdout.write(`${paint.fg('good', '✓')} Updated to Atelier CLI ${manifest.version}. The background service restarts with the next session.\n`);
+  return 0;
+}
+
+main(process.argv.slice(2)).then(
+  (code) => {
+    if (code !== 0 || process.env.ATELIER_DAEMON !== '1') setTimeout(() => process.exit(code), 50).unref();
+  },
+  (e: unknown) => {
+    process.stderr.write(`${e instanceof Error ? (process.env.ATELIER_DEBUG ? e.stack : e.message) : String(e)}\n`);
+    process.exit(1);
+  },
+);
