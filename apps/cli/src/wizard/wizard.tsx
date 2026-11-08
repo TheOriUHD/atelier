@@ -155,6 +155,8 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
   });
 
   const rpc = () => rpcRef.current!.rpc;
+  /** A server from before 0.6.0 knows no `cli` client kind: the terminal signs in there as the desktop app does. */
+  const serverKind = (): 'cli' | 'desktop' => (server?.info?.terminalSignIn ? 'cli' : 'desktop');
 
   /** A WebSocket to the server for the wizard's calls (anonymous until it signs in over it). */
   const openServer = (url: string) => {
@@ -351,7 +353,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                   const values = { ...step.values, [name]: value };
                   if (step.field + 1 < fields.length) return setStep({ ...step, field: step.field + 1, values, error: undefined });
                   void rpc()
-                    .call('auth.setup', { setupToken: values.token!, name: values.name!, username: values.username!, password: values.password!, clientKind: 'cli' })
+                    .call('auth.setup', { setupToken: values.token!, name: values.name!, username: values.username!, password: values.password!, clientKind: serverKind() })
                     .then(signedIn)
                     .catch((e: unknown) => setStep({ ...step, field: errorCode(e) === 'invalid_setup_token' ? 0 : 2, values, error: describe(e) }));
                 }}
@@ -424,7 +426,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                   const values = { ...step.values, [name]: value };
                   if (step.field + 1 < fields.length) return setStep({ ...step, field: step.field + 1, values, error: undefined });
                   void rpc()
-                    .call('auth.login', { username: values.username!.toLowerCase(), password: values.password!, clientKind: 'cli' })
+                    .call('auth.login', { username: values.username!.toLowerCase(), password: values.password!, clientKind: serverKind() })
                     .then(signedIn)
                     .catch((e: unknown) => setStep({ s: 'password', field: 1, values, error: describe(e) }));
                 }}
@@ -455,7 +457,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                   const values = { ...step.values, [name]: value };
                   if (step.field + 1 < fields.length) return setStep({ ...step, field: step.field + 1, values, error: undefined });
                   void rpc()
-                    .call('auth.acceptInvite', { invite: values.invite!, name: values.name!, username: values.username!.toLowerCase(), password: values.password!, clientKind: 'cli' })
+                    .call('auth.acceptInvite', { invite: values.invite!, name: values.name!, username: values.username!.toLowerCase(), password: values.password!, clientKind: serverKind() })
                     .then(signedIn)
                     .catch((e: unknown) => setStep({ s: 'invite', field: 0, values, error: describe(e) }));
                 }}
