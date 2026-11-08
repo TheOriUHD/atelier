@@ -390,7 +390,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
           title: 'Approve this terminal in the browser',
           content: (
             <Box flexDirection="row" gap={3}>
-              <Box flexDirection="column">
+              <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
                 <Text>{step.opened ? 'Your browser opened the page. Check that it shows this code:' : 'Open this page where you are signed in:'}</Text>
                 <Text>{paint.fg('info', step.start.verifyUrlComplete)}</Text>
                 <Box marginY={1} borderStyle="round" borderColor={paint.p.depth ? paint.p.accent : undefined} paddingX={2}>
@@ -648,7 +648,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
     <Frame paint={paint} columns={columns} crumb={crumb} title={body.title} keys={frameKeys}>
       <Box flexDirection="row" gap={2}>
         {/* Keyed by the step, so a list's cursor starts fresh on each one. */}
-        <Box key={step.s} flexDirection="column" flexGrow={1}>
+        <Box key={step.s} flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0} minWidth={0}>
           {note && step.s !== 'address' && <Text>{paint.fg('bad', note)}</Text>}
           {body.content}
         </Box>

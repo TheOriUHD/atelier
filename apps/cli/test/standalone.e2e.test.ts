@@ -42,7 +42,7 @@ afterAll(async () => {
   }
 });
 
-const env = () => ({ ...process.env, HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '', NO_UPDATE_CHECK: '1' });
+const env = () => ({ ...process.env, ATELIER_NO_BROWSER: '1', HOME: home, USERPROFILE: home, ATELIER_CLI_DIR: join(home, '.atelier', 'cli'), ATELIER_CLI_CREDENTIALS: 'file', ATELIER_COOP_RELAY: '', NO_UPDATE_CHECK: '1' });
 
 it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answers', { timeout: 180_000 }, async () => {
   const s = await openScreen({ cwd: project, env: env(), command: `exec ${JSON.stringify(process.execPath)} ${JSON.stringify(BUNDLE)}` });

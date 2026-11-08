@@ -45,7 +45,7 @@ export function copy(text: string): void {
 
 /** Opens a link in the browser (not over SSH, where there's none to open it in). */
 export function openUrl(url: string): boolean {
-  if (process.env.SSH_CONNECTION || process.env.SSH_TTY) return false;
+  if (process.env.SSH_CONNECTION || process.env.SSH_TTY || process.env.ATELIER_NO_BROWSER) return false;
   const [command, args] = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
   try {
     const child = spawn(command as string, args as string[], { stdio: 'ignore', detached: true });
