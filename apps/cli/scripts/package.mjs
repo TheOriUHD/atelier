@@ -1,13 +1,21 @@
 // Packages the terminal app for the six platforms (ARCHITECTURE §25). Each package is a folder:
 //   bin/atelier (bin/atelier.cmd)   the command: runs the bundle with the Node beside it
-//   node/                           the official Node.js build for that platform (its binary and license)
+//   node/                           the official Node.js build for that platform: its binary, named `atelier` on macOS and
+//                                   Linux (so the system's prompts and process lists say Atelier), and its license
 //   lib/atelier.mjs, LICENSES.txt   the bundle (pnpm --filter @atelier/cli build)
 //   lib/runner/                     the runner for this platform, plus the Linux and macOS ones for SSH hosts
 // packed as atelier-cli-<version>-<platform>.tar.gz (a .zip for Windows), and atelier-cli.json lists them with
 // their sha512 and size (the update check reads it; the release signs each package). Node comes from nodejs.org,
 // checked against its SHASUMS256.txt, and is kept in a cache between releases.
 //
-//   node apps/cli/scripts/package.mjs --version 0.6.0 --runners runner/bin --out <dir> [--only darwin-arm64]
+// On a Mac, `--sign` signs the macOS binaries with the Developer ID in the keychain as `dev.atelier.cli`: macOS asks
+// each program before it reaches the local network, and Node.js's own signature made that "node", a program the person
+// never allowed (an Atelier server at home couldn't be reached). Signed as Atelier, macOS asks for "atelier" once, and
+// the answer holds across updates. Only V8's two exceptions to the hardened runtime are kept (JIT code); Node's own
+// signature also allows debugging and loading unsigned libraries, which Atelier doesn't need. `--notarize` then has
+// Apple notarize them (notarytool, the keychain profile `atelier-notary` or APPLE_KEYCHAIN_PROFILE).
+//
+//   node apps/cli/scripts/package.mjs --version 0.6.0 --runners runner/bin --out <dir> [--only darwin-arm64] [--sign] [--notarize]
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -33,6 +41,28 @@ const arg = (name, fallback) => {
   return i === -1 ? fallback : process.argv[i + 1];
 };
 
+const ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.cs.allow-jit</key><true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+</dict></plist>
+`;
+
+/** The Developer ID to sign with: ATELIER_CLI_SIGN_IDENTITY, else the keychain's "Developer ID Application". */
+function signingIdentity() {
+  if (process.env.ATELIER_CLI_SIGN_IDENTITY) return process.env.ATELIER_CLI_SIGN_IDENTITY;
+  const identities = execFileSync('security', ['find-identity', '-v', '-p', 'codesigning'], { encoding: 'utf8' });
+  const name = /"(Developer ID Application: .+? \([A-Z0-9]{10}\))"/.exec(identities)?.[1];
+  if (!name) throw new Error('No "Developer ID Application" certificate in the keychain (see docs/updates.md).');
+  return name;
+}
+
+function signMac(binary, identity, entitlements) {
+  execFileSync('codesign', ['--force', '--sign', identity, '--identifier', 'dev.atelier.cli', '--options', 'runtime', '--timestamp', '--entitlements', entitlements, binary], { stdio: 'pipe' });
+  execFileSync('codesign', ['--verify', '--strict', binary], { stdio: 'pipe' });
+}
+
 const POSIX_LAUNCHER = `#!/bin/sh
 # Atelier CLI: runs the bundle with the Node.js beside it. Follows the link in ~/.local/bin to this install.
 self="$0"
@@ -41,7 +71,7 @@ while [ -L "$self" ]; do
   case $link in /*) self=$link ;; *) self=$(dirname "$self")/$link ;; esac
 done
 dir=$(cd "$(dirname "$self")/.." && pwd -P)
-exec "$dir/node/bin/node" "$dir/lib/atelier.mjs" "$@"
+exec "$dir/node/bin/atelier" "$dir/lib/atelier.mjs" "$@"
 `;
 const WINDOWS_LAUNCHER = '@echo off\r\n"%~dp0..\\node\\node.exe" "%~dp0..\\lib\\atelier.mjs" %*\r\n';
 
@@ -82,12 +112,20 @@ async function main() {
   const out = arg('out', join(root, 'release'));
   const only = arg('only');
   const cache = arg('cache', join(homedir(), '.atelier-release', 'node'));
+  const sign = process.argv.includes('--sign');
+  const notarize = process.argv.includes('--notarize');
+  if ((sign || notarize) && process.platform !== 'darwin') throw new Error('--sign and --notarize run on a Mac.');
+  const identity = sign ? signingIdentity() : null;
+  const signed = [];
   if (!version) throw new Error('usage: node apps/cli/scripts/package.mjs --version <v> [--runners dir] [--out dir] [--only key]');
   const bundle = join(root, 'dist', 'atelier.mjs');
   if (!existsSync(bundle)) throw new Error('Build the bundle first: pnpm --filter @atelier/cli build');
   mkdirSync(out, { recursive: true });
   const files = {};
   const work = join(tmpdir(), `atelier-cli-package-${process.pid}`);
+  mkdirSync(work, { recursive: true });
+  const entitlements = join(work, 'entitlements.plist');
+  writeFileSync(entitlements, ENTITLEMENTS);
   for (const target of TARGETS.filter((t) => !only || t.key === only)) {
     const name = `atelier-cli-${version}-${target.key}`;
     const dir = join(work, name);
@@ -107,8 +145,16 @@ async function main() {
     if (windows) copyFileSync(join(node, 'node.exe'), join(dir, 'node', 'node.exe'));
     else {
       mkdirSync(join(dir, 'node', 'bin'), { recursive: true });
-      copyFileSync(join(node, 'bin', 'node'), join(dir, 'node', 'bin', 'node'));
-      chmodSync(join(dir, 'node', 'bin', 'node'), 0o755);
+      const binary = join(dir, 'node', 'bin', 'atelier');
+      copyFileSync(join(node, 'bin', 'node'), binary);
+      chmodSync(binary, 0o755);
+      if (identity && target.key.startsWith('darwin')) {
+        signMac(binary, identity, entitlements);
+        const kept = join(work, 'signed', target.key);
+        mkdirSync(kept, { recursive: true });
+        copyFileSync(binary, join(kept, 'atelier'));
+        signed.push(kept);
+      }
     }
     copyFileSync(join(node, 'LICENSE'), join(dir, 'node', 'LICENSE'));
     // The bundle and its licenses.
@@ -133,6 +179,17 @@ async function main() {
     else execFileSync('tar', ['-czf', path, '-C', work, name], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
     files[target.key] = { file, sha512: sha512(path), size: readFileSync(path).length };
     console.log(`${file} ${(files[target.key].size / 1048576).toFixed(1)} MB`);
+  }
+  if (notarize) {
+    if (!signed.length) throw new Error('--notarize needs --sign and a macOS target.');
+    const zip = join(work, 'atelier-cli-mac.zip');
+    execFileSync('ditto', ['-c', '-k', '--keepParent', join(work, 'signed'), zip]);
+    const profile = process.env.APPLE_KEYCHAIN_PROFILE || 'atelier-notary';
+    console.log('notarizing the macOS binaries …');
+    const out = execFileSync('xcrun', ['notarytool', 'submit', zip, '--keychain-profile', profile, '--wait', '--output-format', 'json'], { encoding: 'utf8' });
+    const status = JSON.parse(out).status;
+    if (status !== 'Accepted') throw new Error(`Notarization said ${status}: xcrun notarytool log <id> --keychain-profile ${profile}`);
+    console.log('notarized');
   }
   rmSync(work, { recursive: true, force: true });
   if (!only) writeFileSync(join(out, 'atelier-cli.json'), `${JSON.stringify({ version, files }, null, 2)}\n`);

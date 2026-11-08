@@ -4,7 +4,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { homedir, networkInterfaces } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { connect } from 'node:net';
 import type { CliConfig } from '../config.ts';
@@ -33,7 +33,13 @@ export async function knownServers(config: CliConfig, dir = desktopDataDir()): P
   return out;
 }
 
-/** The app macOS asks about local network access for: the terminal this runs in. */
+/**
+ * The program macOS asks about local network access for: each program asks for itself, so the terminal app's switch
+ * doesn't cover it. The installed app's is `atelier` (its Node, signed as Atelier); a copy built from source runs as `node`.
+ */
+export const networkProgram = (execPath = process.execPath) => basename(execPath).replace(/\.exe$/i, '');
+
+/** The terminal this runs in, by name. */
 export function terminalApp(env: NodeJS.ProcessEnv = process.env): string {
   const program = env.TERM_PROGRAM ?? '';
   return (

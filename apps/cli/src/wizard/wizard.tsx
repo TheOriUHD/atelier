@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { contract, createRpcClient, DEFAULT_BASE_URLS, PROVIDER_LABELS, type AppContract, type AppInfo, type ModelInfo, type PermissionMode, type ProviderType, type RpcClient, type TerminalSignInStart, type UserSummary } from '@atelier/protocol';
 import { wsTransport, type ReconnectingTransport } from '@atelier/client';
 import { applyLending, changeLending, diagnose, healthCheck, resolveServer, scanNetwork, type FoundServer } from '@atelier/core/device';
-import { knownServers, localNetworkBlocked, openLocalNetworkSettings, terminalApp, type KnownServer } from '../connection/known.ts';
+import { knownServers, localNetworkBlocked, networkProgram, openLocalNetworkSettings, terminalApp, type KnownServer } from '../connection/known.ts';
 import { bigBanner, TAGLINE } from '../art/banner.ts';
 import { drawPip, PIP_HELLO, PIP_IDLE } from '../art/mascot.ts';
 import { qrLines } from '../art/qr.ts';
@@ -154,11 +154,18 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
   const save = async (change: (c: CliConfig) => CliConfig) => setConfig(await updateConfig(paths.config, change));
 
   // Look for servers on the network while the person reads the first screens.
+  // Scanning starts as true; a scan again (after the person allowed the network) sets it first.
+  const scan = () =>
+    void scanNetwork({ interfaces: networkInterfaces(), fetch, onFound: (s) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s])) })
+      .then((all) => (all.length ? setBlocked(false) : localNetworkBlocked().then(setBlocked)))
+      .finally(() => setScanning(false));
+  const rescan = () => {
+    setScanning(true);
+    scan();
+  };
   useEffect(() => {
     void knownServers(initial).then(setKnown);
-    void scanNetwork({ interfaces: networkInterfaces(), fetch, onFound: (s) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s])) })
-      .then((all) => (all.length ? null : localNetworkBlocked().then(setBlocked)))
-      .finally(() => setScanning(false));
+    scan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -339,7 +346,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                       : scanning
                         ? 'Looking for servers on your network…'
                         : blocked
-                          ? paint.fg('warn', `macOS isn’t letting ${terminalApp()} search your local network: turn ${terminalApp()} on under System Settings › Privacy & Security › Local Network.`)
+                          ? paint.fg('warn', `macOS hasn’t let “${networkProgram()}” reach your local network yet: allow it when macOS asks, or turn it on under System Settings › Privacy & Security › Local Network.`)
                           : 'No server found on your network (one elsewhere works too).',
                   )}
                 </Text>
@@ -375,15 +382,15 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
           ),
         };
       case 'blocked': {
-        const app = terminalApp();
+        const program = networkProgram();
         const host = /^[a-z][a-z\d+.-]*:\/\//i.test(step.typed) ? new URL(step.typed).host : step.typed;
         return {
-          title: `macOS is keeping ${app} off your network`,
+          title: 'macOS asks before Atelier reaches your network',
           content: (
             <Box flexDirection="column">
-              <Text>{`${host} is on your local network, and macOS hasn’t allowed ${app} to reach devices there. Everything started in ${app}, Atelier included, is held back the same way.`}</Text>
+              <Text>{`${host} is on your local network, and macOS asks each program before it may reach devices there; Atelier runs as “${program}”, so the switch for ${terminalApp()} doesn’t cover it.`}</Text>
               <Box marginY={1}>
-                <Text>{`Turn ${paint.bold(app)} on under ${paint.bold('System Settings › Privacy & Security › Local Network')}, then try again. If it still can’t reach it, quit ${app} and open it again.`}</Text>
+                <Text>{`When macOS asks whether “${program}” may find and connect to devices on your local network, choose ${paint.bold('Allow')}. If you said no before, turn ${paint.bold(`“${program}”`)} on under ${paint.bold('System Settings › Privacy & Security › Local Network')}. Then try again.`}</Text>
               </Box>
               <Choices
                 paint={paint}
@@ -392,7 +399,7 @@ function Wizard({ paths, config: initial, start, shade, onDone }: Props) {
                   { value: 'again', label: 'Try again' },
                   { value: 'other', label: 'Another address' },
                 ]}
-                onPick={(v) => (v === 'open' ? openLocalNetworkSettings() : v === 'again' ? setStep({ s: 'checking', typed: step.typed }) : (setTyping(true), setStep({ s: 'address' })))}
+                onPick={(v) => (v === 'open' ? openLocalNetworkSettings() : v === 'again' ? (rescan(), setStep({ s: 'checking', typed: step.typed })) : (setTyping(true), setStep({ s: 'address' })))}
                 onCancel={() => setStep({ s: 'address' })}
               />
             </Box>

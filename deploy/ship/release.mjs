@@ -732,7 +732,8 @@ async function buildCli({ version, channel, tree, work, artifacts, log }) {
   const dest = join(artifacts, 'cli');
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
-  await exec('node', ['apps/cli/scripts/package.mjs', '--version', version, '--runners', join(tree, 'runner/bin'), '--out', dest], { cwd: tree, log });
+  // Signed as Atelier on macOS (its own local network permission) and notarized, like the desktop app.
+  await exec('node', ['apps/cli/scripts/package.mjs', '--version', version, '--runners', join(tree, 'runner/bin'), '--out', dest, '--sign', '--notarize'], { cwd: tree, log });
   // The install scripts carry each package's sha256.
   const out = join(work, 'cli-installer');
   rmSync(out, { recursive: true, force: true });
