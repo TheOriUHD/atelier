@@ -15,8 +15,8 @@ import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 import { z } from 'zod';
 import { DEVICE_HEADERS, DEVICE_LINK_PATH, DEVICE_LINK_PING_MS, ServerToDevice, type DeviceInfo, type DeviceRequest, type DeviceStart, type DeviceToServer } from '@atelier/protocol';
-import type { DeviceServices } from './device-services.ts';
-import { backoff } from './relay.ts';
+import type { DeviceServices } from './services.ts';
+import { backoff } from './backoff.ts';
 
 type OpenSocket = (url: string, headers: Record<string, string>) => WebSocket;
 /** Node's WebSocket (undici) accepts request headers; the DOM typings don't know that. */

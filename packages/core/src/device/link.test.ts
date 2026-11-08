@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { NO_LENDING } from '@atelier/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDeviceLink, insideTrusted, trustedPath } from './device-link.ts';
+import { createDeviceLink, insideTrusted, trustedPath } from './link.ts';
 
 class FakeSocket {
   readyState: number = WebSocket.CONNECTING;

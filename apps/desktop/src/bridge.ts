@@ -1,5 +1,5 @@
 import type { ControllerEvent } from '@atelier/protocol';
-import type { LinkProblem } from './link-problem.ts';
+import type { LinkProblem } from '@atelier/core/device';
 
 /** Messages between the Electron main process and the utility process (embedded backend or server relay). */
 export type BackendRequest =

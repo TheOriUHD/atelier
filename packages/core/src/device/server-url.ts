@@ -1,7 +1,7 @@
 /** The Server URL as typed: without a scheme https:// is tried first, then http:// where parseConnection allows it. */
 import { parseConnection, type Connection } from './connection.ts';
 
-type ServerConnection = Extract<Connection, { mode: 'server' }>;
+export type ServerConnection = Extract<Connection, { mode: 'server' }>;
 
 /** Whether an Atelier server answers `/api/health` at `serverUrl` within `timeoutMs`. */
 export type HealthCheck = (serverUrl: string, timeoutMs: number) => Promise<boolean>;

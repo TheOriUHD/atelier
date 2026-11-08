@@ -20,26 +20,17 @@ import {
   type DeviceSocketLine,
   type DeviceStart,
 } from '@atelier/protocol';
-import {
-  bootstrapRunner,
-  detectImageServers,
-  detectLocalServers,
-  homeFs,
-  importClaudeCode,
-  interpolate,
-  networkCode,
-  plainHttpFetch,
-  probeSsh,
-  programChannel,
-  remoteRunnerChannel,
-  runOnce,
-  scanHome,
-  sshConfigHosts,
-  throughShell,
-  watchHome,
-  writeAskpass,
-  type RunnerChannel,
-} from '@atelier/core/device';
+import { bootstrapRunner, remoteRunnerChannel, sshConfigHosts } from '../workspaces/ssh.ts';
+import { probeSsh, runOnce, throughShell, writeAskpass } from '../workspaces/ssh-access.ts';
+import type { RunnerChannel } from '../workspaces/runner-client.ts';
+import { plainHttpFetch } from '../providers/plain-http.ts';
+import { detectLocalServers } from '../providers/local-servers.ts';
+import { detectImageServers } from '../images/detect.ts';
+import { programChannel } from '../mcp/line-transport.ts';
+import { importClaudeCode } from '../mcp/import.ts';
+import { homeFs, scanHome, watchHome } from '../extensions/home.ts';
+import { interpolate } from '../util/interpolate.ts';
+import { networkCode } from '../util/network-error.ts';
 import { connectorFingerprint } from './lending.ts';
 
 /** Why this computer didn't do what the server asked: the person didn't allow it here, or it can't. */
@@ -210,7 +201,7 @@ function lentSocket(url: string, headers: Record<string, string>, stillLent: () 
     clearTimeout(timer);
     say({ open: true });
   };
-  ws.onmessage = ({ data }: MessageEvent<string | ArrayBuffer>) => {
+  ws.onmessage = ({ data }: { data: string | ArrayBuffer }) => {
     if (done) return;
     const text = typeof data === 'string';
     if ((text ? Buffer.byteLength(data) : data.byteLength) > MAX_SOCKET_FRAME_BYTES) return tooLarge();

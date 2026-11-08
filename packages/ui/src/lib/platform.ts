@@ -6,7 +6,7 @@ import { APP, type AppTier, type ComputerApp, type ComputerSettings, type Comput
 
 export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'join-coop' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
 
-/** A change to what this computer lends the server (apps/desktop/src/lending.ts). */
+/** A change to what this computer lends the server (packages/core/src/device/lending.ts). */
 export type LendingChange =
   | { kind: 'scratch'; allowed: boolean }
   | { kind: 'ssh'; host: string; allowed: boolean }
@@ -33,7 +33,7 @@ export interface ConnectionProblem {
   localNetwork?: boolean;
 }
 
-/** An Atelier server that answered on the local network (apps/desktop/src/discovery.ts). */
+/** An Atelier server that answered on the local network (packages/core/src/device/discovery.ts). */
 export interface FoundServer {
   url: string;
   host: string;

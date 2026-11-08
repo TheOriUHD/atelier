@@ -7,10 +7,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { NO_LENDING, type DeviceLending } from '@atelier/protocol';
-import { DeviceLinks } from '../../../packages/core/src/workspaces/device-links.ts';
-import { deviceSocket } from '../../../packages/core/src/workspaces/device-socket.ts';
-import { createDeviceLink } from './device-link.ts';
-import { deviceServices } from './device-services.ts';
+import { DeviceLinks } from '../workspaces/device-links.ts';
+import { deviceSocket } from '../workspaces/device-socket.ts';
+import { createDeviceLink } from './link.ts';
+import { deviceServices } from './services.ts';
 import { readLending } from './lending.ts';
 import { wsServer, type WsServer } from './__fixtures__/ws-server.ts';
 

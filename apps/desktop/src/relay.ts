@@ -7,6 +7,9 @@
  * for a new one; requests in flight fail instead of hanging.
  */
 import { APP } from '@atelier/protocol';
+import { backoff } from '@atelier/core/device';
+
+export { backoff };
 
 type Port = Pick<Electron.MessagePortMain, 'on' | 'postMessage' | 'start' | 'close'>;
 type OpenSocket = (url: string, headers: Record<string, string>) => WebSocket;
@@ -22,9 +25,6 @@ export interface RelayHooks {
   up(): void;
   failed(failures: number): void;
 }
-
-/** No wait on a healthy connection; then 250 ms doubling to 10 s while the server stays unreachable. */
-export const backoff = (failures: number) => (failures === 0 ? 0 : Math.min(10_000, 250 * 2 ** (failures - 1)));
 
 export function createRelay(serverUrl: string, openSocket: OpenSocket = (url, headers) => new NodeWebSocket(url, { headers }), hooks?: RelayHooks) {
   const socketUrl = `${serverUrl.replace(/^http/, 'ws')}/api/ws`;

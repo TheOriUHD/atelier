@@ -21,16 +21,13 @@ import { APP, AppTier, artifactRuntimeCsp, blobHeaders, blobResponse, ComputerAp
 import type { BackendToMain, MainToBackend, MenuCommand } from './bridge.ts';
 
 import { BROWSER_PARTITION, attachGuest, fetchFavicon, hardenWebview, prepareBrowserSession, type BrowserEvents } from './browser.ts';
-import type { LinkProblem } from './link-problem.ts';
-import type { Connection } from './connection.ts';
-import { scanNetwork } from './discovery.ts';
-import { healthCheck, resolveConnection } from './server-url.ts';
+import { healthCheck, resolveConnection, scanNetwork, type Connection, type LinkProblem } from '@atelier/core/device';
 import { localDataDir } from './data-dir.ts';
-import { readTrustedFolders, trustedPath } from './device-link.ts';
+import { readTrustedFolders, trustedPath } from '@atelier/core/device';
 import { KeepAwake } from './keep-awake.ts';
 import { FileReads, PAGES_PRIVILEGES, PAGES_SCHEME, WorkspacePages } from './workspace-pages.ts';
 import { loginItem } from './login-item.ts';
-import { applyLending, changeLending, LendingChange, readLending } from './lending.ts';
+import { applyLending, changeLending, LendingChange, readLending } from '@atelier/core/device';
 import { loginShellPath, mergePaths } from './shell-path.ts';
 import { parseShortTime, systemHourCycle, type HourCycle } from './clock.ts';
 import { createBundleSwap } from './bundle-swap.ts';

@@ -3,14 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_SOCKET_FRAME_BYTES, NO_LENDING, RUNNER_PROTOCOL_VERSION, type DeviceLending, type DeviceSocketLine } from '@atelier/protocol';
-import { hostRunnerBinary } from '@atelier/core';
+import { hostRunnerBinary } from '../index.ts';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { wsServer, type WsServer } from './__fixtures__/ws-server.ts';
-import { deviceServices, lentHeaders, withinAddress, withinSocketAddress } from './device-services.ts';
+import { deviceServices, lentHeaders, withinAddress, withinSocketAddress } from './services.ts';
 import { applyLending, connectorFingerprint } from './lending.ts';
 
-const runnerDir = join(import.meta.dirname, '../../../runner/bin');
+const runnerDir = join(import.meta.dirname, '../../../../runner/bin');
 const built = existsSync(hostRunnerBinary(runnerDir)) && existsSync(join(runnerDir, 'checksums.json'));
 
 /** Stands in for ssh: skips options, takes the host, and runs the rest as a shell command here, with HOME at FAKE_SSH_HOME. */
@@ -484,7 +484,7 @@ describe('the ChatGPT window lent to a server', () => {
 
 describe("a person's connectors run here", () => {
   /** The MCP mock server the core tests use, over stdio. */
-  const server = join(import.meta.dirname, '../../../packages/core/src/mcp/__fixtures__/stdio-server.ts');
+  const server = join(import.meta.dirname, '../mcp/__fixtures__/stdio-server.ts');
   const start = (env: Record<string, string>, args = [server]) => services().start({ kind: 'mcp', connectorId: 'c1', command: process.execPath, args, env }, () => {});
   const allow = (envKeys: string[], args = [server]) => {
     lending = { ...NO_LENDING, connectors: [{ id: 'c1', name: 'mock', fingerprint: connectorFingerprint(process.execPath, args, envKeys) }] };

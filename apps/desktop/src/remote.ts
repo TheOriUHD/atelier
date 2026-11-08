@@ -8,10 +8,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { DeviceInfo, runnerBinaryName } from '@atelier/protocol';
 import type { BackendRequest, BackendToMain, MainToBackend } from './bridge.ts';
-import { createDeviceLink, readTrustedFolders } from './device-link.ts';
-import { deviceServices } from './device-services.ts';
-import { readLending } from './lending.ts';
-import { diagnose, type LinkProblem } from './link-problem.ts';
+import { createDeviceLink, deviceServices, diagnose, readLending, readTrustedFolders, type LinkProblem } from '@atelier/core/device';
 import { createRelay } from './relay.ts';
 
 const serverUrl = process.argv[2]!;

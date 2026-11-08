@@ -11,8 +11,7 @@ import { hostname } from 'node:os';
 import { join, normalize } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
-import { parseConnection, type Connection } from './connection.ts';
-import { readTrustedFolders } from './device-link.ts';
+import { parseConnection, readTrustedFolders, type Connection } from '@atelier/core/device';
 
 const file = (name: string) => join(app.getPath('userData'), name);
 
