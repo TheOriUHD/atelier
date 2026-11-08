@@ -1,7 +1,7 @@
 /**
  * The wordmarks (ARCHITECTURE §25): ATELIER in big block letters, painted left to right in the clay gradient, and CLI
  * beside it drawn with command-line prompts (`>_`), its last `_` a blinking cursor: for the setup's first screen and
- * `atelier --version`. The whole needs 79 columns; narrower terminals get ATELIER alone, then a small one.
+ * `atelier --version`. The whole is 76 columns wide and shows from 79; narrower terminals get ATELIER alone, then a small one.
  */
 import type { Paint } from '../style.ts';
 
@@ -11,17 +11,11 @@ export const BIG = [
   '███████║   ██║   █████╗  ██║     ██║█████╗  ██████╔╝',
   '██╔══██║   ██║   ██╔══╝  ██║     ██║██╔══╝  ██╔══██╗',
   '██║  ██║   ██║   ███████╗███████╗██║███████╗██║  ██║',
-  '╚═╝  ╚═╝   ╚═╝   ╚══════╝╚══════╝╚═╝╚══════╝╚═╝  ╚═╝',
 ];
 
-/**
- * C, L and I as pixels (`#`), each drawn as a prompt, `>_`, on the five rows of ATELIER's letters, and under them a
- * shadow row in ATELIER's own lines. A sixth row of prompts would end lower than ATELIER: `_` sits at the foot of a
- * cell, where ATELIER's bottom, `╚═╝`, is in the middle of one.
- */
+/** C, L and I as pixels (`#`), each drawn as a prompt, `>_`, on the five rows of ATELIER's letters. */
 const CLI_PIXELS = [' ### #    #', '#    #    #', '#    #    #', '#    #    #', ' ### #### #'];
-const CLI_SHADOW = '  ╚═════╝ ╚═══════╝ ╚═╝';
-export const BIG_CLI = [...CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  ')), CLI_SHADOW];
+export const BIG_CLI = CLI_PIXELS.map((row) => row.replace(/#/g, '>_').replace(/ /g, '  '));
 
 export const SMALL = ['▄▀█ ▀█▀ █▀▀ █   █ █▀▀ █▀█   █▀▀ █   █', '█▀█  █  ██▄ █▄▄ █ ██▄ █▀▄   █▄▄ █▄▄ █'];
 
@@ -48,10 +42,9 @@ export function bigBanner(paint: Paint, columns: number, reveal = 1, cursor = tr
     const word = paint.gradient(chars.slice(0, wordWidth).join(''));
     const cli = chars.slice(wordWidth).map((ch, i) => {
       if (r === cursorAt.row && wordWidth + i === cursorAt.x && !cursor) return ' ';
-      // Bold, so the thin glyphs hold their own beside the solid blocks; the shadow in clay, as ATELIER's is.
+      // Bold, so the thin glyphs hold their own beside the solid blocks.
       if (ch === '>') return paint.bold(paint.fg('accent', ch));
-      if (ch === '_') return paint.bold(paint.fg('muted', ch));
-      return ch === ' ' ? ch : paint.fg('accent', ch);
+      return ch === '_' ? paint.bold(paint.fg('muted', ch)) : ch;
     });
     const painted = [...splitPainted(word), ...cli];
     // The brush's tip, in the light colour, only while it paints: finished, every cell has its own colour.
