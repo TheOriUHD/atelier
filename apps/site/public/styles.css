@@ -266,12 +266,29 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 /* Download page: the three things on it, beside the heading, so the app, the terminal app and the server aren't taken for each other. */
 .dl-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
 .dl-choose { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 0.45em; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); }
-.choice { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 8px; font: 500 0.875rem/1.2 var(--sans); color: var(--ink-2); white-space: nowrap; text-decoration: none; transition: background-color 150ms, color 150ms; }
-.choice:hover { background: var(--raised); color: var(--ink); }
-.choice .icon { flex: none; width: 16px; height: 16px; color: var(--ink-3); }
-.choice.is-here { background: var(--raised); color: var(--ink); box-shadow: 0 0 0 1px var(--line-strong) inset; }
+.dl-choose { position: relative; isolation: isolate; }
+.choice { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 8px; font: 500 0.875rem/1.2 var(--sans); color: var(--ink-2); white-space: nowrap; text-decoration: none; transition: color 200ms var(--ease); }
+.choice:hover { color: var(--ink); }
+.choice .icon { flex: none; width: 16px; height: 16px; color: var(--ink-3); transition: color 200ms var(--ease); }
+.choice.is-here { color: var(--ink); }
 .choice.is-here .icon { color: var(--clay); }
+/* The highlight behind the section being read; it glides from one to the next (download.js). Without script, the first one's own. */
+.dl-choose .glide { position: absolute; z-index: -1; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: 8px; background: var(--raised); box-shadow: 0 0 0 1px var(--line-strong) inset; transition: transform 320ms var(--ease), width 320ms var(--ease); }
+.dl-choose:not(.has-glide) .choice.is-here { background: var(--raised); box-shadow: 0 0 0 1px var(--line-strong) inset; }
 @media (max-width: 520px) { .dl-choose { margin-bottom: 0; } .choice { padding: 6px 9px; font-size: 0.8125rem; } .choice .icon { display: none; } }
+
+/* The heading and its switch follow the page, under the site's own row, once the big heading has scrolled away. */
+.dl-bar { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms var(--ease), opacity 220ms var(--ease); }
+.site-header.has-bar .dl-bar { grid-template-rows: 1fr; opacity: 1; }
+.dl-bar-clip { min-height: 0; overflow: hidden; }
+.dl-bar-line { border-top: 1px solid var(--line); }
+.dl-bar-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 54px; }
+.dl-bar-title { font: 500 1.375rem/1 var(--serif); letter-spacing: -0.015em; color: var(--ink); text-decoration: none; white-space: nowrap; transform: translateY(6px); transition: transform 300ms var(--ease); }
+.site-header.has-bar .dl-bar-title { transform: none; }
+.dl-bar .dl-choose { margin-bottom: 0; }
+html:has(.dl-bar) { scroll-padding-top: 136px; }
+@media (max-width: 520px) { .dl-bar-title { display: none; } .dl-bar-row { justify-content: center; height: 48px; } }
+@media (prefers-reduced-motion: reduce) { .dl-bar, .dl-bar-title, .dl-choose .glide { transition: none; } }
 
 /* What a section is, above its heading: "Atelier CLI · terminal app". */
 .kind { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 5px 11px 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font: 500 0.8125rem/1.2 var(--sans); color: var(--ink-2); }

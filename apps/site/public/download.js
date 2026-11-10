@@ -189,6 +189,91 @@
     });
   });
 
+  // What to download: the switch beside the heading, and the bar that keeps it at the top once the heading has scrolled
+  // away. Its highlight follows the section being read (Desktop app, Atelier CLI, Atelier Server).
+  var header = $('.site-header');
+  var bar = $('.dl-bar');
+  var head = $('.dl-head');
+  var switches = $$('.dl-choose');
+  var sections = ['desktop', 'cli', 'server']
+    .map(function (id) {
+      return document.getElementById(id);
+    })
+    .filter(Boolean);
+  var reading = null;
+  var barShown = false;
+  switches.forEach(function (nav) {
+    var glide = document.createElement('span');
+    glide.className = 'glide';
+    glide.setAttribute('aria-hidden', 'true');
+    nav.insertBefore(glide, nav.firstChild);
+    nav.classList.add('has-glide');
+  });
+  function placeGlide(nav) {
+    var chip = $('.choice.is-here', nav);
+    var glide = $('.glide', nav);
+    if (!chip || !glide || !chip.offsetWidth) return;
+    glide.style.width = chip.offsetWidth + 'px';
+    glide.style.transform = 'translateX(' + chip.offsetLeft + 'px)';
+  }
+  function mark(id) {
+    switches.forEach(function (nav) {
+      $$('.choice', nav).forEach(function (chip) {
+        var on = chip.getAttribute('href') === '#' + id;
+        chip.classList.toggle('is-here', on);
+        if (on) chip.setAttribute('aria-current', 'true');
+        else chip.removeAttribute('aria-current');
+      });
+      placeGlide(nav);
+    });
+  }
+  function follow() {
+    if (!sections.length) return;
+    // The section whose top has passed a line a third of the way down, or the last one at the end of the page.
+    var line = window.innerHeight * 0.34;
+    var id = sections[0].id;
+    sections.forEach(function (section) {
+      if (section.getBoundingClientRect().top <= line) id = section.id;
+    });
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) id = sections[sections.length - 1].id;
+    if (id !== reading) {
+      reading = id;
+      mark(id);
+    }
+    if (bar && head && header) {
+      var shown = head.getBoundingClientRect().bottom < $('.bar', header).offsetHeight;
+      if (shown !== barShown) {
+        barShown = shown;
+        header.classList.toggle('has-bar', shown);
+        bar.inert = !shown;
+      }
+    }
+  }
+  var queued = false;
+  window.addEventListener(
+    'scroll',
+    function () {
+      if (queued) return;
+      queued = true;
+      window.requestAnimationFrame(function () {
+        queued = false;
+        follow();
+      });
+    },
+    { passive: true },
+  );
+  window.addEventListener('resize', function () {
+    switches.forEach(placeGlide);
+    follow();
+  });
+  // Fonts change the chips' widths once they arrive.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () {
+      switches.forEach(placeGlide);
+    });
+  }
+  follow();
+
   // A link can ask for a system (/download/#windows); otherwise the detected one, otherwise macOS.
   var asked = (location.hash || '').replace('#', '');
   var start = SYSTEM[asked] ? asked : current;
