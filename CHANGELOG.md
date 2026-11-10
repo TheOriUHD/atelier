@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-10
+
 - **Atelier CLI: Atelier in the terminal.** `atelier` in a project folder starts a Code session there, laid out like the terminal coding agents people know: the transcript printed as it finishes, each step one line (`● Read src/app.ts · 84 lines`, edits with their changed lines, commands with their last output), the line while it works, and a footer with the mode, the context, the connection and the model. Install with `curl -fsSL https://updates.atelierhq.dev/cli | sh` (Windows: `irm https://updates.atelierhq.dev/cli.ps1 | iex`): it installs for the person alone, brings its own Node.js and runner, and updates itself (`atelier update`), each version checked against the release key.
   - **With a server (recommended), or on its own.** Connected to an Atelier server, it uses the server's models and keys and its sessions open in the browser and the desktop app too (`/open`, `/resume`); the computer lends the folders opened in the terminal through the same device link and consent as the desktop app. On its own, it runs its own backend with the person's own providers, in `~/.atelier/cli`.
   - **A setup in four screens,** in the look of the server installer: the servers found on your network (or another address, or only this computer), signing in (the browser code at once; username and password on one screen; an invite; a new server's first admin), what the computer lends, and the model with the mode. Lists filter as you type and scroll in place.
