@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-11-10
+
 - **Share on your network: Atelier on this computer as a server for your other devices.** On **Run on this computer**, **Settings › Connection › Share on your network** asks for a password and a port (7340), then answers on the network: a browser on a phone, tablet or another computer opens the address it shows (or the Atelier app there finds it under **Found on your network**), signs in as you with the password, and works in your chats, with your models and keys, and in the folders this computer has. One account, no accounts to manage: everyone who signs in is you. It is plain HTTP for a network you trust, with a warning saying so. **Change password…** and **Sign everyone out** end every sign-in from the network, and turning it off closes the port. From the network: password sign-in only (no passkeys, invites or sign-up), and sharing, the screen lock and adding folders stay with this computer; a request from another site's page (its Origin, or a domain pointed at this computer) is refused.
 
 ## [0.5.4] — 2026-11-10
