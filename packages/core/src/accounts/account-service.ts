@@ -63,6 +63,11 @@ export interface ClientInfo {
   userAgent?: string;
   ip?: string;
   deviceId?: string;
+  /**
+   * Reaches the desktop app's own backend over the network (Settings › Connection › Share on your network), not through
+   * its windows: it signs in with the password, and what only this computer may do is refused.
+   */
+  network?: boolean;
 }
 
 /** How a sign-in was proven; the activity log says which. */
@@ -71,6 +76,8 @@ export type SignInMethod = 'password' | 'passkey' | 'oidc' | 'invite' | 'setup';
 export interface Authenticated {
   user: UserSummary;
   sessionId: string;
+  /** The sign-in was made from somewhere with an address (a browser, an app over the network), not by this computer's own windows. */
+  fromNetwork: boolean;
 }
 
 /** The stored override, or null when there is none (or it can't be read: then the system limits apply). */
@@ -226,7 +233,41 @@ export class AccountService {
       await this.db.update(authSessions).set({ lastSeenAt: now, expiresAt: now + SESSION_TTL_MS }).where(eq(authSessions.id, row.session.id));
       await this.db.update(users).set({ lastActiveAt: now }).where(eq(users.id, row.user.id));
     }
-    return { user: toUserSummary(row.user), sessionId: row.session.id };
+    return { user: toUserSummary(row.user), sessionId: row.session.id, fromNetwork: row.session.ip !== '' };
+  }
+
+  // ------------------------------------------------------------------ "Run on this computer" shared on the network
+
+  /** The person who owns this installation (the first admin), for the desktop app's own backend. */
+  async owner(): Promise<UserSummary> {
+    const row = await this.db.select().from(users).where(and(eq(users.role, 'admin'), isNull(users.disabledAt))).orderBy(users.createdAt).limit(1).get();
+    if (!row) throw new AccountError('not_found', 'This computer has no account yet. Set up Atelier first.');
+    return toUserSummary(row);
+  }
+
+  /**
+   * The password other devices sign in to this computer with. Chosen at this computer, which needs no old one (its own
+   * windows never had one: `setupLocal` made a random one nobody knows). Every sign-in from the network ends.
+   */
+  async setOwnerPassword(password: string): Promise<void> {
+    const owner = await this.owner();
+    await this.db.update(users).set({ passwordHash: await hashPassword(password), mustChangePassword: false, updatedAt: Date.now() }).where(eq(users.id, owner.id));
+    await this.revokeNetwork();
+  }
+
+  /** Ends every sign-in made from the network (they have an address; this computer's own windows don't). */
+  async revokeNetwork(): Promise<void> {
+    await this.db.delete(authSessions).where(ne(authSessions.ip, ''));
+  }
+
+  /** How many sign-ins from the network still work. */
+  async networkSignIns(): Promise<number> {
+    const row = await this.db
+      .select({ n: sql<number>`count(*)` })
+      .from(authSessions)
+      .where(and(ne(authSessions.ip, ''), sql`${authSessions.expiresAt} >= ${Date.now()}`))
+      .get();
+    return row?.n ?? 0;
   }
 
   async logout(sessionId: string): Promise<void> {

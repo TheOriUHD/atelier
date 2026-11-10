@@ -181,6 +181,39 @@ export function oidcProviderId(name: string): string {
   return id || 'sso';
 }
 
+/** The port other devices reach a shared desktop app at (Settings › Connection); 7340 is the one apps look for. */
+export const SharePort = z.number().int().min(1024).max(65535);
+
+/**
+ * "Share on your network": the desktop app's own backend is a server for the other devices on the network too, signed in
+ * to as its one person with a password (Settings › Connection). Changed only from this computer.
+ */
+export const NetworkShare = z.object({
+  /** The person turned it on. It may still have failed to start: see `error`. */
+  enabled: z.boolean(),
+  port: SharePort,
+  /** It answers on the network now. */
+  listening: z.boolean(),
+  /** Why it doesn't, in words for the person ("Port 7340 is in use by another program."). */
+  error: z.string().nullable(),
+  /** The addresses other devices open, most useful first: `http://192.168.1.20:7340`, `http://studio.local:7340`. */
+  addresses: z.array(z.string()),
+  /** What they sign in with: the person's username, and the password chosen here (none yet: false). */
+  username: z.string(),
+  passwordSet: z.boolean(),
+  /** Sign-ins from the network that still work. */
+  signedIn: z.number().int(),
+});
+export type NetworkShare = z.infer<typeof NetworkShare>;
+
+export const NetworkShareChange = z.object({
+  enabled: z.boolean(),
+  port: SharePort.optional(),
+  /** Needed to turn it on until a password was chosen; a new one signs every device on the network out. */
+  password: Password.optional(),
+});
+export type NetworkShareChange = z.infer<typeof NetworkShareChange>;
+
 export const AuthStatus = z.object({
   /** No account exists yet: the first one created becomes the admin. */
   setupRequired: z.boolean(),
@@ -191,6 +224,8 @@ export const AuthStatus = z.object({
   local: z.boolean(),
   /** Identity providers this server signs people in with; browsers offer them on the sign-in page. */
   oidc: z.array(OidcSignInOption),
+  /** A desktop app's own computer, shared on the network: its one person signs in with its password, nothing else (no invites, sign-up or passkeys). */
+  passwordOnly: z.boolean().optional(),
 });
 export type AuthStatus = z.infer<typeof AuthStatus>;
 

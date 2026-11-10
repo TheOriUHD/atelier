@@ -208,6 +208,22 @@ export const SETTINGS_INDEX = [
     available: () => !!desktop?.connection,
   },
   {
+    id: 'connection.share',
+    page: 'connection',
+    label: 'Share on your network',
+    description: 'Other devices on your network open Atelier on this computer in a browser or the Atelier app, and sign in as you with a password. They work in your chats, with your models and in your folders.',
+    keywords: ['hybrid', 'lan', 'local network', 'other devices', 'phone', 'tablet', 'host', 'serve', 'open to network', 'remote access', 'port'],
+    available: () => isLocal() && !!desktop?.connection,
+  },
+  {
+    id: 'connection.shareSwitch',
+    page: 'connection',
+    label: 'Let other devices use Atelier here',
+    description: 'Asks for a password and a port, then other devices on your network can sign in. Off signs them out.',
+    keywords: ['share', 'network', 'lan', 'turn on'],
+    available: () => isLocal() && !!desktop?.connection,
+  },
+  {
     id: 'account.username',
     page: 'account',
     label: 'Username',
