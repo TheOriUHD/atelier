@@ -15,6 +15,7 @@ import {
   Keyboard,
   KeyRound,
   Laptop,
+  Network,
   Plug,
   Puzzle,
   ScrollText,
@@ -32,6 +33,7 @@ import { isLocal } from '../auth/screen-lock.ts';
 
 export type SettingsPageId =
   | 'general'
+  | 'connection'
   | 'shortcuts'
   | 'account'
   | 'privacy'
@@ -70,6 +72,8 @@ export interface SettingsPage {
 /** Nav order. Only pages that work end to end are listed. */
 export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'general', label: 'General', icon: SettingsIcon, group: 'Settings' },
+  // The desktop app: this computer or an Atelier server, and the switch between them.
+  { id: 'connection', label: 'Connection', icon: Network, group: 'Settings', available: () => !!desktop?.connection },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, group: 'Settings' },
   { id: 'account', label: 'Account', icon: CircleUserRound, group: 'Settings' },
   { id: 'privacy', label: 'Privacy', icon: Shield, group: 'Settings' },

@@ -30,6 +30,12 @@ see are hidden in the app.
 | **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |
 
+## Settings › Connection
+
+| Setting | What it does |
+|---|---|
+| **Where Atelier runs** *(only where it works)* | On this computer, or on an Atelier server you sign in to. Switching deletes nothing: switch back any time. |
+
 ## Settings › Shortcuts
 
 | Setting | What it does |
@@ -52,8 +58,6 @@ see are hidden in the app.
 | **Username** *(only where it works)* | What you sign in with. |
 | **Password** *(only where it works)* | Changing it signs you out on your other devices. |
 | **Log out** *(only where it works)* | Ends your sign-in here. |
-| **Server** *(only where it works)* | The Atelier server this app uses. Switch to another one, or to running on this computer. |
-| **Setup** *(only where it works)* | Atelier runs on this computer. Switch to an Atelier server, or choose again. |
 | **Log out of all devices** *(only where it works)* | Ends every sign-in to your account, including this one. |
 | **Content safeguards** *(only where it works)* | Extra limits on what models write for you. Your administrator manages them. |
 | **Active sessions** *(only where it works)* | Browsers and apps signed in to your account. |

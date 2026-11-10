@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Switching between this computer and a server has its own page: Settings › Connection.** It was under Settings › Account as **Change setup…** (on this computer) or **Server › Switch…** (on a server), which went back to the first-run choice. The new page shows both ways to run Atelier with the one in use marked; **Switch…** opens what switching takes (a server's address, or one found on the network), and **Change…** on a server switches to another one. A server has to answer before anything changes: the app logs out of the server it uses only then. The profile menu at the bottom of the sidebar says where Atelier runs (**Running on this computer**, **Connected to atelier.home**) and opens the page. Settings search finds it as "standalone", "server mode", "switch server" or "set up again".
+
 ## [0.5.3] — 2026-11-10
 
 - **Files you attach in Cowork and Code go into the session's folder.** An attached ZIP, model file or spreadsheet reached the model only as its text, or not at all (a ZIP was "cannot be read by this model"), so the agent couldn't unpack or open it although it had the tools: it said the folder was empty and asked for the file again. Each attached file is now put into the folder when the message is sent: in the root of a folder made for a session with no folder, under `.atelier/attachments/` in a folder of your own (with a `.gitignore`, so git leaves it alone). The model is told where; a name that is taken gets ` (2)`, and the same file sent again keeps its place. Only your own files: a co-op guest's don't go into the host's folder.

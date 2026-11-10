@@ -33,12 +33,14 @@ import { ShortcutsPage } from './shortcuts-page.tsx';
 import { DeveloperPage } from './developer-page.tsx';
 import { SkillsPage } from './skills-page.tsx';
 import { SystemPage } from './system-page.tsx';
+import { ConnectionPage } from './connection-page.tsx';
 import { LimitsPage } from './limits-page.tsx';
 import { UsagePage } from './usage-page.tsx';
 import { UsersPage } from './users-page.tsx';
 
 const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   general: GeneralPage,
+  connection: ConnectionPage,
   shortcuts: ShortcutsPage,
   account: AccountPage,
   privacy: PrivacyPage,

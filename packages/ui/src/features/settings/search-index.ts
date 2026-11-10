@@ -200,6 +200,14 @@ export const SETTINGS_INDEX = [
     keywords: ['tone', 'concise', 'explanatory', 'formal', 'personalization'],
   },
   {
+    id: 'connection.mode',
+    page: 'connection',
+    label: 'Where Atelier runs',
+    description: 'On this computer, or on an Atelier server you sign in to. Switching deletes nothing: switch back any time.',
+    keywords: ['standalone', 'server mode', 'this computer', 'run on this computer', 'switch', 'change setup', 'set up again', 'setup', 'connect', 'server address', 'server url', 'mode', 'local'],
+    available: () => !!desktop?.connection,
+  },
+  {
     id: 'account.username',
     page: 'account',
     label: 'Username',
@@ -223,22 +231,6 @@ export const SETTINGS_INDEX = [
     description: 'Ends your sign-in here.',
     keywords: ['log out', 'logout', 'sign off', 'leave'],
     available: () => !isLocal(),
-  },
-  {
-    id: 'account.server',
-    page: 'account',
-    label: 'Server',
-    description: 'The Atelier server this app uses. Switch to another one, or to running on this computer.',
-    keywords: ['switch server', 'change server', 'this computer', 'connection', 'setup'],
-    available: () => !isLocal() && !!desktop?.connection?.reset,
-  },
-  {
-    id: 'account.changeSetup',
-    page: 'account',
-    label: 'Setup',
-    description: 'Atelier runs on this computer. Switch to an Atelier server, or choose again.',
-    keywords: ['change setup', 'server', 'switch', 'connection', 'sign out', 'log out'],
-    available: () => isLocal() && !!desktop?.connection?.reset,
   },
   {
     id: 'account.logoutEverywhere',

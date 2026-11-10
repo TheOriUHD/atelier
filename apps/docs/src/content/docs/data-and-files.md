@@ -94,7 +94,7 @@ The desktop app keeps a few small files of its own in Electron's user data folde
 
 | File | What it is |
 |---|---|
-| `connection.json` | Your choice at first run: `{"mode":"local"}` or `{"mode":"server","serverUrl":"…"}`. Deleting it brings the first-run choice back (**Log out** and **Change setup…** do the same). |
+| `connection.json` | Your choice at first run: `{"mode":"local"}` or `{"mode":"server","serverUrl":"…"}`. Deleting it brings the first-run choice back (**Log out** does the same on a server). **Settings › Connection** changes it. |
 | `session.bin` | Your sign-in token for the chosen server, encrypted with the OS's secure storage. It is bound to the server address it was issued for. |
 | `device.json` | A random id that names this computer as one of your devices. |
 | `trusted-folders.json` | The folders you trusted here, as a JSON list of absolute paths. A server you are signed in to can start work only inside these. |

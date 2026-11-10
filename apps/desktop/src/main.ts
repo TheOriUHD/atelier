@@ -782,6 +782,18 @@ function registerIpc(): void {
   ipcMain.handle('connection:openNetworkSettings', async () => {
     if (process.platform === 'darwin') await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork');
   });
+  /**
+   * Settings › Connection: whether a server answers at an address, before the app logs out of the one it uses. Resolves to
+   * an error message for the user, or null; nothing is switched or saved.
+   */
+  ipcMain.handle('connection:check', async (_event, input: unknown): Promise<string | null> => {
+    try {
+      await resolveConnection(input, healthCheck());
+      return null;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  });
   /** Resolves to an error message for the user, or switches backends and reloads the window. */
   ipcMain.handle('connection:set', async (_event, input: unknown): Promise<string | null> => {
     let next: Connection;

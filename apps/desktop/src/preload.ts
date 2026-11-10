@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
       const error = (await ipcRenderer.invoke('connection:set', choice)) as string | null;
       if (error) throw new Error(error);
     },
+    check: async (choice: unknown) => {
+      const error = (await ipcRenderer.invoke('connection:check', choice)) as string | null;
+      if (error) throw new Error(error);
+    },
     reset: () => ipcRenderer.invoke('connection:reset'),
   },
   discovery: {

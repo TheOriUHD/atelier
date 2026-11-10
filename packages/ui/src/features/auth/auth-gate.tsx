@@ -135,7 +135,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // Signed out elsewhere (logout, password reset, account disabled) or a call found no sign-in.
   useEffect(() => {
     const signedOut = () => {
-      // "Log out" and "Change setup…" end in a reload onto the first-run choice; until then nothing else is shown.
+      // "Log out" and Settings › Connection end in a reload onto the first-run choice or the new connection; until then nothing else is shown.
       if (isLeavingSetup()) return;
       void desktop?.session.clear();
       if (status?.local) void refresh();
