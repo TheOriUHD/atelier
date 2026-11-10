@@ -218,11 +218,15 @@
     });
   });
 
-  // What to download: the switch beside the heading, and the bar that keeps it at the top once the heading has scrolled
-  // away. Its highlight follows the section being read (Desktop app, Atelier CLI, Atelier Server).
+  // What to download: "Download Atelier" and its switch. Once they reach the site's row they stay there, the heading
+  // shrinking into a slim bar over the next stretch of scrolling, while the page below keeps its place (the height the
+  // heading gives up becomes margin under it). The switch's highlight follows the section being read.
   var header = $('.site-header');
-  var bar = $('.dl-bar');
   var head = $('.dl-head');
+  var marker = $('.dl-head-marker');
+  var title = head && $('h1', head);
+  var row = head && $('.dl-head-row', head);
+  var headSwitch = head && $('.dl-choose', head);
   var switches = $$('.dl-choose');
   var sections = ['desktop', 'cli', 'server']
     .map(function (id) {
@@ -230,9 +234,59 @@
     })
     .filter(Boolean);
   var reading = null;
-  var barShown = false;
-  // The page ships it hidden, so a stale stylesheet or no script never leaves it standing open; it unfolds from here.
-  if (bar) bar.hidden = false;
+  // How far the page scrolls while the heading shrinks, and its size in the bar (none on a phone: the switch alone).
+  var SHRINK = 110;
+  var BAR_TITLE = 22;
+  var BAR_PAD = 9;
+  var rest = null;
+  var shrunk = -1;
+  function unshrink() {
+    [title.style, headSwitch.style, row.style, head.style].forEach(function (style) {
+      style.cssText = '';
+    });
+    head.classList.remove('is-stuck');
+  }
+  /** The heading as it is at the top of the page, which the shrinking starts from. */
+  function measure() {
+    if (!head || !title || !row || !headSwitch || !marker) return;
+    unshrink();
+    shrunk = -1;
+    var titleStyle = getComputedStyle(title);
+    rest = {
+      font: parseFloat(titleStyle.fontSize),
+      line: parseFloat(titleStyle.lineHeight) || parseFloat(titleStyle.fontSize) * 1.04,
+      switchGap: parseFloat(getComputedStyle(headSwitch).marginBottom) || 0,
+      rowGap: parseFloat(getComputedStyle(row).rowGap) || 0,
+      height: head.offsetHeight,
+      switchHeight: headSwitch.offsetHeight,
+    };
+    shrink();
+  }
+  function shrink() {
+    if (!rest) return;
+    var top = header ? header.offsetHeight : 0;
+    // The marker ends where the heading starts: it has reached the site's row once that edge has.
+    var p = Math.min(1, Math.max(0, (top - marker.getBoundingClientRect().bottom) / SHRINK));
+    if (p === shrunk) return;
+    shrunk = p;
+    if (p === 0) return unshrink();
+    var phone = window.innerWidth < 640;
+    var lerp = function (from, to) {
+      return from + (to - from) * p;
+    };
+    var font = lerp(rest.font, phone ? 0 : BAR_TITLE);
+    title.style.fontSize = font + 'px';
+    // In the bar the title's line is as tall as the switch, so the two sit centred on one line.
+    title.style.lineHeight = (phone ? lerp(rest.line, 0) : lerp(rest.line, rest.switchHeight)) + 'px';
+    title.style.opacity = phone ? String(1 - p) : '';
+    headSwitch.style.marginBottom = lerp(rest.switchGap, 0) + 'px';
+    row.style.rowGap = lerp(rest.rowGap, 0) + 'px';
+    head.style.paddingTop = head.style.paddingBottom = lerp(0, BAR_PAD) + 'px';
+    head.style.setProperty('--stuck', String(p));
+    head.classList.add('is-stuck');
+    head.style.marginBottom = '0px';
+    head.style.marginBottom = Math.max(0, rest.height - head.offsetHeight) + 'px';
+  }
   function mark(id) {
     switches.forEach(function (nav) {
       $$('.choice', nav).forEach(function (chip) {
@@ -257,14 +311,7 @@
       reading = id;
       mark(id);
     }
-    if (bar && head && header) {
-      var shown = head.getBoundingClientRect().bottom < $('.bar', header).offsetHeight;
-      if (shown !== barShown) {
-        barShown = shown;
-        header.classList.toggle('has-bar', shown);
-        bar.inert = !shown;
-      }
-    }
+    shrink();
   }
   var queued = false;
   window.addEventListener(
@@ -281,14 +328,17 @@
   );
   window.addEventListener('resize', function () {
     glides.forEach(placeGlide);
+    measure();
     follow();
   });
-  // Fonts change the chips' widths once they arrive.
+  // Fonts change the chips' widths and the heading's size once they arrive.
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function () {
       glides.forEach(placeGlide);
+      measure();
     });
   }
+  measure();
   follow();
 
   // A link can ask for a system (/download/#windows); otherwise the detected one, otherwise macOS.

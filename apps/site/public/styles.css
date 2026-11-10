@@ -228,7 +228,7 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 .notfound .actions { margin-top: 12px; }
 
 /* Download page */
-.dl-hero { padding-block: clamp(40px, 6vw, 80px) clamp(20px, 3vw, 36px); }
+.dl-hero { display: flow-root; padding-block: 0 clamp(20px, 3vw, 36px); }
 .dl-hero .lead { max-width: 40rem; margin-top: 18px; }
 .dl-section { padding-bottom: clamp(48px, 7vw, 96px); }
 .dl-card { display: grid; grid-template-columns: minmax(0, 1fr); border-radius: 18px; overflow: hidden; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--shadow-window), var(--shadow-lift); }
@@ -269,7 +269,7 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 .dl-links .icon { width: 15px; height: 15px; }
 
 /* Download page: the three things on it, beside the heading, so the app, the terminal app and the server aren't taken for each other. */
-.dl-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
+.dl-head-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
 .dl-choose { position: relative; isolation: isolate; display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 0.45em; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); }
 .choice { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 8px; font: 500 0.875rem/1.2 var(--sans); color: var(--ink-2); white-space: nowrap; text-decoration: none; transition: color 200ms var(--ease); }
 .choice:hover { color: var(--ink); }
@@ -280,19 +280,15 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 .dl-choose:not(.has-glide) .choice.is-here { background: var(--raised); box-shadow: 0 0 0 1px var(--line-strong) inset; }
 @media (max-width: 520px) { .dl-choose { margin-bottom: 0; } .choice { padding: 6px 9px; font-size: 0.8125rem; } .choice .icon { display: none; } }
 
-/* The heading and its switch follow the page, under the site's own row, once the big heading has scrolled away. */
-.dl-bar { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms var(--ease), opacity 220ms var(--ease); }
-.dl-bar[hidden] { display: none; }
-.site-header.has-bar .dl-bar { grid-template-rows: 1fr; opacity: 1; }
-.dl-bar-clip { min-height: 0; overflow: hidden; }
-.dl-bar-line { border-top: 1px solid var(--line); }
-.dl-bar-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 54px; }
-.dl-bar-title { font: 500 1.375rem/1 var(--serif); letter-spacing: -0.015em; color: var(--ink); text-decoration: none; white-space: nowrap; transform: translateY(6px); transition: transform 300ms var(--ease); }
-.site-header.has-bar .dl-bar-title { transform: none; }
-.dl-bar .dl-choose { margin-bottom: 0; }
-html:has(.dl-bar) { scroll-padding-top: 136px; }
-@media (max-width: 520px) { .dl-bar-title { display: none; } .dl-bar-row { justify-content: center; height: 48px; } }
-@media (prefers-reduced-motion: reduce) { .dl-bar, .dl-bar-title { transition: none; } }
+/* "Download Atelier" and its switch stay under the site's row once they reach it; download.js shrinks the heading into a
+   bar as the page scrolls on (--stuck goes from 0 to 1), and the bar's background fades in with it. */
+.dl-head-marker { height: clamp(40px, 6vw, 80px); }
+/* On a phone the title keeps a row of its own, so the switch rises smoothly as the title folds away (download.js, under 640px). */
+@media (max-width: 639px) { .dl-head-row h1 { flex-basis: 100%; } }
+.dl-head { position: sticky; top: 64px; z-index: 40; isolation: isolate; --stuck: 0; }
+.dl-head::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: var(--stuck); background: color-mix(in srgb, var(--paper) 86%, transparent); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--line); }
+body:has(.dl-head.is-stuck) .site-header { border-bottom-color: transparent; }
+html:has(.dl-head) { scroll-padding-top: 132px; }
 
 /* What a section is, above its heading: "Atelier CLI · terminal app". */
 .kind { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 5px 11px 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font: 500 0.8125rem/1.2 var(--sans); color: var(--ink-2); }
