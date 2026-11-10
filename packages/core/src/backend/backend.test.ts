@@ -285,7 +285,8 @@ describe('co-op on a team server: a teammate’s own sidebar', () => {
 });
 
 describe('co-op on a desktop whose protected storage refuses', () => {
-  it('joining says the storage refused, instead of an internal error, and tries the storage again next time', async () => {
+  // A whole desktop backend and two joins: about a second alone, more while the whole suite runs at once.
+  it('joining says the storage refused, instead of an internal error, and tries the storage again next time', { timeout: 20_000 }, async () => {
     const home = await mkdtemp(join(tmpdir(), 'atelier-coop-storage-'));
     let refuse = true;
     const desktop = await createBackend({
@@ -810,6 +811,57 @@ describe('sessions without a folder', () => {
     } finally {
       await desktop.dispose();
       await rm(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('attached files', () => {
+  it.skipIf(!existsSync(hostRunnerBinary(runnerDir)))('go into a scratch folder’s root, and under .atelier/attachments in a project, where the tools reach them', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-attach-'));
+    const project = await mkdtemp(join(tmpdir(), 'atelier-attach-project-'));
+    const desktop = await createBackend({
+      surface: 'desktop',
+      configDir: home,
+      dataDir: join(home, 'data'),
+      runnerDir,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      fetch: async () => Promise.reject(new Error('offline')),
+    });
+    try {
+      const [clientSide, serverSide] = createMemoryTransportPair();
+      desktop.connect(serverSide, { client: { clientKind: 'desktop', ip: '127.0.0.1', userAgent: 'test' } });
+      const c = createRpcClient(contract, clientSide);
+      await c.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'desktop' });
+      const until = async (path: string) => {
+        for (let i = 0; i < 100 && !existsSync(path); i++) await new Promise((r) => setTimeout(r, 50));
+        return readFile(path, 'utf8');
+      };
+      const attach = async (sessionId: string) => {
+        const file = await c.call('files.upload', { name: 'rack.zip', mime: 'application/zip', dataBase64: Buffer.from('PK rack').toString('base64'), sessionId });
+        // No model is set up here: the reply fails, after the message (and its file) went in.
+        await c.call('chat.send', { sessionId, parts: [{ type: 'document', mime: 'application/zip', blob: file.blob, name: 'rack.zip' }, { type: 'text', text: 'Extract this.' }] }).catch(() => undefined);
+      };
+
+      // Cowork with no folder: its scratch folder's root.
+      const cowork = await c.call('sessions.create', { mode: 'work', scratch: {} });
+      const scratch = (await c.call('workspaces.list', {})).find((w) => w.id === cowork.workspaceId)!;
+      await attach(cowork.id);
+      expect(await until(join(scratch.root, 'rack.zip'))).toBe('PK rack');
+      const sent = (await c.call('sessions.subscribe', { id: cowork.id })).messages.find((m) => m.role === 'user')!;
+      expect(sent.parts[0]).toMatchObject({ type: 'document', name: 'rack.zip', path: 'rack.zip' });
+
+      // A project: out of the way, and out of git.
+      const folder = await c.call('workspaces.addLocal', { path: project });
+      const code = await c.call('sessions.create', { mode: 'code', workspaceId: folder.id });
+      await attach(code.id);
+      expect(await until(join(project, '.atelier', 'attachments', 'rack.zip'))).toBe('PK rack');
+      expect(await readFile(join(project, '.atelier', 'attachments', '.gitignore'), 'utf8')).toBe('*\n');
+    } finally {
+      await desktop.dispose();
+      await rm(home, { recursive: true, force: true });
+      await rm(project, { recursive: true, force: true });
     }
   });
 });

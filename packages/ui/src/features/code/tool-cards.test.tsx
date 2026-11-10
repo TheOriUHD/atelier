@@ -5,7 +5,8 @@ import { PLAN_MODE_OFF, type Message, type SessionSnapshot, type ToolCallPart } 
 import { callsTo, resetBackend } from '../settings/test-backend.ts';
 import type { TranscriptView } from '@atelier/protocol';
 import { TranscriptDetail } from '../chat/parts.tsx';
-import { ActivityList, CodeActivity, MovedNotice, TranscriptSession, WorkspaceRoot, bashResult, summarize, type ToolStep } from './tool-cards.tsx';
+import { ActivityList, CodeActivity, MovedNotice, TranscriptSession, WorkspaceRoot, bashResult, folderRead, summarize, type ToolStep } from './tool-cards.tsx';
+import { activityLabel } from './activity-summary.ts';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
@@ -114,6 +115,14 @@ describe('summarize', () => {
     expect(summarize(call('Grep', { pattern: 'x' }), 'No files found.', null).meta).toBe('no matches');
     expect(summarize(call('TodoWrite', { todos: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'pending' }] }), null, null).meta).toBe('1 of 2 done');
     expect(summarize(call('mcp__notes__find', { query: 'tea' }), null, null)).toEqual({ verb: 'mcp__notes__find', target: 'tea' });
+  });
+
+  it('says a Read of a folder listed it: the workspace as “the folder”, another by its path', () => {
+    expect(summarize(call('ListedFolder', { file_path: '.' }), '. is a directory:\nrack.zip\nnotes/', '/repo')).toEqual({ verb: 'Listed', target: 'the folder', meta: '2 items' });
+    expect(summarize(call('ListedFolder', { file_path: '/repo/src/' }), '/repo/src/ is a directory:\na.ts\n\n[Only the first 1 entries are listed.]', '/repo')).toEqual({ verb: 'Listed', target: 'src', meta: '1 item' });
+    expect(summarize(call('ListedFolder', { file_path: '/repo' }), '/repo is an empty directory.', '/repo')).toEqual({ verb: 'Listed', target: 'the folder', meta: 'empty' });
+    expect(folderRead({ call: { type: 'tool_call', id: 'r', name: 'Read', input: { file_path: '.' } }, result: result('. is a directory:\na') })).toBe(true);
+    expect(folderRead({ call: { type: 'tool_call', id: 'r', name: 'Read', input: { file_path: 'a.ts' } }, result: result('     1\tconst directory = 1;') })).toBe(false);
   });
 
   it('says how many results a search had and who answered, or that it found none', () => {
@@ -369,6 +378,18 @@ describe('compact transcript (Normal view)', () => {
     expect(command.textContent).toContain('2 failing');
     expect(rows[1]!.getAttribute('aria-expanded')).toBe('true');
     expect(rows[0]!.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('words looking through the folder as an action, not as reading “.”', () => {
+    compact([
+      step('Read', { file_path: '.' }, { result: result('. is a directory:\nminisforum-rack.zip') }),
+      step('Grep', { pattern: 'zip' }, { result: result('No files found.') }),
+    ]);
+    expect(screen.getByRole('button', { name: /^Listed the folder, searched the code/ })).toBeTruthy();
+    expect(screen.queryByText(/Read \./)).toBeNull();
+    expect(activityLabel([step('Read', { file_path: '.' }, { running: true })], '/repo')).toBe('Looking through the folder');
+    expect(activityLabel([step('Read', { file_path: '/repo/' }, { running: true })], '/repo')).toBe('Looking through the folder');
+    expect(activityLabel([step('Read', { file_path: '/repo/a.ts' }, { running: true })], '/repo')).toBe('Reading a.ts');
   });
 
   it('says what a running run does now, and keeps sub-agents on their own card', () => {

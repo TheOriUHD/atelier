@@ -137,7 +137,12 @@ and a file that failed to upload is left out of the message.
 | **Images** (PNG, JPEG, GIF, WebP) | The image, if the model can see. A model without vision gets only the note "An image was attached, but this model cannot view images.", and the tile shows a warning. |
 | **PDF** | The file itself, for models that take PDFs natively (the Anthropic and OpenAI models Atelier knows, Mistral models that take images, and ChatGPT Chat). For every other model, the PDF's text layer, page by page. A scan with no text layer yields no text. |
 | **Text and code** (`.txt`, `.md`, `.csv`, `.json`, `.html`, `.py`, `.svg` and similar) | The text, inside a document block with the file name. Text beyond 400,000 characters is cut off. |
-| **Anything else** (Word, Excel and PowerPoint files, archives, audio, video) | Nothing readable: the model is told "Attached file … cannot be read by this model." Put such files in a Cowork task's folder instead. |
+| **Anything else** (Word, Excel and PowerPoint files, archives, audio, video) | In a Cowork or Code session, the file in its folder (below), which the agent opens, unpacks or converts with its tools. In a chat, nothing readable: the model is told "Attached file … cannot be read by this model." |
+
+In a Cowork or Code session every file you attach also goes into the session's folder, so the agent's tools can work with
+it: in the root of a folder made for a session started with **No folder**, and under `.atelier/attachments/` in a folder
+of your own (with a `.gitignore` there, so git leaves it alone). A file whose name is taken gets ` (2)`; the same file sent
+again keeps its place. The model is told where each one is.
 
 Limits:
 

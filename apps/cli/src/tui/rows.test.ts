@@ -42,3 +42,13 @@ describe('the transcript rows', () => {
     expect(finalCount(rows)).toBe(1);
   });
 });
+
+it('words a Read of the folder as listing it', async () => {
+  const { toolLine } = await import('./views.tsx');
+  const { Paint, palette } = await import('../style.ts');
+  const { strip } = await import('../style.ts');
+  const ctx = { paint: new Paint(palette('dark', 0)), columns: 100, root: '/repo', view: 'normal' as const };
+  const line = toolLine({ type: 'tool_call', id: 'r', name: 'Read', input: { file_path: '.' } }, { type: 'tool_result', callId: 'r', content: [{ type: 'text', text: '. is a directory:\nrack.zip\nnotes/' }] }, ctx);
+  expect(strip(line)).toContain('Listed the folder');
+  expect(strip(line)).toContain('2 items');
+});

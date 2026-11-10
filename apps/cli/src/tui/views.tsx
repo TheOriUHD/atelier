@@ -6,7 +6,7 @@
  */
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
-import { bashResult, displayPath, placedEditRows, resultText, summarize, writeRows, type DiffRow } from '@atelier/client';
+import { bashResult, displayPath, placedEditRows, resultText, shownCall, summarize, writeRows, type DiffRow } from '@atelier/client';
 import type { Todo, ToolCallPart, ToolResultPart } from '@atelier/protocol';
 import { strip, type Paint } from '../style.ts';
 import { renderMarkdown } from './markdown.ts';
@@ -114,7 +114,8 @@ function toolDetail(call: ToolCallPart, result: ToolResultPart | undefined, ctx:
 /** The step's one line: "Read src/app.ts · 84 lines", with "Edited", "Created" for file changes. */
 export function toolLine(call: ToolCallPart, result: ToolResultPart | undefined, ctx: ViewContext): string {
   const { paint } = ctx;
-  const s = summarize(call, result ? resultText(result) : null, ctx.root);
+  // A Read of a folder says it listed the folder; one that brought an image, that it looked at it.
+  const s = summarize(shownCall({ call, result }), result ? resultText(result) : null, ctx.root);
   const input = asRecord(call.input);
   let verb = s.verb;
   let meta = s.meta;

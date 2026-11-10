@@ -8,7 +8,14 @@ import { Mode } from './settings.ts';
 
 export const TextPart = z.object({ type: z.literal('text'), text: z.string() });
 export const ImagePart = z.object({ type: z.literal('image'), mime: z.string(), blob: z.string() });
-export const DocumentPart = z.object({ type: z.literal('document'), mime: z.string(), blob: z.string(), name: z.string() });
+export const DocumentPart = z.object({
+  type: z.literal('document'),
+  mime: z.string(),
+  blob: z.string(),
+  name: z.string(),
+  /** Where the file was put in the session's folder (Code and Cowork), relative to its root, so the agent's tools reach it. */
+  path: z.string().optional(),
+});
 export const ThinkingPart = z.object({
   type: z.literal('thinking'),
   text: z.string(),

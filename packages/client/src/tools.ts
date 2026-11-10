@@ -17,6 +17,30 @@ export function resultText(result: ToolResultPart | undefined): string {
   return result?.content.flatMap((c) => (c.type === 'text' ? [c.text] : [])).join('\n') ?? '';
 }
 
+/** A Read of a folder: it answered with the folder's entries ("src is a directory:", files.ts) rather than a file. */
+export function folderRead(step: { call: ToolCallPart | Pick<ToolCallPart, 'name'>; result?: ToolResultPart | undefined }): boolean {
+  if (step.call.name !== 'Read' || !step.result || step.result.isError) return false;
+  return /^.* is (?:a directory:|an empty directory\.)/.test(resultText(step.result));
+}
+
+/** A Read that brought an image: it was looked at. */
+export function imageRead(step: { call: ToolCallPart | Pick<ToolCallPart, 'name'>; result?: ToolResultPart | undefined }): boolean {
+  return step.call.name === 'Read' && !step.result?.isError && !!step.result?.content.some((part) => part.type === 'image');
+}
+
+/** The call as its row and summary word it: an image looked at, a folder listed, else as it was made. */
+export function shownCall<C extends Pick<ToolCallPart, 'name' | 'input'>>(step: { call: C; result?: ToolResultPart | undefined }): C {
+  if (imageRead(step)) return { ...step.call, name: 'ViewedImage' };
+  if (folderRead(step)) return { ...step.call, name: 'ListedFolder' };
+  return step.call;
+}
+
+/** A folder as the transcript names it: the workspace itself is "the folder", another by its path. */
+export function folderName(path: string, root: string | null): string {
+  const shown = displayPath(path, root).replace(/[\\/]+$/, '');
+  return !shown || shown === '.' || shown === '~' || (root && (path === root || path === `${root}/`)) ? 'the folder' : shown;
+}
+
 
 /** The id Bash gave a command it started in the background, from its result. */
 export function backgroundId(result: ToolResultPart | undefined): string | null {
@@ -64,6 +88,10 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return plural(n, 'ran a command', 'ran # commands');
       case 'ViewedImage':
         return files(list).length === 1 ? `looked at ${file(list[0]!)}` : `looked at ${files(list).length} images`;
+      case 'ListedFolder': {
+        const folders = [...new Set(list.map((c) => folderName(str(asRecord(c.input).file_path), root)))];
+        return folders.length === 1 ? `listed ${folders[0]}` : `listed ${folders.length} folders`;
+      }
       case 'Read':
         return files(list).length === 1 ? `read ${file(list[0]!)}` : `read ${files(list).length} files`;
       case 'Write':
@@ -209,6 +237,11 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
   switch (call.name) {
     case 'ViewedImage':
       return { verb: 'Looked at', target: displayPath(str(input.file_path), root) };
+    case 'ListedFolder': {
+      // The entries under the first line, without the note that a long folder was cut short.
+      const entries = (result ?? '').split('\n').slice(1).filter((line) => line && !line.startsWith('[Only the first'));
+      return { verb: 'Listed', target: folderName(str(input.file_path), root), ...(result != null ? { meta: entries.length ? count(entries.length, 'item') : 'empty' } : {}) };
+    }
     case 'Read': {
       const lines = result?.match(/^\s*\d+\t/gm)?.length ?? 0;
       return { verb: 'Read', target: displayPath(str(input.file_path), root), ...(lines ? { meta: count(lines, 'line') } : {}) };

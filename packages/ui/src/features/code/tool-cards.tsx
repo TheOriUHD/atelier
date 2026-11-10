@@ -25,8 +25,8 @@ import { WithViewedImages } from '../chat/images.tsx';
 import { CommandCode } from './command-code.tsx';
 import { navigatorNotes } from '../coop/coop.ts';
 import { MEMORY_TOOLS, MemoryStep } from '../chat/memory-steps.tsx';
-import { activitySummary, asRecord, backgroundId, backgroundSummary, bashResult, changedLines, count, messageReceipt, resultText, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
-export { activitySummary, actionWords, asRecord, backgroundId, backgroundSummary, bashResult, computerActions, messageReceipt, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
+import { activitySummary, asRecord, backgroundId, backgroundSummary, bashResult, changedLines, count, messageReceipt, resultText, shownCall, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
+export { activitySummary, actionWords, asRecord, backgroundId, backgroundSummary, bashResult, computerActions, folderName, folderRead, messageReceipt, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
 
 export type ToolStep = Extract<ActivityStepView, { kind: 'tool' }>;
 
@@ -111,7 +111,7 @@ function FinishedLine({ steps, root, open, onToggle }: { steps: ActivityStepView
   return (
     <Summary open={open} onToggle={onToggle}>
       <span className="truncate">
-        {tools.length ? activitySummary(tools.map((s) => imageRead(s) ? { ...s.call, name: 'ViewedImage' } : s.call), root) : 'Thought it over'}
+        {tools.length ? activitySummary(tools.map(shownCall), root) : 'Thought it over'}
         {failed > 0 && ` (${failed} failed)`}
       </span>
       {(changed.added > 0 || changed.removed > 0) && <DiffStat added={changed.added} removed={changed.removed} />}
@@ -133,10 +133,6 @@ function ActivityRows({ steps }: { steps: ActivityStepView[] }) {
   );
 }
 
-function imageRead(step: ToolStep): boolean {
-  return step.call.name === 'Read' && !step.result?.isError && !!step.result?.content.some((part) => part.type === 'image');
-}
-
 function ActivityRow({ step }: { step: ActivityStepView }) {
   const root = useContext(WorkspaceRoot);
   const [open, setOpen] = useState(false);
@@ -148,7 +144,7 @@ function ActivityRow({ step }: { step: ActivityStepView }) {
   if (step.kind === 'tool') {
     const input = asRecord(step.call.input);
     const text = step.result ? resultText(step.result) : null;
-    const summary = summarize(imageRead(step) ? { ...step.call, name: 'ViewedImage' } : step.call, text, root);
+    const summary = summarize(shownCall(step), text, root);
     const failed = !!step.result?.isError;
     switch (step.call.name) {
       case 'Bash': {
@@ -301,7 +297,7 @@ export function GroupedActivity({ steps }: { steps: ActivityStepView[] }) {
       <WithViewedImages steps={steps}>
         <Summary open={open} onToggle={() => setOpen((o) => !o)}>
           {steps.some((s) => (s.kind === 'tool' ? s.running : s.active)) && <ThinkingDots />}
-          <span className="truncate">{tools.length ? activitySummary(tools.map((s) => imageRead(s) ? { ...s.call, name: 'ViewedImage' } : s.call), root) : 'Thought process'}</span>
+          <span className="truncate">{tools.length ? activitySummary(tools.map(shownCall), root) : 'Thought process'}</span>
           {(changed.added > 0 || changed.removed > 0) && <DiffStat added={changed.added} removed={changed.removed} />}
         </Summary>
       </WithViewedImages>
@@ -382,7 +378,7 @@ function OneLineCard({ step, detail }: { step: ToolStep; detail?: ReactNode }) {
   const root = useContext(WorkspaceRoot);
   const [open, setOpen] = useState(useStartsOpen(false));
   const text = step.result ? resultText(step.result) : null;
-  const { verb, target, meta } = summarize(imageRead(step) ? { ...step.call, name: 'ViewedImage' } : step.call, text, root);
+  const { verb, target, meta } = summarize(shownCall(step), text, root);
   const after = (
     <>
       {meta && <span className="shrink-0 text-fg-muted">{meta}</span>}

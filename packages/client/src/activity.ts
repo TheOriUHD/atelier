@@ -35,8 +35,11 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
   switch (step.call.name) {
     case 'Bash':
       return text(args.description) || 'Running a command';
-    case 'Read':
-      return `Reading ${path()}`;
+    case 'Read': {
+      // A folder can't be told from a file before the answer comes, except the folder itself.
+      const target = text(args.file_path).replace(/[\\/]+$/, '');
+      return !target || target === '.' || (root && target === root.replace(/[\\/]+$/, '')) ? 'Looking through the folder' : `Reading ${path()}`;
+    }
     case 'Write':
       return `Creating ${path()}`;
     case 'Edit':
