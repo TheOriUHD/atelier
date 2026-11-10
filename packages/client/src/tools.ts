@@ -144,6 +144,8 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return 'checked usage';
       case 'TodoWrite':
         return 'updated the task list';
+      case 'artifact':
+        return plural(n, 'made an artifact', 'made # artifacts');
       default:
         return `used ${name}`;
     }
@@ -261,6 +263,11 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
       return { verb: result === null ? 'Save' : 'Saved', target: displayPath(str(input.file_path), root) };
     case 'Bash':
       return { verb: 'Ran', target: str(input.description) || str(input.command) };
+    // A file shown as an artifact (Code, Cowork), or one the model writes itself (Chat).
+    case 'artifact':
+      return str(input.file_path)
+        ? { verb: 'Showed', target: displayPath(str(input.file_path), root), meta: 'as an artifact' }
+        : { verb: str(input.command) === 'create' || !str(input.command) ? 'Made' : 'Updated', target: str(input.title) || str(input.identifier), meta: 'artifact' };
     case 'BashOutput':
       return { verb: 'Checked the output of', target: str(input.bash_id) };
     case 'KillShell':
