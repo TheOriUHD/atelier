@@ -14,7 +14,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { randomBytes } from 'node:crypto';
 import { AccountError, AesGcmCipher, createBackend, loadServerKey, type ClientInfo, type LinkSocket } from '@atelier/core';
 import { attachCoopRelay } from '@atelier/core/coop';
-import { APP, artifactRuntimeCsp, DEVICE_HEADERS, DEVICE_LINK_PATH, DeviceInfo, Password, Username, type RpcMessage, type Transport } from '@atelier/protocol';
+import { APP, APP_CSP, artifactRuntimeCsp, DEVICE_HEADERS, DEVICE_LINK_PATH, DeviceInfo, Password, Username, type RpcMessage, type Transport } from '@atelier/protocol';
 import { z } from 'zod';
 import { blobRoutes } from './blobs.ts';
 import { oauthRoutes } from './oauth.ts';
@@ -59,27 +59,6 @@ if (await backend.accounts.setupRequired()) logger.info('No accounts yet. Create
 const app = new Hono();
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
-/**
- * The web app's own pages: scripts and styles from this server only; images only from here (markdown
- * images can't beacon data to other hosts); the artifact runtime is framed from this origin and sets its
- * own stricter policy.
- */
-const APP_CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  // Generated videos come from /api/blobs; a blob: URL is a frame a page took from one.
-  "media-src 'self' blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-src 'self' blob:",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join('; ');
 app.use('*', async (c, next) => {
   await next();
   if (c.res.headers.get('content-type')?.startsWith('text/html') && !c.req.path.startsWith('/artifact-runtime/') && c.req.path !== '/inline-visual.html') {
