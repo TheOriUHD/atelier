@@ -46,6 +46,8 @@ export interface Screen {
   text(): string;
   /** Everything printed so far, scrollback included. */
   all(): string;
+  /** Whether the program is on the terminal's alternate screen (the fullscreen view), not the one the shell prints on. */
+  alternate(): boolean;
   type(text: string): Promise<void>;
   press(key: keyof typeof KEYS, times?: number): Promise<void>;
   /** Until the screen shows `match` (text or a pattern), or `match()` says so. */
@@ -75,6 +77,7 @@ export async function openScreen(options: { cwd: string; env: NodeJS.ProcessEnv;
   const screen: Screen = {
     text: () => lines(term.buffer.active.viewportY, term.buffer.active.viewportY + rows),
     all: () => lines(0, term.buffer.active.length),
+    alternate: () => term.buffer.active.type === 'alternate',
     type: async (text) => {
       await runner.call('pty.write', { ptyId, data: text });
       await sleep(60);

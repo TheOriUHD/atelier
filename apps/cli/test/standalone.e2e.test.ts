@@ -120,8 +120,9 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
     await s.type('/fullscreen');
     await s.press('enter');
     await s.waitFor(() => saved().fullscreen === false, 30_000);
-    // The classic view prints into the terminal below the shell's line, the conversation included.
-    await s.waitFor(() => s.text().includes('exec "') && s.text().includes('hello there') && s.text().includes('⏵⏵'), 30_000);
+    // The classic view prints on the shell's own screen (not the alternate one), the conversation included. (The shell's
+    // line differs: sh on macOS and Linux, cmd.exe on Windows.)
+    await s.waitFor(() => !s.alternate() && s.all().includes('hello there') && s.text().includes('⏵⏵'), 30_000);
     show('classic again', s);
     await s.press('ctrlD');
   } finally {

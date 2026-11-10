@@ -266,10 +266,14 @@ export function nextReleaseProblem(searchOutput) {
 /**
  * The shell script that runs the end-to-end suite on the Linux machine. The first pass runs beside the package and image
  * builds, which can slow a test past its timeout; a test that fails then is run again by itself (`lastFailed`) once those
- * are done, on a quiet machine, so only a failure that stays counts. `name` is the build's folder under ~/builds.
+ * are done, on a quiet machine, so only a failure that stays counts. That goes for the terminal app's tests (apps/cli/test,
+ * which leave `cli-failed` behind) as for the browser and desktop ones (Playwright's record of what failed): a failure in
+ * one doesn't keep the other from running. `name` is the build's folder under ~/builds.
  */
 export function e2eScript({ name, lastFailed = false }) {
   const run = 'ATELIER_SHOW_WINDOW=1 xvfb-run --auto-servernum pnpm e2e --retries=1 2>&1 | tail -40';
+  const cli = 'ATELIER_NO_BROWSER=1 npx vitest run apps/cli/test 2>&1 | tail -15';
+  const recorded = `node -e "const r=require('./test-results/.last-run.json'); process.exit(r.failedTests && r.failedTests.length ? 0 : 1)" 2>/dev/null`;
   return [
     'set -eo pipefail',
     'export PATH=/usr/local/go/bin:$PATH CI=1',
@@ -279,8 +283,11 @@ export function e2eScript({ name, lastFailed = false }) {
       ? [
           `cd ~/builds/${name}-e2e`,
           // Nothing recorded (the suite never started) means there is nothing to run again: that failure stands.
-          `node -e "const r=require('./test-results/.last-run.json'); process.exit(r.failedTests && r.failedTests.length ? 0 : 1)" || { echo 'no failed tests were recorded'; exit 1; }`,
-          run.replace('pnpm e2e --retries=1', 'pnpm e2e --last-failed --retries=1'),
+          `[ -e cli-failed ] || ${recorded} || { echo 'no failed tests were recorded'; exit 1; }`,
+          'status=0',
+          `if [ -e cli-failed ]; then ${cli} || status=1; fi`,
+          `if ${recorded}; then ${run.replace('pnpm e2e --retries=1', 'pnpm e2e --last-failed --retries=1')} || status=1; fi`,
+          'exit $status',
         ]
       : [
           `rm -rf ~/builds/${name}-e2e && cp -a ~/builds/${name} ~/builds/${name}-e2e && cd ~/builds/${name}-e2e`,
@@ -290,8 +297,10 @@ export function e2eScript({ name, lastFailed = false }) {
           'pnpm exec playwright install chromium >/dev/null 2>&1',
           'node apps/desktop/node_modules/electron/install.js >/dev/null 2>&1',
           // The terminal app in a real pseudo-terminal: set up on this machine, and with a server (apps/cli/test).
-          'ATELIER_NO_BROWSER=1 npx vitest run apps/cli/test 2>&1 | tail -15',
-          run,
+          'status=0',
+          `${cli} || { touch cli-failed; status=1; }`,
+          `${run} || status=1`,
+          'exit $status',
         ]),
   ].join('\n');
 }

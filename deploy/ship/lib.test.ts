@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -191,6 +192,56 @@ describe('what the preflight and the Linux machine are told', () => {
     expect(again).toContain('no failed tests were recorded');
     // Leftover test servers from a stopped run go first in both.
     expect(again).toMatch(/^pkill|\npkill -u \$USER/m);
+  });
+
+  it.skipIf(process.platform === 'win32')('runs the terminal app’s failed tests again too, and lets neither kind of failure stop the other', () => {
+    // The script run for real by bash, with stand-ins for the tools: each says it ran, and fails when told to.
+    const home = mkdtempSync(join(tmpdir(), 'atelier-e2e-script-'));
+    const bin = join(home, 'bin');
+    mkdirSync(bin);
+    const log = join(home, 'ran.log');
+    const stub = (name: string, body = '') =>
+      writeFileSync(join(bin, name), `#!/bin/bash\necho "${name} $*" >> ${log}\n${body}\nexit 0\n`, { mode: 0o755 });
+    stub('npx', '[ -n "$CLI_FAILS" ] && exit 1');
+    stub('xvfb-run', '[ -n "$E2E_FAILS" ] && exit 1');
+    stub('pnpm');
+    stub('pkill');
+    // Node runs the check of Playwright's record for real; the Electron download is skipped.
+    writeFileSync(join(bin, 'node'), `#!/bin/bash\n[ "$1" = "-e" ] && exec ${process.execPath} "$@"\nexit 0\n`, { mode: 0o755 });
+    const build = join(home, 'builds', 'v1.2.3');
+    mkdirSync(build, { recursive: true });
+    const run = (lastFailed: boolean, env: Record<string, string> = {}) => {
+      rmSync(log, { force: true });
+      const result = spawnSync('bash', ['-c', e2eScript({ name: 'v1.2.3', lastFailed })], { env: { HOME: home, PATH: `${bin}:/usr/bin:/bin`, ...env }, encoding: 'utf8' });
+      return { code: result.status, ran: readFileSync(log, 'utf8').split('\n').map((l) => l.split(' ')[0]).filter(Boolean), out: result.stdout };
+    };
+    const e2e = join(home, 'builds', 'v1.2.3-e2e');
+    try {
+      // A terminal test failing beside the builds: the rest of the suite still runs, and the run fails.
+      const first = run(false, { CLI_FAILS: '1' });
+      expect(first.code).toBe(1);
+      expect(first.ran).toContain('xvfb-run');
+      expect(readFileSync(join(e2e, 'cli-failed'), 'utf8')).toBe('');
+      // Run again alone: the terminal tests, not Playwright, which recorded nothing.
+      const again = run(true);
+      expect(again).toMatchObject({ code: 0 });
+      expect(again.ran).toContain('npx');
+      expect(again.ran).not.toContain('xvfb-run');
+      expect(run(true, { CLI_FAILS: '1' }).code).toBe(1);
+      // Neither recorded (the suite never started): that failure stands.
+      rmSync(join(e2e, 'cli-failed'));
+      const nothing = run(true);
+      expect(nothing.code).toBe(1);
+      expect(nothing.out).toContain('no failed tests were recorded');
+      // Playwright's failures alone: only they run again.
+      mkdirSync(join(e2e, 'test-results'), { recursive: true });
+      writeFileSync(join(e2e, 'test-results', '.last-run.json'), JSON.stringify({ status: 'failed', failedTests: ['a'] }));
+      const browser = run(true);
+      expect(browser.code).toBe(0);
+      expect(browser.ran).toEqual(['pkill', 'xvfb-run']);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it('counts a GitHub asset as there only when it is uploaded whole with the same size and sha256', () => {
