@@ -281,6 +281,7 @@ Searches file contents with a regular expression.
 Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code.
 - The working directory persists between calls, but exported variables, aliases and `source` don't, so chain dependent steps with `&&`. Relative paths in a command resolve against that current directory, while the file tools always resolve them against the workspace root. Keep the shell at the root by using `(cd dir && cmd)` or a flag such as `git -C` or `npm --prefix` instead of a bare `cd`.
 - Quote paths that contain spaces. Avoid interactive programs and pass flags that make them non-interactive. Commands are stopped after 2 minutes unless you set `timeout` (up to 10 minutes).
+- Don't search the whole disk or home folder (`find /`, `find ~`, `grep -r /`): that runs for many minutes, crosses network volumes and can wait on the system's permission prompts. Search the workspace, or name the folders likely to hold what you look for, with a `-maxdepth`.
 - Start servers, watchers and other long-running processes with `run_in_background`, then read their output with BashOutput and stop them with KillShell. Don't poll in sleep loops; check once when you need the result.
 - Output longer than 30,000 characters is cut in the middle.
 - The person may not see command output, so repeat in your reply what matters.
@@ -315,6 +316,7 @@ A description depends on the prompt tier, the mode and which other tools the ses
 Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code.
 - The working directory persists between calls, but exported variables, aliases and `source` don't, so chain dependent steps with `&&`. Relative paths in a command resolve against that current directory, while the file tools always resolve them against the workspace root. Keep the shell at the root by using `(cd dir && cmd)` or a flag such as `git -C` or `npm --prefix` instead of a bare `cd`.
 - Quote paths that contain spaces. Avoid interactive programs and pass flags that make them non-interactive. Commands are stopped after 2 minutes unless you set `timeout` (up to 10 minutes).
+- Don't search the whole disk or home folder (`find /`, `find ~`, `grep -r /`): that runs for many minutes, crosses network volumes and can wait on the system's permission prompts. Search the workspace, or name the folders likely to hold what you look for, with a `-maxdepth`.
 - Start servers, watchers and other long-running processes with `run_in_background`, then read their output with BashOutput and stop them with KillShell. Don't poll in sleep loops; check once when you need the result.
 - Output longer than 30,000 characters is cut in the middle.
 - The person may not see command output, so repeat in your reply what matters.
@@ -327,6 +329,7 @@ Runs a shell command in the workspace and returns its output (stdout and stderr 
 Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code.
 - The working directory persists between calls, but exported variables, aliases and `source` don't, so chain dependent steps with `&&`. Relative paths in a command resolve against that current directory, while the file tools always resolve them against the workspace root. Keep the shell at the root by using `(cd dir && cmd)` or a flag such as `git -C` or `npm --prefix` instead of a bare `cd`.
 - Quote paths that contain spaces. Avoid interactive programs and pass flags that make them non-interactive. Commands are stopped after 2 minutes unless you set `timeout` (up to 10 minutes).
+- Don't search the whole disk or home folder (`find /`, `find ~`, `grep -r /`): that runs for many minutes, crosses network volumes and can wait on the system's permission prompts. Search the workspace, or name the folders likely to hold what you look for, with a `-maxdepth`.
 - Output longer than 30,000 characters is cut in the middle.
 - The person may not see command output, so repeat in your reply what matters.
 - Don't use it to read files (Read does that), or to send messages to the person.
@@ -336,9 +339,9 @@ Runs a shell command in the workspace and returns its output (stdout and stderr 
 
 ````text wrap
 Runs a command in the shell and returns what it printed.
-- The current folder stays the same between calls and relative paths follow it, so prefer `(cd dir && cmd)` to a bare `cd`.
+- The current folder persists between calls and relative paths follow it: prefer `(cd dir && cmd)` to a bare `cd`.
 - Use `run_in_background` for servers.
-- Don't use it to read or edit files.
+- Don't use it to read or edit files, or to search the whole disk (`find /`).
 - Commit only when asked. Never force-push or throw away uncommitted changes unless asked.
 ````
 
@@ -346,8 +349,8 @@ Runs a command in the shell and returns what it printed.
 
 ````text wrap
 Runs a command in the shell and returns what it printed.
-- The current folder stays the same between calls and relative paths follow it, so prefer `(cd dir && cmd)` to a bare `cd`.
-- Don't use it to read files.
+- The current folder persists between calls and relative paths follow it: prefer `(cd dir && cmd)` to a bare `cd`.
+- Don't use it to read files, or to search the whole disk (`find /`).
 - Commit only when asked. Never force-push or throw away uncommitted changes unless asked.
 ````
 

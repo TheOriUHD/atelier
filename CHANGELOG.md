@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **A command stuck in the system no longer stalls a turn.** A model searched the whole disk (`find / …`) and the turn waited on it for minutes with the model idle, which looked as if the model had stopped. Commands are killed after their timeout (2 minutes unless the model sets one), but a process blocked inside the system (a network volume that stopped answering, a macOS privacy prompt a read waits on) can outlive the kill, and the runner waited for it. It now answers a few seconds after the kill whether the process is gone or not, and tells the model the command is still held and to narrow it down instead of running it again. Stopping a turn answers the same way.
+- **Models are told not to search the whole disk** (`find /`, `find ~`, `grep -r /`) but the workspace or the folders likely to hold what they look for, small local models too.
 - **Switching between this computer and a server has its own page: Settings › Connection.** It was under Settings › Account as **Change setup…** (on this computer) or **Server › Switch…** (on a server), which went back to the first-run choice. The new page shows both ways to run Atelier with the one in use marked; **Switch…** opens what switching takes (a server's address, or one found on the network), and **Change…** on a server switches to another one. A server has to answer before anything changes: the app logs out of the server it uses only then. The profile menu at the bottom of the sidebar says where Atelier runs (**Running on this computer**, **Connected to atelier.home**) and opens the page. Settings search finds it as "standalone", "server mode", "switch server" or "set up again".
 
 ## [0.5.3] — 2026-11-10

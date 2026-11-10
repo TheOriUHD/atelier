@@ -289,6 +289,8 @@ type ShellExecResult struct {
 	Output     string `json:"output"` // stdout+stderr interleaved; head and tail kept when truncated
 	Truncated  bool   `json:"truncated"`
 	TimedOut   bool   `json:"timedOut"`
+	// Killed, but not gone a few seconds later: something in the system holds it (a network volume, a privacy prompt).
+	StillRunning bool `json:"stillRunning,omitempty"`
 }
 
 type ShellOutputNotification struct {

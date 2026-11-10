@@ -68,9 +68,9 @@ function describeBash({ tier, mode, has }: DescribeContext): string {
     const short = join([has('Read') && 'read', edits && 'edit']);
     return [
       'Runs a command in the shell and returns what it printed.',
-      '- The current folder stays the same between calls and relative paths follow it, so prefer `(cd dir && cmd)` to a bare `cd`.',
+      '- The current folder persists between calls and relative paths follow it: prefer `(cd dir && cmd)` to a bare `cd`.',
       ...(has('BashOutput') ? ['- Use `run_in_background` for servers.'] : []),
-      ...(short ? [`- Don't use it to ${short} files.`] : []),
+      short ? `- Don't use it to ${short} files, or to search the whole disk (\`find /\`).` : "- Don't search the whole disk (`find /`).",
       "- Commit only when asked. Never force-push or throw away uncommitted changes unless asked.",
     ].join('\n');
   }
@@ -78,6 +78,7 @@ function describeBash({ tier, mode, has }: DescribeContext): string {
     'Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code.',
     "- The working directory persists between calls, but exported variables, aliases and `source` don't, so chain dependent steps with `&&`. Relative paths in a command resolve against that current directory, while the file tools always resolve them against the workspace root. Keep the shell at the root by using `(cd dir && cmd)` or a flag such as `git -C` or `npm --prefix` instead of a bare `cd`.",
     '- Quote paths that contain spaces. Avoid interactive programs and pass flags that make them non-interactive. Commands are stopped after 2 minutes unless you set `timeout` (up to 10 minutes).',
+    "- Don't search the whole disk or home folder (`find /`, `find ~`, `grep -r /`): that runs for many minutes, crosses network volumes and can wait on the system's permission prompts. Search the workspace, or name the folders likely to hold what you look for, with a `-maxdepth`.",
     ...(has('BashOutput') ? ["- Start servers, watchers and other long-running processes with `run_in_background`, then read their output with BashOutput and stop them with KillShell. Don't poll in sleep loops; check once when you need the result."] : []),
     `- Output longer than ${MAX_OUTPUT_CHARS.toLocaleString('en')} characters is cut in the middle.`,
     '- The person may not see command output, so repeat in your reply what matters.',
@@ -159,7 +160,11 @@ export function createBashTools(workspace: Workspace, background?: BackgroundCom
         .finally(off);
       if (!res) return textOutput('The command was stopped before it finished.', true);
       const notes = [
-        res.timedOut ? `Timed out after ${timeoutMs / 1000}s; the command was killed.` : `Exit code ${res.exitCode}.`,
+        res.stillRunning
+          ? `Timed out after ${timeoutMs / 1000}s and killed, but it hadn't exited a few seconds later: something in the system holds it, such as a network volume or a permission prompt. Don't run it again as it is; narrow it down (fewer folders, a -maxdepth).`
+          : res.timedOut
+            ? `Timed out after ${timeoutMs / 1000}s; the command was killed.`
+            : `Exit code ${res.exitCode}.`,
       ];
       if (res.truncated) notes.push('The output was too long; its middle was dropped.');
       if (res.cwd !== (cwds.get(shellId) ?? workspace.root)) notes.push(`Working directory is now ${res.cwd}.`);

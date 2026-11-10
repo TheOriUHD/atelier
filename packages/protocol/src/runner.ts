@@ -304,6 +304,11 @@ export interface ShellExecResult {
   output: string;
   truncated: boolean;
   timedOut: boolean;
+  /**
+   * Killed (timed out), but not gone a few seconds later: something in the system holds it, such as a network volume that
+   * stopped answering or a privacy prompt a read waits on. Runners before 0.5.4 wait for it instead.
+   */
+  stillRunning?: boolean;
 }
 
 /** Live output of a foreground `shell.exec`. */

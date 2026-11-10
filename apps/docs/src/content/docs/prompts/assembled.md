@@ -38,7 +38,7 @@ prompts or replies.
 | [`chat.full.memory-explicit`](/prompts/assembled/chat.full.memory-explicit.txt) | Chat with memory where “Generate memory from chats” and chat search are off. | 29 KB |
 | [`chat.compact.memory`](/prompts/assembled/chat.compact.memory.txt) | Chat, compact tier, with memory. | 15 KB |
 | [`work.full`](/prompts/assembled/work.full.txt) | Cowork, full tier. | 41 KB |
-| [`work.full.no-web`](/prompts/assembled/work.full.no-web.txt) | Cowork with web access and skills switched off. | 33 KB |
+| [`work.full.no-web`](/prompts/assembled/work.full.no-web.txt) | Cowork with web access and skills switched off. | 34 KB |
 | [`work.compact`](/prompts/assembled/work.compact.txt) | Cowork, compact tier. | 21 KB |
 | [`work.full.memory`](/prompts/assembled/work.full.memory.txt) | Cowork for a person with memory. | 50 KB |
 | [`work.full.computer`](/prompts/assembled/work.full.computer.txt) | Cowork in the desktop app with computer use on: the computer use tools. | 49 KB |
@@ -53,20 +53,20 @@ prompts or replies.
 | [`code.compact.audio`](/prompts/assembled/code.compact.audio.txt) | Code, compact tier, with a sound model: the shorter GenerateAudio schema. | 23 KB |
 | [`code.compact.computer`](/prompts/assembled/code.compact.computer.txt) | Code, compact tier, with computer use on. | 26 KB |
 | [`code.full`](/prompts/assembled/code.full.txt) | Code, full tier: the baseline. | 51 KB |
-| [`code.full.plan`](/prompts/assembled/code.full.plan.txt) | Code in plan mode. | 51 KB |
-| [`code.full.scratch`](/prompts/assembled/code.full.scratch.txt) | Code started with No folder: a scratch folder of its own. | 50 KB |
+| [`code.full.plan`](/prompts/assembled/code.full.plan.txt) | Code in plan mode. | 52 KB |
+| [`code.full.scratch`](/prompts/assembled/code.full.scratch.txt) | Code started with No folder: a scratch folder of its own. | 51 KB |
 | [`code.full.no-effort`](/prompts/assembled/code.full.no-effort.txt) | Code on a model without effort levels, web search off. | 46 KB |
 | [`code.full.subagent`](/prompts/assembled/code.full.subagent.txt) | A sub-agent started by the Agent tool. | 27 KB |
 | [`code.full.defined-agent`](/prompts/assembled/code.full.defined-agent.txt) | A sub-agent defined by an agent file with its own prompt. | 6 KB |
 | [`code.compact`](/prompts/assembled/code.compact.txt) | Code, compact tier. | 21 KB |
 | [`code.compact.prompted`](/prompts/assembled/code.compact.prompted.txt) | Code, compact tier, with prompted tool calls. | 17 KB |
 | [`code.compact.connectors`](/prompts/assembled/code.compact.connectors.txt) | Code, compact tier, with three connectors of twenty tools each. | 40 KB |
-| [`code.compact.budget`](/prompts/assembled/code.compact.budget.txt) | Code, compact tier, over the 16,000 character budget: how the builder trims the skill list, connectors and instruction files. | 21 KB |
+| [`code.compact.budget`](/prompts/assembled/code.compact.budget.txt) | Code, compact tier, over the 16,000 character budget: how the builder trims the skill list, connectors and instruction files. | 22 KB |
 | [`safeguards.chat.full`](/prompts/assembled/safeguards.chat.full.txt) | Chat with the administrator’s optional safeguards on. | 25 KB |
 | [`safeguards.chat.compact`](/prompts/assembled/safeguards.chat.compact.txt) | Chat, compact tier, with safeguards on. | 10 KB |
 | [`safeguards.code.full.all`](/prompts/assembled/safeguards.code.full.all.txt) | Code with every safeguard category on. | 55 KB |
 | [`safeguards.code.compact.all`](/prompts/assembled/safeguards.code.compact.all.txt) | Code, compact tier, with every safeguard category on. | 22 KB |
-| [`safeguards.work.full.person-on`](/prompts/assembled/safeguards.work.full.person-on.txt) | Cowork where the person turned safeguards on for themselves. | 43 KB |
+| [`safeguards.work.full.person-on`](/prompts/assembled/safeguards.work.full.person-on.txt) | Cowork where the person turned safeguards on for themselves. | 44 KB |
 | [`safeguards.work.compact`](/prompts/assembled/safeguards.work.compact.txt) | Cowork, compact tier, with safeguards on. | 22 KB |
 | [`safeguards.code.full.subagent`](/prompts/assembled/safeguards.code.full.subagent.txt) | A sub-agent inheriting the person’s safeguards (some categories on). | 29 KB |
 

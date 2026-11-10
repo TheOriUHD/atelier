@@ -88,7 +88,7 @@ Image models you can use with GenerateImage, the person's choice first:
 - comfy/sdxl (SDXL): prompt in comma-separated tags, takes a negative prompt, can change images
 </context-update>
 
-# Tools: 18, 13045 characters of JSON
+# Tools: 18, 13076 characters of JSON
 
 [
   {
@@ -264,7 +264,7 @@ Image models you can use with GenerateImage, the person's choice first:
   },
   {
     "name": "Bash",
-    "description": "Runs a command in the shell and returns what it printed.\n- The current folder stays the same between calls and relative paths follow it, so prefer `(cd dir && cmd)` to a bare `cd`.\n- Use `run_in_background` for servers.\n- Don't use it to read or edit files.\n- Commit only when asked. Never force-push or throw away uncommitted changes unless asked.",
+    "description": "Runs a command in the shell and returns what it printed.\n- The current folder persists between calls and relative paths follow it: prefer `(cd dir && cmd)` to a bare `cd`.\n- Use `run_in_background` for servers.\n- Don't use it to read or edit files, or to search the whole disk (`find /`).\n- Commit only when asked. Never force-push or throw away uncommitted changes unless asked.",
     "inputSchema": {
       "type": "object",
       "properties": {

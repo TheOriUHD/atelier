@@ -1,4 +1,4 @@
-# System prompt: 6 blocks, 16549 characters
+# System prompt: 6 blocks, 16580 characters
 
 ## Block 1
 
@@ -122,9 +122,9 @@ Arguments JSON Schema: {"type":"object","properties":{"pattern":{"type":"string"
 
 ### Bash
 Runs a command in the shell and returns what it printed.
-- The current folder stays the same between calls and relative paths follow it, so prefer `(cd dir && cmd)` to a bare `cd`.
+- The current folder persists between calls and relative paths follow it: prefer `(cd dir && cmd)` to a bare `cd`.
 - Use `run_in_background` for servers.
-- Don't use it to read or edit files.
+- Don't use it to read or edit files, or to search the whole disk (`find /`).
 - Commit only when asked. Never force-push or throw away uncommitted changes unless asked.
 Arguments JSON Schema: {"type":"object","properties":{"command":{"type":"string","description":"The command to run."},"timeout":{"type":"number","minimum":1,"description":"Milliseconds before the command is stopped (default 120000, at most 600000)."},"run_in_background":{"type":"boolean","description":"Start the command and return at once with an ID for BashOutput and KillShell. For servers and watchers."},"description":{"type":"string","description":"What the command achieves, in 5 to 10 words in the active voice, shown to the person (\"Run the unit tests\"). Don't repeat the command."}},"required":["command"],"additionalProperties":false}
 

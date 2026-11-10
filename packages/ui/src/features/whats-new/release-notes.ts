@@ -28,7 +28,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         body: 'Where Atelier runs has a page of its own: this computer or an Atelier server, with the one in use marked. Switch to the other, or to another server, from there; a server has to answer before anything changes, and switching deletes nothing. The profile menu at the bottom of the sidebar says where Atelier runs and opens the page.',
       },
     ],
-    also: [],
+    also: ['A command that hangs inside the system (a whole-disk search, a network volume) no longer stalls a turn after its timeout.'],
   },
   {
     version: '0.5.3',
