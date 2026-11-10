@@ -32,9 +32,28 @@ describe('the transcript rows', () => {
       },
       [{ key: 'l', lines: ['/cost output'], at: 15 }],
     );
-    expect(rows.map((r) => r.kind)).toEqual(['user', 'local', 'error', 'notice']);
+    expect(rows.map((r) => r.kind)).toEqual(['user', 'local', 'error', 'turn', 'notice']);
     expect(rows[2]).toMatchObject({ text: 'It broke', fix: 'Check the key' });
-    expect(finalCount(rows)).toBe(4);
+    expect(finalCount(rows)).toBe(5);
+  });
+
+  it('closes each finished turn with how long it took, from the message to the end of the last reply', () => {
+    const turn = (n: number, at: number, reply: Partial<Message>) => [
+      msg({ id: `u${n}`, role: 'user', parts: [{ type: 'text', text: `ask ${n}` }], createdAt: at }),
+      msg({ id: `a${n}`, role: 'assistant', parts: [{ type: 'tool_call', id: `c${n}`, name: 'Bash', input: { command: 'ls' } }], stopReason: 'tool_use', usage: { durationMs: 2000 } as never, createdAt: at + 1000 }),
+      msg({ id: `t${n}`, role: 'tool', parts: [{ type: 'tool_result', callId: `c${n}`, content: [{ type: 'text', text: 'a' }] }], createdAt: at + 9000 }),
+      msg({ id: `b${n}`, role: 'assistant', parts: [{ type: 'text', text: 'Done.' }], usage: { durationMs: 20_000 } as never, createdAt: at + 9000, ...reply }),
+    ];
+    const messages = [...turn(1, 0, { stopReason: 'end' }), ...turn(2, 100_000, { stopReason: 'aborted' })];
+    const rows = buildRows({ messages, streamingMessageId: null, session: session('idle') });
+    expect(rows.filter((r) => r.kind === 'turn')).toEqual([
+      { key: 'b1:turn', kind: 'turn', since: 0, end: 29_000, stopped: false },
+      { key: 'b2:turn', kind: 'turn', since: 100_000, end: 129_000, stopped: true },
+    ]);
+    expect(rows.findIndex((r) => r.key === 'b1:turn')).toBe(rows.findIndex((r) => r.key === 'u2') - 1);
+    // While the last turn still runs, only the earlier one has its line.
+    const running = buildRows({ messages: messages.slice(0, -1), streamingMessageId: null, session: session('running') });
+    expect(running.filter((r) => r.kind === 'turn').map((r) => r.key)).toEqual(['b1:turn']);
   });
 
   it('counts a call cut off by a stop as final (no result is coming)', () => {

@@ -6,7 +6,8 @@
  */
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
-import { bashResult, displayPath, placedEditRows, resultText, shownCall, summarize, writeRows, type DiffRow } from '@atelier/client';
+import { bashResult, displayPath, formatElapsed, placedEditRows, resultText, shownCall, summarize, writeRows, type DiffRow } from '@atelier/client';
+import { studioPast } from '../art/words.ts';
 import type { Todo, ToolCallPart, ToolResultPart } from '@atelier/protocol';
 import { strip, type Paint } from '../style.ts';
 import { renderMarkdown } from './markdown.ts';
@@ -221,7 +222,22 @@ export function RowView({ row, ctx }: { row: Row; ctx: ViewContext }) {
           <Text>{row.lines.join('\n')}</Text>
         </Box>
       );
+    case 'turn':
+      return (
+        <Box marginBottom={1}>
+          <Text>{paint.fg('muted', turnLine(row.since, row.end, row.stopped))}</Text>
+        </Box>
+      );
   }
+}
+
+const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/** Under a finished turn: "◉ Glazed for 29s · done 1:13 PM", the spinner's last word said as done. */
+export function turnLine(since: number, end: number, stopped: boolean): string {
+  const took = formatElapsed(end - since);
+  const at = clock.format(end);
+  return stopped ? `◉ Stopped after ${took} · ${at}` : `◉ ${studioPast(since, end)} for ${took} · done ${at}`;
 }
 
 export const shortPath = (path: string, home = process.env.HOME ?? process.env.USERPROFILE ?? '') => (home && (path === home || path.startsWith(`${home}/`) || path.startsWith(`${home}\\`)) ? `~${path.slice(home.length)}` : path);

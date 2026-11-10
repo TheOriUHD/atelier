@@ -31,10 +31,43 @@ export const STUDIO_WORDS = [
   'Framing',
 ];
 
+/** What each word says once the work is done, for the line under a finished turn ("Glazed for 29s"). */
+export const STUDIO_PAST = [
+  'Sketched',
+  'Primed the canvas',
+  'Mixed pigments',
+  'Underpainted',
+  'Blocked in',
+  'Glazed',
+  'Scumbled',
+  'Cross-hatched',
+  'Stippled',
+  'Blended',
+  'Shaded',
+  'Chiselled',
+  'Threw clay',
+  'Kiln-fired',
+  'Gilded',
+  'Etched',
+  'Inked',
+  'Burnished',
+  'Stretched the canvas',
+  'Squinted at it',
+  'Stepped back',
+  'Varnished',
+  'Framed',
+];
+
+const studioIndex = (since: number, now: number) => (Math.floor(since / 1000) + Math.floor(Math.max(0, now - since) / 6000)) % STUDIO_WORDS.length;
+
 /** The word for a run that began at `since`: a new one every 6 seconds, the same for everyone looking at that moment. */
 export function studioWord(since: number, now: number): string {
-  const step = Math.floor(Math.max(0, now - since) / 6000);
-  return STUDIO_WORDS[(Math.floor(since / 1000) + step) % STUDIO_WORDS.length]!;
+  return STUDIO_WORDS[studioIndex(since, now)]!;
+}
+
+/** The word the spinner showed when a run that began at `since` ended at `end`, said as done: "Glazing…" ends as "Glazed". */
+export function studioPast(since: number, end: number): string {
+  return STUDIO_PAST[studioIndex(since, end)]!;
 }
 
 /** Tips at the start, one per start, in turn. */

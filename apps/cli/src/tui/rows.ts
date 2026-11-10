@@ -14,7 +14,9 @@ export type Row =
   | { key: string; kind: 'tool'; call: ToolCallPart; result: ToolResultPart | undefined; final: boolean; since: number }
   | { key: string; kind: 'notice'; text: string }
   | { key: string; kind: 'error'; text: string; fix?: string | undefined }
-  | { key: string; kind: 'local'; lines: string[]; at: number };
+  | { key: string; kind: 'local'; lines: string[]; at: number }
+  /** Under a finished turn: how long it took, from the message to the end of the reply, and when it ended. */
+  | { key: string; kind: 'turn'; since: number; end: number; stopped: boolean };
 
 /** Output of the terminal itself (a command's answer, `!` output), placed among the messages by time. */
 export interface LocalRow {
@@ -65,6 +67,14 @@ export function buildRows(state: Pick<LiveSessionState, 'messages' | 'streamingM
   for (const m of state.messages) for (const p of m.parts) if (p.type === 'tool_result') results.set(p.callId, p);
   const running = state.session?.status === 'running' || state.session?.status === 'waiting';
   const rows: Row[] = [];
+  /** The turn going on in the loop: when its message was sent, when its last part ended, its last reply and the row after it. */
+  let turn: { since: number; end: number; last: Message | null; after: number } | null = null;
+  const endTurn = (over: boolean) => {
+    const t = turn;
+    turn = null;
+    if (!t?.last || !over) return;
+    rows.splice(t.after, 0, { key: `${t.last.id}:turn`, kind: 'turn', since: t.since, end: t.end, stopped: t.last.stopReason === 'aborted' });
+  };
   const pending = [...local].sort((a, b) => a.at - b.at);
   const flushLocal = (before: number) => {
     while (pending.length && pending[0]!.at <= before) {
@@ -73,6 +83,14 @@ export function buildRows(state: Pick<LiveSessionState, 'messages' | 'streamingM
     }
   };
   for (const m of state.messages) {
+    // A message of the person's own starts a turn; the one before it is over.
+    if (m.role === 'user' && m.kind === 'normal') {
+      endTurn(true);
+      turn = { since: m.createdAt, end: m.createdAt, last: null, after: 0 };
+    } else if (turn && m.kind === 'normal') {
+      turn.end = Math.max(turn.end, m.createdAt + (m.role === 'assistant' ? (m.usage?.durationMs ?? 0) : 0));
+      if (m.role === 'assistant') turn.last = m;
+    }
     flushLocal(m.createdAt);
     if (m.kind === 'compaction_summary') {
       rows.push({ key: m.id, kind: 'notice', text: 'Earlier messages were summarized to make room' });
@@ -97,7 +115,11 @@ export function buildRows(state: Pick<LiveSessionState, 'messages' | 'streamingM
     });
     if (m.error) rows.push({ key: `${m.id}:error`, kind: 'error', text: m.error.message, fix: m.error.fix });
     else if (m.stopReason === 'refusal') rows.push({ key: `${m.id}:refusal`, kind: 'error', text: 'The model’s provider ended this reply.' });
+    if (turn?.last === m) turn.after = rows.length;
   }
+  // The last turn is over once the session stopped running and its reply has ended.
+  const last = (turn as { last: Message | null } | null)?.last;
+  endTurn(!running && state.streamingMessageId === null && !!(last && (last.stopReason || last.error)));
   flushLocal(Infinity);
   return rows;
 }

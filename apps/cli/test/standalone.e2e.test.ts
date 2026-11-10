@@ -102,6 +102,8 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
     await s.press('enter');
     await s.waitFor(/hello there/i);
     await s.waitFor(/◆/, 30_000);
+    // The finished turn says how long it took and when it ended.
+    await s.waitFor(/◉ .+ for \d+s · done \d/, 30_000);
     show('reply', s);
     // A scripted Write: it asks (Ask mode), then writes once allowed.
     await s.press('shiftTab');
