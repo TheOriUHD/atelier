@@ -118,10 +118,15 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 
 /* The product window: tabs for the rooms, then one big capture */
 .showcase { margin-top: clamp(32px, 4vw, 48px); }
-.tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 11px; background: var(--sunken); border: 1px solid var(--line-soft); }
-.tab { appearance: none; border: 0; padding: 8px 16px; border-radius: 8px; background: transparent; color: var(--ink-2); font: 500 0.9375rem/1.2 var(--sans); cursor: pointer; transition: background-color 150ms, color 150ms; }
+.tabs { position: relative; isolation: isolate; display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 11px; background: var(--sunken); border: 1px solid var(--line-soft); }
+.tab { appearance: none; border: 0; padding: 8px 16px; border-radius: 8px; background: transparent; color: var(--ink-2); font: 500 0.9375rem/1.2 var(--sans); cursor: pointer; transition: background-color 150ms, color 200ms var(--ease); }
 .tab:hover { color: var(--ink); }
 .tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(11, 11, 11, 0.06); }
+.tabs.has-glide .tab[aria-selected="true"] { background: transparent; box-shadow: none; }
+/* The highlight behind the chosen tab or section; it glides from one to the next (download.js). */
+.has-glide > .glide { position: absolute; z-index: -1; top: 0; left: 0; width: 0; height: 0; border-radius: 8px; transition: transform 320ms var(--ease), width 320ms var(--ease), height 320ms var(--ease); pointer-events: none; }
+.tabs > .glide { background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(11, 11, 11, 0.06); }
+@media (prefers-reduced-motion: reduce) { .has-glide > .glide { transition: none; } }
 .tab-note { margin-top: 14px; max-width: 46rem; color: var(--ink-2); min-height: 4.8em; }
 .tab-note strong { color: var(--ink); font-weight: 600; }
 .window { position: relative; margin-top: 16px; border-radius: 14px; overflow: hidden; background: #151515; box-shadow: 0 0 0 1px var(--line), var(--shadow-window), var(--shadow-lift); }
@@ -265,15 +270,13 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 
 /* Download page: the three things on it, beside the heading, so the app, the terminal app and the server aren't taken for each other. */
 .dl-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
-.dl-choose { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 0.45em; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); }
-.dl-choose { position: relative; isolation: isolate; }
+.dl-choose { position: relative; isolation: isolate; display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 0.45em; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); }
 .choice { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 8px; font: 500 0.875rem/1.2 var(--sans); color: var(--ink-2); white-space: nowrap; text-decoration: none; transition: color 200ms var(--ease); }
 .choice:hover { color: var(--ink); }
 .choice .icon { flex: none; width: 16px; height: 16px; color: var(--ink-3); transition: color 200ms var(--ease); }
 .choice.is-here { color: var(--ink); }
 .choice.is-here .icon { color: var(--clay); }
-/* The highlight behind the section being read; it glides from one to the next (download.js). Without script, the first one's own. */
-.dl-choose .glide { position: absolute; z-index: -1; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: 8px; background: var(--raised); box-shadow: 0 0 0 1px var(--line-strong) inset; transition: transform 320ms var(--ease), width 320ms var(--ease); }
+.dl-choose > .glide { background: var(--raised); box-shadow: 0 0 0 1px var(--line-strong) inset; }
 .dl-choose:not(.has-glide) .choice.is-here { background: var(--raised); box-shadow: 0 0 0 1px var(--line-strong) inset; }
 @media (max-width: 520px) { .dl-choose { margin-bottom: 0; } .choice { padding: 6px 9px; font-size: 0.8125rem; } .choice .icon { display: none; } }
 
@@ -289,28 +292,44 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 .dl-bar .dl-choose { margin-bottom: 0; }
 html:has(.dl-bar) { scroll-padding-top: 136px; }
 @media (max-width: 520px) { .dl-bar-title { display: none; } .dl-bar-row { justify-content: center; height: 48px; } }
-@media (prefers-reduced-motion: reduce) { .dl-bar, .dl-bar-title, .dl-choose .glide { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .dl-bar, .dl-bar-title { transition: none; } }
 
 /* What a section is, above its heading: "Atelier CLI · terminal app". */
 .kind { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 5px 11px 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font: 500 0.8125rem/1.2 var(--sans); color: var(--ink-2); }
 .kind .icon { width: 16px; height: 16px; color: var(--clay); }
 .kind-note { margin-top: 14px; color: var(--ink-3); font-size: 0.9375rem; max-width: 36rem; text-wrap: pretty; }
 
+/* Atelier Server: its one-line installer, and the setup wizard's first question as atelier-setup draws it. */
+.server-install { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 26px; max-width: 34rem; }
+.server-install .fine { margin-top: 2px; }
+.server-install + .ticks { margin-top: 26px; }
+.term-body.setup { white-space: normal; }
+.setup-head { margin-bottom: 6px; }
+.setup-head .t-name { letter-spacing: 0.08em; }
+.setup-crumbs { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-bottom: 14px; font-size: 0.75rem; }
+.setup-box { padding: 14px 16px 10px; border: 1px solid #3a3936; border-radius: 10px; }
+.setup-title { text-align: center; color: #f0efec; font-weight: 600; }
+.setup-rule { width: 62%; margin: 8px auto 12px; border-top: 1px solid #3a3936; }
+.setup-opt { padding: 1px 0 1px 1.25em; color: #b8b3a9; }
+.setup-opt.is-on { padding-left: 0; color: #f0efec; }
+.setup-desc { margin: 2px 0 8px 1.25em; color: #8d897f; font-size: 0.75rem; line-height: 1.5; }
+.setup-keys { margin-top: 12px; font-size: 0.75rem; }
+
 /* Atelier CLI: its own band, an install command to copy, and a terminal showing it. */
 .cli-section { background: var(--sunken); }
 .cli-section + .section { border-top-color: var(--line); }
 .cli-install { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 26px; max-width: 34rem; }
 .cli-install .tabs { justify-self: start; background: var(--surface); }
-.cli-install .tab[aria-selected="true"] { background: var(--sunken); }
+.cli-install .tab[aria-selected="true"], .cli-install .tabs > .glide { background: var(--sunken); }
 .cli-install .fine { margin-top: 2px; }
-/* A command longer than its box scrolls under the copy button, which fades it out. */
-.cli-command { position: relative; display: flex; align-items: center; min-height: 56px; padding: 0 10px 0 16px; border-radius: 11px; background: #141413; border: 1px solid rgba(255, 255, 255, 0.08); }
-.cli-command[hidden] { display: none; }
-.cli-command code { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 15px 52px 15px 0; white-space: nowrap; font: 500 0.875rem/1.6 var(--mono); color: #f0efec; background: none; border-radius: 0; }
-.cli-command code::-webkit-scrollbar { display: none; }
-.cli-command code::before { content: "$ "; color: #d97757; }
-.cli-command .copy { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); box-shadow: -14px 0 12px 2px #141413; background-color: #1c1c1a; }
-.cli-command .copy:hover { background-color: #2a2a27; }
+/* A command to copy (Atelier CLI, the server's installer): longer than its box, it scrolls under the copy button, which fades it out. */
+.command-box { position: relative; display: flex; align-items: center; min-height: 56px; padding: 0 10px 0 16px; border-radius: 11px; background: #141413; border: 1px solid rgba(255, 255, 255, 0.08); }
+.command-box[hidden] { display: none; }
+.command-box code { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 15px 52px 15px 0; white-space: nowrap; font: 500 0.875rem/1.6 var(--mono); color: #f0efec; background: none; border: 0; border-radius: 0; }
+.command-box code::-webkit-scrollbar { display: none; }
+.command-box code::before { content: "$ "; color: #d97757; }
+.command-box .copy { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); box-shadow: -14px 0 12px 2px #141413; background-color: #1c1c1a; }
+.command-box .copy:hover { background-color: #2a2a27; }
 .copy { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); color: #d6d3cc; cursor: pointer; transition: background-color 150ms, color 150ms; }
 .copy:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .copy .icon { grid-area: 1 / 1; width: 16px; height: 16px; }

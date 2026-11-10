@@ -185,11 +185,11 @@
             <button class="tab" role="tab" id="cli-tab-unix" aria-controls="cli-unix" aria-selected="true" type="button" data-cli="unix">macOS and Linux</button>
             <button class="tab" role="tab" id="cli-tab-windows" aria-controls="cli-windows" aria-selected="false" tabindex="-1" type="button" data-cli="windows">Windows</button>
           </div>
-          <div class="cli-command" id="cli-unix" role="tabpanel" aria-labelledby="cli-tab-unix" data-cli-panel="unix">
+          <div class="command-box" id="cli-unix" role="tabpanel" aria-labelledby="cli-tab-unix" data-cli-panel="unix">
             <code>curl -fsSL https://updates.atelierhq.dev/cli | sh</code>
             <button class="copy" type="button" data-copy="curl -fsSL https://updates.atelierhq.dev/cli | sh" aria-label="Copy the command"><svg class="icon i-copy" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg></button>
           </div>
-          <div class="cli-command" id="cli-windows" role="tabpanel" aria-labelledby="cli-tab-windows" data-cli-panel="windows" hidden>
+          <div class="command-box" id="cli-windows" role="tabpanel" aria-labelledby="cli-tab-windows" data-cli-panel="windows" hidden>
             <code>irm https://updates.atelierhq.dev/cli.ps1 | iex</code>
             <button class="copy" type="button" data-copy="irm https://updates.atelierhq.dev/cli.ps1 | iex" aria-label="Copy the command"><svg class="icon i-copy" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg></button>
           </div>
@@ -226,29 +226,41 @@
         <h2>Prefer a server?</h2>
         <p class="lead">For the web app, several people on one install, or one place for your data. Desktop apps and Atelier CLI can connect to it too.</p>
         <p class="kind-note">Not an app you open: it runs on a machine you keep on, and the apps, the browser and the terminal connect to it.</p>
+        <div class="server-install">
+          <div class="command-box">
+            <code>curl -fsSL https://updates.atelierhq.dev/install | sudo sh</code>
+            <button class="copy" type="button" data-copy="curl -fsSL https://updates.atelierhq.dev/install | sudo sh" aria-label="Copy the command"><svg class="icon i-copy" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg></button>
+          </div>
+          <p class="fine">On Linux or macOS. A short wizard checks Docker (on Linux it installs or starts it), asks how people will reach the server, and starts it. Later, <code>atelier-setup update</code> brings each new version.</p>
+        </div>
         <ul class="ticks">
-          <li><strong>Docker image</strong> for x86-64 and ARM64, with Caddy for HTTPS.</li>
+          <li><strong>Docker image</strong> for x86-64 and ARM64, with Caddy for HTTPS when you want a domain.</li>
           <li><strong>Invite codes and passkeys,</strong> keys encrypted at rest, one data folder to back up.</li>
           <li><strong>Never runs commands on the server.</strong> Code in a browser uses the folders of a desktop app or Atelier CLI.</li>
         </ul>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://docs.atelierhq.dev/self-hosting/">Self-hosting guide<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-          <a class="btn btn-quiet" href="https://github.com/TheOriUHD/atelier/tree/main/deploy"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github"/></svg>Compose files</a>
+          <a class="btn btn-quiet" href="https://docs.atelierhq.dev/self-hosting/">Self-hosting guide<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="btn btn-quiet" href="https://github.com/TheOriUHD/atelier/tree/main/deploy"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github"/></svg>By hand: Compose files</a>
         </div>
       </div>
       <div class="reveal">
-        <pre class="pre" aria-label="Running the server"><span class="c"># 1. copy deploy/compose.yaml and deploy/Caddyfile</span>
-<span class="c">#    and put your hostname in both</span>
-<span class="k">docker compose up -d</span>
-
-<span class="c"># 2. read the one-time setup token</span>
-<span class="k">docker compose logs atelier</span>
-
-<span class="c"># 3. open your site, create the admin, add a model</span>
-
-<span class="c"># later: update to the newest image</span>
-<span class="k">docker compose pull &amp;&amp; docker compose up -d</span></pre>
-        <p class="fine">The image is <code>ghcr.io/theoriuhd/atelier</code>.</p>
+        <figure class="term" aria-label="The server's setup wizard asking how people will reach Atelier">
+          <div class="term-bar"><span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="term-title">atelier-setup</span></div>
+          <div class="term-body setup" aria-hidden="true">
+            <div class="setup-head"><b class="t-name">ATELIER</b><span class="t-dim">  server setup</span></div>
+            <div class="setup-crumbs"><span class="t-good">✓ Machine</span><span class="t-clay">● Access</span><span class="t-dim">○ Options</span><span class="t-dim">○ Review</span><span class="t-dim">○ Install</span><span class="t-dim">○ Finish</span></div>
+            <div class="setup-box">
+              <div class="setup-title">How will people reach Atelier?</div>
+              <div class="setup-rule"></div>
+              <div class="setup-opt is-on"><span class="t-clay">›</span> This machine’s address, no domain needed</div>
+              <div class="setup-desc">The simplest start. Open http://192.168.1.20:7340 from any device on your network: no domain, no certificates.</div>
+              <div class="setup-opt">A domain name with HTTPS (Caddy handles it)</div>
+              <div class="setup-opt">Behind my own reverse proxy</div>
+              <div class="setup-opt">Only on my Tailscale network</div>
+            </div>
+            <div class="setup-keys t-dim">↑/↓ choose · enter continue · q quit</div>
+          </div>
+        </figure>
       </div>
     </div>
   </section>

@@ -12,6 +12,33 @@
     return Array.prototype.slice.call((scope || document).querySelectorAll(selector));
   };
 
+  // A highlight that glides to the chosen item of a row (the platform tabs, the section switch) instead of jumping there.
+  // The first placing doesn't glide in from the left edge.
+  function addGlide(group) {
+    var glide = document.createElement('span');
+    glide.className = 'glide';
+    glide.setAttribute('aria-hidden', 'true');
+    group.insertBefore(glide, group.firstChild);
+    group.classList.add('has-glide');
+  }
+  function placeGlide(group) {
+    var chosen = $('.choice.is-here, [aria-selected="true"]', group);
+    var glide = $('.glide', group);
+    if (!chosen || !glide || !chosen.offsetWidth) return;
+    var first = !glide.hasAttribute('data-placed');
+    if (first) glide.style.transition = 'none';
+    glide.style.width = chosen.offsetWidth + 'px';
+    glide.style.height = chosen.offsetHeight + 'px';
+    glide.style.transform = 'translate(' + chosen.offsetLeft + 'px, ' + chosen.offsetTop + 'px)';
+    if (first) {
+      void glide.offsetWidth;
+      glide.style.transition = '';
+      glide.setAttribute('data-placed', '');
+    }
+  }
+  var glides = $$('.tabs, .dl-choose');
+  glides.forEach(addGlide);
+
   var tabs = $$('[role="tab"][data-os]');
   var panels = {};
   $$('.os-panel').forEach(function (panel) {
@@ -117,6 +144,7 @@
     Object.keys(panels).forEach(function (key) {
       panels[key].hidden = key !== os;
     });
+    if (tabs.length) placeGlide(tabs[0].parentNode);
     if (!keepHash && window.history && history.replaceState) history.replaceState(null, '', '#' + os);
   }
 
@@ -153,6 +181,7 @@
     $$('[data-cli-panel]').forEach(function (panel) {
       panel.hidden = panel.getAttribute('data-cli-panel') !== which;
     });
+    if (cliTabs.length) placeGlide(cliTabs[0].parentNode);
   }
   cliTabs.forEach(function (tab, index) {
     tab.addEventListener('click', function () {
@@ -204,20 +233,6 @@
   var barShown = false;
   // The page ships it hidden, so a stale stylesheet or no script never leaves it standing open; it unfolds from here.
   if (bar) bar.hidden = false;
-  switches.forEach(function (nav) {
-    var glide = document.createElement('span');
-    glide.className = 'glide';
-    glide.setAttribute('aria-hidden', 'true');
-    nav.insertBefore(glide, nav.firstChild);
-    nav.classList.add('has-glide');
-  });
-  function placeGlide(nav) {
-    var chip = $('.choice.is-here', nav);
-    var glide = $('.glide', nav);
-    if (!chip || !glide || !chip.offsetWidth) return;
-    glide.style.width = chip.offsetWidth + 'px';
-    glide.style.transform = 'translateX(' + chip.offsetLeft + 'px)';
-  }
   function mark(id) {
     switches.forEach(function (nav) {
       $$('.choice', nav).forEach(function (chip) {
@@ -265,13 +280,13 @@
     { passive: true },
   );
   window.addEventListener('resize', function () {
-    switches.forEach(placeGlide);
+    glides.forEach(placeGlide);
     follow();
   });
   // Fonts change the chips' widths once they arrive.
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function () {
-      switches.forEach(placeGlide);
+      glides.forEach(placeGlide);
     });
   }
   follow();
