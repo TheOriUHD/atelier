@@ -202,6 +202,8 @@
     .filter(Boolean);
   var reading = null;
   var barShown = false;
+  // The page ships it hidden, so a stale stylesheet or no script never leaves it standing open; it unfolds from here.
+  if (bar) bar.hidden = false;
   switches.forEach(function (nav) {
     var glide = document.createElement('span');
     glide.className = 'glide';

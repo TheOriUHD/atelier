@@ -279,6 +279,7 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 
 /* The heading and its switch follow the page, under the site's own row, once the big heading has scrolled away. */
 .dl-bar { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms var(--ease), opacity 220ms var(--ease); }
+.dl-bar[hidden] { display: none; }
 .site-header.has-bar .dl-bar { grid-template-rows: 1fr; opacity: 1; }
 .dl-bar-clip { min-height: 0; overflow: hidden; }
 .dl-bar-line { border-top: 1px solid var(--line); }
