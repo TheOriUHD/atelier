@@ -35,6 +35,8 @@ see are hidden in the app.
 | Setting | What it does |
 |---|---|
 | **Where Atelier runs** *(only where it works)* | On this computer, or on an Atelier server you sign in to. Switching deletes nothing: switch back any time. |
+| **Share on your network** *(only where it works)* | Other devices on your network open Atelier on this computer in a browser or the Atelier app, and sign in as you with a password. They work in your chats, with your models and in your folders. |
+| **Let other devices use Atelier here** *(only where it works)* | Asks for a password and a port, then other devices on your network can sign in. Off signs them out. |
 
 ## Settings › Shortcuts
 

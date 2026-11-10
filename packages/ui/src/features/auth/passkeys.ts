@@ -15,7 +15,13 @@ import { postJson, reload } from './sign-in.ts';
 
 /** In a browser that can run WebAuthn, at a hostname (WebAuthn refuses IP addresses); never in the desktop app. */
 export function passkeysAvailable(): boolean {
-  return surface === 'web' && typeof window.PublicKeyCredential === 'function' && !/^[\d.]+$|^\[/.test(location.hostname);
+  return offered && surface === 'web' && typeof window.PublicKeyCredential === 'function' && !/^[\d.]+$|^\[/.test(location.hostname);
+}
+
+let offered = true;
+/** A computer shared on the network signs in with its password only (the sign-in status says so). */
+export function setPasskeysOffered(value: boolean): void {
+  offered = value;
 }
 
 /** The browser's refusals in words. Cancelling the prompt or letting it time out is the usual one. */

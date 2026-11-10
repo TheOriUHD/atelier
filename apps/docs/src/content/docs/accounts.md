@@ -282,6 +282,30 @@ computer** or **Connected to atelier.home**) and opens this page.
 Switching deletes nothing: chats on this computer stay here, chats on a server stay there, and switching back brings
 them back.
 
+### Share on your network
+
+On **This computer**, **Share on your network** lets your other devices (a phone, a tablet, another computer) use
+Atelier on this computer as they would a server: in a browser, or in the Atelier app there under **Found on your
+network**. They sign in as you, with your username and a password you choose here, and work in your chats, with your
+models and keys, and in the folders you added on this computer. There are no other accounts: everyone who signs in is
+you.
+
+| Control | What it does |
+|---|---|
+| **Let other devices use Atelier here** | Asks for the password (8 characters or more) and a port (7340 unless you change it; Atelier apps look for 7340 on the network), then answers on every network this computer is on. Off signs every device out and closes the port. |
+| Addresses | What to open on the other device, local network first (`http://192.168.1.20:7340`), then others such as Tailscale, then the computer's name. Each has a copy button. |
+| **Change port…** | Moves it to another port, when 7340 is taken (another program, or an Atelier server on the same computer). |
+| **Change password…** | A new password signs every device on the network out. |
+| **Sign everyone out** | Ends every sign-in from the network; sharing stays on. |
+
+From the network, Atelier here signs in with the password only (no passkeys, invites or identity providers), and
+whatever belongs to this computer stays here: sharing itself, the screen lock, and adding folders. Folders are added at
+this computer; the other devices use the ones it has. The screen lock is for whoever sits at this computer: devices on
+the network signed in with the password and are not locked out by it. See [Security](/security/#sharing-this-computer-on-your-network).
+
+If this computer asks whether Atelier may accept incoming connections (macOS, or Windows' firewall), allow it, on
+Windows for private networks.
+
 Related pages in Settings: **Privacy**, **Memory**, **Usage** and **General**. See
 [What leaves your machine](/privacy/) and [Data and files](/data-and-files/).
 

@@ -55,6 +55,8 @@ import {
   DeviceSummary,
   IdentitySummary,
   InviteSummary,
+  NetworkShare,
+  NetworkShareChange,
   NewScreenLock,
   OidcProviderInput,
   OidcProviderSummary,
@@ -173,6 +175,12 @@ export const contract = {
     'lock.set': { input: z.object({ lock: NewScreenLock, current: z.string().max(256).optional() }), output: ScreenLockStatus },
     'lock.clear': { input: z.object({ current: z.string().min(1).max(256) }), output: ScreenLockStatus },
     'lock.setAutoLock': { input: z.object({ minutes: AutoLockMinutes }), output: ScreenLockStatus },
+
+    // The desktop app's own backend shared on the network (Settings › Connection); only its own windows may call these.
+    'network.status': { input: Empty, output: NetworkShare },
+    'network.set': { input: NetworkShareChange, output: NetworkShare },
+    /** Ends every sign-in from the network; sharing stays on. */
+    'network.signOutAll': { input: Empty, output: NetworkShare },
 
     'account.get': { input: Empty, output: UserSummary },
     'account.update': { input: z.object({ name: z.string().trim().min(1).max(80).optional(), avatar: z.string().nullable().optional() }), output: UserSummary },

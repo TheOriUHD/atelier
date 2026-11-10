@@ -4,6 +4,7 @@
  */
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { parseByteRange, type ControllerEvent, type RpcMessage, type Transport } from '@atelier/protocol';
 import { createBackend, hostRunnerBinary, type Cipher } from '@atelier/core';
 import type { BackendToMain, MainToBackend } from './bridge.ts';
@@ -54,6 +55,8 @@ const backend = await createBackend({
   dataDir: localDataDir(),
   cipher,
   ...(hasRunner ? { runnerDir } : {}),
+  // Settings › Connection › Share on your network serves the same web app build the windows load (main.ts UI_DIR).
+  share: { uiDir: existsSync(join(import.meta.dirname, 'ui', 'index.html')) ? join(import.meta.dirname, 'ui') : null },
   // Main keeps the folders "Show in Finder" and "Open in" may open: the backend's own, however they were added.
   folderTrusted: (root) => send({ kind: 'trusted', root }),
   // Guests work on this computer while a co-op room is open: main keeps it awake (keep-awake.ts).

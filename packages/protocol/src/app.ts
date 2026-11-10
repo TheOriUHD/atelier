@@ -31,6 +31,28 @@ export const APP = {
 } as const;
 
 /**
+ * Content-Security-Policy for the web app's own pages (the server, and a desktop app shared on the network): scripts and
+ * styles from the same origin only; images only from there too (markdown images can't beacon data to other hosts); the
+ * artifact runtime is framed from that origin and sets its own stricter policy (`artifactRuntimeCsp`).
+ */
+export const APP_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  // Generated videos come from /api/blobs; a blob: URL is a frame a page took from one.
+  "media-src 'self' blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-src 'self' blob:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+/**
  * Content-Security-Policy for the artifact runtime page. `scriptOrigin` is where the runtime's own bundle
  * is served from. No network access: artifacts are self-contained (see the chat prompt).
  */

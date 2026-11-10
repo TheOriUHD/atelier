@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -18,6 +18,18 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.5.5',
+    intro: 'Atelier on this computer can be a server for your other devices at home.',
+    highlights: [
+      {
+        icon: Wifi,
+        title: 'Share on your network',
+        body: 'Settings › Connection › Share on your network: choose a password, and your phone, tablet or another computer opens Atelier on this one in a browser (or finds it in the Atelier app) and signs in as you, with your chats, models and folders. For a network you trust: the connection isn’t encrypted. Turning it off signs every device out.',
+      },
+    ],
+    also: [],
+  },
   {
     version: '0.5.4',
     intro: 'Switching between this computer and a server is one page away.',

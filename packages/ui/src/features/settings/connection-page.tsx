@@ -3,6 +3,7 @@ import { Laptop, Server } from 'lucide-react';
 import { z } from 'zod';
 import { Badge, Button, cn, Field, Icon, TextField } from '../../components/ui/index.ts';
 import { useConnection } from '../../lib/lending.ts';
+import { useAppInfo } from '../../lib/queries.ts';
 import { describeError } from '../../lib/rpc.ts';
 import { FoundServers } from '../auth/found-servers.tsx';
 import { useFormSubmit } from '../auth/form.ts';
@@ -10,6 +11,7 @@ import { isLocal } from '../auth/screen-lock.ts';
 import { switchConnection } from '../auth/sign-in.ts';
 import { settingEntry } from './search-index.ts';
 import { SettingsSection } from './setting-row.tsx';
+import { ShareSection } from './share-section.tsx';
 
 // The main process normalizes the address (apps/desktop/src/server-url.ts): no scheme tries https://, then http://.
 const ServerUrl = z.string().trim().min(1, 'Enter the server’s address, for example atelier.example.com or 192.168.1.20:7340.').max(2048);
@@ -34,40 +36,44 @@ export function ConnectionPage() {
   const entry = settingEntry('connection.mode');
   // Which option is open: the other one, to switch to it, or the server in use, for another server.
   const [open, setOpen] = useState<'local' | 'server' | null>(null);
+  const { data: info } = useAppInfo();
   if (!connection) return null;
   const local = isLocal();
   const host = hostOf(connection.serverUrl);
   return (
-    <SettingsSection id="connection.mode" title={entry.label} description={entry.description}>
-      <div className="flex flex-col gap-3">
-        <Option
-          icon={Laptop}
-          title="This computer"
-          description="Atelier runs here, with your own models and keys. Your chats and settings stay on this computer."
-          current={local}
-          action={local ? null : 'Switch…'}
-          open={open === 'local'}
-          onSelect={() => setOpen(local || open === 'local' ? null : 'local')}
-        >
-          {!local && <SwitchToLocal host={host} onCancel={() => setOpen(null)} />}
-        </Option>
-        <Option
-          icon={Server}
-          title="An Atelier server"
-          description={
-            !local && host
-              ? `Signed in to ${host}. Your chats, models and keys live there, and this computer lends the folders you open.`
-              : 'Your chats, models and keys live on a server you or your team run. This computer lends the folders you open.'
-          }
-          current={!local}
-          action={local ? 'Switch…' : 'Change…'}
-          open={open === 'server'}
-          onSelect={() => setOpen(open === 'server' ? null : 'server')}
-        >
-          <SwitchToServer another={!local} onCancel={() => setOpen(null)} />
-        </Option>
-      </div>
-    </SettingsSection>
+    <>
+      <SettingsSection id="connection.mode" title={entry.label} description={entry.description}>
+        <div className="flex flex-col gap-3">
+          <Option
+            icon={Laptop}
+            title="This computer"
+            description="Atelier runs here, with your own models and keys. Your chats and settings stay on this computer."
+            current={local}
+            action={local ? null : 'Switch…'}
+            open={open === 'local'}
+            onSelect={() => setOpen(local || open === 'local' ? null : 'local')}
+          >
+            {!local && <SwitchToLocal host={host} onCancel={() => setOpen(null)} />}
+          </Option>
+          <Option
+            icon={Server}
+            title="An Atelier server"
+            description={
+              !local && host
+                ? `Signed in to ${host}. Your chats, models and keys live there, and this computer lends the folders you open.`
+                : 'Your chats, models and keys live on a server you or your team run. This computer lends the folders you open.'
+            }
+            current={!local}
+            action={local ? 'Switch…' : 'Change…'}
+            open={open === 'server'}
+            onSelect={() => setOpen(open === 'server' ? null : 'server')}
+          >
+            <SwitchToServer another={!local} onCancel={() => setOpen(null)} />
+          </Option>
+        </div>
+      </SettingsSection>
+      {local && info?.networkShare && <ShareSection />}
+    </>
   );
 }
 

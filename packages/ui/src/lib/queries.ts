@@ -265,6 +265,12 @@ export const imageGenerationOffered = (): boolean => !!queryClient.getQueryData<
 /** For code outside React: this backend keeps the admin activity log (a shared server that knows it). */
 export const auditLogOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.auditLog;
 
+/**
+ * For code outside React (the Settings page list): this is a desktop app's own computer reached over the network, with one
+ * person and no accounts, limits or devices of theirs to manage. Something must have asked `useAppInfo`.
+ */
+export const sharedComputer = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.sharedComputer;
+
 /** For code outside React (the Settings page list). A newer app on an older server hides usage limits; something must have asked `useAppInfo`. */
 export const usageLimitsOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.usageLimits;
 
