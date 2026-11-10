@@ -124,7 +124,7 @@ notarization login stay on this Mac; GitHub's own macOS job builds unsigned pack
 | Step | Where |
 |---|---|
 | Checks: on `main`, nothing uncommitted, the version is newer, the changelog has entries, the "What's new" notes exist for it, every machine and login answers | this Mac |
-| `typecheck`, `lint` and the unit tests | the Linux build machine |
+| The rehearsal, before anything is tagged: `typecheck`, `lint`, the unit tests and the terminal app's tests in a real terminal (with `CI` set, as the builds run them) on the Linux machine, and the terminal app's tests on the Windows machine (ConPTY), side by side, about 2 minutes | the Linux and the Windows build machine |
 | `APP.version` and `apps/desktop/package.json` raised, the changelog's Unreleased section cut into the version, the commit `release: <version>` and the tag | this Mac (local only) |
 | Linux packages (AppImage and deb, x64 and arm64), the server images (built, not yet pushed) and the whole end-to-end suite (browser and Electron, under a virtual display) | the Linux build machine |
 | The Windows installers (one for x64, one for arm64) | the Windows build machine |
@@ -138,7 +138,9 @@ The three builds run side by side. The Mac is the longest: signing takes about 2
 says why; run the same command again and finished steps are skipped (the state, the logs and the built files are in
 `~/.atelier-release/builds/<version>/`). Nothing leaves your Mac before the question. `--build-only` builds and checks
 everything and publishes nothing; `--skip qa,e2e,linux,windows,mac,image,docs` leaves parts out; `--yes` publishes without
-asking; `--trailer` adds a line to the commits it makes.
+asking; `--trailer` adds a line to the commits it makes. `pnpm release --rehearse` runs only the rehearsal, on HEAD, and
+commits, builds and publishes nothing: run it when something big lands on `main`, so a test that would stop a build
+twenty minutes in shows up in two.
 
 **The preflight** stops before anything is built, with one line per failed check: not on `main`, uncommitted changes, a version that isn't newer, no "What's new" notes or changelog entries, a "next release" marker left in the docs, out-of-date third-party notices, a build machine that doesn't answer over ssh, no Linux ghcr login (unless `--skip image`), no Developer ID certificate, a notarization login that can't be read (a locked Mac), no Go, `gh` not signed in, no update-signing key, and a Cloudflare login that can't reach the bucket (`wrangler r2 bucket info`, which also renews wrangler's OAuth token).
 

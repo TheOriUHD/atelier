@@ -5,10 +5,15 @@
  *   pnpm release 0.1.11              check, test, version, tag, build everywhere, sign, ask, publish, verify
  *   pnpm release 0.1.11 --build-only everything up to a folder of signed files; publishes nothing
  *   pnpm release 0.1.11              run again after a failure: finished steps are skipped (~/.atelier-release/builds/<version>/state.json)
+ *   pnpm release --rehearse          only the tests that come before the tag, on the Linux and the Windows machine; nothing
+ *                                    is committed, built or published. Run it whenever something big lands on main.
  *
  * Flags: --yes (publish without asking; it also lets the Linux and Windows packages go to the update feed while the Mac is
  * still building, see --no-stage), --no-stage, --skip qa,e2e,linux,windows,mac,cli,image,installer,docs (comma list), --trailer "<line>"
- * (added to the commits it makes). The browser and desktop end-to-end tests run on the Linux machine beside the builds.
+ * (added to the commits it makes). Before anything is tagged, both build machines run the tests as the builds will
+ * (the rehearsal: typecheck, lint, unit, and the terminal app in a real terminal with CI set, on Linux and on Windows), so
+ * a test that would stop a build an hour in stops the release in minutes instead. The browser and desktop end-to-end
+ * tests run on the Linux machine beside the builds.
  *
  * Where things are built (all settable with environment variables, see CONFIG below):
  *   Linux packages, the tests and the server image   a Linux machine over ssh (ATELIER_RELEASE_LINUX, default atelier-linux)
@@ -71,11 +76,12 @@ const SSH = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliv
 // Arguments
 
 function parseArgs(argv) {
-  const args = { yes: false, noStage: false, buildOnly: false, skip: new Set(), trailer: '', version: undefined };
+  const args = { yes: false, noStage: false, buildOnly: false, rehearse: false, skip: new Set(), trailer: '', version: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--yes') args.yes = true;
     else if (a === '--build-only') args.buildOnly = true;
+    else if (a === '--rehearse') args.rehearse = true;
     else if (a === '--no-stage') args.noStage = true;
     else if (a === '--skip') for (const s of (argv[++i] ?? '').split(',')) args.skip.add(s.trim());
     else if (a === '--trailer') args.trailer = argv[++i] ?? '';
@@ -159,6 +165,14 @@ function loadState(file) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.rehearse) {
+    const logs = join(CONFIG.workDir, '_rehearse');
+    mkdirSync(logs, { recursive: true });
+    say(`Rehearsing the release's tests on ${git('rev-parse', '--abbrev-ref', 'HEAD')} ${git('rev-parse', '--short', 'HEAD')}`);
+    await step('tests on Linux and Windows (typecheck, lint, unit, the terminal app)', () => rehearse({ log: (name) => join(logs, `${name}.log`) }));
+    say(`All passed. Logs: ${logs}`);
+    return;
+  }
   if (args.help || !args.version) {
     console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('*/')[0].replace(/^#!.*\n/, '').replace(/^\/\*\*\n|^ \* ?/gm, ''));
     process.exit(args.help ? 0 : 2);
@@ -190,9 +204,9 @@ async function main() {
   // 1. Checks that need nothing built ---------------------------------------------------------------------------------
   await step('checks', () => preflight({ version, tag, args, done: state.done }));
 
-  // 2. Tests on the Linux machine, before anything is committed --------------------------------------------------------
+  // 2. Tests on the Linux and the Windows machine, before anything is committed (the rehearsal) ---------------------------
   if (!state.done.tag && !skipped('qa')) {
-    await once('qa', 'tests (typecheck, lint, unit)', () => runQa({ log: log('qa') }));
+    await once('qa', 'tests on Linux and Windows (typecheck, lint, unit, the terminal app)', () => rehearse({ log }));
   }
 
   // 3. Version, changelog, commit, tag --------------------------------------------------------------------------------
@@ -434,10 +448,43 @@ async function runQa({ log }) {
     '(pnpm test --retry=1 > unit.log 2>&1; echo $? > unit.code) &',
     'wait',
     'bad=0; for c in typecheck lint setup unit; do if [ "$(cat $c.code)" != 0 ]; then echo "--- $c failed"; tail -40 $c.log; bad=1; else echo "$c ok: $(grep -E "Tests .*passed" $c.log | tail -1)"; fi; done',
+    // The terminal app in a real pseudo-terminal, as the end-to-end step runs it (CI is set): its tests skip themselves
+    // without the bundles, so the unit run above leaves them out. They run here alone, on a quiet machine.
+    'if pnpm --filter @atelier/server build > bundles.log 2>&1 && pnpm --filter @atelier/cli build >> bundles.log 2>&1; then',
+    '  if ATELIER_NO_BROWSER=1 npx vitest run apps/cli/test > cli.log 2>&1; then echo "terminal app ok: $(grep -E "Tests .*passed" cli.log | tail -1)"; else echo "--- terminal app failed"; tail -40 cli.log; bad=1; fi',
+    'else echo "--- the terminal app and server bundles failed"; tail -20 bundles.log; bad=1; fi',
     'exit $bad',
   ].join('\n');
   const r = await exec('ssh', [...SSH, CONFIG.linux, 'bash -s'], { input: script, log, check: false });
   if (r.code !== 0) throw new Error(`The checks failed on the Linux machine:\n${r.out.split('\n').slice(-45).join('\n')}`);
+}
+
+/** The rehearsal: the Linux checks and the terminal app on Windows, side by side. `log(name)` is where each writes. */
+async function rehearse({ log }) {
+  const results = await Promise.allSettled([runQa({ log: log('qa') }), runWindowsQa({ log: log('qa-windows') })]);
+  const failed = results.filter((r) => r.status === 'rejected').map((r) => r.reason.message);
+  if (failed.length) throw new Error(failed.join('\n\n'));
+}
+
+/**
+ * The terminal app's tests on the Windows machine (ConPTY), with CI set, from HEAD: the part of the Windows build that
+ * can fail on a test (deploy/ship/windows-qa.ps1). The runners are built here, as for the release; the machine has no Go.
+ */
+async function runWindowsQa({ log }) {
+  const host = CONFIG.windows;
+  const root = CONFIG.windowsRoot;
+  const name = `qa-${git('rev-parse', '--short', 'HEAD')}`;
+  const source = join(tmpDir(), `${name}-src.tar.gz`);
+  const runners = join(tmpDir(), `${name}-runner-bin.tar.gz`);
+  await exec('git', ['archive', '--format=tar.gz', '-o', source, 'HEAD'], { log });
+  await exec('pnpm', ['runner:build'], { log, env: { PATH: `${process.env.PATH}:/usr/local/go/bin:/opt/homebrew/bin` } });
+  await exec('tar', ['-czf', runners, '-C', join(ROOT, 'runner'), 'bin'], { log });
+  await exec('scp', ['-q', ...SSH, source, `${host}:${root}/qa-src.tar.gz`], { log });
+  await exec('scp', ['-q', ...SSH, runners, `${host}:${root}/qa-runner-bin.tar.gz`], { log });
+  await exec('scp', ['-q', ...SSH, join(HERE, 'windows-qa.ps1'), `${host}:${root}/release-qa.ps1`], { log });
+  const winRoot = root.replace(/\//g, '\\');
+  const r = await exec('ssh', [...SSH, host, `powershell -NoProfile -ExecutionPolicy Bypass -File ${winRoot}\\release-qa.ps1 -Root ${winRoot}`], { log, check: false });
+  if (r.code !== 0) throw new Error(`The terminal app's tests failed on the Windows machine:\n${r.out.split('\n').filter(Boolean).slice(-30).join('\n')}`);
 }
 
 function tmpDir() {
