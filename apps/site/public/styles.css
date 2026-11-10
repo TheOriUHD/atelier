@@ -263,16 +263,15 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 .dl-links a:hover { color: var(--ink); }
 .dl-links .icon { width: 15px; height: 15px; }
 
-/* Download page: the three things on it, so the app, the terminal app and the server aren't taken for each other. */
-.dl-choose { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 28px; max-width: 64rem; }
-@media (min-width: 760px) { .dl-choose { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.choice { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); text-decoration: none; transition: border-color 150ms, background-color 150ms; }
-.choice:hover { border-color: var(--line-strong); background: var(--raised); }
-.choice .icon { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--ink-3); }
-.choice.is-here { border-color: var(--clay); box-shadow: 0 0 0 1px var(--clay) inset; }
+/* Download page: the three things on it, beside the heading, so the app, the terminal app and the server aren't taken for each other. */
+.dl-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
+.dl-choose { display: inline-flex; gap: 2px; padding: 3px; margin-bottom: 0.45em; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); }
+.choice { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 8px; font: 500 0.875rem/1.2 var(--sans); color: var(--ink-2); white-space: nowrap; text-decoration: none; transition: background-color 150ms, color 150ms; }
+.choice:hover { background: var(--raised); color: var(--ink); }
+.choice .icon { flex: none; width: 16px; height: 16px; color: var(--ink-3); }
+.choice.is-here { background: var(--raised); color: var(--ink); box-shadow: 0 0 0 1px var(--line-strong) inset; }
 .choice.is-here .icon { color: var(--clay); }
-.choice-text { display: grid; gap: 2px; font-size: 0.875rem; line-height: 1.45; }
-.choice-text strong { color: var(--ink); font-size: 0.9375rem; font-weight: 600; }
+@media (max-width: 520px) { .dl-choose { margin-bottom: 0; } .choice { padding: 6px 9px; font-size: 0.8125rem; } .choice .icon { display: none; } }
 
 /* What a section is, above its heading: "Atelier CLI · terminal app". */
 .kind { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 5px 11px 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font: 500 0.8125rem/1.2 var(--sans); color: var(--ink-2); }
