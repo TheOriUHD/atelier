@@ -141,6 +141,54 @@
     });
   });
 
+  // Atelier CLI: the install command for this system (Windows has its own), and copy buttons.
+  var cliTabs = $$('[role="tab"][data-cli]');
+  function selectCli(which, focus) {
+    cliTabs.forEach(function (tab) {
+      var on = tab.getAttribute('data-cli') === which;
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      tab.tabIndex = on ? 0 : -1;
+      if (on && focus) tab.focus();
+    });
+    $$('[data-cli-panel]').forEach(function (panel) {
+      panel.hidden = panel.getAttribute('data-cli-panel') !== which;
+    });
+  }
+  cliTabs.forEach(function (tab, index) {
+    tab.addEventListener('click', function () {
+      selectCli(tab.getAttribute('data-cli'), false);
+    });
+    tab.addEventListener('keydown', function (event) {
+      if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+      event.preventDefault();
+      selectCli(cliTabs[(index + 1) % cliTabs.length].getAttribute('data-cli'), true);
+    });
+  });
+  if (cliTabs.length) selectCli(detected === 'windows' ? 'windows' : 'unix', false);
+  $$('[data-copy]').forEach(function (button) {
+    // Where the browser won't copy, the command is selected for the visitor to copy.
+    var select = function () {
+      var code = button.parentNode && $('code', button.parentNode);
+      var selection = window.getSelection && window.getSelection();
+      if (!code || !selection) return;
+      var range = document.createRange();
+      range.selectNodeContents(code);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    };
+    button.addEventListener('click', function () {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) return select();
+      navigator.clipboard.writeText(button.getAttribute('data-copy')).then(function () {
+        button.classList.add('copied');
+        button.setAttribute('aria-label', 'Copied');
+        setTimeout(function () {
+          button.classList.remove('copied');
+          button.setAttribute('aria-label', 'Copy the command');
+        }, 1600);
+      }, select);
+    });
+  });
+
   // A link can ask for a system (/download/#windows); otherwise the detected one, otherwise macOS.
   var asked = (location.hash || '').replace('#', '');
   var start = SYSTEM[asked] ? asked : current;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download Atelier</title>
-<meta name="description" content="Download Atelier for macOS, Windows or Linux, or run the server yourself with Docker. Free for noncommercial use.">
+<meta name="description" content="Download Atelier for macOS, Windows or Linux, Atelier CLI for your terminal, or run the Atelier server yourself with Docker. Free for noncommercial use.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
@@ -12,7 +12,7 @@
 <link rel="canonical" href="https://atelierhq.dev/download/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Download Atelier">
-<meta property="og:description" content="Atelier for macOS, Windows and Linux, or run the server yourself with Docker. Free for noncommercial use.">
+<meta property="og:description" content="Atelier for macOS, Windows and Linux, Atelier CLI for your terminal, or the Atelier server with Docker. Free for noncommercial use.">
 <meta property="og:url" content="https://atelierhq.dev/download/">
 <meta property="og:image" content="https://atelierhq.dev/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -30,6 +30,10 @@
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7.5 10 3 2.5-3 2.5M12.5 15.5h4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
   <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
 </svg>
 
@@ -59,10 +63,24 @@
     <div class="wrap">
       <h1>Download Atelier</h1>
       <p class="lead">For macOS, Windows and Linux. Free for noncommercial use. <span class="muted" id="version-line">Beta.</span></p>
+      <nav class="dl-choose" aria-label="What to download">
+        <a class="choice is-here" href="#desktop">
+          <svg class="icon" aria-hidden="true"><use href="#i-window"/></svg>
+          <span class="choice-text"><strong>Desktop app</strong><span>Chat, Cowork and Code in a window. For most people.</span></span>
+        </a>
+        <a class="choice" href="#cli">
+          <svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>
+          <span class="choice-text"><strong>Atelier CLI</strong><span>A coding agent in your terminal, on its own or with a server.</span></span>
+        </a>
+        <a class="choice" href="#server">
+          <svg class="icon" aria-hidden="true"><use href="#i-server"/></svg>
+          <span class="choice-text"><strong>Atelier Server</strong><span>Self-hosted with Docker: the web app, for you or a team.</span></span>
+        </a>
+      </nav>
     </div>
   </section>
 
-  <section class="dl-section">
+  <section class="dl-section" id="desktop">
     <div class="wrap">
       <div class="dl-card">
         <div class="dl-left">
@@ -148,30 +166,48 @@
     </div>
   </section>
 
-  <section class="section" id="terminal">
+  <section class="section cli-section" id="cli">
     <div class="wrap split">
       <div class="reveal">
-        <h2>In your terminal too</h2>
-        <p class="lead">Atelier CLI is a Code session in the terminal, with the same tools, permissions and models. Connect it to your Atelier server, or run it on its own.</p>
-        <ul class="ticks">
-          <li><strong>With a server,</strong> no keys on your laptop: the server’s models, and sessions you pick up in the browser.</li>
-          <li><strong>Installs for you alone,</strong> with its own Node.js, and updates itself.</li>
-          <li><strong>macOS, Linux and Windows,</strong> x86-64 and ARM64.</li>
-        </ul>
+        <p class="kind"><svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>Atelier CLI · terminal app</p>
+        <h2>Atelier in your terminal</h2>
+        <p class="lead">A Code session where you already work: the same tools, permissions and models as the app, in any terminal and over SSH.</p>
+        <p class="kind-note">A program of its own, separate from the desktop app and from the server. It runs on its own with your own models and keys, or connects to an Atelier server.</p>
+        <div class="cli-install">
+          <div class="tabs" role="tablist" aria-label="System for the install command">
+            <button class="tab" role="tab" id="cli-tab-unix" aria-controls="cli-unix" aria-selected="true" type="button" data-cli="unix">macOS and Linux</button>
+            <button class="tab" role="tab" id="cli-tab-windows" aria-controls="cli-windows" aria-selected="false" tabindex="-1" type="button" data-cli="windows">Windows</button>
+          </div>
+          <div class="cli-command" id="cli-unix" role="tabpanel" aria-labelledby="cli-tab-unix" data-cli-panel="unix">
+            <code>curl -fsSL https://updates.atelierhq.dev/cli | sh</code>
+            <button class="copy" type="button" data-copy="curl -fsSL https://updates.atelierhq.dev/cli | sh" aria-label="Copy the command"><svg class="icon i-copy" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg></button>
+          </div>
+          <div class="cli-command" id="cli-windows" role="tabpanel" aria-labelledby="cli-tab-windows" data-cli-panel="windows" hidden>
+            <code>irm https://updates.atelierhq.dev/cli.ps1 | iex</code>
+            <button class="copy" type="button" data-copy="irm https://updates.atelierhq.dev/cli.ps1 | iex" aria-label="Copy the command"><svg class="icon i-copy" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg></button>
+          </div>
+          <p class="fine">Then run <code>atelier</code> in a project folder; the first start sets it up. It installs for you alone, brings its own Node.js and updates itself. x86-64 and ARM64.</p>
+        </div>
         <div class="cta-row">
-          <a class="btn btn-primary" href="https://docs.atelierhq.dev/cli/">Atelier CLI guide<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="btn btn-quiet" href="https://docs.atelierhq.dev/cli/">Atelier CLI guide<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
         </div>
       </div>
       <div class="reveal">
-        <pre class="pre" aria-label="Installing Atelier CLI"><span class="c"># macOS and Linux</span>
-<span class="k">curl -fsSL https://updates.atelierhq.dev/cli | sh</span>
-
-<span class="c"># Windows (PowerShell)</span>
-<span class="k">irm https://updates.atelierhq.dev/cli.ps1 | iex</span>
-
-<span class="c"># then, in a project folder</span>
-<span class="k">atelier</span></pre>
-        <p class="fine">The first start sets it up: a server or this computer, sign-in, a model.</p>
+        <figure class="term" aria-label="Atelier CLI in a terminal">
+          <div class="term-bar"><span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="term-title">atelier · ~/shader</span></div>
+          <div class="term-body" aria-hidden="true">
+            <div class="term-head"><svg class="term-pip" viewBox="0 0 12 10" width="48" height="40" shape-rendering="crispEdges" aria-hidden="true"><rect x="5" y="0" width="2" height="1" fill="#3E3552"/><rect x="3" y="1" width="6" height="1" fill="#6A5C8E"/><rect x="9" y="1" width="1" height="1" fill="#3E3552"/><rect x="1" y="2" width="11" height="1" fill="#3E3552"/><rect x="2" y="3" width="7" height="1" fill="#D97757"/><rect x="9" y="3" width="1" height="1" fill="#B5573A"/><rect x="1" y="4" width="2" height="1" fill="#D97757"/><rect x="3" y="4" width="1" height="1" fill="#FFF4EA"/><rect x="4" y="4" width="1" height="1" fill="#2A211E"/><rect x="5" y="4" width="2" height="1" fill="#D97757"/><rect x="7" y="4" width="1" height="1" fill="#FFF4EA"/><rect x="8" y="4" width="1" height="1" fill="#2A211E"/><rect x="9" y="4" width="1" height="1" fill="#D97757"/><rect x="10" y="4" width="1" height="1" fill="#B5573A"/><rect x="1" y="5" width="2" height="1" fill="#D97757"/><rect x="3" y="5" width="2" height="1" fill="#2A211E"/><rect x="5" y="5" width="2" height="1" fill="#D97757"/><rect x="7" y="5" width="2" height="1" fill="#2A211E"/><rect x="9" y="5" width="1" height="1" fill="#D97757"/><rect x="10" y="5" width="1" height="1" fill="#B5573A"/><rect x="1" y="6" width="1" height="1" fill="#D97757"/><rect x="2" y="6" width="1" height="1" fill="#EF8C80"/><rect x="3" y="6" width="6" height="1" fill="#D97757"/><rect x="9" y="6" width="1" height="1" fill="#EF8C80"/><rect x="10" y="6" width="1" height="1" fill="#B5573A"/><rect x="1" y="7" width="9" height="1" fill="#D97757"/><rect x="10" y="7" width="1" height="1" fill="#B5573A"/><rect x="2" y="8" width="1" height="1" fill="#B5573A"/><rect x="3" y="8" width="6" height="1" fill="#D97757"/><rect x="9" y="8" width="1" height="1" fill="#B5573A"/><rect x="2" y="9" width="2" height="1" fill="#B5573A"/><rect x="8" y="9" width="2" height="1" fill="#B5573A"/></svg><div><b class="t-name">Atelier</b> <b>CLI</b> <span class="t-dim">v0.6.0</span><br>GPT-6 · High<br><span class="t-soft">Ada @ atelier.home</span><br><span class="t-dim">~/shader · main</span></div></div>
+            <div class="term-lines"><span class="t-you">❯ make the water wave slower</span>
+<span class="t-clay">◆</span> I’ll slow the wave animation down.
+<span class="t-good">●</span> Read <span class="t-path">shaders/water.fsh</span> <span class="t-dim">· 84 lines</span>
+<span class="t-good">●</span> Edited <span class="t-path">shaders/water.fsh</span> <span class="t-dim">·</span> <span class="t-add">+1</span> <span class="t-del">−1</span>
+<span class="t-row t-row-del">  41 - float t = frameTimeCounter * 2.0;</span>
+<span class="t-row t-row-add">  41 + float t = frameTimeCounter * 0.8;</span>
+<span class="t-clay">◎</span> <span class="t-soft">Glazing…</span> <span class="t-dim">8s · esc to stop</span></div>
+            <div class="term-box"><span class="t-clay">❯</span> <span class="t-cursor"></span></div>
+            <div class="term-foot"><span><span class="t-clay">⏵⏵ Auto</span> <span class="t-dim">(shift+tab) · ctx 23% ·</span> <span class="t-good">●</span> atelier.home</span><span class="t-dim">GPT-6 · High</span></div>
+          </div>
+        </figure>
       </div>
     </div>
   </section>
@@ -179,12 +215,14 @@
   <section class="section" id="server">
     <div class="wrap split">
       <div class="reveal">
+        <p class="kind"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg>Atelier Server · self-hosted</p>
         <h2>Prefer a server?</h2>
-        <p class="lead">For the web app, several people on one install, or one place for your data. Desktop apps can connect to it too.</p>
+        <p class="lead">For the web app, several people on one install, or one place for your data. Desktop apps and Atelier CLI can connect to it too.</p>
+        <p class="kind-note">Not an app you open: it runs on a machine you keep on, and the apps, the browser and the terminal connect to it.</p>
         <ul class="ticks">
           <li><strong>Docker image</strong> for x86-64 and ARM64, with Caddy for HTTPS.</li>
           <li><strong>Invite codes and passkeys,</strong> keys encrypted at rest, one data folder to back up.</li>
-          <li><strong>Never runs commands on the server.</strong> Code in a browser uses a desktop app’s folders.</li>
+          <li><strong>Never runs commands on the server.</strong> Code in a browser uses the folders of a desktop app or Atelier CLI.</li>
         </ul>
         <div class="cta-row">
           <a class="btn btn-primary" href="https://docs.atelierhq.dev/self-hosting/">Self-hosting guide<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>

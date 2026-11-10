@@ -262,3 +262,74 @@ kbd { padding: 0.12em 0.45em; border-radius: 5px; border: 1px solid var(--line);
 .dl-links a { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
 .dl-links a:hover { color: var(--ink); }
 .dl-links .icon { width: 15px; height: 15px; }
+
+/* Download page: the three things on it, so the app, the terminal app and the server aren't taken for each other. */
+.dl-choose { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 28px; max-width: 64rem; }
+@media (min-width: 760px) { .dl-choose { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.choice { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); text-decoration: none; transition: border-color 150ms, background-color 150ms; }
+.choice:hover { border-color: var(--line-strong); background: var(--raised); }
+.choice .icon { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--ink-3); }
+.choice.is-here { border-color: var(--clay); box-shadow: 0 0 0 1px var(--clay) inset; }
+.choice.is-here .icon { color: var(--clay); }
+.choice-text { display: grid; gap: 2px; font-size: 0.875rem; line-height: 1.45; }
+.choice-text strong { color: var(--ink); font-size: 0.9375rem; font-weight: 600; }
+
+/* What a section is, above its heading: "Atelier CLI · terminal app". */
+.kind { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 5px 11px 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font: 500 0.8125rem/1.2 var(--sans); color: var(--ink-2); }
+.kind .icon { width: 16px; height: 16px; color: var(--clay); }
+.kind-note { margin-top: 14px; color: var(--ink-3); font-size: 0.9375rem; max-width: 36rem; text-wrap: pretty; }
+
+/* Atelier CLI: its own band, an install command to copy, and a terminal showing it. */
+.cli-section { background: var(--sunken); }
+.cli-section + .section { border-top-color: var(--line); }
+.cli-install { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 26px; max-width: 34rem; }
+.cli-install .tabs { justify-self: start; background: var(--surface); }
+.cli-install .tab[aria-selected="true"] { background: var(--sunken); }
+.cli-install .fine { margin-top: 2px; }
+/* A command longer than its box scrolls under the copy button, which fades it out. */
+.cli-command { position: relative; display: flex; align-items: center; min-height: 56px; padding: 0 10px 0 16px; border-radius: 11px; background: #141413; border: 1px solid rgba(255, 255, 255, 0.08); }
+.cli-command[hidden] { display: none; }
+.cli-command code { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 15px 52px 15px 0; white-space: nowrap; font: 500 0.875rem/1.6 var(--mono); color: #f0efec; background: none; border-radius: 0; }
+.cli-command code::-webkit-scrollbar { display: none; }
+.cli-command code::before { content: "$ "; color: #d97757; }
+.cli-command .copy { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); box-shadow: -14px 0 12px 2px #141413; background-color: #1c1c1a; }
+.cli-command .copy:hover { background-color: #2a2a27; }
+.copy { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); color: #d6d3cc; cursor: pointer; transition: background-color 150ms, color 150ms; }
+.copy:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.copy .icon { grid-area: 1 / 1; width: 16px; height: 16px; }
+.copy .i-done { opacity: 0; color: #7fcf8a; }
+.copy.copied .i-copy { opacity: 0; }
+.copy.copied .i-done { opacity: 1; }
+
+.term { margin: 8px 0 0; border-radius: 14px; overflow: hidden; background: #141413; border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: var(--shadow-lift); color: #e7e4dd; }
+.term-bar { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: #1d1d1b; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.term-dots { display: inline-flex; gap: 7px; }
+.term-dots i { width: 11px; height: 11px; border-radius: 50%; background: #3a3936; }
+.term-title { flex: 1; text-align: center; margin-right: 50px; font: 500 0.75rem var(--sans); color: #8d897f; }
+.term-body { padding: 18px 20px 14px; font: 400 0.8125rem/1.65 var(--mono); overflow-x: auto; }
+.term-head { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; white-space: nowrap; }
+.term-pip { flex: none; width: 48px; height: 40px; }
+.term-lines { white-space: pre; }
+.term-box { margin-top: 12px; padding: 4px 0; border-top: 1px solid #3a3936; border-bottom: 1px solid #3a3936; }
+.term-foot { display: flex; justify-content: space-between; gap: 16px; margin-top: 6px; white-space: nowrap; font-size: 0.75rem; }
+.t-name { background: linear-gradient(90deg, #f0a07c, #c6613f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.t-name + b { color: #e6b86a; }
+.t-dim { color: #8d897f; }
+.t-soft { color: #b8b3a9; }
+.t-you { color: #f0efec; font-weight: 500; }
+.t-clay { color: #d97757; }
+.t-good { color: #7fcf8a; }
+.t-add { color: #7fcf8a; }
+.t-del { color: #e88a7d; }
+.t-path { color: #f0efec; }
+.t-row { display: inline-block; min-width: 100%; padding-right: 8px; }
+.t-row-del { background: rgba(232, 138, 125, 0.12); color: #e88a7d; }
+.t-row-add { background: rgba(127, 207, 138, 0.12); color: #7fcf8a; }
+.t-cursor { display: inline-block; width: 0.6em; height: 1.1em; vertical-align: text-bottom; background: #e7e4dd; animation: t-blink 1.06s steps(1) infinite; }
+@keyframes t-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .t-cursor { animation: none; } }
+@media (max-width: 520px) {
+  .term-body { padding: 14px 14px 12px; font-size: 0.6875rem; }
+  .term-foot { font-size: 0.625rem; }
+  .term-foot > :last-child { display: none; }
+}
