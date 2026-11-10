@@ -123,7 +123,7 @@ function FinishedLine({ steps, root, open, onToggle }: { steps: ActivityStepView
   return (
     <Summary open={open} onToggle={onToggle}>
       <span className="truncate">
-        {tools.length ? activitySummary(tools.map((s) => imageRead(s) ? { ...s.call, name: 'ViewedImage' } : s.call), root) : 'Thought it over'}
+        {tools.length ? activitySummary(tools.map(shownCall), root) : 'Thought it over'}
         {failed > 0 && ` (${failed} failed)`}
       </span>
       {(changed.added > 0 || changed.removed > 0) && <DiffStat added={changed.added} removed={changed.removed} />}
@@ -149,6 +149,19 @@ function imageRead(step: ToolStep): boolean {
   return step.call.name === 'Read' && !step.result?.isError && !!step.result?.content.some((part) => part.type === 'image');
 }
 
+/** A Read of a folder: it answered with the folder's entries ("src is a directory:", files.ts) rather than a file. */
+export function folderRead(step: Pick<ToolStep, 'call' | 'result'>): boolean {
+  if (step.call.name !== 'Read' || !step.result || step.result.isError) return false;
+  return /^.* is (?:a directory:|an empty directory\.)/.test(resultText(step.result));
+}
+
+/** The call as its row and summary word it: an image looked at, a folder listed, else as it was made. */
+function shownCall(step: ToolStep): Pick<ToolCallPart, 'name' | 'input'> {
+  if (imageRead(step)) return { ...step.call, name: 'ViewedImage' };
+  if (folderRead(step)) return { ...step.call, name: 'ListedFolder' };
+  return step.call;
+}
+
 function ActivityRow({ step }: { step: ActivityStepView }) {
   const root = useContext(WorkspaceRoot);
   const [open, setOpen] = useState(false);
@@ -160,7 +173,7 @@ function ActivityRow({ step }: { step: ActivityStepView }) {
   if (step.kind === 'tool') {
     const input = asRecord(step.call.input);
     const text = step.result ? resultText(step.result) : null;
-    const summary = summarize(imageRead(step) ? { ...step.call, name: 'ViewedImage' } : step.call, text, root);
+    const summary = summarize(shownCall(step), text, root);
     const failed = !!step.result?.isError;
     switch (step.call.name) {
       case 'Bash': {
@@ -320,6 +333,12 @@ function BackgroundCommandsCard({ steps }: { steps: ToolStep[] }) {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace('#', String(n)));
 
+/** A folder as the transcript names it: the workspace itself is "the folder", another by its path. */
+export function folderName(path: string, root: string | null): string {
+  const shown = displayPath(path, root).replace(/[\\/]+$/, '');
+  return !shown || shown === '.' || shown === '~' || (root && (path === root || path === `${root}/`)) ? 'the folder' : shown;
+}
+
 /**
  * What a run of tool calls did, in a line: "Ran 34 commands, read app.ts", "Created 2 files, ran 5 commands". Phrases
  * come in the order their tools were first used.
@@ -342,6 +361,10 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return plural(n, 'ran a command', 'ran # commands');
       case 'ViewedImage':
         return files(list).length === 1 ? `looked at ${file(list[0]!)}` : `looked at ${files(list).length} images`;
+      case 'ListedFolder': {
+        const folders = [...new Set(list.map((c) => folderName(str(asRecord(c.input).file_path), root)))];
+        return folders.length === 1 ? `listed ${folders[0]}` : `listed ${folders.length} folders`;
+      }
       case 'Read':
         return files(list).length === 1 ? `read ${file(list[0]!)}` : `read ${files(list).length} files`;
       case 'Write':
@@ -469,7 +492,7 @@ export function GroupedActivity({ steps }: { steps: ActivityStepView[] }) {
       <WithViewedImages steps={steps}>
         <Summary open={open} onToggle={() => setOpen((o) => !o)}>
           {steps.some((s) => (s.kind === 'tool' ? s.running : s.active)) && <ThinkingDots />}
-          <span className="truncate">{tools.length ? activitySummary(tools.map((s) => imageRead(s) ? { ...s.call, name: 'ViewedImage' } : s.call), root) : 'Thought process'}</span>
+          <span className="truncate">{tools.length ? activitySummary(tools.map(shownCall), root) : 'Thought process'}</span>
           {(changed.added > 0 || changed.removed > 0) && <DiffStat added={changed.added} removed={changed.removed} />}
         </Summary>
       </WithViewedImages>
@@ -533,6 +556,11 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
   switch (call.name) {
     case 'ViewedImage':
       return { verb: 'Looked at', target: displayPath(str(input.file_path), root) };
+    case 'ListedFolder': {
+      // The entries under the first line, without the note that a long folder was cut short.
+      const entries = (result ?? '').split('\n').slice(1).filter((line) => line && !line.startsWith('[Only the first'));
+      return { verb: 'Listed', target: folderName(str(input.file_path), root), ...(result != null ? { meta: entries.length ? count(entries.length, 'item') : 'empty' } : {}) };
+    }
     case 'Read': {
       const lines = result?.match(/^\s*\d+\t/gm)?.length ?? 0;
       return { verb: 'Read', target: displayPath(str(input.file_path), root), ...(lines ? { meta: count(lines, 'line') } : {}) };
@@ -653,7 +681,7 @@ function OneLineCard({ step, detail }: { step: ToolStep; detail?: ReactNode }) {
   const root = useContext(WorkspaceRoot);
   const [open, setOpen] = useState(useStartsOpen(false));
   const text = step.result ? resultText(step.result) : null;
-  const { verb, target, meta } = summarize(imageRead(step) ? { ...step.call, name: 'ViewedImage' } : step.call, text, root);
+  const { verb, target, meta } = summarize(shownCall(step), text, root);
   const after = (
     <>
       {meta && <span className="shrink-0 text-fg-muted">{meta}</span>}

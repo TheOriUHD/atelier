@@ -1172,6 +1172,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       };
     },
     workspace: async (session) => (session.workspaceId && session.userId ? workspaceManager.open(session.userId, session.workspaceId) : null),
+    attachmentFolder: async (session) => {
+      if (!session.workspaceId || !session.userId || session.mode === 'chat') return null;
+      const workspace = await workspaceManager.open(session.userId, session.workspaceId);
+      const summary = (await workspaceManager.list(session.userId)).find((w) => w.id === session.workspaceId);
+      return { workspace, scratch: summary?.scratch ?? false };
+    },
+    warn: (message, error) => platform.logger.error(message, error),
     chatSandboxAvailable: (session) => !!session.userId && workspaceManager.chatSandboxes,
     chatSandbox: (session) => {
       // Parallel calls of a turn share one new sandbox.

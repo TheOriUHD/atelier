@@ -69,6 +69,7 @@ import { fitCompactBudget, type Trim } from '../prompts/budget.ts';
 import { buildSystemPrompt, type ProjectContext, type PromptContext } from '../prompts/builder.ts';
 import { localDate, modelFacts } from '../prompts/env.ts';
 import { escapeAttr, escapeTags, unescapeAttr } from '../prompts/escape.ts';
+import { placeAttachments } from './attachments.ts';
 import { safeguardsBlock } from '../prompts/safeguards.ts';
 import { render, renderNote, template } from '../prompts/templates.ts';
 import type { ProjectRepo } from '../projects/project-repo.ts';
@@ -292,6 +293,13 @@ export interface ChatServiceDeps {
   checkpoints?: Checkpoints;
   /** Code and Work sessions: the session's running workspace, for the code tools; null without one. */
   workspace?(session: SessionRow): Promise<Workspace | null>;
+  /**
+   * Code and Work sessions: the folder attached files go into (attachments.ts) and whether it is a scratch folder (they
+   * go in its root) or a project (`.atelier/attachments/`); null without one.
+   */
+  attachmentFolder?(session: SessionRow): Promise<{ workspace: Workspace; scratch: boolean } | null>;
+  /** Something that went wrong without stopping anything, for the log. */
+  warn?(message: string, error?: unknown): void;
   /** Whether this chat can have a sandbox here (a sandbox container or this machine), offered as Bash and Read. */
   chatSandboxAvailable?(session: SessionRow): boolean;
   /** The chat's sandbox, made on first use and kept on the session; throws with a message when it can't be reached. */
@@ -786,7 +794,7 @@ export class ChatService {
           sessionId,
           parentId: parentId === undefined ? session.headMessageId : parentId,
           role: 'user',
-          parts,
+          parts: await this.placeFiles(session, parts, by),
           model: null,
           usage: null,
           stopReason: null,
@@ -810,6 +818,26 @@ export class ChatService {
    */
   private checked(sessionId: string, parts: Part[]): Part[] | Promise<Part[]> {
     return parts.some((p) => p.type === 'context' && p.notice?.kind === 'area') ? withAreas(this.deps.images, sessionId, parts) : parts;
+  }
+
+  /**
+   * Files the person attached, put into the session's folder so the agent's tools reach them (attachments.ts). Only the
+   * person's own (alone, or the host's in co-op): a guest's files don't go into the host's folder. Never throws: a file
+   * that can't be written is still shown to the model as before.
+   */
+  private async placeFiles(session: SessionRow, parts: Part[], by?: TurnParticipant | null): Promise<Part[]> {
+    if (!this.deps.attachmentFolder || (by && by.role !== 'host') || !parts.some((p) => p.type === 'document' && !p.path)) return parts;
+    const folder = await this.deps.attachmentFolder(session).catch(() => null);
+    if (!folder) return parts;
+    return placeAttachments(
+      folder.workspace,
+      {
+        scratch: folder.scratch,
+        read: (blob) => this.deps.blobs.read(blob),
+        onError: (name, e) => this.deps.warn?.(`couldn't put the attached ${name} into the folder`, e),
+      },
+      parts,
+    ).catch(() => parts);
   }
 
   /** Edit = a new sibling of the user message, then a fresh reply on that branch. */
@@ -897,7 +925,7 @@ export class ChatService {
     }
     const answerWith = by && opts.answerWith ? await this.checkedAnswerWith(sessionId, opts.answerWith, by) : undefined;
     // A message that asks for its own model opens a turn of its own: it doesn't join someone's running one.
-    const item: OutboxMessage = { id: newId(), parts, ...(by ? { author: by.id } : {}), ...(by && opts.joinTurn && !answerWith ? { joinTurn: true } : {}), ...(answerWith ? { answerWith } : {}) };
+    const item: OutboxMessage = { id: newId(), parts: await this.placeFiles(await this.requireSession(sessionId), parts, by), ...(by ? { author: by.id } : {}), ...(by && opts.joinTurn && !answerWith ? { joinTurn: true } : {}), ...(answerWith ? { answerWith } : {}) };
     this.setOutbox(sessionId, [...(this.outboxes.get(sessionId) ?? []), item]);
     return { id: item.id, queued: true };
   }
@@ -2895,11 +2923,18 @@ export class ChatService {
         // An image a tool brought in (Read, a screenshot) gets an id too, so it can be edited or saved. GenerateImage says its own.
         else if (p.type === 'tool_result' && imageIds && !p.generated && p.content.some((c) => c.type === 'image')) parts.push({ ...p, content: p.content.flatMap((c) => (c.type === 'image' ? [c, { type: 'text' as const, text: `[Image ${imageId(c.blob)}]` }] : [c])) });
         else if (p.type === 'document' && !(p.mime === 'application/pdf' && info.capabilities.pdf)) {
+          // In the folder too (attachments.ts): its path, for the tools.
+          const at = p.path ? ` path="${escapeAttr(p.path)}"` : '';
           parts.push(
             canExtractText(p.mime)
-              ? { type: 'text', text: `<document name="${escapeAttr(p.name)}">\n${escapeTags(await this.textOf(p.blob, p.mime))}\n</document>` }
-              : { type: 'text', text: `[Attached file ${p.name} (${p.mime}) cannot be read by this model.]` },
+              ? { type: 'text', text: `<document name="${escapeAttr(p.name)}"${at}>\n${escapeTags(await this.textOf(p.blob, p.mime))}\n</document>` }
+              : p.path
+                ? { type: 'text', text: `[Attached file ${escapeTags(p.name)} (${p.mime}), saved in the folder as ${escapeTags(p.path)}: open, unpack or convert it there with the tools.]` }
+                : { type: 'text', text: `[Attached file ${escapeTags(p.name)} (${p.mime}) cannot be read by this model.]` },
           );
+        } else if (p.type === 'document' && p.path) {
+          // A PDF the model reads itself, and its copy in the folder.
+          parts.push(p, { type: 'text', text: `[${escapeTags(p.name)} is also saved in the folder as ${escapeTags(p.path)}.]` });
         } else {
           parts.push(p);
           if (p.type === 'image' && imageIds) parts.push({ type: 'text', text: `[Image ${imageId(p.blob)}]` });

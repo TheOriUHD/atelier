@@ -19,6 +19,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.5.3',
+    intro: 'Files you attach in Cowork and Code are in the agent’s reach.',
+    highlights: [
+      {
+        icon: FolderInput,
+        title: 'Attachments go into the folder',
+        body: 'A ZIP, a model file or a spreadsheet you attached reached the model only as its text, or not at all, so the agent couldn’t unpack or open it. Each file you attach in Cowork or Code now goes into the session’s folder (in a project, under .atelier/attachments, which git leaves alone), and the agent is told where.',
+      },
+    ],
+    also: ['An agent looking through its folder shows as “Listed the folder”, not “Read .”.'],
+  },
+  {
     version: '0.5.2',
     intro: 'Mistral’s models, GLM above all, work through long coding tasks instead of stopping or saving half-written files.',
     highlights: [
