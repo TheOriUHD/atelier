@@ -3,7 +3,7 @@ import { Box, render, Text, useApp } from 'ink';
 import { useState } from 'react';
 import { drawPip } from '../art/mascot.ts';
 import type { Paint } from '../style.ts';
-import { holdInput } from '../term.ts';
+import { holdInput, interactive } from '../term.ts';
 import { Choices, Panel } from './inputs.tsx';
 import { PipBox } from './pip.tsx';
 
@@ -45,7 +45,7 @@ export function askFullscreen(paint: Paint): Promise<boolean | null> {
   return new Promise((resolve) => {
     let picked: boolean | null = null;
     holdInput();
-    const instance = render(<Ask paint={paint} onAnswer={(a) => (picked = a)} />, { exitOnCtrlC: true });
+    const instance = render(<Ask paint={paint} onAnswer={(a) => (picked = a)} />, { exitOnCtrlC: true, interactive: interactive() });
     void instance.waitUntilExit().then(
       () => resolve(picked),
       () => resolve(null),

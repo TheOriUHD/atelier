@@ -20,7 +20,7 @@ import { credentialStore, tokenName } from './keychain.ts';
 import { paths as cliPaths } from './paths.ts';
 import { VERSION } from './runtime.ts';
 import { colorDepth, Paint, palette, type Shade } from './style.ts';
-import { backgroundShade, FOCUS_OFF, holdInput, MOUSE_OFF, MOUSE_ON } from './term.ts';
+import { backgroundShade, FOCUS_OFF, holdInput, interactive, MOUSE_OFF, MOUSE_ON } from './term.ts';
 import type { AppExit } from './tui/commands.ts';
 import { mouseInput } from './tui/mouse.ts';
 import { setInstance } from './tui/screen.ts';
@@ -244,7 +244,7 @@ async function main(argv: string[]): Promise<number> {
           wheel: mouse?.wheel ?? null,
           onExit: (next: AppExit) => (exit = next),
         }),
-        { exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' }, incrementalRendering: true, maxFps: 30, isScreenReaderEnabled: screenReader, alternateScreen: fullscreen, ...(mouse ? { stdin: mouse.stdin } : {}) },
+        { exitOnCtrlC: false, interactive: interactive(), kittyKeyboard: { mode: 'auto' }, incrementalRendering: true, maxFps: 30, isScreenReaderEnabled: screenReader, alternateScreen: fullscreen, ...(mouse ? { stdin: mouse.stdin } : {}) },
       );
       if (mouse) {
         process.stdout.write(MOUSE_ON);

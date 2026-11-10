@@ -98,11 +98,18 @@ export async function openScreen(options: { cwd: string; env: NodeJS.ProcessEnv;
       }
     },
     select: async (row, max = 30) => {
-      for (let i = 0; i < max; i++) {
+      const chosen = () => {
         const current = screen.text().split('\n').find((l) => l.includes('› '));
-        const label = current?.slice(current.indexOf('› ') + 2).split(/\s{2,}|│/)[0]!.replace(/^\d+\.\s*/, '').trim();
+        return current?.slice(current.indexOf('› ') + 2).split(/\s{2,}|│/)[0]!.replace(/^\d+\.\s*/, '').trim();
+      };
+      for (let i = 0; i < max; i++) {
+        const label = chosen();
         if (label !== undefined && row.test(label)) return;
         await screen.press('down');
+        // The screen shows the move before it is read again: a terminal that redraws late (ConPTY on Windows) would
+        // otherwise still show the row before, and another press would go past the one wanted.
+        const deadline = Date.now() + 5000;
+        while (chosen() === label && Date.now() < deadline) await sleep(50);
       }
       throw new Error(`No row matching ${String(row)}. The screen:\n${screen.text()}`);
     },

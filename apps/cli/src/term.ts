@@ -7,6 +7,13 @@ import { execFile, spawn } from 'node:child_process';
 const ESC = '\x1b';
 const BEL = '\x07';
 
+/**
+ * Ink's `interactive`: a live screen whenever the output is a terminal. Left to itself Ink takes a `CI` variable in the
+ * environment to mean there is none and draws only the last frame when the program ends, so with `CI` set (some shells
+ * and dev containers set it) the terminal app would show nothing at all.
+ */
+export const interactive = () => Boolean(process.stdout.isTTY);
+
 // eslint-disable-next-line no-control-regex -- a title may not carry control characters.
 export const setTitle = (title: string) => (process.stdout.isTTY ? process.stdout.write(`${ESC}]0;${title.replace(/[\x00-\x1f]/g, ' ')}${BEL}`) : true);
 
