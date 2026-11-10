@@ -118,12 +118,14 @@ describe('settings search index', () => {
     }
   });
 
-  it('finds Sign out for everyone, and the way back to the first-run choice only in the desktop app', () => {
+  it('finds Sign out for everyone, and where Atelier runs only in the desktop app', () => {
     expect(ids('sign out', false)).toContain('account.signOut');
     expect(ids('switch server', false)).toEqual([]);
-    platform.desktop = { connection: { reset: () => {} } };
+    platform.desktop = { connection: { get: () => {} } };
     try {
-      expect(ids('switch server', false)).toEqual(['account.server']);
+      expect(ids('switch server', false)).toEqual(['connection.mode']);
+      expect(ids('standalone', false)).toEqual(['connection.mode']);
+      expect(ids('set up again', false)).toEqual(['connection.mode']);
     } finally {
       platform.desktop = undefined;
     }

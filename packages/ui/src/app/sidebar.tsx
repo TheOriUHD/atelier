@@ -11,6 +11,7 @@ import {
   FolderClosed,
   Images,
   Keyboard,
+  Laptop,
   ListFilter,
   Lock,
   LogOut,
@@ -20,6 +21,7 @@ import {
   PinOff,
   Plus,
   Search,
+  Server,
   Settings as SettingsIcon,
   Shapes,
   Sparkles,
@@ -45,7 +47,8 @@ import {
 } from '../components/ui/index.ts';
 import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { recentGroup } from '../lib/dates.ts';
-import { blobUrl } from '../lib/platform.ts';
+import { blobUrl, desktop } from '../lib/platform.ts';
+import { useConnection } from '../lib/lending.ts';
 import { shortcutText, useShortcutBindings } from '../lib/shortcuts.ts';
 import { useAccount, useImagesOffered, usePrefs, useProjects, useSessions, useSetPref } from '../lib/queries.ts';
 import { describeError, rpc } from '../lib/rpc.ts';
@@ -435,6 +438,23 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
+/** "Running on this computer" or "Connected to atelier.home": opens Settings › Connection. */
+function WhereItRunsItem({ onClick }: { onClick(): void }) {
+  const { data: connection } = useConnection();
+  if (!connection?.mode) return null;
+  let host = connection.serverUrl ?? 'a server';
+  try {
+    host = new URL(host).host;
+  } catch {
+    // The saved address as it is.
+  }
+  return (
+    <MenuItem icon={connection.mode === 'local' ? Laptop : Server} onClick={onClick}>
+      <span className="truncate">{connection.mode === 'local' ? 'Running on this computer' : `Connected to ${host}`}</span>
+    </MenuItem>
+  );
+}
+
 /** Avatar, name · role and the profile menu; a quiet Settings button on the right. */
 function ProfileFooter() {
   const { account } = useAccount();
@@ -472,6 +492,8 @@ function ProfileFooter() {
           <MenuItem icon={SettingsIcon} shortcut={shortcutText(shortcuts.settings)} onClick={() => openSettings()}>
             Settings
           </MenuItem>
+          {/* The desktop app: where it runs, one click from Settings › Connection, which switches it. */}
+          {desktop?.connection && <WhereItRunsItem onClick={() => openSettings('connection')} />}
           <MenuSeparator />
           <MenuRadioGroup
             value={prefs?.appearance.theme ?? 'system'}

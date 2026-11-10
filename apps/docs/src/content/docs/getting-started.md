@@ -88,9 +88,9 @@ allows.
 ### Changing your mind
 
 Nothing you choose here deletes anything. Before sign-in, **Use a server instead** (on this computer) or **Change
-server** goes back to the choice. Afterwards, **Settings › Account** has **Setup › Change setup…** on this computer and
-**Server › Switch…** when the desktop app is connected to a server. Your chats on this computer stay where they are;
-choose **Run on this computer** again to get back to them.
+server** goes back to the choice. Afterwards, **Settings › Connection** switches between this computer and a server,
+or to another server; the profile menu at the bottom of the sidebar opens it too. Your chats on this computer stay where
+they are; switch back to get back to them.
 
 ## Connect your first model
 

@@ -15,6 +15,7 @@ import {
   Keyboard,
   KeyRound,
   Laptop,
+  Network,
   Plug,
   Puzzle,
   ScrollText,
@@ -27,11 +28,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { desktop } from '../../lib/platform.ts';
-import { auditLogOffered, imageGenerationOffered, usageLimitsOffered } from '../../lib/queries.ts';
+import { auditLogOffered, imageGenerationOffered, sharedComputer, usageLimitsOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 
 export type SettingsPageId =
   | 'general'
+  | 'connection'
   | 'shortcuts'
   | 'account'
   | 'privacy'
@@ -70,6 +72,8 @@ export interface SettingsPage {
 /** Nav order. Only pages that work end to end are listed. */
 export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'general', label: 'General', icon: SettingsIcon, group: 'Settings' },
+  // The desktop app: this computer or an Atelier server, and the switch between them.
+  { id: 'connection', label: 'Connection', icon: Network, group: 'Settings', available: () => !!desktop?.connection },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, group: 'Settings' },
   { id: 'account', label: 'Account', icon: CircleUserRound, group: 'Settings' },
   { id: 'privacy', label: 'Privacy', icon: Shield, group: 'Settings' },
@@ -80,7 +84,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   // GitHub and the codespaces that become folders.
   { id: 'cloud', label: 'Cloud', icon: Cloud, group: 'Settings' },
   // The person's own model servers and ChatGPT Chat on their computers, reached through the desktop app there.
-  { id: 'personal-models', label: 'Your models', icon: Cpu, group: 'Settings', available: () => !isLocal() },
+  { id: 'personal-models', label: 'Your models', icon: Cpu, group: 'Settings', available: () => !isLocal() && !sharedComputer() },
   { id: 'skills', label: 'Skills', icon: ScrollText, group: 'Settings' },
   // This computer: the desktop app's version and updates, launch at login, data folder.
   { id: 'system', label: 'System', icon: Laptop, group: 'Settings', available: () => !!desktop },
@@ -94,9 +98,10 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'connectors', label: 'Connectors', icon: Blocks, group: 'Admin' },
   { id: 'plugins', label: 'Plugins', icon: Puzzle, group: 'Admin' },
   { id: 'secrets', label: 'Keys & secrets', icon: KeyRound, group: 'Admin' },
-  { id: 'users', label: 'Users', icon: Users, group: 'Admin' },
+  // A computer shared on the network has one person: nobody to invite.
+  { id: 'users', label: 'Users', icon: Users, group: 'Admin', available: () => !sharedComputer() },
   // Per-person limits matter on a server with several accounts; the desktop's own backend has one person. An older server has none.
-  { id: 'limits', label: 'Limits', icon: Gauge, group: 'Admin', available: () => !isLocal() && usageLimitsOffered() },
+  { id: 'limits', label: 'Limits', icon: Gauge, group: 'Admin', available: () => !isLocal() && !sharedComputer() && usageLimitsOffered() },
   { id: 'server', label: 'Server', icon: Server, group: 'Admin' },
   // Who changed what on a shared server. A desktop app on its own backend has one person, and no page for it.
   { id: 'activity', label: 'Activity', icon: History, group: 'Admin', available: () => auditLogOffered() },

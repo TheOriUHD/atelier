@@ -410,7 +410,6 @@ describe('Account › Log out', () => {
     await renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
     await waitFor(() => expect(webLogout).toHaveBeenCalledTimes(1));
-    expect(screen.queryByRole('button', { name: 'Switch…' })).toBeNull();
   });
 
   it('signs the desktop app out of its server and goes back to the first-run choice', async () => {
@@ -422,52 +421,5 @@ describe('Account › Log out', () => {
     expect(callsTo('auth.logout')).toHaveLength(1);
     expect(webLogout).not.toHaveBeenCalled();
   });
-
-  it('switches to this computer or another server after asking, signing out first', async () => {
-    const bridge = desktopBridge({ mode: 'server', serverUrl: 'https://atelier.lan' });
-    await renderPage();
-    expect(await screen.findByText('https://atelier.lan')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Switch…' }));
-    const dialog = await screen.findByRole('alertdialog');
-    expect(
-      within(dialog).getByText('This app logs out of https://atelier.lan. Your chats stay on the server.'),
-    ).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Log out and switch' }));
-    await waitFor(() => expect(bridge.connection.reset).toHaveBeenCalledTimes(1));
-    expect(callsTo('auth.logout')).toHaveLength(1);
-  });
 });
 
-describe('Account › Change setup on "Run on this computer"', () => {
-  beforeEach(() => {
-    setLocal(true);
-    resetBackend({
-      'settings.get': () => snapshot({}),
-      'account.get': () => user(),
-      'lock.status': () => ({ enabled: false, kind: null, autoLockMinutes: 0, locked: false, retryAt: null }),
-    });
-  });
-  afterEach(() => setLocal(false));
-
-  it('goes back to the first-run choice after saying the chats here stay, without signing anything out', async () => {
-    const bridge = desktopBridge({ mode: 'local', serverUrl: null });
-    await renderPage();
-    expect(screen.queryByRole('button', { name: 'Log out' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Change setup…' }));
-    const dialog = await screen.findByRole('alertdialog');
-    expect(
-      within(dialog).getByText(
-        'Your chats on this computer stay; choose “Run on this computer” again to get back to them.',
-      ),
-    ).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Change setup' }));
-    await waitFor(() => expect(bridge.connection.reset).toHaveBeenCalledTimes(1));
-    expect(callsTo('auth.logout')).toEqual([]);
-  });
-
-  it('isn’t offered in a desktop app too old to go back', async () => {
-    platform.desktop = { connection: { get: vi.fn() } };
-    await renderPage();
-    expect(screen.queryByRole('button', { name: 'Change setup…' })).toBeNull();
-  });
-});

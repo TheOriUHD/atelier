@@ -77,7 +77,6 @@ export function AccountPage() {
         <ProfileSection account={account} />
         <PersonalInstructionsSection />
         <ScreenLockSection />
-        {desktop?.connection?.reset && <ChangeSetupSection />}
       </>
     );
   }
@@ -433,14 +432,7 @@ function AccountSection({ account }: { account: UserSummary }) {
 /** "Log out" for everyone; the desktop app then goes back to its first-run choice, a browser to its server's sign-in. */
 function SignOutRows() {
   const canLeave = !!desktop?.connection?.reset;
-  const [switching, setSwitching] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const { data: connection } = useQuery({
-    queryKey: ['desktop', 'connection'],
-    queryFn: () => desktop!.connection.get(),
-    enabled: canLeave,
-  });
-  const server = connection?.serverUrl ?? 'the server';
   const signOut = async () => {
     setSigningOut(true);
     try {
@@ -451,61 +443,11 @@ function SignOutRows() {
     }
   };
   return (
-    <>
-      <SettingRow
-        id="account.signOut"
-        detail={canLeave ? 'Then Atelier asks again whether to use a server or this computer.' : undefined}
-      >
-        <Button loading={signingOut} onClick={() => void signOut()}>
-          Log out
-        </Button>
-      </SettingRow>
-      {canLeave && (
-        <SettingRow id="account.server" detail={connection?.serverUrl ?? undefined}>
-          <Button onClick={() => setSwitching(true)}>Switch…</Button>
-        </SettingRow>
-      )}
-      <ConfirmDialog
-        open={switching}
-        onOpenChange={setSwitching}
-        title="Switch to this computer or another server?"
-        description={`This app logs out of ${server}. Your chats stay on the server.`}
-        confirmLabel="Log out and switch"
-        onConfirm={async () => {
-          try {
-            await leaveSetup();
-          } catch (e) {
-            toast.error(describeError(e).message);
-          }
-        }}
-      />
-    </>
-  );
-}
-
-/** "Run on this computer": back to the first-run choice without deleting anything. */
-function ChangeSetupSection() {
-  const [confirming, setConfirming] = useState(false);
-  return (
-    <SettingsSection title="Setup">
-      <SettingRow id="account.changeSetup">
-        <Button onClick={() => setConfirming(true)}>Change setup…</Button>
-      </SettingRow>
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title="Change setup?"
-        description="Your chats on this computer stay; choose “Run on this computer” again to get back to them."
-        confirmLabel="Change setup"
-        onConfirm={async () => {
-          try {
-            await leaveSetup();
-          } catch (e) {
-            toast.error(describeError(e).message);
-          }
-        }}
-      />
-    </SettingsSection>
+    <SettingRow id="account.signOut" detail={canLeave ? 'Then Atelier asks again whether to use a server or this computer.' : undefined}>
+      <Button loading={signingOut} onClick={() => void signOut()}>
+        Log out
+      </Button>
+    </SettingRow>
   );
 }
 

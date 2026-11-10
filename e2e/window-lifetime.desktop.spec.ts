@@ -27,7 +27,8 @@ test('desktop: a hidden window never stands in for Atelier’s own', async () =>
       // The Dock icon, then opening the app again: there is one new real window, and the hidden one stays hidden.
       await app.evaluate(({ app: electronApp }) => void electronApp.emit('activate'));
       await expect.poll(async () => (await windows(app)).filter((w) => w.title !== 'hidden').length).toBe(1);
-      await app.evaluate(({ app: electronApp }) => void electronApp.emit('second-instance'));
+      // As a second copy hands over: its arguments come along (an `atelier://` link among them, on Windows and Linux).
+      await app.evaluate(({ app: electronApp }) => void electronApp.emit('second-instance', {}, ['Atelier'], ''));
       expect((await windows(app)).filter((w) => w.title !== 'hidden')).toHaveLength(1);
       expect((await windows(app)).find((w) => w.title === 'hidden')?.visible).toBe(false);
     } else {

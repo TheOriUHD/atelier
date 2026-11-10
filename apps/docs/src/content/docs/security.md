@@ -328,6 +328,29 @@ computer. Turning off the home folder in the desktop app (**Settings › System*
 - Signing in through the browser: approve only a code your own terminal shows ([Accounts](/accounts/#signing-in-a-terminal)).
 - Print mode (`atelier -p`) allows nothing that would ask unless `--allow` names it.
 
+## Sharing this computer on your network
+
+**Settings › Connection › Share on your network** (off until you turn it on) makes the desktop app's own backend answer
+other devices on the network, as a server does. What that opens and what guards it:
+
+- **Everyone who signs in is you.** There is one account. Whoever has the password can do what you can in Atelier on
+  this computer, including running commands in your folders. Choose a password you use nowhere else.
+- **Plain HTTP.** The connection isn't encrypted, so others on the same network could read it, the password included.
+  Share only on a network you trust. For use away from home, run an [Atelier server](/self-hosting/) behind HTTPS.
+- **Sign-in:** the password only, with the same limit on wrong tries as a server. A browser keeps the sign-in in a cookie
+  scripts can't read (`HttpOnly`, `SameSite=Lax`); apps keep a token. Only sign-ins made over the network count there:
+  the token this computer's own windows use doesn't. **Change password…**, **Sign everyone out** and turning sharing
+  off delete every sign-in from the network.
+- **Not from the network:** sharing itself, the screen lock, signing in without a password, accounts and invites, and
+  adding folders (a path picked on another device would be read as one on this computer). The screen lock doesn't stop
+  devices on the network: they signed in with the password.
+- **Other sites:** sign-in and the WebSocket refuse requests whose `Origin` is another site, and every request whose
+  `Host` isn't an address, a single-label name or a local-network name (`.local`, `.lan`, `.home.arpa`, `.internal`,
+  `.ts.net`): a web page that points its own domain at this computer (DNS rebinding) can't talk to it. Pages get the
+  same Content-Security-Policy as on a server.
+- **What it serves:** the web app, `/api/health`, sign-in and sign-out, `/api/ws` and `/api/blobs` (signed-in only).
+  Nothing else on this computer is reachable through it.
+
 ## The web server
 
 ### The web server's headers

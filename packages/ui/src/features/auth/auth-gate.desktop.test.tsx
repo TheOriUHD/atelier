@@ -362,7 +362,7 @@ describe('AuthGate in the desktop app', () => {
   });
 });
 
-describe('leaving the setup (Log out, Change setup…)', () => {
+describe('leaving the setup (Log out, Settings › Connection)', () => {
   it('does not put the server’s sign-in screen up while the backend stops, because the window is about to show the first-run choice', async () => {
     // The server answers a logout with auth.signedOut before the reply; stopping the backend then takes seconds.
     let reload!: () => void;

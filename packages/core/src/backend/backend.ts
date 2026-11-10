@@ -2,6 +2,7 @@
  * The whole app backend, shared by the Electron utility process and the web server. `platform`
  * injects the only surface-specific pieces; everything else is identical on desktop and web.
  */
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { z } from 'zod';
 import { basename, dirname, join, posix, win32 } from 'node:path';
@@ -10,6 +11,8 @@ import {
   accountParticipant,
   isCoopMirror,
   ADMIN_PROCEDURES,
+  SharePort,
+  type NetworkShare,
   APP,
   DEVICE_LINK_PROTOCOL,
   McpImportList,
@@ -56,6 +59,7 @@ import {
 } from '@atelier/protocol';
 import { AccountError, AccountService, type Authenticated, type ClientInfo } from '../accounts/account-service.ts';
 import { TerminalSignIns } from '../accounts/terminal-sign-in.ts';
+import { ShareError, shareAddresses, shareName, startShareServer, type ShareBackend, type ShareServer } from '../network/share-server.ts';
 import { DeviceRepo, toDeviceSummary } from '../accounts/device-repo.ts';
 import { AuditLog } from '../audit/audit-log.ts';
 import { auditEntry, isSkip, type AuditEnv } from '../audit/audit-rules.ts';
@@ -186,6 +190,11 @@ export interface Platform {
   serverUpdates?: ServerUpdates | null;
   /** The desktop: a folder on this machine became one of the person's, so the app may show and open it (Show in Finder). */
   folderTrusted?(root: string): void;
+  /**
+   * The desktop app's own backend may be shared on the network (Settings › Connection), serving the web app from `uiDir`
+   * (its build; null serves the API only).
+   */
+  share?: { uiDir: string | null };
   /** The desktop: the co-op sessions with a room open, for which the computer stays awake (guests work on it). */
   coopAwake?(sessionIds: string[]): void;
   /**
@@ -274,6 +283,36 @@ function withImageModel(overrides: Record<string, unknown>, imageModel: string |
   const { imageModel: _old, ...rest } = overrides;
   return imageModel === null ? rest : { ...rest, imageModel };
 }
+
+/**
+ * What a device on the network may not do on a desktop app's own backend shared there (Settings › Connection): sign in
+ * without the password, the screen lock and the sharing itself, which belong to whoever sits at that computer; accounts,
+ * because it has one person; and adding folders, whose paths would be that computer's, picked on another.
+ */
+const NOT_OVER_NETWORK: ReadonlySet<keyof AppContract['procedures']> = new Set<keyof AppContract['procedures']>([
+  'auth.setup',
+  'auth.setupLocal',
+  'auth.localSignIn',
+  'auth.signup',
+  'auth.checkInvite',
+  'auth.acceptInvite',
+  'lock.unlock',
+  'lock.lock',
+  'lock.set',
+  'lock.clear',
+  'lock.setAutoLock',
+  'network.status',
+  'network.set',
+  'network.signOutAll',
+  'users.create',
+  'users.update',
+  'users.resetPassword',
+  'users.delete',
+  'invites.list',
+  'invites.create',
+  'invites.revoke',
+  'workspaces.addLocal',
+]);
 
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
 const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat'];
@@ -1645,8 +1684,81 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
   /** Every window follows the screen lock, signed in or not. */
   const lockChanged = (status: ReturnType<ScreenLock['status']>) => {
-    for (const c of connections) c.rpc.emit('lock.changed', status);
+    // The screen lock is this computer's: devices on the network signed in with the password and don't see it.
+    for (const c of connections) if (!c.client.network) c.rpc.emit('lock.changed', status);
     return status;
+  };
+
+  // ---------------------------------------------------------------- shared on the network (Settings › Connection)
+  /** What the person chose, in `network.json` beside the settings: this computer's, not the account's. */
+  interface ShareChoice {
+    enabled: boolean;
+    port: number;
+    /** A password for other devices was chosen here (the one `setupLocal` made is random and known to nobody). */
+    passwordSet: boolean;
+  }
+  const shareFile = join(platform.configDir, 'network.json');
+  const shareAvailable = local && !!platform.share;
+  let shareChoice: ShareChoice = { enabled: false, port: 7340, passwordSet: false };
+  if (shareAvailable) {
+    try {
+      const saved = JSON.parse(await readFile(shareFile, 'utf8')) as Partial<ShareChoice>;
+      shareChoice = {
+        enabled: saved.enabled === true,
+        port: SharePort.safeParse(saved.port).success ? saved.port! : 7340,
+        passwordSet: saved.passwordSet === true,
+      };
+    } catch {
+      // Never shared: off.
+    }
+  }
+  let shareServer: ShareServer | null = null;
+  let shareError: string | null = null;
+  const saveShareChoice = async () => {
+    await mkdir(platform.configDir, { recursive: true });
+    await writeFile(shareFile, `${JSON.stringify(shareChoice, null, 2)}\n`, { mode: 0o600 });
+  };
+  /** Everyone signed in from the network is signed out, now and for good (their sign-ins are deleted). */
+  const signOutNetwork = async () => {
+    await accounts.revokeNetwork();
+    signOutWhere((c) => !!c.client.network);
+  };
+  const stopSharing = async () => {
+    const open = shareServer;
+    shareServer = null;
+    await open?.close();
+  };
+  /** Starts listening with `listener` (the backend's connect and sign-in, set once the backend exists). */
+  let shareListener: ShareBackend | null = null;
+  const startSharing = async () => {
+    if (!shareListener) return;
+    shareError = null;
+    if (!shareChoice.passwordSet) {
+      shareError = 'Choose a password for the other devices first.';
+      return;
+    }
+    try {
+      shareServer = await startShareServer(shareListener, { port: shareChoice.port, uiDir: platform.share!.uiDir, name: shareName(), logger: platform.logger });
+    } catch (e) {
+      shareError = e instanceof ShareError ? e.message : `Atelier couldn’t share on the network: ${e instanceof Error ? e.message : String(e)}`;
+      platform.logger.error('Sharing on the network failed', e);
+    }
+  };
+  const shareStatus = async (): Promise<NetworkShare> => {
+    const owner = await accounts.owner().catch(() => null);
+    return {
+      enabled: shareChoice.enabled,
+      port: shareChoice.port,
+      listening: !!shareServer,
+      error: shareChoice.enabled ? shareError : null,
+      addresses: shareAddresses(shareChoice.port),
+      username: owner?.username ?? '',
+      passwordSet: shareChoice.passwordSet,
+      signedIn: await accounts.networkSignIns(),
+    };
+  };
+  const shareOnly = () => {
+    if (!shareAvailable) throw appError('unsupported', 'Only the desktop app running on this computer can share it on the network.');
   };
   const lockErrors = async <T>(run: () => Promise<T>): Promise<T> => {
     try {
@@ -1936,7 +2048,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       },
       error: (code, message) => appError(code as never, message),
     }),
-    'app.info': () => ({
+    'app.info': (_input, ctx) => ({
       name: APP.name,
       version: APP.version,
       surface: platform.surface,
@@ -1950,6 +2062,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       videoGeneration: true,
       audioGeneration: true,
       terminalSignIn: platform.surface === 'web',
+      ...(ctx.connection().client.network ? { sharedComputer: true } : shareAvailable ? { networkShare: true } : {}),
     }),
 
     // ---------------------------------------------------------------- sign-in
@@ -1957,7 +2070,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       setupRequired: await accounts.setupRequired(),
       signup: settings.effective.server.signup,
       user: ctx.connection().auth?.user ?? null,
-      local,
+      // A device on the network signs in with the password, as to a server.
+      local: local && !ctx.connection().client.network,
+      ...(ctx.connection().client.network ? { passwordOnly: true } : {}),
       oidc: platform.surface === 'web' ? await oidc.options() : [],
     }),
     'auth.setupLocal': ({ name, clientKind }, ctx) =>
@@ -1993,6 +2108,36 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'lock.status': async () => {
       if (local) await screenLock.load();
       return screenLock.status();
+    },
+    'network.status': () => {
+      shareOnly();
+      return shareStatus();
+    },
+    'network.set': async ({ enabled, port, password }) => {
+      shareOnly();
+      if (password !== undefined) {
+        await accounts.setOwnerPassword(password);
+        signOutWhere((c) => !!c.client.network);
+        shareChoice = { ...shareChoice, passwordSet: true };
+      }
+      if (enabled && !shareChoice.passwordSet) throw appError('invalid_input', 'Choose a password for the other devices first.');
+      const moved = port !== undefined && port !== shareChoice.port;
+      shareChoice = { ...shareChoice, enabled, ...(port !== undefined ? { port } : {}) };
+      await saveShareChoice();
+      if (!enabled) {
+        await stopSharing();
+        await signOutNetwork();
+        shareError = null;
+      } else if (!shareServer || moved) {
+        await stopSharing();
+        await startSharing();
+      }
+      return shareStatus();
+    },
+    'network.signOutAll': async () => {
+      shareOnly();
+      await signOutNetwork();
+      return shareStatus();
     },
     'lock.unlock': ({ secret }) =>
       lockErrors(async () => {
@@ -3204,7 +3349,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const c = ctx.connection();
         await c.ready;
         const method = name as keyof AppContract['procedures'];
-        if (screenLock.locked && !LOCKED_PROCEDURES.has(method)) throw appError('locked', 'Atelier is locked. Unlock it to continue.');
+        if (c.client.network && NOT_OVER_NETWORK.has(method)) throw appError('forbidden', 'Only Atelier on the computer you’re connected to can do this.');
+        // The screen lock is for whoever sits at this computer; devices on the network signed in with the password.
+        if (screenLock.locked && !c.client.network && !LOCKED_PROCEDURES.has(method)) throw appError('locked', 'Atelier is locked. Unlock it to continue.');
         if (!PUBLIC_PROCEDURES.has(method)) {
           if (!c.auth) throw appError('unauthenticated', 'Sign in to continue.');
           if (c.auth.user.mustChangePassword && !method.startsWith('account.') && method !== 'auth.logout' && method !== 'prefs.get') {
@@ -3234,14 +3381,18 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     ]),
   ) as unknown as Handlers<AppContract, Ctx>;
 
-  return {
+  const backend: Backend = {
     accounts,
     authenticate: (token) => accounts.authenticate(token),
     connect(transport, options) {
       // Handlers reach their connection through the context; the RPC endpoint is attached right after.
       const connection = { subscriptions: new Set(), client: options.client, auth: null, deviceId: options.client.deviceId ?? null, origin: options.origin } as unknown as Connection;
       connection.ready = options.token
-        ? accounts.authenticate(options.token).then((auth) => void (connection.auth = auth), () => undefined)
+        ? accounts.authenticate(options.token).then(
+            // From the network only a sign-in made there counts, so turning sharing off locks every device out.
+            (auth) => void (connection.auth = auth && (!options.client.network || auth.fromNetwork) ? auth : null),
+            () => undefined,
+          )
         : Promise.resolve();
       const rpc = serveRpc(contract, guarded, transport, { connection: () => connection }, (method, error) => platform.logger.error(`rpc ${method} failed`, error));
       connection.rpc = rpc;
@@ -3294,6 +3445,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return links.attach(auth.user.id, device.id, socket);
     },
     async dispose(options) {
+      await stopSharing();
       clearInterval(cleanupTimer);
       await audit.idle();
       clearInterval(temporaryTimer);
@@ -3319,4 +3471,19 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       db.$client.close();
     },
   };
+
+  if (shareAvailable) {
+    shareListener = {
+      connect: (transport, options) => backend.connect(transport, options),
+      authenticate: async (token) => {
+        const auth = await accounts.authenticate(token);
+        return auth?.fromNetwork ? auth : null;
+      },
+      login: (input, client) => accounts.login(input, client),
+      logout: (sessionId) => backend.logout(sessionId),
+      blobSource: (userId, sha256) => backend.blobSource(userId, sha256),
+    };
+    if (shareChoice.enabled) await startSharing();
+  }
+  return backend;
 }

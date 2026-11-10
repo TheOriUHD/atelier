@@ -387,8 +387,8 @@ sign-ins. See [Remote control](/remote-control/).
 
 ### Can I switch between this computer and a server?
 
-Yes, and nothing is deleted. **Settings › Account › Setup › Change setup…** goes back to the first choice on this computer,
-and **Server › Switch…** does the same when the desktop app is connected to a server. The two stay separate: chats made on
+Yes, and nothing is deleted. **Settings › Connection** (also in the profile menu at the bottom of the sidebar) switches
+the desktop app between this computer and a server, or to another server. The two stay separate: chats made on
 this computer stay on this computer, and chats on a server stay on that server. See
 [Get started](/getting-started/#changing-your-mind).
 

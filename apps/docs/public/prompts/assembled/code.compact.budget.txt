@@ -86,7 +86,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 21, 11877 characters of JSON
+# Tools: 21, 11908 characters of JSON
 
 [
   {
@@ -262,7 +262,7 @@ Recent commit subjects:
   },
   {
     "name": "Bash",
-    "description": "Runs a command in the shell and returns what it printed.\n- The current folder stays the same between calls and relative paths follow it, so prefer `(cd dir && cmd)` to a bare `cd`.\n- Use `run_in_background` for servers.\n- Don't use it to read or edit files.\n- Commit only when asked. Never force-push or throw away uncommitted changes unless asked.",
+    "description": "Runs a command in the shell and returns what it printed.\n- The current folder persists between calls and relative paths follow it: prefer `(cd dir && cmd)` to a bare `cd`.\n- Use `run_in_background` for servers.\n- Don't use it to read or edit files, or to search the whole disk (`find /`).\n- Commit only when asked. Never force-push or throw away uncommitted changes unless asked.",
     "inputSchema": {
       "type": "object",
       "properties": {

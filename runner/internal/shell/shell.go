@@ -35,7 +35,20 @@ type Manager struct {
 	shells map[string]*shell
 	execs  map[string]*execution
 	seq    int
+
+	// killGrace is how long a killed command may take to exit before the answer goes without it (killGraceDefault).
+	killGrace time.Duration
+	// kill stops a command's process group; tests replace it to stand for a process that outlives SIGKILL.
+	kill func(*os.Process) error
 }
+
+// killGraceDefault: a process blocked inside the system (a network volume that stopped answering, a macOS privacy prompt
+// that a read of a protected folder waits on, a stuck file provider) can outlive SIGKILL for minutes. A command that was
+// timed out or stopped answers this long after the kill, whether it is gone or not, so the turn goes on.
+const killGraceDefault = 3 * time.Second
+
+// killedCode is the exit code of a command killed with SIGKILL that hasn't exited yet: 128 + 9, as a shell reports one.
+const killedCode = 137
 
 type shell struct {
 	id         string
@@ -67,7 +80,7 @@ func (x *execution) state() (running bool, code *int) {
 // NewManager keeps per-command cwd files in tmpDir.
 func NewManager(scope *fsops.Scope, notify func(string, any), tmpDir string) *Manager {
 	path, kind := sys.ExecShell()
-	return &Manager{scope: scope, notify: notify, tmpDir: tmpDir, path: path, kind: kind, shells: map[string]*shell{}, execs: map[string]*execution{}}
+	return &Manager{scope: scope, notify: notify, tmpDir: tmpDir, path: path, kind: kind, shells: map[string]*shell{}, execs: map[string]*execution{}, killGrace: killGraceDefault, kill: proc.KillGroup}
 }
 
 // Kind is what commands run with: bash, sh or powershell.
@@ -125,7 +138,7 @@ func (m *Manager) Exec(ctx context.Context, p rpc.ShellExecParams) (rpc.ShellExe
 	cmd.Dir = cwd
 	cmd.Env = proc.MergeEnv(sh.env, map[string]string{"PWD": cwd})
 	proc.NewGroup(cmd)
-	cmd.Cancel = func() error { return proc.KillGroup(cmd.Process) }
+	cmd.Cancel = func() error { return m.kill(cmd.Process) }
 	cmd.WaitDelay = 200 * time.Millisecond // stop reading once the command exits, even if a child it left behind holds the pipe
 	st := &stream{out: &x.out, execID: x.id}
 	if !p.Background {
@@ -157,7 +170,25 @@ func (m *Manager) Exec(ctx context.Context, p rpc.ShellExecParams) (rpc.ShellExe
 	}
 
 	stop := context.AfterFunc(ctx, cancel) // $/cancel kills the command
-	timedOut := wait()
+	exited := make(chan bool, 1)
+	go func() { exited <- wait() }()
+	var timedOut, stillRunning bool
+	var code int
+	select {
+	case timedOut = <-exited:
+		code = x.code
+	case <-runCtx.Done():
+		// Timed out or stopped, so killed (or it just exited: wait cancels runCtx too). One the system holds past the
+		// kill is left to exit when it can.
+		select {
+		case timedOut = <-exited:
+			code = x.code
+		case <-time.After(m.killGrace):
+			timedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
+			stillRunning = true
+			code = killedCode
+		}
+	}
 	stop()
 	m.forget(x.id)
 	newCwd := m.updateCwd(sh, cwdFile)
@@ -165,15 +196,15 @@ func (m *Manager) Exec(ctx context.Context, p rpc.ShellExecParams) (rpc.ShellExe
 		return rpc.ShellExecResult{}, ctx.Err()
 	}
 	text, truncated := x.out.text()
-	code := x.code
 	return rpc.ShellExecResult{
-		ExecID:     x.id,
-		ExitCode:   &code,
-		Cwd:        newCwd,
-		DurationMs: time.Since(started).Milliseconds(),
-		Output:     text,
-		Truncated:  truncated,
-		TimedOut:   timedOut,
+		ExecID:       x.id,
+		ExitCode:     &code,
+		Cwd:          newCwd,
+		DurationMs:   time.Since(started).Milliseconds(),
+		Output:       text,
+		Truncated:    truncated,
+		TimedOut:     timedOut,
+		StillRunning: stillRunning,
 	}, nil
 }
 

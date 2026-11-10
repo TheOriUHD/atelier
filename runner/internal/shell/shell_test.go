@@ -8,11 +8,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"atelier.dev/runner/internal/fsops"
+	"atelier.dev/runner/internal/proc"
 	"atelier.dev/runner/internal/rpc"
 )
 
@@ -201,6 +203,51 @@ func TestCancelKillsForegroundCommand(t *testing.T) {
 	// The shell stays usable.
 	if res := f.exec(t, "echo ok", 0); res.Output != "ok\n" {
 		t.Fatalf("after cancel: %+v", res)
+	}
+}
+
+// A process the system holds past SIGKILL (a network volume that stopped answering, a macOS privacy prompt a read waits
+// on) doesn't hold the answer: it comes shortly after the kill and says the command may still be running.
+func TestKilledCommandThatOutlivesTheKillStillAnswers(t *testing.T) {
+	f := setup(t)
+	var mu sync.Mutex
+	var stuck []*os.Process
+	var holding atomic.Bool
+	holding.Store(true)
+	f.m.kill = func(p *os.Process) error { // while holding, stands for a kill the process doesn't die of yet
+		if !holding.Load() {
+			return proc.KillGroup(p)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		stuck = append(stuck, p)
+		return nil
+	}
+	f.m.killGrace = 200 * time.Millisecond
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, p := range stuck {
+			_ = proc.KillGroup(p)
+		}
+	})
+
+	start := time.Now()
+	res := f.exec(t, "echo searching; sleep 30", 300)
+	if !res.TimedOut || !res.StillRunning || *res.ExitCode != killedCode || strings.TrimSpace(res.Output) != "searching" || time.Since(start) > 5*time.Second {
+		t.Fatalf("timed out: %+v after %v", res, time.Since(start))
+	}
+
+	// Stopped the same way, it answers too, and the shell takes the next command.
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(200*time.Millisecond, cancel)
+	start = time.Now()
+	if _, err := f.m.Exec(ctx, rpc.ShellExecParams{ShellID: f.shell, Command: "sleep 30"}); !errors.Is(err, context.Canceled) || time.Since(start) > 5*time.Second {
+		t.Fatalf("stopped: %v after %v", err, time.Since(start))
+	}
+	holding.Store(false)
+	if res := f.exec(t, "echo ok", 0); strings.TrimSpace(res.Output) != "ok" || res.StillRunning {
+		t.Fatalf("after: %+v", res)
 	}
 }
 

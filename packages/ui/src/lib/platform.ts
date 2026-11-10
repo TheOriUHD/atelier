@@ -74,6 +74,8 @@ interface DesktopBridge {
   connection: {
     get(): Promise<{ mode: 'local' | 'server' | null; serverUrl: string | null }>;
     set(choice: ConnectionChoice): Promise<void>;
+    /** Rejects with a message for the person unless a server answers at that address; nothing is switched. Absent in older shells. */
+    check?(choice: ConnectionChoice): Promise<void>;
     /** Server mode: what is wrong with the way to the server right now, null while it works (or hasn't failed twice yet). */
     problem(): Promise<ConnectionProblem | null>;
     onProblem(handler: (problem: ConnectionProblem | null) => void): () => void;

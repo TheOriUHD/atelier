@@ -5,7 +5,7 @@
  */
 import { appError, type UserSummary } from '@atelier/protocol';
 import { toast } from '../../components/ui/toaster.tsx';
-import { desktop } from '../../lib/platform.ts';
+import { desktop, type ConnectionChoice } from '../../lib/platform.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { isLocal } from './screen-lock.ts';
 
@@ -157,6 +157,25 @@ export async function leaveSetup(): Promise<void> {
     await desktop!.connection.reset!();
   } catch (error) {
     // The window stays as it is: the person may try again.
+    leaving = false;
+    throw error;
+  }
+}
+
+/**
+ * Desktop, Settings › Connection: runs on this computer or on another server from now on. A server has to answer first;
+ * only then is the sign-in to the server in use revoked (where it answers in time), and the app reloads onto the new
+ * choice. Rejects with a message to show, and nothing changes, when the address doesn't work.
+ */
+export async function switchConnection(choice: ConnectionChoice): Promise<void> {
+  if (choice.mode === 'server') await desktop!.connection.check?.(choice);
+  leaving = true;
+  try {
+    if (!isLocal()) {
+      await Promise.race([rpc().call('auth.logout', {}), new Promise((resolve) => setTimeout(resolve, LOGOUT_WAIT_MS))]).catch(() => undefined);
+    }
+    await desktop!.connection.set(choice);
+  } catch (error) {
     leaving = false;
     throw error;
   }

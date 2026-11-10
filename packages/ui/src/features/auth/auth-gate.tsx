@@ -27,6 +27,7 @@ import { InviteCodeScreen } from './invite-code-screen.tsx';
 import { LockScreen } from './lock-screen.tsx';
 import { setLocal, useAutoLock } from './screen-lock.ts';
 import { isLeavingSetup, localSignIn, setIdentityProvidersOffered } from './sign-in.ts';
+import { setPasskeysOffered } from './passkeys.ts';
 
 type Screen =
   | { name: 'loading' }
@@ -86,6 +87,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     const next = await rpc().call('auth.status', {});
     setLocal(next.local);
     setIdentityProvidersOffered(next.oidc.length > 0);
+    setPasskeysOffered(!next.passwordOnly);
     setStatus(next);
     if (next.local) setLock(await rpc().call('lock.status', {}));
     // The owner of this computer has no password: without a kept sign-in they are signed in again by themselves.
@@ -135,7 +137,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // Signed out elsewhere (logout, password reset, account disabled) or a call found no sign-in.
   useEffect(() => {
     const signedOut = () => {
-      // "Log out" and "Change setup…" end in a reload onto the first-run choice; until then nothing else is shown.
+      // "Log out" and Settings › Connection end in a reload onto the first-run choice or the new connection; until then nothing else is shown.
       if (isLeavingSetup()) return;
       void desktop?.session.clear();
       if (status?.local) void refresh();
@@ -253,12 +255,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
           footer={
             (!status?.local || serverFooter || thisComputerFooter) && (
               <>
-                {status?.signup === 'open' && (
+                {status?.signup === 'open' && !status.passwordOnly && (
                   <p>
                     New here? <LinkButton onClick={() => setScreen({ name: 'signup' })}>Create an account</LinkButton>
                   </p>
                 )}
-                {status && !status.local && (
+                {status && !status.local && !status.passwordOnly && (
                   <p>
                     Invited? <LinkButton onClick={() => setScreen({ name: 'inviteCode' })}>I have a code</LinkButton>
                   </p>

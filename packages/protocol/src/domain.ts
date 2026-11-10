@@ -677,5 +677,12 @@ export const AppInfo = z.object({
   audioGeneration: z.boolean().optional(),
   /** A server that signs terminals in through the browser (`auth.terminalStart`, its /link page); absent on older ones. */
   terminalSignIn: z.boolean().optional(),
+  /** The desktop app's own backend, which can be shared on the network (Settings › Connection); said to its own windows only. */
+  networkShare: z.boolean().optional(),
+  /**
+   * This connection reaches a desktop app's own backend over the network: one person and no accounts to manage, so the
+   * pages for users, limits and someone's own computers are left out.
+   */
+  sharedComputer: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

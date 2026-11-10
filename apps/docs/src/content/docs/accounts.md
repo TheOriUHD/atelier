@@ -189,8 +189,8 @@ app holds a token in secure storage. Only a hash of the token is stored on the s
   from sign-in and is not renewed, so in a browser you sign in again after 30 days. An expired session stops working at
   once and is deleted when the server next starts.
 - **Log out** (**Settings › Account › Account**) ends this sign-in. In the desktop app it also revokes the app's sign-in
-  on the server, deletes the saved one and returns to the first-run choice. **Switch…** (the **Server** row) does the same
-  after asking, so you can pick another server or **Run on this computer**.
+  on the server, deletes the saved one and returns to the first-run choice. To use another server or this computer
+  instead, see **Settings › Connection** below.
 - **Log out everywhere** ends every sign-in of your account, this one included.
 - **Change password** keeps you signed in here and signs you out everywhere else.
 - A password reset by an admin, disabling or deleting an account, and revoking a session end the sessions concerned at
@@ -278,15 +278,51 @@ On a server (in a browser or in a desktop app connected to one), top to bottom:
 | **Session access › Remote control** | On by default. Whether your other browsers and devices can open this account's conversations. See [Remote control](/remote-control/). |
 | **Account › Username** | What you sign in with. Fixed. |
 | **Password › Change password** | Asks for the current password and a new one (8 characters or more). On an account made through an identity provider it says **Set a password** and asks only for the new one. |
-| **Log out** | See above. In the desktop app it also offers **Switch…**. |
+| **Log out** | See above. |
 | **Log out of all devices › Log out everywhere** | Ends every sign-in, after confirming. |
 | **Passkeys** | Browser only. **Add passkey** names it and asks your browser where to keep it. The list shows **Name**, **Added** and **Last used**; removing one here does not delete it from your device or password manager. |
 | **Connected sign-ins** | When the server has identity providers. **Connect** and the provider's name goes through its sign-in and back here; in the desktop app that happens in a small window, with **Open in browser** for providers that refuse one. The list shows **Provider**, **Signed in as** and **Last used**. |
 | **Devices** | Computers running the Atelier desktop app for your account: **Name**, **Platform**, **Added**, and **Online** or when last seen. **This computer** marks the one you are on; the others can be removed. |
 
 On **Run on this computer** the page is shorter, because there is no sign-in to manage: **Profile**, **Instructions for
-Code and Cowork**, **Screen lock** and **Setup** (**Change setup…**, which returns to the first-run choice without
-deleting anything).
+Code and Cowork** and **Screen lock**.
+
+## Settings › Connection
+
+Desktop app only: where Atelier runs. The profile menu at the bottom of the sidebar says it too (**Running on this
+computer** or **Connected to atelier.home**) and opens this page.
+
+| Option | What it does |
+|---|---|
+| **This computer** | Atelier runs its own backend here. From a server, **Switch…** and **Switch to this computer** log this app out of the server and reload it on this computer. |
+| **An Atelier server** | Enter the server's address, or pick one under **Found on your network**, and **Connect**. The app checks that a server answers there first: if none does it says so and nothing changes. Then it asks you to sign in to the server. On a server already, **Change…** switches to another one the same way. |
+
+Switching deletes nothing: chats on this computer stay here, chats on a server stay there, and switching back brings
+them back.
+
+### Share on your network
+
+On **This computer**, **Share on your network** lets your other devices (a phone, a tablet, another computer) use
+Atelier on this computer as they would a server: in a browser, or in the Atelier app there under **Found on your
+network**. They sign in as you, with your username and a password you choose here, and work in your chats, with your
+models and keys, and in the folders you added on this computer. There are no other accounts: everyone who signs in is
+you.
+
+| Control | What it does |
+|---|---|
+| **Let other devices use Atelier here** | Asks for the password (8 characters or more) and a port (7340 unless you change it; Atelier apps look for 7340 on the network), then answers on every network this computer is on. Off signs every device out and closes the port. |
+| Addresses | What to open on the other device, local network first (`http://192.168.1.20:7340`), then others such as Tailscale, then the computer's name. Each has a copy button. |
+| **Change port…** | Moves it to another port, when 7340 is taken (another program, or an Atelier server on the same computer). |
+| **Change password…** | A new password signs every device on the network out. |
+| **Sign everyone out** | Ends every sign-in from the network; sharing stays on. |
+
+From the network, Atelier here signs in with the password only (no passkeys, invites or identity providers), and
+whatever belongs to this computer stays here: sharing itself, the screen lock, and adding folders. Folders are added at
+this computer; the other devices use the ones it has. The screen lock is for whoever sits at this computer: devices on
+the network signed in with the password and are not locked out by it. See [Security](/security/#sharing-this-computer-on-your-network).
+
+If this computer asks whether Atelier may accept incoming connections (macOS, or Windows' firewall), allow it, on
+Windows for private networks.
 
 Related pages in Settings: **Privacy**, **Memory**, **Usage** and **General**. See
 [What leaves your machine](/privacy/) and [Data and files](/data-and-files/).

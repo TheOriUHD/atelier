@@ -1,4 +1,4 @@
-import { AppWindow, Blocks, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
@@ -38,6 +38,30 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       'On a Mac, macOS asks once whether “atelier” may reach a server on your local network; the answer holds for later versions.',
       'Meet Pip, the terminal app’s mascot.',
     ],
+  },
+  {
+    version: '0.5.5',
+    intro: 'Atelier on this computer can be a server for your other devices at home.',
+    highlights: [
+      {
+        icon: Wifi,
+        title: 'Share on your network',
+        body: 'Settings › Connection › Share on your network: choose a password, and your phone, tablet or another computer opens Atelier on this one in a browser (or finds it in the Atelier app) and signs in as you, with your chats, models and folders. For a network you trust: the connection isn’t encrypted. Turning it off signs every device out.',
+      },
+    ],
+    also: [],
+  },
+  {
+    version: '0.5.4',
+    intro: 'Switching between this computer and a server is one page away.',
+    highlights: [
+      {
+        icon: Network,
+        title: 'Settings › Connection',
+        body: 'Where Atelier runs has a page of its own: this computer or an Atelier server, with the one in use marked. Switch to the other, or to another server, from there; a server has to answer before anything changes, and switching deletes nothing. The profile menu at the bottom of the sidebar says where Atelier runs and opens the page.',
+      },
+    ],
+    also: ['A command that hangs inside the system (a whole-disk search, a network volume) no longer stalls a turn after its timeout.'],
   },
   {
     version: '0.5.3',

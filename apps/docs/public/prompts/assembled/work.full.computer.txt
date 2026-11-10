@@ -102,7 +102,7 @@ Skills hold instructions for specific tasks. When a request matches one, load it
 
 # Notes on the first message: 0
 
-# Tools: 26, 30226 characters of JSON
+# Tools: 26, 30504 characters of JSON
 
 [
   {
@@ -278,7 +278,7 @@ Skills hold instructions for specific tasks. When a request matches one, load it
   },
   {
     "name": "Bash",
-    "description": "Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code.\n- The working directory persists between calls, but exported variables, aliases and `source` don't, so chain dependent steps with `&&`. Relative paths in a command resolve against that current directory, while the file tools always resolve them against the workspace root. Keep the shell at the root by using `(cd dir && cmd)` or a flag such as `git -C` or `npm --prefix` instead of a bare `cd`.\n- Quote paths that contain spaces. Avoid interactive programs and pass flags that make them non-interactive. Commands are stopped after 2 minutes unless you set `timeout` (up to 10 minutes).\n- Start servers, watchers and other long-running processes with `run_in_background`, then read their output with BashOutput and stop them with KillShell. Don't poll in sleep loops; check once when you need the result.\n- Output longer than 30,000 characters is cut in the middle.\n- The person may not see command output, so repeat in your reply what matters.\n- Don't use it to read, search or edit files (Read, Glob, Grep, Edit, Write do that), or to send messages to the person.",
+    "description": "Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code.\n- The working directory persists between calls, but exported variables, aliases and `source` don't, so chain dependent steps with `&&`. Relative paths in a command resolve against that current directory, while the file tools always resolve them against the workspace root. Keep the shell at the root by using `(cd dir && cmd)` or a flag such as `git -C` or `npm --prefix` instead of a bare `cd`.\n- Quote paths that contain spaces. Avoid interactive programs and pass flags that make them non-interactive. Commands are stopped after 2 minutes unless you set `timeout` (up to 10 minutes).\n- Don't search the whole disk or home folder (`find /`, `find ~`, `grep -r /`): that runs for many minutes, crosses network volumes and can wait on the system's permission prompts. Search the workspace, or name the folders likely to hold what you look for, with a `-maxdepth`.\n- Start servers, watchers and other long-running processes with `run_in_background`, then read their output with BashOutput and stop them with KillShell. Don't poll in sleep loops; check once when you need the result.\n- Output longer than 30,000 characters is cut in the middle.\n- The person may not see command output, so repeat in your reply what matters.\n- Don't use it to read, search or edit files (Read, Glob, Grep, Edit, Write do that), or to send messages to the person.",
     "inputSchema": {
       "type": "object",
       "properties": {
