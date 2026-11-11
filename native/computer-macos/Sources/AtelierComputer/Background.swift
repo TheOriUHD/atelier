@@ -164,32 +164,102 @@ enum Background {
     return Front(pid: pid, window: windows.first?.id)
   }
 
-  /// Runs an action into `target`'s app and, when that app came to the front because of it (it wasn't before, and the
-  /// person had another app in front), sends the person's app back to the front. True when that happened.
-  static func keepingFront(_ target: pid_t, _ action: () throws -> Void) throws -> Bool {
-    let before = front()
-    try action()
-    guard let before, before.pid != target else { return false }
-    // The app answers on its own main thread: a moment, then a look.
-    for _ in 0..<4 {
-      usleep(50_000)
-      if front()?.pid == target {
-        bringBack(before)
+  /// Whether one of `target`'s windows sits above the person's front window and overlaps it: the app raised it over
+  /// their work. An app may do that without coming to the front (seen on a Mac: a link in Chrome that opened a tab put
+  /// Chrome's window over Atelier while Atelier stayed the front app). `list` is front to back.
+  static func raised(_ target: pid_t, over front: Front, in list: [WindowInfo]) -> Bool {
+    guard let id = front.window, let theirs = list.first(where: { $0.id == id }) else { return false }
+    for window in list {
+      if window.id == id { return false }
+      if window.pid == target, window.layer == theirs.layer, window.alpha > 0, window.bounds.intersects(theirs.bounds) {
         return true
       }
     }
     return false
   }
 
+  /// Runs an action into `target`'s app and, when that app came to the front because of it or raised a window over the
+  /// person's (it wasn't before, and the person had another app in front), puts the person's app and window back in
+  /// front. True when that happened. A raise that comes later (a tab opened once a page has loaded) is watched for
+  /// a few seconds more and undone the same way.
+  static func keepingFront(_ target: pid_t, _ action: () throws -> Void) throws -> Bool {
+    let before = front()
+    let over = before.map { raised(target, over: $0, in: Windows.list(onScreenOnly: true)) } ?? false
+    try action()
+    guard let before, before.pid != target else { return false }
+    // The app answers on its own main thread: a moment, then a look.
+    for _ in 0..<6 {
+      usleep(50_000)
+      if fronted(target, before: before, wasOver: over) {
+        bringBack(before, over: target)
+        return true
+      }
+    }
+    watch(target, before: before, wasOver: over)
+    return false
+  }
+
+  /// The target came to the front, or (the person's app still in front) raised a window over theirs.
+  private static func fronted(_ target: pid_t, before: Front, wasOver: Bool) -> Bool {
+    guard let now = front() else { return false }
+    if now.pid == target { return true }
+    return now.pid == before.pid && !wasOver && raised(target, over: before, in: Windows.list(onScreenOnly: true))
+  }
+
+  /// Which watch is the current one: a newer action ends the one before.
+  nonisolated(unsafe) private static var watching = 0
+  private static let watchLock = NSLock()
+
+  /// Looks for a late raise for three seconds after an action, while the person's app is still in front. The target
+  /// coming to the front itself counts only in the first second: later it is more likely the person switching to it.
+  private static func watch(_ target: pid_t, before: Front, wasOver: Bool) {
+    watchLock.lock()
+    watching += 1
+    let mine = watching
+    watchLock.unlock()
+    DispatchQueue.global(qos: .userInitiated).async {
+      for tick in 0..<30 {
+        usleep(100_000)
+        watchLock.lock()
+        let current = watching == mine
+        watchLock.unlock()
+        guard current, let now = front() else { return }
+        if now.pid == target {
+          if tick < 10 { bringBack(before, over: target) }
+          return
+        }
+        guard now.pid == before.pid else { return }
+        if !wasOver, raised(target, over: before, in: Windows.list(onScreenOnly: true)) {
+          bringBack(before, over: target)
+          return
+        }
+      }
+    }
+  }
+
   /// The person's app back in front with its window: the window server's own call (yabai's), then Accessibility's
-  /// `AXFrontmost`, until it holds (at most a second).
-  static func bringBack(_ front: Front) {
+  /// `AXFrontmost`, until it holds (at most a second). The app in front again doesn't put its window back over one
+  /// `target` raised (seen with a link that opened a tab: TextEdit in front, Brave's window still above TextEdit's), so
+  /// then the person's window is raised too.
+  static func bringBack(_ front: Front, over target: pid_t? = nil) {
     SkyLight.bringToFront(pid: front.pid, window: front.window)
     for _ in 0..<10 {
+      if Self.front()?.pid == front.pid { break }
       usleep(100_000)
-      if Self.front()?.pid == front.pid { return }
       _ = AXUIElementSetAttributeValue(Inspect.application(front.pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue)
     }
+    guard let target else { return }
+    for _ in 0..<5 {
+      guard raised(target, over: front, in: Windows.list(onScreenOnly: true)) else { return }
+      raiseWindow(front)
+      usleep(60_000)
+    }
+  }
+
+  /// Raises the person's front window over the others (Accessibility's raise, on their own app's window).
+  private static func raiseWindow(_ front: Front) {
+    guard let id = front.window, let info = Windows.info(id), let element = Occlusion.element(of: info) else { return }
+    _ = AXUIElementPerformAction(element, kAXRaiseAction as CFString)
   }
 
   static let passwordField =

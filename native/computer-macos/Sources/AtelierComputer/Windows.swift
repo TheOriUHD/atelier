@@ -53,16 +53,29 @@ public enum WindowChoice {
       && window.bounds.height >= minimumSide
   }
 
+  /// The Dock's window level (`kCGDockWindowLevel`): an app's own windows sit below it.
+  public static let dockLevel = 20
+
+  /// An app's window above the normal layer that is still its work: a floating palette, a modal panel (Numbers' welcome
+  /// and setup windows are on level 8). Seen on a Mac: with only level 0 counted, Numbers past its license screen had
+  /// "no window open" and background mode gave up.
+  public static func isPanel(_ window: WindowInfo) -> Bool {
+    window.layer > 0 && window.layer < dockLevel && window.onScreen && window.alpha > 0
+      && window.bounds.width >= minimumSide && window.bounds.height >= minimumSide
+  }
+
   /// The app's frontmost normal window: the first of its processes' in a front-to-back window list that is on a display
-  /// (some apps park windows far outside every display; with no displays given, that isn't checked).
-  /// The app's frontmost normal window, one with a title first: an app's untitled windows are mostly passing ones (a
-  /// browser's pop-up or sign-in sheet, which Esc closes), its main windows carry a title (a browser's, the tab's).
+  /// (some apps park windows far outside every display; with no displays given, that isn't checked), one with a title
+  /// first: an app's untitled windows are mostly passing ones (a browser's pop-up or sign-in sheet, which Esc closes),
+  /// its main windows carry a title (a browser's, the tab's). With no normal window, its frontmost panel.
   public static func frontmost(_ windows: [WindowInfo], pids: Set<pid_t>, displays: [CGRect] = []) -> WindowInfo? {
-    let candidates = windows.filter { window in
-      pids.contains(window.pid) && isNormal(window)
-        && (displays.isEmpty || displays.contains { $0.intersects(window.bounds) })
+    func pick(_ kind: (WindowInfo) -> Bool) -> WindowInfo? {
+      let candidates = windows.filter { window in
+        pids.contains(window.pid) && kind(window) && (displays.isEmpty || displays.contains { $0.intersects(window.bounds) })
+      }
+      return candidates.first { $0.title != nil } ?? candidates.first
     }
-    return candidates.first { $0.title != nil } ?? candidates.first
+    return pick(isNormal) ?? pick(isPanel)
   }
 
   /// The window number a `bg.*` call names, as `window.capture` wrote it.

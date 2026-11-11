@@ -56,6 +56,37 @@ final class WindowChoiceTests: XCTestCase {
     XCTAssertEqual(WindowChoice.frontmost(list, pids: [20])?.id, 1)
   }
 
+  func testFrontmostFallsBackToAnAppsPanel() {
+    // Numbers past its license screen: its only window a modal panel on level 8.
+    let numbers = [window(1, pid: 10), window(2, pid: 20, layer: 8, CGRect(x: 445, y: 152, width: 910, height: 608))]
+    XCTAssertEqual(WindowChoice.frontmost(numbers, pids: [20])?.id, 2)
+    // A normal window still wins over a panel in front of it.
+    let both = [window(3, pid: 20, layer: 3), window(4, pid: 20)]
+    XCTAssertEqual(WindowChoice.frontmost(both, pids: [20])?.id, 4)
+    // Not the Dock's level or above, nor a sliver or a clear one.
+    XCTAssertNil(WindowChoice.frontmost([window(5, pid: 20, layer: 20)], pids: [20]))
+    XCTAssertNil(WindowChoice.frontmost([window(6, pid: 20, layer: 8, alpha: 0)], pids: [20]))
+    XCTAssertNil(WindowChoice.frontmost([window(7, pid: 20, layer: 8, CGRect(x: 0, y: 0, width: 30, height: 600))], pids: [20]))
+  }
+
+  func testRaisedOverThePersonsWindow() {
+    let front = Background.Front(pid: 10, window: 1)
+    let mine = window(1, pid: 10, CGRect(x: 180, y: 70, width: 1440, height: 900))
+    let chrome = window(2, pid: 20, CGRect(x: 0, y: 30, width: 1800, height: 1100))
+    // Chrome's window ordered above the person's (front to back).
+    XCTAssertTrue(Background.raised(20, over: front, in: [chrome, mine]))
+    XCTAssertFalse(Background.raised(20, over: front, in: [mine, chrome]))
+    // Above but beside it, on another level (a panel or a menu), or clear: not over their work.
+    XCTAssertFalse(Background.raised(20, over: front, in: [window(3, pid: 20, CGRect(x: 1700, y: 30, width: 100, height: 100)), mine]))
+    XCTAssertFalse(Background.raised(20, over: front, in: [window(4, pid: 20, layer: 101), mine]))
+    XCTAssertFalse(Background.raised(20, over: front, in: [window(5, pid: 20, alpha: 0), mine]))
+    // Another app's window above: not the target's doing.
+    XCTAssertFalse(Background.raised(20, over: front, in: [window(6, pid: 30), mine]))
+    // The person's window unknown or gone: nothing to compare with.
+    XCTAssertFalse(Background.raised(20, over: Background.Front(pid: 10, window: nil), in: [chrome, mine]))
+    XCTAssertFalse(Background.raised(20, over: front, in: [chrome]))
+  }
+
   func testNormalWindowSize() {
     XCTAssertTrue(WindowChoice.isNormal(window(1, pid: 1, CGRect(x: 0, y: 0, width: 40, height: 40))))
     XCTAssertFalse(WindowChoice.isNormal(window(1, pid: 1, CGRect(x: 0, y: 0, width: 39, height: 400))))
