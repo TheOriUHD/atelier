@@ -562,7 +562,7 @@ export class ChatService {
   private readonly changeDirectory: Tool;
   private readonly addConnector: Tool;
   private readonly computerTools: Tool[];
-  private readonly browserTool: Tool | null;
+  private readonly browserTool: (Tool & { closeTabs(sessionId: string): Promise<void> }) | null;
   private readonly askUser: Tool;
   private readonly exitPlanMode: Tool;
   private readonly skill: Tool;
@@ -672,7 +672,7 @@ export class ChatService {
       },
       wanted: (sessionId) => this.computerWanted(sessionId),
     });
-    this.browserTool = this.deps.browser ? createBrowserTool({ call: this.deps.browser.call, blobs: this.deps.blobs }) as Tool : null;
+    this.browserTool = this.deps.browser ? (createBrowserTool({ call: this.deps.browser.call, blobs: this.deps.blobs }) as Tool & { closeTabs(sessionId: string): Promise<void> }) : null;
     this.addConnector = createAddConnectorTool({
       approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
       add: async (sessionId, connector) => this.deps.addConnector!(await this.requireSession(sessionId), connector),
@@ -3367,6 +3367,8 @@ export class ChatService {
 
   /** Ends a session's control of the computer, if it has it, as its turn ends or waits on the person; best-effort. */
   private async releaseComputer(sessionId: string, waiting?: PendingInteraction['kind']): Promise<void> {
+    // The browser tabs the reply opened close with it (not while it waits on the person: it goes on in them).
+    if (!waiting) await this.browserTool?.closeTabs(sessionId).catch(() => undefined);
     if (!this.deps.computer) return;
     const session = await this.deps.repo.getRow(sessionId);
     if (!session || (session.mode !== 'code' && session.mode !== 'work') || session.parentSessionId) return;

@@ -42,7 +42,7 @@ function describe({ tier }: DescribeContext): string {
   if (tier === 'compact') return 'Works in web pages in tabs of its own: open a URL, read the page (text and elements with refs), click, type, select, scroll.';
   return [
     'Works in web pages for the person, in tabs of its own in their browser (Atelier for Chrome), which stay in the background: never their own tabs, and nothing comes to the front of their screen.',
-    '- open loads a URL in a new tab and returns its tab number; navigate and back move that tab. close it when the task is done.',
+    '- open loads a URL in a new tab and returns its tab number; navigate and back move that tab. Tabs you opened close when your reply ends.',
     '- read returns the page’s text and its usable elements, each with a ref ("[12] button \\"Add to cart\\""). Act by ref: click, type (with replace to overwrite, submit to press Enter), select (an option of a list, by its text), scroll (dy in pixels, positive is down), key (a chord like ["Enter"] or ["Meta","a"]). find lists only the elements matching a query. Refs last until the page changes: read again after a navigation.',
     '- Prefer read over screenshot: it is faster and exact. Take a screenshot when the layout matters (a picture, a chart, whether something looks right); its points are CSS pixels and can be clicked as x and y.',
     '- Give each action that changes something a short summary of its effect ("Adds the cable to the cart"), naming what it agrees to, sends or buys when it does.',
@@ -104,19 +104,28 @@ function need<K extends keyof BrowserInput>(input: BrowserInput, ...keys: K[]): 
 
 const target = (input: BrowserInput) => ({ tab: input.tab!, ...(input.ref !== undefined ? { ref: input.ref } : {}), ...(input.x !== undefined && input.y !== undefined ? { x: input.x, y: input.y } : {}) });
 
-export function createBrowserTool(deps: BrowserToolDeps): Tool<BrowserInput> {
+/** The Browser tool, and the tabs each session opened, closed when its turn ends (`closeTabs`). */
+export function createBrowserTool(deps: BrowserToolDeps): Tool<BrowserInput> & { closeTabs(sessionId: string): Promise<void> } {
+  const opened = new Map<string, Set<number>>();
   return {
+    async closeTabs(sessionId) {
+      const tabs = opened.get(sessionId);
+      opened.delete(sessionId);
+      for (const tab of tabs ?? []) await deps.call('tabs.close', { tab }).catch(() => undefined);
+    },
     name: 'Browser',
     description: describe,
     inputSchema: SCHEMA as never,
     readOnly: false,
     compactExample: { action: 'open', url: 'https://example.com' },
-    async run(input): Promise<ToolOutput> {
+    async run(input, ctx): Promise<ToolOutput> {
       try {
         switch (input.action) {
           case 'open': {
             need(input, 'url');
             const tab = await deps.call('tabs.open', { url: input.url! });
+            if (!opened.has(ctx.sessionId)) opened.set(ctx.sessionId, new Set());
+            opened.get(ctx.sessionId)!.add(tab.tab);
             const page = await deps.call('page.read', { tab: tab.tab, text: true, elements: true });
             return textOutput(pageText(page));
           }
@@ -143,6 +152,7 @@ export function createBrowserTool(deps: BrowserToolDeps): Tool<BrowserInput> {
           case 'close':
             need(input, 'tab');
             await deps.call('tabs.close', { tab: input.tab! });
+            opened.get(ctx.sessionId)?.delete(input.tab!);
             return textOutput(`Closed tab ${input.tab}.`);
           case 'screenshot': {
             need(input, 'tab');
