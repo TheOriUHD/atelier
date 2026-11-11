@@ -62,8 +62,10 @@ newer download fails, the one that waits stays offered.
 ### What's new
 
 The first time you open a new version, a **What's new in Atelier** dialog lists what changed: the changes that matter, then
-the smaller ones, with a link to the full changelog. It shows once per person and not on a new install. Open it again from
-**More › What's new** in the sidebar.
+the smaller ones, with a link to the full changelog. Larger features come with a short clip of them at work. If you skipped
+versions, every version since the one you had follows, newest first, each with its own notes (up to eight; the changelog
+has the rest). It shows once per person and not on a new install. Open it again from **More › What's new** in the
+sidebar: it shows the same versions again. The clips come with the app, so opening the dialog sends nothing anywhere.
 
 ### What each platform does
 

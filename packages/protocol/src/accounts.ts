@@ -477,8 +477,11 @@ export const UserPrefs = z.object({
     .default({ searchChats: true, generate: true, sensitive: false }),
   /** The SSH connections this person added in the desktop app (their passwords are secrets, kept apart). */
   ssh: z.object({ connections: z.array(SshConnection).default([]) }).default({ connections: [] }),
-  /** The "What's new" dialog: the version whose release notes this person last saw (null: none yet). */
-  whatsNew: z.object({ seen: z.string().max(40).nullable().default(null) }).default({ seen: null }),
+  /**
+   * The "What's new" dialog: the version whose release notes this person last saw (null: none yet), and the one they had
+   * before it, so the sidebar shows again everything that update brought.
+   */
+  whatsNew: z.object({ seen: z.string().max(40).nullable().default(null), from: z.string().max(40).nullable().default(null) }).default({ seen: null, from: null }),
   /** Keyboard shortcuts this person changed (Settings › Keyboard shortcuts); null turns one off. */
   shortcuts: ShortcutPrefs.default({}),
   /** This person's own connectors, without their values; written only through `connectors.*`, never `prefs.set`. */

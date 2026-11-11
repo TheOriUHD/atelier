@@ -14,6 +14,10 @@ const repo = process.argv[3] ?? '/tmp/timeline';
 const work = process.argv[4] ?? '/tmp/q3-planning';
 const MODEL = 'qwen3:30b';
 const TOKENS_PER_SECOND = 58.8;
+/** Milliseconds between streamed pieces: DEMO_PACE slows replies down to reading speed for recorded clips. */
+const PACE = Number(process.env.DEMO_PACE ?? 8);
+/** Milliseconds the model 'thinks' before each step: DEMO_STEP_MS lets a clip's viewer read each step. */
+const STEP_MS = Number(process.env.DEMO_STEP_MS ?? 0);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chunks = (text, size) => text.match(new RegExp(`[\\s\\S]{1,${size}}`, 'g')) ?? [];
@@ -260,11 +264,12 @@ async function chat(req, res) {
   const lastUserIndex = messages.findLastIndex((m) => m.role === 'user');
   const step =
     scene.steps[messages.slice(lastUserIndex + 1).filter((m) => m.role === 'assistant').length] ?? scene.steps.at(-1);
+  if (STEP_MS) await sleep(STEP_MS);
   if (step.say) {
     for (const piece of chunks(step.say, 6)) {
       if (res.destroyed) return;
       send({ content: piece });
-      await sleep(8);
+      await sleep(PACE);
     }
     if (step.tool) await sleep(120);
   }

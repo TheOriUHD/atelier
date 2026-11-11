@@ -28,7 +28,7 @@ vi.mock('../features/ssh/ssh-prompts.tsx', () => ({ SshPrompts: () => null }));
 vi.mock('../features/auth/screen-lock.ts', () => ({ useLockNow: () => () => {} }));
 vi.mock('./chrome.tsx', () => ({ SidebarToggle: () => null, trafficLightInset: false, useSidebarHidden: () => true }));
 vi.mock('./command-palette.tsx', () => ({ CommandPalette: () => null }));
-vi.mock('../features/whats-new/whats-new.tsx', () => ({ WhatsNewHost: () => null }));
+vi.mock('../features/whats-new/whats-new.tsx', () => ({ WhatsNewHost: () => null, WhatsNewDialog: () => null, useWhatsNewNotes: () => [] }));
 vi.mock('./sidebar.tsx', () => ({ Sidebar: () => null, SidebarDrawer: () => null }));
 vi.mock('./navigation.ts', () => ({ useMode: () => 'chat', useNewChat: () => () => {}, useNewTemporaryChat: () => () => {}, useOpenSettings: () => () => {} }));
 

@@ -1,10 +1,29 @@
+import { compareVersions } from '@atelier/protocol';
+// Clips are recorded from the real apps on throwaway data: apps/cli/scripts/record-clip.ts (see media/README.md).
+import cliClip from './media/atelier-cli.mp4';
+import cliPoster from './media/atelier-cli.jpg';
 import { AppWindow, Blocks, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
+
+/**
+ * A clip or picture that shows a larger feature off: it takes the dialog's full width above the feature's title. Clips are
+ * imported assets bundled with the app (no request leaves it), short and silent: a looping .mp4 or .webm (16:10), or a
+ * .gif, .webp or .png picture.
+ */
+export interface HighlightMedia {
+  src: string;
+  /** What it shows, for screen readers and when it can't load. */
+  alt: string;
+  /** A clip's first frame: shown before it plays, and instead of playing when the person reduces motion. */
+  poster?: string;
+}
 
 /** One thing worth a paragraph: what changed for the person using Atelier, in their words. */
 export interface Highlight {
   icon: LucideIcon;
   title: string;
   body: string;
+  /** A larger feature: shown with its clip, in a segment of its own above the other highlights. */
+  media?: HighlightMedia;
 }
 
 /** What a release tells people when they first open it. Written by hand, newest first; the CHANGELOG has everything. */
@@ -31,6 +50,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
     also: [
       'On a Mac, Chrome, Edge, Brave and Arc only take screenshots in the background: Atelier asks you for Full control to click or type there.',
       'In Bypass, using an app doesn’t ask; taking over the mouse and keyboard still does.',
+      'What’s new now shows every version since the one you had, with clips of the larger features.',
     ],
   },
   {
@@ -41,6 +61,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         icon: SquareTerminal,
         title: 'Atelier in the terminal',
         body: 'Run atelier in a project folder for a Code session there, with the same tools, permissions and models. Connected to your server it uses the server’s models and keys, and its sessions open here too. Install it with curl -fsSL https://updates.atelierhq.dev/cli | sh.',
+        media: { src: cliClip, poster: cliPoster, alt: 'Atelier CLI in a terminal: asked to add uptime to a health check, it reads the server, edits it, writes a test, asks before running the tests, and reports that they pass.' },
       },
       {
         icon: KeyRound,
@@ -622,4 +643,20 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
 /** The notes for exactly this version, or none (a development build has nothing to announce). */
 export function releaseNotesFor(version: string): ReleaseNotes | undefined {
   return RELEASE_NOTES.find((notes) => notes.version === version);
+}
+
+/** How many versions the dialog shows at most; anything older is in the full changelog. */
+export const MAX_VERSIONS = 8;
+
+/**
+ * Everything new since the version the person had (`from`) up to the one they run (`to`), newest first: one entry per
+ * version with notes. Without `from` (they never saw any), only `to`'s own; nothing when `to` has none (a development
+ * build), so the dialog never opens on old news alone.
+ */
+export function releaseNotesSince(from: string | null | undefined, to: string): ReleaseNotes[] {
+  const current = releaseNotesFor(to);
+  if (!current) return [];
+  if (!from) return [current];
+  const range = RELEASE_NOTES.filter((n) => compareVersions(n.version, from) > 0 && compareVersions(n.version, to) <= 0).sort((a, b) => compareVersions(b.version, a.version));
+  return range.length ? range : [current];
 }

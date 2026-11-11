@@ -28,7 +28,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { APP, type Mode, type Project, type SessionSummary, type UserPrefs } from '@atelier/protocol';
+import { type Mode, type Project, type SessionSummary, type UserPrefs } from '@atelier/protocol';
 import {
   Icon,
   IconButton,
@@ -62,9 +62,8 @@ import { VersionNotice } from './version-notice.tsx';
 import { useCodeSplit } from './split-nav.ts';
 import { FolderGroups, GroupHeader, RowLead, SessionRow, rowClass } from './session-rows.tsx';
 import { ShortcutsDialog } from './shortcuts-dialog.tsx';
-import { releaseNotesFor } from '../features/whats-new/release-notes.ts';
 import { JoinLinkDialog } from '../features/coop/join-link-dialog.tsx';
-import { WhatsNewDialog } from '../features/whats-new/whats-new.tsx';
+import { useWhatsNewNotes, WhatsNewDialog } from '../features/whats-new/whats-new.tsx';
 
 type Tab = 'chat' | 'code';
 
@@ -260,7 +259,7 @@ function MoreRows() {
   const [shortcuts, setShortcuts] = useState(false);
   const [news, setNews] = useState(false);
   const [joining, setJoining] = useState(false);
-  const notes = releaseNotesFor(APP.version);
+  const notes = useWhatsNewNotes();
   const openSettings = useOpenSettings();
   const list = useId();
   const row = (icon: LucideIcon, label: string, onClick: () => void) => (
@@ -293,13 +292,13 @@ function MoreRows() {
           {row(SettingsIcon, 'Settings', () => openSettings())}
           {row(ChartColumn, 'Usage', () => openSettings('usage'))}
           {row(Keyboard, 'Keyboard shortcuts', () => setShortcuts(true))}
-          {notes && row(Sparkles, 'What’s new', () => setNews(true))}
+          {notes.length > 0 && row(Sparkles, 'What’s new', () => setNews(true))}
           {row(Users, 'Join a co-op session…', () => setJoining(true))}
         </div>
       )}
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
       <JoinLinkDialog open={joining} onOpenChange={setJoining} />
-      {notes && <WhatsNewDialog notes={notes} open={news} onOpenChange={setNews} />}
+      {notes.length > 0 && <WhatsNewDialog notes={notes} open={news} onOpenChange={setNews} />}
     </>
   );
 }

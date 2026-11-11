@@ -23,9 +23,13 @@ export interface FooterInfo {
   statusLine?: string | null;
 }
 
+/** Below this many columns the footer leaves out the "(shift+tab)" hint. */
+const NARROW = 96;
+
 export function Footer({ info, paint, columns }: { info: FooterInfo; paint: Paint; columns: number }) {
   const modeColour = { auto: 'accent', default: 'muted', acceptEdits: 'good', plan: 'info', bypassPermissions: 'bad' } as const;
-  const mode = paint.fg(modeColour[info.mode], `⏵⏵ ${MODE_WORDS[info.mode]}`) + paint.fg('faint', ' (shift+tab)');
+  // The key's hint goes first when the terminal is narrow: the mode, the context and the model matter more.
+  const mode = paint.fg(modeColour[info.mode], `⏵⏵ ${MODE_WORDS[info.mode]}`) + (columns >= NARROW ? paint.fg('faint', ' (shift+tab)') : '');
   const dot = !info.connected ? paint.fg('bad', '○') : info.link === 'signed_out' ? paint.fg('bad', '●') : info.link === 'connecting' || info.link === 'off' ? paint.fg('warn', '●') : paint.fg('good', '●');
   const bits = [
     mode,
@@ -36,10 +40,15 @@ export function Footer({ info, paint, columns }: { info: FooterInfo; paint: Pain
   ];
   const left = info.hint ? paint.fg('muted', info.hint) : info.statusLine ?? bits.join(paint.fg('faint', ' · '));
   const right = paint.fg('secondary', info.model) + (info.effort ? paint.fg('muted', ` · ${info.effort}`) : '');
+  // The model keeps its place on the right; what doesn't fit on the left ends in "…", with a gap before the model.
   return (
-    <Box width={columns} justifyContent="space-between" paddingX={1}>
-      <Text wrap="truncate-end">{left}</Text>
-      <Text wrap="truncate-start">{right}</Text>
+    <Box width={columns} paddingX={1} columnGap={2}>
+      <Box flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text wrap="truncate-end">{left}</Text>
+      </Box>
+      <Box flexShrink={0}>
+        <Text wrap="truncate-start">{right}</Text>
+      </Box>
     </Box>
   );
 }
