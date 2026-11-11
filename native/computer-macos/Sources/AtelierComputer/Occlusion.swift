@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
@@ -10,6 +11,16 @@ import Foundation
 enum Occlusion {
   /// Points sampled across a window, per side, to tell whether any of it shows.
   static let samples = 24
+
+  /// WebKit browsers and mail, which throttle their pages while covered as Chromium does.
+  static let webKitApps: Set<String> = ["com.apple.Safari", "com.apple.SafariTechnologyPreview", "com.apple.mail", "com.kagi.kagimacOS"]
+
+  /// Whether the app's window goes stale while covered: Chromium (browsers, Electron) and WebKit browsers.
+  static func stopsPaintingWhenCovered(pid: pid_t, bundleID: String? = nil) -> Bool {
+    if Chromium.isChromium(pid: pid) { return true }
+    let id = bundleID ?? NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+    return id.map { webKitApps.contains($0) } ?? false
+  }
 
   /// Whether some of `rect` shows: a sampled point in a display and under none of `covers` (the windows in front).
   static func shows(_ rect: CGRect, covers: [CGRect], displays: [CGRect]) -> Bool {

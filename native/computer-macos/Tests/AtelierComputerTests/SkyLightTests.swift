@@ -136,4 +136,22 @@ final class OcclusionTests: XCTestCase {
     ]
     XCTAssertEqual(Occlusion.covers(of: target, in: list), [CGRect(x: 0, y: 0, width: 1800, height: 39), CGRect(x: 0, y: 39, width: 1800, height: 1053)])
   }
+
+  func testRecentKeyWindowLastsFourSeconds() {
+    SkyLight.Recent.forget()
+    XCTAssertFalse(SkyLight.Recent.key(pid: 10, window: 5, now: 1_000))
+    SkyLight.Recent.note(pid: 10, window: 5, now: 1_000)
+    XCTAssertTrue(SkyLight.Recent.key(pid: 10, window: 5, now: 1_000 + 3_999_999_999))
+    XCTAssertFalse(SkyLight.Recent.key(pid: 10, window: 5, now: 1_000 + 4_000_000_000))
+    XCTAssertFalse(SkyLight.Recent.key(pid: 10, window: 6, now: 2_000))
+    XCTAssertFalse(SkyLight.Recent.key(pid: 11, window: 5, now: 2_000))
+    SkyLight.Recent.forget()
+    XCTAssertFalse(SkyLight.Recent.key(pid: 10, window: 5, now: 2_000))
+  }
+
+  func testNoPrimerOutsideChromium() {
+    let steps = SkyLight.click(at: CGPoint(x: 10, y: 10), stamped: CGPoint(x: 10, y: 10), pid: 9, window: 77, button: .left, count: 1, group: 5, primer: false)
+    XCTAssertFalse(steps.contains { $0.at == CGPoint(x: -1, y: -1) })
+    XCTAssertEqual(steps.map(\.type), [.mouseMoved, .leftMouseDown, .leftMouseUp])
+  }
 }

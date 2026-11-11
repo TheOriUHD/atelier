@@ -221,8 +221,10 @@ enum Capture {
     configuration.shouldBeOpaque = true
     configuration.showsCursor = false
 
-    // Covered completely, the window's pages aren't painted: shifted for a moment so a sliver shows (`Occlusion`).
-    let putBack = Occlusion.peek(window)
+    // Covered completely, a browser's pages aren't painted: shifted for a moment so a sliver shows (`Occlusion`). Native
+    // AppKit windows keep drawing while covered (a covered Calculator's display changes in its capture), so they aren't
+    // moved: that saved 300 ms a screenshot.
+    let putBack = Occlusion.stopsPaintingWhenCovered(pid: window.pid) ? Occlusion.peek(window) : nil
     if putBack != nil { try? await Task.sleep(nanoseconds: 300_000_000) }
     let image: CGImage
     do {

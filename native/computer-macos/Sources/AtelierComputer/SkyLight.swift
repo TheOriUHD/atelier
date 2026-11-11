@@ -110,7 +110,35 @@ enum SkyLight {
     guard post(focusRecord(window: window, direction: 1), to: psn) else {
       throw RPCError.unsupported("the window server refused to focus the app's window")
     }
-    usleep(50_000)
+    if !Recent.key(pid: pid, window: window) { usleep(50_000) }
+  }
+
+  /// The window made key a moment ago: the records are sent again (an inactive app may have let go of it), but the
+  /// waits that let the window server switch windows aren't needed, which saves 200 ms an action (measured: a background
+  /// key press took 340 ms, 211 of them in makeKey's waits).
+  enum Recent {
+    static let span: UInt64 = 4_000_000_000
+    nonisolated(unsafe) private static var last: (pid: pid_t, window: CGWindowID, at: UInt64)?
+    private static let lock = NSLock()
+
+    static func key(pid: pid_t, window: CGWindowID, now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      guard let last, last.pid == pid, last.window == window else { return false }
+      return now >= last.at && now - last.at < span
+    }
+
+    static func note(pid: pid_t, window: CGWindowID, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
+      lock.lock()
+      last = (pid, window, now)
+      lock.unlock()
+    }
+
+    static func forget() {
+      lock.lock()
+      last = nil
+      lock.unlock()
+    }
   }
 
   /// The window becomes its app's key window, where keys go, without the app becoming active: the app's own key window
@@ -120,15 +148,17 @@ enum SkyLight {
     // Always sent, even when Accessibility names the window as the key one: an inactive app reports its last key window
     // (Chrome does), and a shortcut sent without the records reaches an app whose window isn't key, which makes it bring
     // a window forward itself (Chrome on cmd+L, every time, on a Mac where it had been active before).
-    let current = keyWindow(of: pid)
+    let recent = Recent.key(pid: pid, window: window)
+    let current = recent ? window : keyWindow(of: pid)
     if let current, current != window { post(focusRecord(window: current, direction: 2), to: psn); usleep(120_000) }
     guard post(focusRecord(window: window, direction: 1), to: psn) else {
       throw RPCError.unsupported("the window server refused to focus the app's window")
     }
-    usleep(120_000)
+    if !recent { usleep(120_000) }
     post(makeKeyRecord(window: window, kind: 1), to: psn)
     post(makeKeyRecord(window: window, kind: 2), to: psn)
-    usleep(80_000)
+    if !recent { usleep(80_000) }
+    Recent.note(pid: pid, window: window)
   }
 
   /// The window an app's keyboard focus is in, as Accessibility says (nil when it says none, as an inactive Chrome does).
@@ -229,9 +259,11 @@ enum SkyLight {
   }
 
   /// A click as Cua Driver posts it to a background window: a move to the point, a primer click off every window (for
-  /// Chromium's user-activation gate; a right or middle click has none), then the presses, numbered.
+  /// Chromium's user-activation gate; a right or middle click has none, and other apps don't need it), then the presses,
+  /// numbered.
   static func click(
-    at screen: CGPoint, stamped: CGPoint, pid: pid_t, window: CGWindowID, button: MouseButton, count: Int, group: Int64
+    at screen: CGPoint, stamped: CGPoint, pid: pid_t, window: CGWindowID, button: MouseButton, count: Int, group: Int64,
+    primer: Bool = true
   ) -> [MouseStep] {
     let number: Int64 = button == .left ? 0 : button == .right ? 1 : 2
     func stamp(_ point: CGPoint, phase: Int64, state: Int64) -> Stamp {
@@ -239,7 +271,7 @@ enum SkyLight {
     }
     let off = CGPoint(x: -1, y: -1)
     var steps = [MouseStep(type: .mouseMoved, at: screen, stamp: stamp(stamped, phase: 2, state: 0), pause: 15)]
-    if button == .left {
+    if button == .left, primer {
       steps += [
         MouseStep(type: .leftMouseDown, at: off, stamp: stamp(off, phase: 1, state: 1), pause: 1),
         MouseStep(type: .leftMouseUp, at: off, stamp: stamp(off, phase: 2, state: 1), pause: 100),

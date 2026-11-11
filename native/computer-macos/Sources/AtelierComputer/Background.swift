@@ -187,9 +187,10 @@ enum Background {
     let over = before.map { raised(target, over: $0, in: Windows.list(onScreenOnly: true)) } ?? false
     try action()
     guard let before, before.pid != target else { return false }
-    // The app answers on its own main thread: a moment, then a look.
-    for _ in 0..<6 {
-      usleep(50_000)
+    // The app answers on its own main thread: a look at once and two more within 80 ms (what an action's own reply
+    // brings forward shows by then); later raises are left to the watch, so an action costs no more than that.
+    for wait in [0, 40_000, 40_000] as [UInt32] {
+      if wait > 0 { usleep(wait) }
       if fronted(target, before: before, wasOver: over) {
         bringBack(before, over: target)
         return true
@@ -242,6 +243,8 @@ enum Background {
   /// `target` raised (seen with a link that opened a tab: TextEdit in front, Brave's window still above TextEdit's), so
   /// then the person's window is raised too.
   static func bringBack(_ front: Front, over target: pid_t? = nil) {
+    // The target's key window may have changed with this: the next action makes it key again, with the waits.
+    SkyLight.Recent.forget()
     SkyLight.bringToFront(pid: front.pid, window: front.window)
     for _ in 0..<10 {
       if Self.front()?.pid == front.pid { break }
@@ -347,7 +350,7 @@ enum Background {
     let flags = Modifier.flags(click.modifiers)
     let steps = SkyLight.click(
       at: click.point, stamped: stamped, pid: window.pid, window: window.id, button: click.button, count: click.count,
-      group: group
+      group: group, primer: chromium
     ).map { step -> EventStep in
       // Each press carries its own release, so a stop in between lets go of the button.
       func spec(_ type: CGEventType) -> EventSpec {
@@ -364,7 +367,7 @@ enum Background {
     let fronted = try keepingFront(window.pid) {
       try SkyLight.focus(pid: window.pid, window: window.id)
       try input.run(steps, route: .skyLight(window.pid))
-      usleep(150_000)
+      usleep(100_000)
       // A menu opened: closed again (Esc). Its options can't be reached in the background (a closed list in a page shows
       // only the chosen one to Accessibility, and keys go to the page), as in Claude's helper, which refuses these too.
       if menuOpen(window.pid) {
