@@ -303,6 +303,11 @@ export interface BgPointParams {
   y: number;
 }
 
+/** Where the software cursor goes: a point of that window, and whether it clicked there (a ripple). */
+export interface BgCursorParams extends BgPointParams {
+  click?: boolean;
+}
+
 export interface BgClickParams extends BgPointParams {
   button: MouseButton;
   count: number;
@@ -387,6 +392,13 @@ export interface ComputerMethods {
   'bg.type': { params: BgTypeParams; result: BgInputResult };
   /** macOS: background work is over for now; what was turned on in apps for it (Chromium's page accessibility) is turned off. */
   'bg.end': { params: Record<string, never>; result: Record<string, never> };
+  /**
+   * macOS: the software cursor, drawn at a point just above that window (never over a window in front of it), with a
+   * ripple for a click, so the person sees where the work happens; it fades after a few seconds still. A no-op elsewhere.
+   */
+  'bg.cursor': { params: BgCursorParams; result: Record<string, never> };
+  /** The software cursor gone at once (the turn ended, Full control began). */
+  'bg.cursorHide': { params: Record<string, never>; result: Record<string, never> };
   /** Starts watching the Esc hold and the person's own input; `control.end` stops it; `control.resume` lifts a stop. */
   'control.begin': { params: Record<string, never>; result: Record<string, never> };
   'control.end': { params: Record<string, never>; result: Record<string, never> };

@@ -363,7 +363,11 @@ enum Background {
     if let hit, let role, Chromium.textRoles.contains(role) { Chromium.remember(window.pid, hit) }
     if pressesInstead(click, chromium: chromium), let hit, let control = pressable(hit) {
       var pressed = false
-      let fronted = try keepingFront(window.pid) { pressed = try press(control, input: input) }
+      let fronted = try keepingFront(window.pid) {
+        pressed = try press(control, input: input)
+        // A moment for what the press changes to show, as after a posted click (the caller doesn't wait on macOS).
+        if pressed { usleep(50_000) }
+      }
       if pressed { return fronted }
     }
     let secureBefore = secureInputOn()

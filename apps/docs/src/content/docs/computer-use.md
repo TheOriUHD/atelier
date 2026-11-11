@@ -90,6 +90,12 @@ app stays behind yours and your pointer and keyboard stay with you. This works i
 browsers, in apps built on them (Slack, VS Code, Discord, Notion and other Electron apps) and in native apps. A few
 things behave differently from the real mouse and keyboard:
 
+- **A clay cursor shows where it works.** A small arrow of its own (your pointer doesn't move) glides to each point the
+  assistant clicks or scrolls, with a ripple for a click, and stays while it types. It is drawn just above the window it
+  works in, so a window of yours in front of that one covers it too, and it fades after a few seconds still. It isn't in
+  the assistant's screenshots.
+- **Buttons are pressed.** A plain click on a native app's button, checkbox, link or menu item is pressed through
+  Accessibility, which is quicker than sending a click; browsers and Electron apps get the real click.
 - **The screenshot comes with the window's controls.** Each background screenshot carries a list of the window's
   buttons, fields, checkboxes and lists, with their names and values, read through Accessibility; the assistant aims at
   one by its number instead of a pixel, so it misses less and does several steps in one go.

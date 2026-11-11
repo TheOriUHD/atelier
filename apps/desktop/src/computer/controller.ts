@@ -91,6 +91,8 @@ interface SessionState {
   elements?: ScreenshotElement[];
   /** Background: the app it opened last and when, so a screenshot right after waits for its first window. */
   opened?: { id: string; at: number };
+  /** Background (macOS): where the software cursor last went, in that window; typing keeps it there. */
+  pointer?: { window: string; x: number; y: number };
 }
 
 /** How long a screenshot waits for the first window of an app it just opened. */
@@ -455,8 +457,13 @@ export class ComputerController {
         if (this.control?.key === key) await this.end(this.control, { focus: true });
         state().takenBack = false;
         await this.reopen();
-        // What background work turned on in apps (Chromium's page accessibility) goes off until it is needed again.
-        if (this.deps.platform === 'darwin' && state().frame && this.deps.hasHelper) await this.deps.helper.call('bg.end', {}).catch(() => undefined);
+        // What background work turned on in apps (Chromium's page accessibility) goes off until it is needed again, and
+        // the software cursor goes.
+        if (this.deps.platform === 'darwin' && state().frame && this.deps.hasHelper) {
+          state().pointer = undefined;
+          await this.deps.helper.call('bg.cursorHide', {}).catch(() => undefined);
+          await this.deps.helper.call('bg.end', {}).catch(() => undefined);
+        }
         return {};
       },
       'turn.wait': async ({ kind }: ControllerMethods['turn.wait']['params']) => {
@@ -620,6 +627,8 @@ export class ComputerController {
     await helper.call('control.resume', {});
     this.helperStopped = false;
     await helper.call('control.begin', {});
+    // Full control uses the real pointer: no software cursor in its screenshots.
+    if (this.deps.platform === 'darwin') await helper.call('bg.cursorHide', {}).catch(() => undefined);
     this.deps.overlay.show();
     this.deps.changed();
     // Full control takes the computer as it is. In Background only the allowed apps stay in view, and Atelier's own
@@ -814,14 +823,18 @@ export class ComputerController {
         if (why) return refuse(why);
         // macOS: the helper clears the field the way the app takes it (cmd+A selects nothing in a Chromium app's page).
         if (item.replace && this.deps.platform !== 'darwin') await helper.call('bg.key', { window: window.id, keys: ['ctrl', 'a'] });
-        return done(fronted(await helper.call('bg.type', { window: window.id, text: item.text, ...(item.replace && this.deps.platform === 'darwin' ? { replace: true } : {}) })));
+        const typed = await helper.call('bg.type', { window: window.id, text: item.text, ...(item.replace && this.deps.platform === 'darwin' ? { replace: true } : {}) });
+        this.cursor(state, window.id);
+        return done(fronted(typed));
       }
       case 'key': {
         const keys = parseKeys(item.text ?? '');
         if (!keys.length) return refuse('Which keys? Like "cmd+s" or "return".');
         const why = await checkKeys();
         if (why) return refuse(why);
-        return done(fronted(await helper.call('bg.key', { window: window.id, keys, ...(item.amount ? { repeat: item.amount } : {}) })));
+        const keyed = await helper.call('bg.key', { window: window.id, keys, ...(item.amount ? { repeat: item.amount } : {}) });
+        this.cursor(state, window.id);
+        return done(fronted(keyed));
       }
       case 'scroll': {
         const at = item.coordinate ? point(item.coordinate) : { x: frame.rect.x + frame.rect.width / 2, y: frame.rect.y + frame.rect.height / 2 };
@@ -829,7 +842,9 @@ export class ComputerController {
         if (why) return refuse(why);
         const amount = item.amount ?? 3;
         const d = item.direction ?? 'down';
-        return done(fronted(await helper.call('bg.scroll', { window: window.id, ...at, dx: d === 'right' ? amount : d === 'left' ? -amount : 0, dy: d === 'down' ? amount : d === 'up' ? -amount : 0 })));
+        const scrolled = await helper.call('bg.scroll', { window: window.id, ...at, dx: d === 'right' ? amount : d === 'left' ? -amount : 0, dy: d === 'down' ? amount : d === 'up' ? -amount : 0 });
+        this.cursor(state, window.id, at);
+        return done(fronted(scrolled));
       }
       case 'mouse_move':
       case 'cursor_position':
@@ -844,10 +859,24 @@ export class ComputerController {
         const button = item.action === 'right_click' ? 'right' : item.action === 'middle_click' ? 'middle' : 'left';
         const count = item.action === 'double_click' ? 2 : item.action === 'triple_click' ? 3 : 1;
         const clicked = await helper.call('bg.click', { window: window.id, ...at, button, count, modifiers: [] });
-        await sleep(150);
+        this.cursor(state, window.id, at, true);
+        // The app takes a moment to answer a click; on macOS the helper waits for that itself.
+        if (this.deps.platform !== 'darwin') await sleep(150);
         return done(fronted(clicked));
       }
     }
+  }
+
+  /**
+   * macOS: the software cursor to `at` in that window (a ripple for a click), or where it was for typing and keys. Not
+   * waited for: it is drawn while the next action runs.
+   */
+  private cursor(state: SessionState, window: string, at?: { x: number; y: number }, click = false): void {
+    if (this.deps.platform !== 'darwin') return;
+    if (at) state.pointer = { window, ...at };
+    const pointer = state.pointer;
+    if (pointer?.window !== window) return;
+    void this.deps.helper.call('bg.cursor', { window, x: pointer.x, y: pointer.y, ...(click ? { click } : {}) }).catch(() => undefined);
   }
 
   /** Waits while the person uses the mouse or keyboard (the popup says so), at most a few minutes. */

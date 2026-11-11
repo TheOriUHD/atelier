@@ -441,6 +441,23 @@ describe('in the background', () => {
     expect(overlay).toEqual([]);
   });
 
+  it('shows the software cursor where it clicks, keeps it there while typing, and takes it away at the end', async () => {
+    helper.background = true;
+    await controller.grant('local', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
+    await ask('screenshot', { app: 'TextEdit', size: SIZE });
+    await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [200, 150] }, { action: 'type', text: 'hi' }], size: SIZE });
+    expect(helper.did('bg.cursor').map((c) => c.params)).toEqual([
+      { window: '42', x: 500, y: 350, click: true },
+      { window: '42', x: 500, y: 350 },
+    ]);
+    await ask('turn.end', {});
+    expect(helper.did('bg.cursorHide')).toHaveLength(1);
+    // A new turn's typing has no point to show until it clicks.
+    await ask('screenshot', { app: 'TextEdit', size: SIZE });
+    await ask('control.batch', { actions: [{ action: 'type', text: 'more' }], size: SIZE });
+    expect(helper.did('bg.cursor')).toHaveLength(2);
+  });
+
   it('works again in the background after the person held Esc in an earlier turn', async () => {
     // Full control first, stopped with Esc: the helper refuses all input until it's told to go on.
     await ready([{ id: 'com.apple.TextEdit', tier: 'full' }]);

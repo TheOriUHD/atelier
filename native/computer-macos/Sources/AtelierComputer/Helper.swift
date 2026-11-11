@@ -201,6 +201,18 @@ public final class Helper: @unchecked Sendable {
       Chromium.restore()
       return Empty()
     }
+    // The software cursor is drawn on the main thread; the request doesn't wait for it.
+    inline(.bgCursor) { (params: BgCursorParams) in
+      let point = try Self.point(params.x, params.y)
+      let window = try WindowChoice.windowID(params.window)
+      let click = params.click ?? false
+      DispatchQueue.main.async { MainActor.assumeIsolated { SoftwareCursor.shared.show(at: point, above: window, click: click) } }
+      return Empty()
+    }
+    inline(.bgCursorHide) { (_: NoParams) in
+      DispatchQueue.main.async { MainActor.assumeIsolated { SoftwareCursor.shared.hide() } }
+      return Empty()
+    }
 
     inline(.controlBegin) { (_: NoParams) in
       try control.begin()

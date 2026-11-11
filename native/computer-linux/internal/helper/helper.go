@@ -446,6 +446,10 @@ func (h *Helper) register() {
 		in.Resume()
 		return proto.Empty{}, nil
 	})
+	// macOS's: what background work turned on in apps, and the software cursor. Nothing to do here.
+	for _, method := range []string{proto.MBgEnd, proto.MBgCursor, proto.MBgCursorHide} {
+		s.Register(method, rpc.Inline, func(rpc.Params) (any, error) { return proto.Empty{}, nil })
+	}
 }
 
 // ---------------------------------------------------------------- params

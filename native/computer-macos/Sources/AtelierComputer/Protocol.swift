@@ -81,6 +81,8 @@ public enum ComputerMethod: String, Sendable, CaseIterable {
   case bgKey = "bg.key"
   case bgType = "bg.type"
   case bgEnd = "bg.end"
+  case bgCursor = "bg.cursor"
+  case bgCursorHide = "bg.cursorHide"
   case controlBegin = "control.begin"
   case controlEnd = "control.end"
   case controlResume = "control.resume"
@@ -493,6 +495,13 @@ public struct BgPointParams: Codable, Sendable {
   public var window: String
   public var x: Double
   public var y: Double
+}
+
+public struct BgCursorParams: Codable, Sendable {
+  public var window: String
+  public var x: Double
+  public var y: Double
+  public var click: Bool?
 }
 
 public struct BgClickParams: Codable, Sendable {

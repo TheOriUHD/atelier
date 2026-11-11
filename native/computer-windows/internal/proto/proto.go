@@ -81,6 +81,9 @@ const (
 	MBgScroll           = "bg.scroll"
 	MBgKey              = "bg.key"
 	MBgType             = "bg.type"
+	MBgEnd              = "bg.end"
+	MBgCursor           = "bg.cursor"
+	MBgCursorHide       = "bg.cursorHide"
 	MControlBegin       = "control.begin"
 	MControlEnd         = "control.end"
 	MControlResume      = "control.resume"
@@ -92,7 +95,7 @@ var Methods = []string{
 	MInitialize, MPermissionsStatus, MPermissionsRequest, MDisplaysList, MAppsList, MAppsFrontmost, MAppsOpen,
 	MAppsHide, MAppsUnhide, MAppsActivate, MCaptureDisplay, MInspectPoint, MInspectFocused, MMouseMove, MMouseClick,
 	MMouseDown, MMouseUp, MMouseDrag, MMouseScroll, MCursorPosition, MKeyPress, MKeyType, MKeyHold, MInputReleaseAll,
-	MWindowCapture, MBgInspect, MBgFocused, MBgClick, MBgScroll, MBgKey, MBgType,
+	MWindowCapture, MBgInspect, MBgFocused, MBgClick, MBgScroll, MBgKey, MBgType, MBgEnd, MBgCursor, MBgCursorHide,
 	MControlBegin, MControlEnd, MControlResume, MShutdown,
 }
 
