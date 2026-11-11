@@ -173,7 +173,7 @@ export function LiveViewPage() {
       <div className="flex h-9 shrink-0 items-center gap-2 pr-3 pl-[78px] text-footnote [-webkit-app-region:drag]">
         {running && <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent" />}
         <span className="truncate text-fg-secondary">{screen?.title ?? 'Live view'}</span>
-        <span className="ml-auto shrink-0 truncate text-fg-muted">{running ? (screen?.doing ?? '') : 'Finished'}</span>
+        <span className="ml-auto min-w-0 truncate text-fg-muted">{running ? (screen?.doing ?? 'Thinking about the next step') : 'Finished'}</span>
       </div>
       <div className="relative min-h-0 flex-1 bg-fill-ghost-hover">
         {screen ? (
