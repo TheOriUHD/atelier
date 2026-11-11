@@ -33,6 +33,8 @@ class FakeHelper {
   refuse: HelperError | null = null;
   /** The app brings itself to the front on a background key (a browser opening a tab). */
   fronts = false;
+  /** Captures of a window that isn't there yet, before it appears (an app just opened). */
+  noWindowFor = 0;
   async start() {
     return { protocolVersion: 1, helperVersion: 'fake', platform: 'darwin' as const, supports: { background: this.background, fullControl: true, filter: true } };
   }
@@ -65,6 +67,7 @@ class FakeHelper {
           return this.fronts ? { fronted: true } : {};
         case 'window.capture':
           if ((params as { app: string }).app === 'com.apple.Notes') return Promise.reject(new HelperError('no window', -32033));
+          if (this.noWindowFor > 0) return (this.noWindowFor--, Promise.reject(new HelperError('no window', -32033)));
           return { data: 'BBBB', mime: 'image/jpeg', width: 400, height: 300, rect: { x: 100, y: 50, width: 800, height: 600 }, window: '42', title: 'Untitled' };
         case 'bg.inspect':
           return { role: null, title: null, secure: false, link: null, ...this.under };
@@ -503,6 +506,18 @@ describe('apps the person asked for', () => {
     expect(state.apps).toEqual([{ app: { id: 'com.apple.TextEdit', name: 'TextEdit' }, tier: 'full' }, { app: { id: 'com.apple.Terminal', name: 'Terminal' }, tier: 'click' }]);
     // A server's sessions can't: only the card on this computer allows anything.
     expect(await controller.handle('server-1', 's1', 'access.allow', { ids: ['com.apple.Notes'] })).toEqual({ allowed: [] });
+  });
+
+  it('waits for the first window of an app it just opened, and only then', async () => {
+    helper.background = true;
+    await controller.grant('local', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
+    helper.noWindowFor = 2;
+    await expect(ask('screenshot', { app: 'TextEdit', size: SIZE })).rejects.toThrow('TextEdit has no window open');
+    helper.noWindowFor = 2;
+    await ask('apps.open', { id: 'com.apple.TextEdit' });
+    const shot = await ask('screenshot', { app: 'TextEdit', size: SIZE });
+    expect(shot.width).toBe(400);
+    expect(helper.did('window.capture')).toHaveLength(4);
   });
 
   it('says when an app has no window open', async () => {

@@ -5,7 +5,7 @@
  */
 import { ComputerActionItem, type AppGrant, type ComputerScreenshot, type ControllerMethods, type PermissionAnswer, type PermissionRequest, type PreparedApp, type ScreenshotElement, type ScreenshotSize } from '@atelier/protocol';
 import type { BlobStore } from '../store/blobs.ts';
-import { textOutput, type DescribeContext, type Tool, type ToolOutput } from './types.ts';
+import { textOutput, type DescribeContext, type Tool, type ToolContext, type ToolOutput } from './types.ts';
 
 export type ComputerCall = <M extends keyof ControllerMethods>(sessionId: string, method: M, params: ControllerMethods[M]['params']) => Promise<ControllerMethods[M]['result']>;
 
@@ -70,7 +70,7 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 function describeAccess({ tier, has }: DescribeContext): string {
   if (tier === 'compact') return `Asks the person to let you use apps on their computer, by name. Call it once with every app you need.${has('Browser') ? ' For web pages use Browser instead.' : ''}`;
   return [
-    'Asks the person to let you use apps on their computer, then says which you may use and how. Call it once with every app the task needs, before anything else.',
+    'Asks the person to let you use apps on their computer, then says which you may use and how. Call it once with every app the task needs, before anything else; for a task in one app, OpenApp alone asks for it, opens it and shows its window.',
     '- Prefer other tools where they do the job (a connector, WebFetch, the shell, the file tools): using apps on screen is slow and less reliable.',
     ...(has('Browser') ? ['- For web pages (shops, accounts, sites to read or fill in) use Browser, which works in tabs of its own in the person’s browser, rather than the browser app here.'] : []),
     "- What you may do is set per app: terminals and editors click only, other apps full, unless the person picks less on the card; asking again for an app offers it once more. The person's denied apps are turned down without asking.",
@@ -111,6 +111,48 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
     return again.granted ? null : (again.reason ?? 'The computer refused.');
   };
 
+  /**
+   * Lets the session use `apps`: the ones the person named (or any in Bypass) without a card, the rest on the card.
+   * `refused` is what to tell the model when the person declined; `notes` are apps that don't exist or can't be had;
+   * `ids` are the apps the names stand for.
+   */
+  const allowApps = async (ctx: ToolContext, apps: string[], reason: string): Promise<{ refused: string | null; notes: string[]; ids: string[] }> => {
+    const prepared = await deps.call(ctx.sessionId, 'access.prepare', { names: apps });
+    const refused = prepared.apps.filter((p) => p.denied || p.tier === null);
+    // An app it has with less than it could get comes up again: asking again is how it gets more.
+    let pending = prepared.apps
+      .filter((p) => !p.denied && p.tier !== null && (p.granted === null || (p.maxTier !== null && TIER_RANK[p.granted] < TIER_RANK[p.maxTier])))
+      .map((p) => (p.granted ? { ...p, tier: p.maxTier } : p));
+    const notes = [
+      ...prepared.unknown.map((name) => `No app called "${name}" is on this computer.`),
+      ...refused.map((p) => (p.denied ? `${p.app.name} is on the person's denied list: don't ask for it again.` : `${p.app.name} can't be used: it's part of the system or Atelier itself.`)),
+    ];
+    // What the person asked for outright needs no card: an app they named, or any app in Bypass. Only new apps, at their
+    // usual tier: an app the person gave less on a card keeps what they picked until they allow more there.
+    const wanted = pending.length ? await deps.wanted?.(ctx.sessionId) : undefined;
+    const named = wanted ? pending.filter((p) => p.granted === null && (wanted.all || namedIn(wanted.said, p.app.name))) : [];
+    if (named.length) {
+      const { allowed } = await deps.call(ctx.sessionId, 'access.allow', { ids: named.map((p) => p.app.id) });
+      pending = pending.filter((p) => !allowed.includes(p.app.id) && !(wanted?.all && p.granted !== null));
+    } else if (wanted?.all) pending = pending.filter((p) => p.granted === null);
+    if (pending.length) {
+      const answer = await deps.approve(
+        ctx.sessionId,
+        { callId: ctx.callId, toolName: 'ComputerAccess', input: { apps: pending satisfies PreparedApp[], reason }, reason: 'The assistant wants to use apps on this computer.', suggestedRule: '' },
+        ctx.signal,
+      );
+      if (answer.behavior === 'deny') return { refused: answer.message ? `The person didn't allow it and said: ${answer.message}` : "The person didn't allow those apps. Go on without them, or ask why.", notes, ids: [] };
+    }
+    return { refused: null, notes, ids: prepared.apps.filter((p) => !p.denied && p.tier !== null).map((p) => p.app.id) };
+  };
+
+  /** A screenshot's result for the model: what it shows, the window's controls in the background, and the image. */
+  const shotOutput = async (shot: ControllerMethods['screenshot']['result'], before?: string): Promise<ToolOutput> => {
+    const lines = [...(before ? [before] : []), `Screenshot of ${shot.display}, ${shot.width}×${shot.height} pixels.`, ...(shot.note ? [shot.note] : [])];
+    const controls = shot.elements?.length ? `\nControls (aim at one with element instead of a coordinate):\n${shot.elements.map(elementLine).join('\n')}` : '';
+    return { content: [{ type: 'text', text: lines.join(' ') + controls }, await image(deps, shot)] };
+  };
+
   const access: Tool<{ apps: string[]; reason?: string }> = {
     name: 'ComputerAccess',
     readOnly: false,
@@ -127,41 +169,15 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
     compactExample: { apps: ['Safari'], reason: 'Check the order status page.' },
     async run({ apps, reason }, ctx) {
       try {
-        const prepared = await deps.call(ctx.sessionId, 'access.prepare', { names: apps });
-        const refused = prepared.apps.filter((p) => p.denied || p.tier === null);
-        // An app it has with less than it could get comes up again: asking again is how it gets more.
-        let pending = prepared.apps
-          .filter((p) => !p.denied && p.tier !== null && (p.granted === null || (p.maxTier !== null && TIER_RANK[p.granted] < TIER_RANK[p.maxTier])))
-          .map((p) => (p.granted ? { ...p, tier: p.maxTier } : p));
-        const notes = [
-          ...prepared.unknown.map((name) => `No app called "${name}" is on this computer.`),
-          ...refused.map((p) => (p.denied ? `${p.app.name} is on the person's denied list: don't ask for it again.` : `${p.app.name} can't be used: it's part of the system or Atelier itself.`)),
-        ];
-        // What the person asked for outright needs no card: an app they named, or any app in Bypass. Only new apps, at their
-        // usual tier: an app the person gave less on a card keeps what they picked until they allow more there.
-        const wanted = pending.length ? await deps.wanted?.(ctx.sessionId) : undefined;
-        const named = wanted ? pending.filter((p) => p.granted === null && (wanted.all || namedIn(wanted.said, p.app.name))) : [];
-        if (named.length) {
-          const { allowed } = await deps.call(ctx.sessionId, 'access.allow', { ids: named.map((p) => p.app.id) });
-          pending = pending.filter((p) => !allowed.includes(p.app.id) && !(wanted?.all && p.granted !== null));
-        } else if (wanted?.all) pending = pending.filter((p) => p.granted === null);
-        if (pending.length) {
-          const answer = await deps.approve(
-            ctx.sessionId,
-            { callId: ctx.callId, toolName: 'ComputerAccess', input: { apps: pending satisfies PreparedApp[], reason: reason?.trim() ?? '' }, reason: 'The assistant wants to use apps on this computer.', suggestedRule: '' },
-            ctx.signal,
-          );
-          if (answer.behavior === 'deny') {
-            return textOutput([answer.message ? `The person didn't allow it and said: ${answer.message}` : "The person didn't allow those apps. Go on without them, or ask why.", ...notes].join('\n'), true);
-          }
-        }
+        const { refused, notes } = await allowApps(ctx, apps, reason?.trim() ?? '');
+        if (refused) return textOutput([refused, ...notes].join('\n'), true);
         const state = await deps.call(ctx.sessionId, 'access.state', {});
         if (state.mode === 'full') return textOutput([fullControlText(state.denied, state.platform), ...notes].join('\n'));
         if (!state.apps.length) return textOutput(['You may use no apps on this computer.', ...notes].join('\n'), true);
         const limited = state.apps.some((g) => g.tier !== 'full') ? ` ${MORE}` : '';
         const how = state.background
           ? [
-              'You work in the background, in one app at a time, without the person’s mouse and keyboard: take a Screenshot with `app` to pick it (OpenApp opens one); your actions then go to that window.',
+              'You work in the background, in one app at a time, without the person’s mouse and keyboard: take a Screenshot with `app` to pick it (OpenApp opens one and shows it); your actions then go to that window.',
               'In a browser, use the tab you have: for an address press cmd+L (ctrl+L on Windows and Linux), type it and press return; a new tab or window would come to the front.',
               'Lists to choose from, right clicks, dragging and zooming need Full control, and so does a click that is refused or an app that ignores what you do in the background (nothing changes on the next screenshot): ask with FullControl, which asks the person.',
             ].join(' ')
@@ -189,23 +205,45 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
     },
   };
 
-  const openApp: Tool<{ app: string }> = {
+  const openApp: Tool<{ app: string; reason?: string }> = {
     name: 'OpenApp',
     readOnly: false,
-    description: 'Opens an app you may use and brings it to the front.',
-    inputSchema: { type: 'object', properties: { app: { type: 'string', description: 'Its name, as ComputerAccess allowed it.' } }, required: ['app'], additionalProperties: false },
-    async run({ app }, ctx) {
+    description:
+      'Opens an app, first asking the person for it when you may not use it yet. In the background it stays behind their app and you get its window’s Screenshot (with its controls) to act on at once; in Full control it comes to the front.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        app: { type: 'string', description: 'Its name ("Calculator", "Numbers").' },
+        reason: { type: 'string', description: 'What you will do in it, in a sentence the person reads if they are asked.' },
+      },
+      required: ['app'],
+      additionalProperties: false,
+    },
+    async run({ app, reason }, ctx) {
       try {
-        const state = await deps.call(ctx.sessionId, 'access.state', {});
+        let state = await deps.call(ctx.sessionId, 'access.state', {});
         const wanted = app.trim().toLowerCase();
-        let target = state.apps.find((g) => g.app.name.toLowerCase() === wanted || g.app.id.toLowerCase() === wanted)?.app;
+        const find = () => state.apps.find((g) => g.app.name.toLowerCase() === wanted || g.app.id.toLowerCase() === wanted)?.app;
+        let target = find();
+        let notes: string[] = [];
+        // Not allowed yet (background): asked for here, so the task needs no ComputerAccess step first.
+        if (!target && state.mode !== 'full') {
+          const asked = await allowApps(ctx, [app.trim()], reason?.trim() ?? '');
+          if (asked.refused) return textOutput([asked.refused, ...asked.notes].join('\n'), true);
+          notes = asked.notes;
+          state = await deps.call(ctx.sessionId, 'access.state', {});
+          target = find() ?? state.apps.find((g) => asked.ids.includes(g.app.id))?.app;
+        }
         if (!target && state.mode === 'full') {
           const { apps: found } = await deps.call(ctx.sessionId, 'apps.list', { query: app.trim() });
           const usable = found.filter((a) => a.granted);
           target = (usable.find((a) => a.app.name.toLowerCase() === wanted || a.app.id.toLowerCase() === wanted) ?? usable[0])?.app;
         }
         if (!target) {
-          return textOutput(state.mode === 'full' ? `You may not use ${app}: it isn't installed, or it is on the person's denied list or part of the system.` : `You may not use ${app}: ask with ComputerAccess first.`, true);
+          return textOutput(
+            state.mode === 'full' ? `You may not use ${app}: it isn't installed, or it is on the person's denied list or part of the system.` : [`You may not use ${app}.`, ...notes].join('\n'),
+            true,
+          );
         }
         // Full control: opening an app takes the computer, so the app comes to the front.
         if (state.mode === 'full' && !state.control) {
@@ -213,7 +251,11 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
           if (refused) return textOutput(refused, true);
         }
         await deps.call(ctx.sessionId, 'apps.open', { id: target.id });
-        return textOutput(`Opened ${target.name}${state.mode === 'full' ? ' and brought it to the front' : ''}.`);
+        const opened = `Opened ${target.name}${state.mode === 'full' ? ' and brought it to the front' : ''}.`;
+        // The background works in one window: its screenshot comes with the opening, which saves a step.
+        if (state.mode === 'full' || !state.background) return textOutput(opened);
+        const shot = await deps.call(ctx.sessionId, 'screenshot', { app: target.name, size: await deps.size(ctx.sessionId) }).catch(() => null);
+        return shot ? shotOutput(shot, opened) : textOutput(`${opened} Take a Screenshot with \`app\` once its window is open.`);
       } catch (e) {
         return textOutput(errorText(e), true);
       }
@@ -236,9 +278,7 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
     async run({ display, app }, ctx) {
       try {
         const shot = await deps.call(ctx.sessionId, 'screenshot', { ...(display ? { display } : {}), ...(app ? { app } : {}), size: await deps.size(ctx.sessionId) });
-        const lines = [`Screenshot of ${shot.display}, ${shot.width}×${shot.height} pixels.`, ...(shot.note ? [shot.note] : [])];
-        const controls = shot.elements?.length ? `\nControls (aim at one with element instead of a coordinate):\n${shot.elements.map(elementLine).join('\n')}` : '';
-        return { content: [{ type: 'text', text: lines.join(' ') + controls }, await image(deps, shot)] };
+        return await shotOutput(shot);
       } catch (e) {
         return textOutput(errorText(e), true);
       }

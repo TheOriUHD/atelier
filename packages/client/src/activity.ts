@@ -79,7 +79,8 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
     case 'ComputerApps':
       return 'Looking up apps';
     case 'OpenApp':
-      return `Opening ${text(args.app)}`;
+      // It asks for an app it may not use yet on the same card as ComputerAccess.
+      return asking === step.call.id ? 'Asking to use your computer' : `Opening ${text(args.app)}`;
     case 'Screenshot':
       return 'Taking a screenshot';
     case 'FullControl':

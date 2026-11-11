@@ -89,7 +89,12 @@ interface SessionState {
   takenBack: boolean;
   /** Background: the controls of the latest screenshot, for actions aimed at an `element`. */
   elements?: ScreenshotElement[];
+  /** Background: the app it opened last and when, so a screenshot right after waits for its first window. */
+  opened?: { id: string; at: number };
 }
+
+/** How long a screenshot waits for the first window of an app it just opened. */
+const OPEN_WAIT_MS = 5000;
 
 /**
  * What a session may do in each app. Background: the apps the person allowed it, one by one. Full control: everything in
@@ -383,7 +388,7 @@ export class ComputerController {
         await this.deps.helper.call('apps.open', { id, activate: this.control?.key === key });
         this.apps = null;
         // Background: the app it opens is the one it works in (its window is picked at the next screenshot).
-        if (!policy.full) state().target = id;
+        if (!policy.full) Object.assign(state(), { target: id, opened: { id, at: Date.now() } });
         return {};
       },
       screenshot: async ({ display, app, size }: ControllerMethods['screenshot']['params']): Promise<ControllerMethods['screenshot']['result']> => {
@@ -699,7 +704,20 @@ export class ComputerController {
     if (app?.trim() && !named) throw new Error(`You may not use ${app}: ask with ComputerAccess first.`);
     const grant = named ?? policy.grants.find((g) => g.app.id === state.target) ?? (policy.grants.length === 1 ? policy.grants[0] : undefined);
     if (!grant) throw new Error(`Say which app to look at: Screenshot with \`app\` (in the background you work in one app at a time). You may use ${policy.grants.map((g) => g.app.name).join(', ')}.`);
-    const capture = () => this.deps.helper.call('window.capture', { app: grant.app.id, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8, elements: true });
+    const once = () => this.deps.helper.call('window.capture', { app: grant.app.id, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8, elements: true });
+    // An app it has just opened may not have its window yet: wait for it a little.
+    const capture = async () => {
+      for (;;) {
+        try {
+          return await once();
+        } catch (e) {
+          const opened = state.opened;
+          const launching = opened?.id === grant.app.id && Date.now() - opened.at < OPEN_WAIT_MS;
+          if (!(e instanceof HelperError && e.code === -32033 && launching)) throw e;
+          await sleep(200);
+        }
+      }
+    };
     const shot = await capture()
       .catch(async (e: unknown) => {
         // A hidden app (macOS) is shown again, without being brought forward, and looked at once more.

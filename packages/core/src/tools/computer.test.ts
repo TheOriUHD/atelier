@@ -315,13 +315,62 @@ describe('the other computer tools', () => {
     });
     expect(text(await tool('OpenApp').run({ app: 'textedit' }, ctx))).toBe('Opened TextEdit.');
     expect(calls.find((c) => c.method === 'apps.open')?.params).toEqual({ id: 'com.example.TextEdit' });
-    expect(text(await tool('OpenApp').run({ app: 'Mail' }, ctx))).toBe('You may not use Mail: ask with ComputerAccess first.');
     const shot = await tool('Screenshot').run({}, ctx);
     expect(shot.content).toEqual([
       { type: 'text', text: 'Screenshot of Main, 1280×800 pixels. Only the apps you may use are shown.' },
       { type: 'image', mime: 'image/jpeg', blob: 'blob1' },
     ]);
     expect(calls.find((c) => c.method === 'screenshot')?.params).toEqual({ size: { maxWidth: 1280, maxHeight: 800 } });
+  });
+
+  it('asks for an app it may not use yet when opening it, and stops when the person declines', async () => {
+    const { tool, asked, calls } = setup([{ behavior: 'deny' }], {
+      'access.state': () => state([textEdit]),
+      'access.prepare': () => ({ apps: [prepared('Mail')], unknown: [] }),
+    });
+    const out = await tool('OpenApp').run({ app: 'Mail', reason: 'Read the latest invoice.' }, ctx);
+    expect(out.isError).toBe(true);
+    expect(text(out)).toBe("The person didn't allow those apps. Go on without them, or ask why.");
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({ toolName: 'ComputerAccess', input: { reason: 'Read the latest invoice.' } });
+    expect(calls.map((c) => c.method)).not.toContain('apps.open');
+  });
+
+  it('in the background, opens an app the person named without a card and shows its window with its controls', async () => {
+    let allowed: AppGrant[] = [];
+    const calculator: AppGrant = { app: { id: 'com.example.Calculator', name: 'Calculator' }, tier: 'full' };
+    const { tool, asked, calls } = setup(
+      [],
+      {
+        'access.state': () => ({ ...state(allowed), background: true }),
+        'access.prepare': () => ({ apps: [prepared('Calculator')], unknown: [] }),
+        'access.allow': ({ ids }) => ((allowed = [calculator]), { allowed: ids }),
+        'apps.open': () => ({}),
+        screenshot: () => ({ data: 'AAAA', mime: 'image/jpeg', width: 400, height: 600, display: 'Calculator’s window “Calculator”', note: 'Only this window.', elements: [{ n: 1, role: 'button', name: 'Clear', x: 30, y: 200 }] }),
+      },
+      async () => ({ said: 'Open the Calculator app and add 2 and 3', all: false }),
+    );
+    const out = await tool('OpenApp').run({ app: 'Calculator' }, ctx);
+    expect(asked).toEqual([]);
+    expect(calls.map((c) => c.method)).toEqual(['access.state', 'access.prepare', 'access.allow', 'access.state', 'apps.open', 'screenshot']);
+    expect(calls.find((c) => c.method === 'screenshot')?.params).toEqual({ app: 'Calculator', size: { maxWidth: 1280, maxHeight: 800 } });
+    expect(out.content).toEqual([
+      { type: 'text', text: 'Opened Calculator. Screenshot of Calculator’s window “Calculator”, 400×600 pixels. Only this window.\nControls (aim at one with element instead of a coordinate):\n[1] button "Clear"' },
+      { type: 'image', mime: 'image/jpeg', blob: 'blob1' },
+    ]);
+  });
+
+  it('says to take a screenshot later when the opened window can’t be seen yet', async () => {
+    const { tool } = setup([], {
+      'access.state': () => ({ ...state([textEdit]), background: true }),
+      'apps.open': () => ({}),
+      screenshot: () => {
+        throw new Error('TextEdit has no window open: open it with OpenApp first.');
+      },
+    });
+    const out = await tool('OpenApp').run({ app: 'TextEdit' }, ctx);
+    expect(out.isError).toBeUndefined();
+    expect(text(out)).toBe('Opened TextEdit. Take a Screenshot with `app` once its window is open.');
   });
 
   it('hands the mouse and keyboard back on release', async () => {

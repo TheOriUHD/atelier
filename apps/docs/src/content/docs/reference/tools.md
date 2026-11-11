@@ -36,7 +36,7 @@ without asking are on [Permissions](/permissions/), and how descriptions are kep
 | [`WebFetch`](#webfetch) | Chat, Cowork, Code | Fetches a URL and returns its readable content as Markdown. |
 | [`ComputerAccess`](#computeraccess) | Cowork (some setups), Code (some setups) | Asks the person to let you use apps on their computer, then says which you may use and how. |
 | [`ComputerApps`](#computerapps) | Cowork (some setups) | Lists apps on the person's computer (running ones first), with the ones you may use and how. |
-| [`OpenApp`](#openapp) | Cowork (some setups) | Opens an app you may use and brings it to the front. |
+| [`OpenApp`](#openapp) | Cowork (some setups) | Opens an app, first asking the person for it when you may not use it yet. |
 | [`Screenshot`](#screenshot) | Cowork (some setups), Code (some setups) | Shows the screen (Full control), or in the background one app’s window as it is, even where others cover it. |
 | [`FullControl`](#fullcontrol) | Cowork (some setups), Code (some setups) | Takes over the mouse and keyboard (`request`, the person agrees first) or hands them back (`release`) before you finish or wait a long time. |
 | [`ComputerAction`](#computeraction) | Cowork (some setups), Code (some setups) | Clicks, types, presses keys and scrolls in the apps you may use: a list of actions run in order, stopping at the first one refused or failing. |
@@ -839,7 +839,7 @@ Fetches a web page and returns its text, or an answer to `prompt` about it.
 ### Description
 
 ````text wrap
-Asks the person to let you use apps on their computer, then says which you may use and how. Call it once with every app the task needs, before anything else.
+Asks the person to let you use apps on their computer, then says which you may use and how. Call it once with every app the task needs, before anything else; for a task in one app, OpenApp alone asks for it, opens it and shows its window.
 - Prefer other tools where they do the job (a connector, WebFetch, the shell, the file tools): using apps on screen is slow and less reliable.
 - What you may do is set per app: terminals and editors click only, other apps full, unless the person picks less on the card; asking again for an app offers it once more. The person's denied apps are turned down without asking.
 - For a web service (Teams, Gmail, a shop), use its own app if one is installed; in a browser, go straight to its address (cmd+L on macOS, ctrl+L on Windows and Linux; type it, return) instead of looking through menus, history or bookmarks.
@@ -891,14 +891,15 @@ Lists apps on the person's computer (running ones first), with the ones you may 
 ### Description
 
 ````text wrap
-Opens an app you may use and brings it to the front.
+Opens an app, first asking the person for it when you may not use it yet. In the background it stays behind their app and you get its window’s Screenshot (with its controls) to act on at once; in Full control it comes to the front.
 ````
 
 ### Parameters
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `app` | string | yes | Its name, as ComputerAccess allowed it. |
+| `app` | string | yes | Its name ("Calculator", "Numbers"). |
+| `reason` | string | no | What you will do in it, in a sentence the person reads if they are asked. |
 
 ## Screenshot
 

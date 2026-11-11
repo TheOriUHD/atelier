@@ -2154,7 +2154,7 @@ Fetches a URL and returns its readable content as Markdown. With `prompt`, a hel
 ### ComputerAccess
 
 ````text
-Asks the person to let you use apps on their computer, then says which you may use and how. Call it once with every app the task needs, before anything else.
+Asks the person to let you use apps on their computer, then says which you may use and how. Call it once with every app the task needs, before anything else; for a task in one app, OpenApp alone asks for it, opens it and shows its window.
 - Prefer other tools where they do the job (a connector, WebFetch, the shell, the file tools): using apps on screen is slow and less reliable.
 - What you may do is set per app: terminals and editors click only, other apps full, unless the person picks less on the card; asking again for an app offers it once more. The person's denied apps are turned down without asking.
 - For a web service (Teams, Gmail, a shop), use its own app if one is installed; in a browser, go straight to its address (cmd+L on macOS, ctrl+L on Windows and Linux; type it, return) instead of looking through menus, history or bookmarks.
@@ -2209,7 +2209,7 @@ Lists apps on the person's computer (running ones first), with the ones you may 
 ### OpenApp
 
 ````text
-Opens an app you may use and brings it to the front.
+Opens an app, first asking the person for it when you may not use it yet. In the background it stays behind their app and you get its window’s Screenshot (with its controls) to act on at once; in Full control it comes to the front.
 ````
 
 ````json
@@ -2218,7 +2218,11 @@ Opens an app you may use and brings it to the front.
   "properties": {
     "app": {
       "type": "string",
-      "description": "Its name, as ComputerAccess allowed it."
+      "description": "Its name (\"Calculator\", \"Numbers\")."
+    },
+    "reason": {
+      "type": "string",
+      "description": "What you will do in it, in a sentence the person reads if they are asked."
     }
   },
   "required": [
