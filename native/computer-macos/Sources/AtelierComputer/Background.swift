@@ -129,9 +129,8 @@ enum Background {
     }
   }
 
-  /// `AXPress` on the control under the point when that is what the click would do. True when it pressed.
-  private static func press(at point: CGPoint, in window: WindowInfo, input: InputController) throws -> Bool {
-    guard let hit = try Inspect.element(at: point, in: Inspect.application(window.pid)) else { return false }
+  /// The control `AXPress` would press for a click on `hit`, when that is what the click would do.
+  static func pressable(_ hit: AXUIElement) -> AXUIElement? {
     var chain = [hit]
     let index = pressTarget { depth in
       while chain.count <= depth {
@@ -140,10 +139,28 @@ enum Background {
       }
       return Node(role: Inspect.role(of: chain[depth]), actions: Inspect.actions(of: chain[depth]))
     }
-    guard let index else { return false }
+    return index.map { chain[$0] }
+  }
+
+  /// `AXPress` on `control`. True when it pressed; false when the click has to be posted instead.
+  private static func press(_ control: AXUIElement, input: InputController) throws -> Bool {
     // The press is input like any other: refused once the person held Esc, also while the element was looked up.
     try input.ready()
-    return try outcome(AXUIElementPerformAction(chain[index], kAXPressAction as CFString)) == .pressed
+    return try outcome(AXUIElementPerformAction(control, kAXPressAction as CFString)) == .pressed
+  }
+
+  /// `AXPress` on the control under the point when that is what the click would do. True when it pressed.
+  private static func press(at point: CGPoint, in window: WindowInfo, input: InputController) throws -> Bool {
+    guard let hit = try Inspect.element(at: point, in: Inspect.application(window.pid)), let control = pressable(hit) else { return false }
+    return try press(control, input: input)
+  }
+
+  /// Whether a click is better pressed through Accessibility: a plain left click on a native app's button, checkbox,
+  /// link or menu item does the same through `AXPress` at once, without focus records or waits for the window server
+  /// (Claude's helper presses these too). Chromium's pages, Electron's included, get the real click: they answer
+  /// `AXPress` unevenly, and a click there also moves the page's focus.
+  static func pressesInstead(_ click: Click, chromium: Bool) -> Bool {
+    click.isPlainClick && !chromium
   }
 
   // ---------------------------------------------------------------- the person's app stays in front
@@ -344,6 +361,11 @@ enum Background {
       throw RPCError.unsupported(Self.passwordField)
     }
     if let hit, let role, Chromium.textRoles.contains(role) { Chromium.remember(window.pid, hit) }
+    if pressesInstead(click, chromium: chromium), let hit, let control = pressable(hit) {
+      var pressed = false
+      let fronted = try keepingFront(window.pid) { pressed = try press(control, input: input) }
+      if pressed { return fronted }
+    }
     let secureBefore = secureInputOn()
     let stamped = SkyLight.stampedPoint(click.point, window: window.bounds)
     let group = Int64(DispatchTime.now().uptimeNanoseconds & 0x7FFF_FFFF)

@@ -311,6 +311,16 @@ final class BackgroundRequestTests: XCTestCase {
     BgClickParams(window: window, x: x, y: y, button: button, count: count, modifiers: modifiers)
   }
 
+  func testNativeControlsArePressedAndChromiumClicked() throws {
+    // A plain click on a native app's control goes through AXPress; Chromium pages, other buttons, double clicks and
+    // clicks with modifiers get the real click.
+    XCTAssertTrue(Background.pressesInstead(try Background.Click(click()), chromium: false))
+    XCTAssertFalse(Background.pressesInstead(try Background.Click(click()), chromium: true))
+    XCTAssertFalse(Background.pressesInstead(try Background.Click(click(count: 2)), chromium: false))
+    XCTAssertFalse(Background.pressesInstead(try Background.Click(click(button: .right)), chromium: false))
+    XCTAssertFalse(Background.pressesInstead(try Background.Click(click(modifiers: ["cmd"])), chromium: false))
+  }
+
   func testClick() throws {
     let request = try Background.Click(click(count: 2, modifiers: ["cmd", "command", "shift"]))
     XCTAssertEqual(request.window, 12)
