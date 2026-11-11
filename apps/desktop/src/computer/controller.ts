@@ -768,6 +768,9 @@ export class ComputerController {
       }
       return null;
     };
+    // The app brought itself to the front (a browser opening a tab): the helper put the person's app back at once.
+    const fronted = (r: { fronted?: boolean } | undefined) =>
+      r?.fronted ? `That brought ${window.name} to the front, so it was sent behind the person's app again. In the background, avoid what makes an app come forward (a new tab or window): use the window you have.` : undefined;
     const checkKeys = async (): Promise<string | null> => {
       if (tier !== 'full') return `You may not type in ${window.name}. ${more}`;
       const focused = await helper.call('bg.focused', { window: window.id });
@@ -781,16 +784,14 @@ export class ComputerController {
         if (why) return refuse(why);
         // macOS: the helper clears the field the way the app takes it (cmd+A selects nothing in a Chromium app's page).
         if (item.replace && this.deps.platform !== 'darwin') await helper.call('bg.key', { window: window.id, keys: ['ctrl', 'a'] });
-        await helper.call('bg.type', { window: window.id, text: item.text, ...(item.replace && this.deps.platform === 'darwin' ? { replace: true } : {}) });
-        return done();
+        return done(fronted(await helper.call('bg.type', { window: window.id, text: item.text, ...(item.replace && this.deps.platform === 'darwin' ? { replace: true } : {}) })));
       }
       case 'key': {
         const keys = parseKeys(item.text ?? '');
         if (!keys.length) return refuse('Which keys? Like "cmd+s" or "return".');
         const why = await checkKeys();
         if (why) return refuse(why);
-        await helper.call('bg.key', { window: window.id, keys, ...(item.amount ? { repeat: item.amount } : {}) });
-        return done();
+        return done(fronted(await helper.call('bg.key', { window: window.id, keys, ...(item.amount ? { repeat: item.amount } : {}) })));
       }
       case 'scroll': {
         const at = item.coordinate ? point(item.coordinate) : { x: frame.rect.x + frame.rect.width / 2, y: frame.rect.y + frame.rect.height / 2 };
@@ -798,8 +799,7 @@ export class ComputerController {
         if (why) return refuse(why);
         const amount = item.amount ?? 3;
         const d = item.direction ?? 'down';
-        await helper.call('bg.scroll', { window: window.id, ...at, dx: d === 'right' ? amount : d === 'left' ? -amount : 0, dy: d === 'down' ? amount : d === 'up' ? -amount : 0 });
-        return done();
+        return done(fronted(await helper.call('bg.scroll', { window: window.id, ...at, dx: d === 'right' ? amount : d === 'left' ? -amount : 0, dy: d === 'down' ? amount : d === 'up' ? -amount : 0 })));
       }
       case 'mouse_move':
       case 'cursor_position':
@@ -813,9 +813,9 @@ export class ComputerController {
         if (why) return refuse(why);
         const button = item.action === 'right_click' ? 'right' : item.action === 'middle_click' ? 'middle' : 'left';
         const count = item.action === 'double_click' ? 2 : item.action === 'triple_click' ? 3 : 1;
-        await helper.call('bg.click', { window: window.id, ...at, button, count, modifiers: [] });
+        const clicked = await helper.call('bg.click', { window: window.id, ...at, button, count, modifiers: [] });
         await sleep(150);
-        return done();
+        return done(fronted(clicked));
       }
     }
   }

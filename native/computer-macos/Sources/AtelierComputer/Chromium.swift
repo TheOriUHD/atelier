@@ -103,6 +103,13 @@ enum Chromium {
     }
   }
 
+  /// The field a click went into, for typing to find when the app answers no focus (an inactive Electron app).
+  static func remember(_ pid: pid_t, _ element: AXUIElement) {
+    lock.lock()
+    focused[pid] = element
+    lock.unlock()
+  }
+
   static func lastFocused(_ pid: pid_t) -> AXUIElement? {
     lock.lock()
     defer { lock.unlock() }

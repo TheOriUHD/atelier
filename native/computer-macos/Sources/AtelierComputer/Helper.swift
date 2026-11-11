@@ -186,20 +186,16 @@ public final class Helper: @unchecked Sendable {
       try await Inspect.focused(in: Windows.target(params.window, onScreen: false))
     }
     queued(.bgClick) { (params: BgClickParams) in
-      try Background.click(params, input: input)
-      return Empty()
+      return BgInputResult(fronted: try Background.click(params, input: input))
     }
     queued(.bgScroll) { (params: BgScrollParams) in
-      try Background.scroll(params, input: input)
-      return Empty()
+      return BgInputResult(fronted: try Background.scroll(params, input: input))
     }
     queued(.bgKey) { (params: BgKeyParams) in
-      try Background.key(params, layout: Self.currentLayout, input: input)
-      return Empty()
+      return BgInputResult(fronted: try Background.key(params, layout: Self.currentLayout, input: input))
     }
     queued(.bgType) { (params: BgTypeParams) in
-      try Background.type(params, layout: Self.currentLayout, input: input)
-      return Empty()
+      return BgInputResult(fronted: try Background.type(params, layout: Self.currentLayout, input: input))
     }
     queued(.bgEnd) { (_: NoParams) in
       Chromium.restore()

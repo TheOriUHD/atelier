@@ -45,9 +45,10 @@ Windows asks for nothing. Two things work differently there:
 
 - **Background** (the default): it works in one app at a time **in the background**: it sees that app's window as it is
   (even when other windows cover it) and clicks, types and scrolls in it without moving your pointer or bringing it
-  forward, while you keep working. Nothing shows on your screen while it does. What can't be done in the background
-  (dragging, zooming in, or an app that doesn't take input there) needs Full control, and it asks you for that with a
-  card when it needs it.
+  forward, while you keep working. No note or glow shows while it does (see
+  [How the background works](#how-the-background-works-macos) for the one exception, a covered window shown for a
+  moment). What can't be done in the background (dragging, zooming in, lists to choose from, right clicks, or an app
+  that doesn't take input there) needs Full control, and it asks you for that with a card when it needs it.
 - **Full control**: it takes over your computer as it is. No cards: it may do anything in any app, terminals and code
   editors included, except your denied apps, Atelier itself and the parts of macOS that ask for passwords. Typing in a
   terminal runs commands without Atelier's permission prompts, so use Full control only when you would let it do that.
@@ -81,23 +82,31 @@ tells the assistant to go on without them.
 Some apps are never used: Atelier itself, System Settings, the login window and the other parts of macOS that ask for
 passwords. In the background its screenshots show only the window of the app it works in.
 
-### Browsers and Electron apps in the background
+### How the background works (macOS)
 
-On a Mac, Chrome and the other Chromium browsers (Edge, Brave, Arc, Opera, Vivaldi), and apps built on the same engine
-(Slack, VS Code, Discord, Notion, Spotify and other Electron apps), don't take mouse clicks sent to a window in the
-background. Atelier works in them through the keyboard instead, without bringing them forward:
+On a Mac, Atelier works in an app's window the way Claude's and ChatGPT's computer use do, through private parts of
+macOS's window server (SkyLight): the window takes clicks, typing and scrolling as if it were the focused one, while its
+app stays behind yours and your pointer and keyboard stay with you. This works in Chrome and the other Chromium
+browsers, in apps built on them (Slack, VS Code, Discord, Notion and other Electron apps) and in native apps. A few
+things behave differently from the real mouse and keyboard:
 
-- a click on a button, a link, a checkbox or a field moves the app's keyboard focus there (through macOS
-  Accessibility) and presses the key that activates it: Space for a button or a checkbox, Return for a link;
-- typing goes in a character at a time, and replacing a field's text clears it first;
-- scrolling moves the focus to what is under the point and presses the arrow keys;
-- an address goes in the address bar: Cmd+L, the address, Return.
+- **A covered window is shown for its screenshot.** Browsers stop drawing a window that other windows hide completely,
+  so for each screenshot of a covered window Atelier shifts it just far enough for a strip of it to show past the
+  windows in front, waits for it to draw, and puts it back. You may see that strip at the edge of your screen for about
+  half a second.
+- **Nothing comes forward.** In a browser the assistant uses the tab that is open: Cmd+T and Cmd+N would bring the
+  browser to the front, so they aren't pressed in the background; an address goes in with Cmd+L. If an app brings itself
+  forward anyway, Atelier puts your app back in front at once and tells the assistant what to avoid.
+- **Lists to choose from and right clicks need Full control.** Their menus would cover your screen, and a browser turns
+  a right click it gets this way into a left one.
+- **Password fields aren't clicked or typed into.** A password field turns macOS's secure input on for every app while
+  it has the focus; Atelier types nothing while secure input is on.
+- **Typing waits for you** when you are working in another window of the same app: keys sent to it would land where you
+  are typing.
 
-While it works in such an app, Atelier turns on the app's page accessibility (as a screen reader does) and turns it
-off again when the reply ends. A click on something that is none of the above (a picture or a box that only reacts to
-the mouse), a right click, or a click with keys held can't be done this way: the assistant hears so and asks you for
-Full control. Safari, Firefox and native apps take clicks in the background as they are. The same goes for any app that
-turns out to ignore what the assistant does in the background: it asks for Full control instead of trying again.
+These parts of macOS aren't public and can change with an update. Atelier looks them up when it needs them; without
+them it falls back to the public way of sending input, in which Chrome and Electron apps take only buttons, links and
+fields (through Accessibility) and the assistant asks for Full control for the rest.
 
 ### Denied apps
 

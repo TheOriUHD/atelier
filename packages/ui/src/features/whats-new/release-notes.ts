@@ -44,12 +44,12 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       {
         icon: MousePointerClick,
         title: 'Background computer use that works',
-        body: 'Atelier now works in Chrome, other Chromium browsers and apps like Slack, VS Code and Discord without taking your mouse and keyboard: it clicks buttons, links and fields, types and scrolls while the app stays behind your work. Apps you name yourself, like “keep browsing in Chrome”, are allowed without a card, and nothing shows on your screen meanwhile.',
+        body: 'Atelier now works in your apps the way Claude and ChatGPT do: real clicks, typing and scrolling in Chrome, Slack, VS Code and native apps while they stay behind your work, and a covered window is drawn for its screenshot. Apps you name yourself, like “keep browsing in Chrome”, are allowed without a card.',
       },
     ],
     also: [
       'After you held Esc to stop Full control, background work goes on again once that reply ends.',
-      'Something in a browser that only reacts to the mouse still needs Full control: Atelier asks you for it.',
+      'Lists to choose from and right clicks still need Full control: Atelier asks you for it. In a browser it uses the tab you have, since a new tab would come to the front.',
       'In Bypass, using an app doesn’t ask; taking over the mouse and keyboard still does.',
       'What’s new now shows every version since the one you had, with clips of the larger features.',
     ],

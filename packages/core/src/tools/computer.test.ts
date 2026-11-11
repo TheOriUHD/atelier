@@ -97,7 +97,7 @@ describe('ComputerAccess', () => {
     // Zen wasn't named: it still asks.
     expect((asked[0]!.input as { apps: PreparedApp[] }).apps.map((a) => a.app.name)).toEqual(['Zen']);
     // How browsers take input in the background, and when to ask for more.
-    expect(text(out)).toContain('In browsers and other apps built on Chromium, click buttons, links and fields; for an address, press cmd+L');
+    expect(text(out)).toContain('In a browser, use the tab you have: for an address press cmd+L');
     expect(text(out)).toContain('so does a click that is refused or an app that ignores what you do in the background');
   });
 

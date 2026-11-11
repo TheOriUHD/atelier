@@ -221,10 +221,15 @@ enum Capture {
     configuration.shouldBeOpaque = true
     configuration.showsCursor = false
 
+    // Covered completely, the window's pages aren't painted: shifted for a moment so a sliver shows (`Occlusion`).
+    let putBack = Occlusion.peek(window)
+    if putBack != nil { try? await Task.sleep(nanoseconds: 300_000_000) }
     let image: CGImage
     do {
       image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+      putBack?()
     } catch {
+      putBack?()
       throw mapError(error)
     }
     let data = try ImageEncoder.encode(image, format: params.format, quality: quality)

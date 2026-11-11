@@ -8,6 +8,8 @@ import Foundation
 public enum InputRoute: Equatable, Sendable {
   case hid
   case process(pid_t)
+  /// To the app's process through SkyLight (`SkyLight`): what reaches a background Chromium page.
+  case skyLight(pid_t)
 }
 
 extension MouseButton {
@@ -144,7 +146,7 @@ public final class InputController: @unchecked Sendable {
       postLocked(.modifier(modifier, flags: flags), .hid)
     }
     for hold in heldInProcesses.reversed() {
-      postLocked(hold.release, .process(hold.pid))
+      postLocked(hold.release, hold.route)
     }
     heldKeys = []
     heldButtons = []
@@ -159,6 +161,7 @@ public final class InputController: @unchecked Sendable {
   private struct ProcessHold: Equatable {
     var pid: pid_t
     var release: EventSpec
+    var route: InputRoute
   }
 
   private enum Change {
@@ -180,7 +183,7 @@ public final class InputController: @unchecked Sendable {
     condition.lock()
     defer { condition.unlock() }
     if stopped || terminated { throw RPCError.stopped }
-    postLocked(event, route)
+    postLocked(event, route, authenticate: spec.authenticate)
     switch change {
     case .none: break
     case .keyDown(let code):
@@ -208,7 +211,7 @@ public final class InputController: @unchecked Sendable {
     }
   }
 
-  private func postLocked(_ event: CGEvent, _ route: InputRoute) {
+  private func postLocked(_ event: CGEvent, _ route: InputRoute, authenticate: Bool = false) {
     event.setIntegerValueField(.eventSourceUserData, value: Self.eventTag)
     switch route {
     case .hid:
@@ -222,12 +225,14 @@ public final class InputController: @unchecked Sendable {
     case .process(let pid):
       // Straight to the app: the window server doesn't move the cursor or bring the app forward for it.
       event.postToPid(pid)
+    case .skyLight(let pid):
+      SkyLight.post(event, to: pid, authenticate: authenticate)
     }
   }
 
   /// A release or a stop: best effort, an event that can't be made is skipped.
   private func postLocked(_ spec: EventSpec, _ route: InputRoute) {
-    if let event = try? spec.make(source: source) { postLocked(event, route) }
+    if let event = try? spec.make(source: source) { postLocked(event, route, authenticate: spec.authenticate) }
   }
 
   /// What posting a step changes in the held state.
@@ -235,8 +240,10 @@ public final class InputController: @unchecked Sendable {
     let down = step.release != nil
     guard down || step.isRelease else { return .none }
     switch route {
-    case .process(let pid):
-      return down ? .processDown(ProcessHold(pid: pid, release: step.release!)) : .processUp(ProcessHold(pid: pid, release: step.event))
+    case .process(let pid), .skyLight(let pid):
+      return down
+        ? .processDown(ProcessHold(pid: pid, release: step.release!, route: route))
+        : .processUp(ProcessHold(pid: pid, release: step.event, route: route))
     case .hid:
       switch step.event.kind {
       case .key(let code, _): return down ? .keyDown(code) : .keyUp(code)

@@ -499,6 +499,14 @@ public struct BgKeyParams: Codable, Sendable {
   public var `repeat`: Int?
 }
 
+/// What a background click, scroll, key or typing did besides: `fronted` when the app brought itself to the front
+/// because of it (and the person's app was put back in front).
+public struct BgInputResult: Codable, Sendable {
+  public var fronted: Bool?
+
+  public init(fronted: Bool) { self.fronted = fronted ? true : nil }
+}
+
 public struct BgTypeParams: Codable, Sendable {
   public var window: String
   public var text: String

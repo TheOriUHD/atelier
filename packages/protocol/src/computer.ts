@@ -306,6 +306,11 @@ export interface BgKeyParams {
   repeat?: number;
 }
 
+/** macOS: `fronted` when the app brought itself to the front because of the action, and the person's app was put back. */
+export interface BgInputResult {
+  fronted?: boolean;
+}
+
 export interface BgTypeParams {
   window: string;
   text: string;
@@ -361,11 +366,11 @@ export interface ComputerMethods {
   /** Background: the element of that window's app that takes typing (its focused element, whether or not the app is active). */
   'bg.focused': { params: { window: string }; result: InspectPointResult };
   /** Background: a click delivered to that window, the cursor unmoved and the app not brought forward. -32032 when the app won't take it. */
-  'bg.click': { params: BgClickParams; result: Record<string, never> };
-  'bg.scroll': { params: BgScrollParams; result: Record<string, never> };
+  'bg.click': { params: BgClickParams; result: BgInputResult };
+  'bg.scroll': { params: BgScrollParams; result: BgInputResult };
   /** Background: keys delivered to that window's focused element. Shortcuts with modifiers may not reach every app (-32032). */
-  'bg.key': { params: BgKeyParams; result: Record<string, never> };
-  'bg.type': { params: BgTypeParams; result: Record<string, never> };
+  'bg.key': { params: BgKeyParams; result: BgInputResult };
+  'bg.type': { params: BgTypeParams; result: BgInputResult };
   /** macOS: background work is over for now; what was turned on in apps for it (Chromium's page accessibility) is turned off. */
   'bg.end': { params: Record<string, never>; result: Record<string, never> };
   /** Starts watching the Esc hold and the person's own input; `control.end` stops it; `control.resume` lifts a stop. */

@@ -159,8 +159,8 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
         const how = state.background
           ? [
               'You work in the background, in one app at a time, without the person’s mouse and keyboard: take a Screenshot with `app` to pick it (OpenApp opens one); your actions then go to that window.',
-              'In browsers and other apps built on Chromium, click buttons, links and fields; for an address, press cmd+L (ctrl+L on Windows and Linux), type it and press return.',
-              'Dragging and zooming need Full control, and so does a click that is refused or an app that ignores what you do in the background (nothing changes on the next screenshot): ask with FullControl, which asks the person.',
+              'In a browser, use the tab you have: for an address press cmd+L (ctrl+L on Windows and Linux), type it and press return; a new tab or window would come to the front.',
+              'Lists to choose from, right clicks, dragging and zooming need Full control, and so does a click that is refused or an app that ignores what you do in the background (nothing changes on the next screenshot): ask with FullControl, which asks the person.',
             ].join(' ')
           : 'Taking over the mouse and keyboard (ComputerAction) asks the person first. Take a Screenshot to see them.';
         return textOutput([`You may use: ${grantsText(state.apps)}. ${how}${limited}`, ...notes].join('\n'));

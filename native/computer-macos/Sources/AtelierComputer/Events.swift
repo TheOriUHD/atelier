@@ -25,6 +25,10 @@ public struct EventSpec: Equatable, Sendable {
   public var flags: CGEventFlags?
   /// Integer fields set on the event: the click count, the window under the pointer.
   public var fields: [CGEventField: Int64]
+  /// SkyLight: the window, process and point it is stamped with (`SkyLight.Stamp`), set when it is made.
+  var stamp: SkyLight.Stamp?
+  /// SkyLight: carries the authentication message Chromium wants on typed keys.
+  var authenticate = false
 
   public init(kind: Kind, location: CGPoint? = nil, flags: CGEventFlags? = [], fields: [CGEventField: Int64] = [:]) {
     self.kind = kind
@@ -95,6 +99,7 @@ public struct EventSpec: Equatable, Sendable {
     default: break
     }
     for (field, value) in fields { event.setIntegerValueField(field, value: value) }
+    if let stamp { SkyLight.apply(stamp, to: event) }
     return event
   }
 

@@ -31,6 +31,8 @@ class FakeHelper {
   background = false;
   /** A background click the app won't take. */
   refuse: HelperError | null = null;
+  /** The app brings itself to the front on a background key (a browser opening a tab). */
+  fronts = false;
   async start() {
     return { protocolVersion: 1, helperVersion: 'fake', platform: 'darwin' as const, supports: { background: this.background, fullControl: true, filter: true } };
   }
@@ -59,6 +61,8 @@ class FakeHelper {
           return { app: this.front };
         case 'bg.click':
           return this.refuse ? Promise.reject(this.refuse) : {};
+        case 'bg.key':
+          return this.fronts ? { fronted: true } : {};
         case 'window.capture':
           if ((params as { app: string }).app === 'com.apple.Notes') return Promise.reject(new HelperError('no window', -32033));
           return { data: 'BBBB', mime: 'image/jpeg', width: 400, height: 300, rect: { x: 100, y: 50, width: 800, height: 600 }, window: '42', title: 'Untitled' };
@@ -477,6 +481,13 @@ describe('in the background', () => {
     // A spot the helper can't click in the background (not a button, a link or a field): the agent hears how to go on.
     helper.refuse = new HelperError('In the background this app only takes clicks on buttons, links, checkboxes and fields, and that spot is none of them.', -32032);
     expect((await batch([{ action: 'left_click', coordinate: [5, 5] }]))[0]).toMatchObject({ ok: false, note: /none of them\. This app may need Full control: ask with FullControl\./ });
+    // A key that made the app come forward: the helper put the person's app back, and the agent hears what to avoid.
+    helper.refuse = null;
+    helper.fronts = true;
+    expect((await batch([{ action: 'key', text: 'cmd+comma' }]))[0]).toMatchObject({
+      ok: true,
+      note: /That brought Google Chrome to the front, so it was sent behind the person's app again\. In the background, avoid/,
+    });
     // When the turn ends, what the helper turned on in the app for it goes off.
     await ask('turn.end', {});
     expect(helper.did('bg.end')).toHaveLength(1);
