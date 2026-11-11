@@ -81,12 +81,23 @@ tells the assistant to go on without them.
 Some apps are never used: Atelier itself, System Settings, the login window and the other parts of macOS that ask for
 passwords. In the background its screenshots show only the window of the app it works in.
 
-### Browsers in the background
+### Browsers and Electron apps in the background
 
-On a Mac, Chrome and the other Chromium browsers (Edge, Brave, Arc, Opera, Vivaldi) ignore clicks and typing sent to a
-window in the background, so there the assistant can only take screenshots. To click or type in one, it asks you for
-Full control. Safari and Firefox work in the background as other apps do. The same goes for any app that turns out to
-ignore what the assistant does in the background: it asks for Full control instead of trying again.
+On a Mac, Chrome and the other Chromium browsers (Edge, Brave, Arc, Opera, Vivaldi), and apps built on the same engine
+(Slack, VS Code, Discord, Notion, Spotify and other Electron apps), don't take mouse clicks sent to a window in the
+background. Atelier works in them through the keyboard instead, without bringing them forward:
+
+- a click on a button, a link, a checkbox or a field moves the app's keyboard focus there (through macOS
+  Accessibility) and presses the key that activates it: Space for a button or a checkbox, Return for a link;
+- typing goes in a character at a time, and replacing a field's text clears it first;
+- scrolling moves the focus to what is under the point and presses the arrow keys;
+- an address goes in the address bar: Cmd+L, the address, Return.
+
+While it works in such an app, Atelier turns on the app's page accessibility (as a screen reader does) and turns it
+off again when the reply ends. A click on something that is none of the above (a picture or a box that only reacts to
+the mouse), a right click, or a click with keys held can't be done this way: the assistant hears so and asks you for
+Full control. Safari, Firefox and native apps take clicks in the background as they are. The same goes for any app that
+turns out to ignore what the assistant does in the background: it asks for Full control instead of trying again.
 
 ### Denied apps
 

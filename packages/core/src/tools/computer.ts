@@ -3,7 +3,7 @@
  * app on a card (ComputerAccess) and agrees before it takes over the mouse and keyboard (FullControl); the computer
  * itself decides what each action may do (`apps/desktop/src/computer/`). These tools only ask it and report.
  */
-import { ComputerActionItem, takesBackgroundInput, type AppGrant, type ComputerScreenshot, type ControllerMethods, type PermissionAnswer, type PermissionRequest, type PreparedApp, type ScreenshotSize } from '@atelier/protocol';
+import { ComputerActionItem, type AppGrant, type ComputerScreenshot, type ControllerMethods, type PermissionAnswer, type PermissionRequest, type PreparedApp, type ScreenshotSize } from '@atelier/protocol';
 import type { BlobStore } from '../store/blobs.ts';
 import { textOutput, type DescribeContext, type Tool, type ToolOutput } from './types.ts';
 
@@ -156,15 +156,12 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
         if (state.mode === 'full') return textOutput([fullControlText(state.denied, state.platform), ...notes].join('\n'));
         if (!state.apps.length) return textOutput(['You may use no apps on this computer.', ...notes].join('\n'), true);
         const limited = state.apps.some((g) => g.tier !== 'full') ? ` ${MORE}` : '';
-        const viewOnly = state.apps.filter((g) => !takesBackgroundInput(g.app.id, state.platform)).map((g) => g.app.name);
         const how = state.background
           ? [
               'You work in the background, in one app at a time, without the person’s mouse and keyboard: take a Screenshot with `app` to pick it (OpenApp opens one); your actions then go to that window.',
-              viewOnly.length ? `${viewOnly.join(', ')} only ${viewOnly.length === 1 ? 'shows' : 'show'} screenshots in the background: to click, type or scroll there, ask for Full control with FullControl.` : '',
-              'Dragging and zooming need Full control too, and so does an app that ignores what you do in the background (nothing changes on the next screenshot): ask with FullControl, which asks the person.',
-            ]
-              .filter(Boolean)
-              .join(' ')
+              'In browsers and other apps built on Chromium, click buttons, links and fields; for an address, press cmd+L (ctrl+L on Windows and Linux), type it and press return.',
+              'Dragging and zooming need Full control, and so does a click that is refused or an app that ignores what you do in the background (nothing changes on the next screenshot): ask with FullControl, which asks the person.',
+            ].join(' ')
           : 'Taking over the mouse and keyboard (ComputerAction) asks the person first. Take a Screenshot to see them.';
         return textOutput([`You may use: ${grantsText(state.apps)}. ${how}${limited}`, ...notes].join('\n'));
       } catch (e) {

@@ -241,6 +241,7 @@ public final class InputController: @unchecked Sendable {
       switch step.event.kind {
       case .key(let code, _): return down ? .keyDown(code) : .keyUp(code)
       case .text: return down ? .keyDown(0) : .keyUp(0)
+      case .char(let code, _, _): return down ? .keyDown(code) : .keyUp(code)
       case .mouse(_, let button): return down ? .buttonDown(MouseButton(button)) : .buttonUp(MouseButton(button))
       case .modifier, .scroll: return .none
       }

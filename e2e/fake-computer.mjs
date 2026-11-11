@@ -187,6 +187,7 @@ const methods = {
   'bg.scroll': (p) => (acting(), log({ method: 'bg.scroll', ...p }), {}),
   'bg.key': (p) => (acting(), log({ method: 'bg.key', ...p }), {}),
   'bg.type': (p) => (acting(), log({ method: 'bg.type', ...p }), {}),
+  'bg.end': () => (log({ method: 'bg.end' }), {}),
   'key.press': (p) => (acting(), log({ method: 'key.press', ...p }), {}),
   'key.type': (p) => (acting(), log({ method: 'key.type', ...p }), {}),
   'key.hold': (p) => (acting(), log({ method: 'key.hold', ...p }), {}),

@@ -309,6 +309,8 @@ export interface BgKeyParams {
 export interface BgTypeParams {
   window: string;
   text: string;
+  /** macOS: in place of what the focused field holds (the helper clears it the way the app takes). */
+  replace?: boolean;
 }
 
 /**
@@ -364,6 +366,8 @@ export interface ComputerMethods {
   /** Background: keys delivered to that window's focused element. Shortcuts with modifiers may not reach every app (-32032). */
   'bg.key': { params: BgKeyParams; result: Record<string, never> };
   'bg.type': { params: BgTypeParams; result: Record<string, never> };
+  /** macOS: background work is over for now; what was turned on in apps for it (Chromium's page accessibility) is turned off. */
+  'bg.end': { params: Record<string, never>; result: Record<string, never> };
   /** Starts watching the Esc hold and the person's own input; `control.end` stops it; `control.resume` lifts a stop. */
   'control.begin': { params: Record<string, never>; result: Record<string, never> };
   'control.end': { params: Record<string, never>; result: Record<string, never> };

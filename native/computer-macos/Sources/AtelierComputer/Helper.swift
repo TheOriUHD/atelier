@@ -178,6 +178,8 @@ public final class Helper: @unchecked Sendable {
       let point = try Self.point(params.x, params.y)
       let window = try Windows.target(params.window, onScreen: true)
       try WindowChoice.check(point, in: window)
+      // A Chromium app's page shows to Accessibility once asked: by the click that follows, it is there.
+      if Chromium.isChromium(pid: window.pid) { Chromium.prepare(window.pid) }
       return try await Inspect.point(point, in: window)
     }
     async(.bgFocused) { (params: BgWindowParams) in
@@ -196,7 +198,11 @@ public final class Helper: @unchecked Sendable {
       return Empty()
     }
     queued(.bgType) { (params: BgTypeParams) in
-      try Background.type(params, input: input)
+      try Background.type(params, layout: Self.currentLayout, input: input)
+      return Empty()
+    }
+    queued(.bgEnd) { (_: NoParams) in
+      Chromium.restore()
       return Empty()
     }
 

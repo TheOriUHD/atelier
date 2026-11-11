@@ -29,6 +29,8 @@ class FakeHelper {
   front: HelperApp | null = null;
   /** Whether it can work in a window without the mouse and keyboard. */
   background = false;
+  /** A background click the app won't take. */
+  refuse: HelperError | null = null;
   async start() {
     return { protocolVersion: 1, helperVersion: 'fake', platform: 'darwin' as const, supports: { background: this.background, fullControl: true, filter: true } };
   }
@@ -55,6 +57,8 @@ class FakeHelper {
           return { apps: this.apps };
         case 'apps.frontmost':
           return { app: this.front };
+        case 'bg.click':
+          return this.refuse ? Promise.reject(this.refuse) : {};
         case 'window.capture':
           if ((params as { app: string }).app === 'com.apple.Notes') return Promise.reject(new HelperError('no window', -32033));
           return { data: 'BBBB', mime: 'image/jpeg', width: 400, height: 300, rect: { x: 100, y: 50, width: 800, height: 600 }, window: '42', title: 'Untitled' };
@@ -410,8 +414,9 @@ describe('in the background', () => {
       { action: 'scroll', ok: true },
     ]);
     expect(helper.did('bg.click').at(-1)?.params).toEqual({ window: '42', x: 500, y: 350, button: 'left', count: 1, modifiers: [] });
-    expect(helper.did('bg.key').at(-1)?.params).toEqual({ window: '42', keys: ['cmd', 'a'] });
-    expect(helper.did('bg.type').at(-1)?.params).toEqual({ window: '42', text: 'hi' });
+    // On a Mac the helper clears the field itself, the way the app takes it.
+    expect(helper.did('bg.key')).toHaveLength(0);
+    expect(helper.did('bg.type').at(-1)?.params).toEqual({ window: '42', text: 'hi', replace: true });
     expect(helper.did('bg.scroll').at(-1)?.params).toMatchObject({ window: '42', x: 500, y: 350, dy: 3 });
     expect(helper.did('control.begin')).toHaveLength(0);
     expect(helper.did('mouse.click')).toHaveLength(0);
@@ -457,17 +462,24 @@ describe('in the background', () => {
     expect(helper.did('control.resume')).toHaveLength(resumes);
   });
 
-  it('asks for Full control to act in a Chromium browser, whose screenshots work', async () => {
+  it('works in a Chromium browser in the background, and says when a spot needs Full control', async () => {
     helper.background = true;
     helper.apps = [...APPS, app('com.google.Chrome', 'Google Chrome')];
     await controller.grant('local', 's1', [{ id: 'com.google.Chrome', tier: 'full' }], false);
     expect(await ask('screenshot', { app: 'chrome', size: SIZE })).toMatchObject({ width: 400 });
-    const { results } = await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }, { action: 'type', text: 'x' }], size: SIZE });
-    expect(results[0]).toMatchObject({ ok: false, note: /Google Chrome doesn't take clicks, typing or scrolling in the background \(its screenshots work\)\. Ask for Full control with FullControl/ });
-    // The batch stops there.
-    expect(results).toHaveLength(1);
-    expect(helper.did('bg.click')).toHaveLength(0);
-    expect(helper.did('bg.type')).toHaveLength(0);
+    const batch = async (actions: ControllerMethods['control.batch']['params']['actions']) => (await ask('control.batch', { actions, size: SIZE })).results;
+    expect(await batch([{ action: 'left_click', coordinate: [200, 150] }, { action: 'type', text: 'lego', replace: true }])).toEqual([
+      { action: 'left_click', ok: true },
+      { action: 'type', ok: true },
+    ]);
+    expect(helper.did('bg.click').at(-1)?.params).toMatchObject({ window: '42', x: 500, y: 350 });
+    expect(helper.did('bg.type').at(-1)?.params).toEqual({ window: '42', text: 'lego', replace: true });
+    // A spot the helper can't click in the background (not a button, a link or a field): the agent hears how to go on.
+    helper.refuse = new HelperError('In the background this app only takes clicks on buttons, links, checkboxes and fields, and that spot is none of them.', -32032);
+    expect((await batch([{ action: 'left_click', coordinate: [5, 5] }]))[0]).toMatchObject({ ok: false, note: /none of them\. This app may need Full control: ask with FullControl\./ });
+    // When the turn ends, what the helper turned on in the app for it goes off.
+    await ask('turn.end', {});
+    expect(helper.did('bg.end')).toHaveLength(1);
   });
 });
 

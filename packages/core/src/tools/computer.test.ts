@@ -96,8 +96,9 @@ describe('ComputerAccess', () => {
     expect(calls.find((c) => c.method === 'access.allow')?.params).toEqual({ ids: ['com.google.Chrome'] });
     // Zen wasn't named: it still asks.
     expect((asked[0]!.input as { apps: PreparedApp[] }).apps.map((a) => a.app.name)).toEqual(['Zen']);
-    // Chrome only takes screenshots in the background: it says so, and how to get more.
-    expect(text(out)).toContain('Google Chrome only shows screenshots in the background: to click, type or scroll there, ask for Full control with FullControl.');
+    // How browsers take input in the background, and when to ask for more.
+    expect(text(out)).toContain('In browsers and other apps built on Chromium, click buttons, links and fields; for an address, press cmd+L');
+    expect(text(out)).toContain('so does a click that is refused or an app that ignores what you do in the background');
   });
 
   it('asks for nothing in Bypass, and keeps the tier the person picked for an app it has', async () => {

@@ -80,6 +80,7 @@ public enum ComputerMethod: String, Sendable, CaseIterable {
   case bgScroll = "bg.scroll"
   case bgKey = "bg.key"
   case bgType = "bg.type"
+  case bgEnd = "bg.end"
   case controlBegin = "control.begin"
   case controlEnd = "control.end"
   case controlResume = "control.resume"
@@ -501,6 +502,8 @@ public struct BgKeyParams: Codable, Sendable {
 public struct BgTypeParams: Codable, Sendable {
   public var window: String
   public var text: String
+  /// In place of what the focused field holds.
+  public var replace: Bool?
 }
 
 // ---------------------------------------------------------------- notifications

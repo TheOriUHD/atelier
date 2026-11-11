@@ -8,7 +8,6 @@ import {
   appCategory,
   defaultTier,
   linkSensitive,
-  takesBackgroundInput,
   maxTier,
   type AppGrant,
   type AppTier,
@@ -447,6 +446,8 @@ export class ComputerController {
         if (this.control?.key === key) await this.end(this.control, { focus: true });
         state().takenBack = false;
         await this.reopen();
+        // What background work turned on in apps (Chromium's page accessibility) goes off until it is needed again.
+        if (this.deps.platform === 'darwin' && state().frame && this.deps.hasHelper) await this.deps.helper.call('bg.end', {}).catch(() => undefined);
         return {};
       },
       'turn.wait': async ({ kind }: ControllerMethods['turn.wait']['params']) => {
@@ -754,9 +755,6 @@ export class ComputerController {
     if (!frame || !window) return refuse('Take a Screenshot of the app first: in the background your actions go to its window.');
     const tier = policy.tier(window.app);
     if (!tier) return refuse(`You may not use ${window.name}: ask with ComputerAccess first.`);
-    if (item.action !== 'mouse_move' && item.action !== 'cursor_position' && !takesBackgroundInput(window.app, this.deps.platform)) {
-      return refuse(`${window.name} doesn't take clicks, typing or scrolling in the background (its screenshots work). Ask for Full control with FullControl to act in it.`);
-    }
     const point = (c: [number, number] | undefined) => {
       if (!c) throw new Error('It needs a coordinate.');
       return { x: frame.rect.x + (c[0] * frame.rect.width) / frame.width, y: frame.rect.y + (c[1] * frame.rect.height) / frame.height };
@@ -781,8 +779,9 @@ export class ComputerController {
         if (!item.text) return refuse('Nothing to type.');
         const why = await checkKeys();
         if (why) return refuse(why);
-        if (item.replace) await helper.call('bg.key', { window: window.id, keys: this.deps.platform === 'darwin' ? ['cmd', 'a'] : ['ctrl', 'a'] });
-        await helper.call('bg.type', { window: window.id, text: item.text });
+        // macOS: the helper clears the field the way the app takes it (cmd+A selects nothing in a Chromium app's page).
+        if (item.replace && this.deps.platform !== 'darwin') await helper.call('bg.key', { window: window.id, keys: ['ctrl', 'a'] });
+        await helper.call('bg.type', { window: window.id, text: item.text, ...(item.replace && this.deps.platform === 'darwin' ? { replace: true } : {}) });
         return done();
       }
       case 'key': {

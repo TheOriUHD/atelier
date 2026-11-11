@@ -90,7 +90,8 @@ enum Inspect {
   /// `bg.focused`: the element of the window's app that takes typing, whether or not the app is active.
   static func focused(in window: WindowInfo) async throws -> InspectPointResult {
     guard AXIsProcessTrusted() else { throw RPCError.permission(.accessibility) }
-    let element = focusedElement(in: application(window.pid)).map(read)
+    // An inactive Electron app answers no focus: the element focused in it last, through Accessibility, has it.
+    let element = (focusedElement(in: application(window.pid)) ?? Chromium.lastFocused(window.pid)).map(read)
     return await result(element, pid: window.pid)
   }
 

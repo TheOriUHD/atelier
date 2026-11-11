@@ -10,6 +10,9 @@ public struct EventSpec: Equatable, Sendable {
     case modifier(CGKeyCode, down: Bool)
     /// Text typed by one key event that carries it (`keyboardSetUnicodeString`).
     case text([UniChar], down: Bool)
+    /// One character on the key that types it (Chromium apps type nothing from an event carrying several, or from
+    /// some events without a key).
+    case char(CGKeyCode, [UniChar], down: Bool)
     case mouse(CGEventType, button: CGMouseButton)
     /// Line units: wheel1 vertical, wheel2 horizontal.
     case scroll(wheel1: Int32, wheel2: Int32)
@@ -43,6 +46,10 @@ public struct EventSpec: Equatable, Sendable {
     EventSpec(kind: .text(units, down: down), flags: [])
   }
 
+  public static func char(_ code: CGKeyCode, _ units: [UniChar], down: Bool) -> EventSpec {
+    EventSpec(kind: .char(code, units, down: down), flags: [])
+  }
+
   /// A mouse event; `clickState` 0 leaves the click count unset.
   public static func mouse(
     _ type: CGEventType, at point: CGPoint, button: MouseButton, clickState: Int64 = 0, flags: CGEventFlags = []
@@ -67,7 +74,7 @@ public struct EventSpec: Equatable, Sendable {
   public func make(source: CGEventSource?) throws -> CGEvent {
     let event: CGEvent?
     switch kind {
-    case .key(let code, let down), .modifier(let code, let down):
+    case .key(let code, let down), .modifier(let code, let down), .char(let code, _, let down):
       event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down)
     case .text(_, let down):
       event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
@@ -83,7 +90,7 @@ public struct EventSpec: Equatable, Sendable {
     if let flags { event.flags = flags }
     switch kind {
     case .modifier: event.type = .flagsChanged
-    case .text(let units, _):
+    case .text(let units, _), .char(_, let units, _):
       units.withUnsafeBufferPointer { event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress) }
     default: break
     }
@@ -93,7 +100,7 @@ public struct EventSpec: Equatable, Sendable {
 
   private var kindName: String {
     switch kind {
-    case .key, .modifier, .text: "key"
+    case .key, .modifier, .text, .char: "key"
     case .mouse: "mouse"
     case .scroll: "scroll"
     }

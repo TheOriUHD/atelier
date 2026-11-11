@@ -4,7 +4,8 @@ import Foundation
 
 /// Background input (`bg.*`): into one app's window without the person's mouse and keyboard. Events go straight to the
 /// app's process (`InputRoute.process`): the cursor doesn't move, the app isn't brought forward. A plain click on a
-/// control is an `AXPress` instead, which needs no pointer at all. Everything goes through the same input gate as Full
+/// control is an `AXPress` instead, which needs no pointer at all. Apps built on Chromium take neither posted clicks
+/// nor `AXPress` in a page: they get focus and keys instead (`Chromium`). Everything goes through the same input gate as Full
 /// control: refused after an Esc stop, tagged so the control watch ignores it, let go of by a release or a stop.
 enum Background {
   // ---------------------------------------------------------------- requests, checked before anything is looked up
@@ -68,11 +69,14 @@ enum Background {
   struct Typing: Equatable {
     var window: CGWindowID
     var text: String
+    /// In place of what the field holds.
+    var replace: Bool
 
     init(_ params: BgTypeParams) throws {
       window = try WindowChoice.windowID(params.window)
       guard params.text.utf16.count <= 100_000 else { throw RPCError.invalidParams("text is longer than 100000") }
       text = params.text
+      replace = params.replace ?? false
     }
   }
 
@@ -145,6 +149,7 @@ enum Background {
     let window = try Windows.target(params.window, onScreen: true)
     try WindowChoice.check(click.point, in: window)
     try input.ready()
+    if Chromium.isChromium(pid: window.pid), try Chromium.click(click, window: window, input: input) { return }
     if click.isPlainClick, try press(at: click.point, in: window, input: input) { return }
     let steps = BackgroundEvents.click(
       at: click.point, button: click.button, count: click.count, flags: Modifier.flags(click.modifiers),
@@ -156,6 +161,7 @@ enum Background {
     let scroll = try Scroll(params)
     let window = try Windows.target(params.window, onScreen: true)
     try WindowChoice.check(scroll.point, in: window)
+    if Chromium.isChromium(pid: window.pid), try Chromium.scroll(scroll, window: window, input: input) { return }
     try input.run(
       BackgroundEvents.scroll(at: scroll.point, dx: scroll.dx, dy: scroll.dy, window: window.id),
       route: .process(window.pid))
@@ -165,13 +171,21 @@ enum Background {
   static func key(_ params: BgKeyParams, layout: () -> KeyboardLayoutMap?, input: InputController) throws {
     let key = try Key(params)
     let window = try Windows.target(params.window, onScreen: false)
-    let steps = try Key.steps(KeyMap.resolve(params.keys, layout: layout()), repeat: key.count)
-    try input.run(steps, route: .process(window.pid))
+    let stroke = try KeyMap.resolve(params.keys, layout: layout())
+    if Chromium.isChromium(pid: window.pid), try Chromium.key(stroke, pid: window.pid, input: input) { return }
+    try input.run(Key.steps(stroke, repeat: key.count), route: .process(window.pid))
   }
 
-  static func type(_ params: BgTypeParams, input: InputController) throws {
+  static func type(_ params: BgTypeParams, layout: () -> KeyboardLayoutMap?, input: InputController) throws {
     let typing = try Typing(params)
     let window = try Windows.target(params.window, onScreen: false)
+    if Chromium.isChromium(pid: window.pid) {
+      try Chromium.type(typing.text, replace: typing.replace, pid: window.pid, layout: layout(), input: input)
+      return
+    }
+    if typing.replace {
+      try input.run(BackgroundEvents.press(0, flags: .maskCommand, repeat: 1), route: .process(window.pid))
+    }
     try input.run(TypingEvents.steps(typing.text), route: .process(window.pid))
   }
 }

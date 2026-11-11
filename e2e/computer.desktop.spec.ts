@@ -89,8 +89,12 @@ test('desktop: computer use is turned on in Settings, the person allows apps, an
     expect(entries.find((e) => e.method === 'window.capture')).toMatchObject({ app: 'com.apple.TextEdit' });
     // The click lands in the window: image pixels map onto its rect (800×600 at 100,50, shown at full size).
     expect(entries.find((e) => e.method === 'bg.click')).toMatchObject({ window: 'w:com.apple.TextEdit', x: 200, y: 150, button: 'left', count: 1 });
-    expect(entries.find((e) => e.method === 'bg.key')).toMatchObject({ keys: process.platform === 'darwin' ? ['cmd', 'a'] : ['ctrl', 'a'] });
-    expect(entries.find((e) => e.method === 'bg.type')).toMatchObject({ text: 'hello' });
+    // Replacing: the macOS helper clears the field itself; elsewhere ctrl+A selects it first.
+    if (process.platform === 'darwin') expect(entries.find((e) => e.method === 'bg.type')).toMatchObject({ text: 'hello', replace: true });
+    else {
+      expect(entries.find((e) => e.method === 'bg.key')).toMatchObject({ keys: ['ctrl', 'a'] });
+      expect(entries.find((e) => e.method === 'bg.type')).toMatchObject({ text: 'hello' });
+    }
     for (const method of ['control.begin', 'mouse.click', 'key.type', 'apps.hide']) expect(entries.map((e) => e.method), method).not.toContain(method);
   } finally {
     await app.close();
