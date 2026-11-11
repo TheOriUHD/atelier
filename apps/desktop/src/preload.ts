@@ -138,6 +138,10 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     change: (change: unknown) => ipcRenderer.invoke('lending:change', change),
     allowImport: () => ipcRenderer.invoke('lending:allowImport'),
   },
+  browserExtension: {
+    status: () => ipcRenderer.invoke('browserExtension:status'),
+    reveal: () => ipcRenderer.invoke('browserExtension:reveal'),
+  },
   computer: {
     status: () => ipcRenderer.invoke('computer:status'),
     settings: (patch: unknown) => ipcRenderer.invoke('computer:settings', patch),

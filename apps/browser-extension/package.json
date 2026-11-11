@@ -1,0 +1,19 @@
+{
+  "name": "@atelier/browser-extension",
+  "version": "0.1.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "description": "Atelier for Chrome: computer use in web pages, in tabs of its own, through the desktop app.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "build": "node scripts/build.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@atelier/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

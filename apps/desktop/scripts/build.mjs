@@ -17,7 +17,11 @@ await Promise.all([
   build({ ...common, entryPoints: ['src/preload.ts'], outfile: 'dist/preload.cjs', format: 'cjs', external: ['electron'] }),
   build({ ...common, entryPoints: ['src/backend.ts'], outfile: 'dist/backend.mjs', format: 'esm', external: ['electron'], banner: esmBanner }),
   build({ ...common, entryPoints: ['src/remote.ts'], outfile: 'dist/remote.mjs', format: 'esm', external: ['electron'], banner: esmBanner }),
+  // Atelier for Chrome's native messaging host, run by a browser as Atelier's executable in Node mode (browser/bridge.ts).
+  build({ ...common, entryPoints: ['src/browser/host.ts'], outfile: 'dist/browser-host.cjs', format: 'cjs', platform: 'node' }),
 ]);
+// Atelier for Chrome, shipped with the app for "Load unpacked" (electron-builder extraResources).
+execFileSync(process.execPath, [`${root}/../browser-extension/scripts/build.mjs`], { stdio: 'inherit' });
 if (!skipUi) {
   // On Windows pnpm is a .cmd file, which only a shell can start.
   execFileSync('pnpm', ['--filter', '@atelier/ui', 'build'], { stdio: 'inherit', cwd: root, shell: process.platform === 'win32' });

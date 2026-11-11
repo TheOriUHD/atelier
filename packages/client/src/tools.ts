@@ -134,6 +134,10 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         const actions = list.reduce((sum, c) => sum + computerActions(c.input).length, 0);
         return plural(actions, 'used the computer once', 'used the computer # times');
       }
+      case 'Browser': {
+        const looked = list.every((c) => ['read', 'find', 'screenshot', 'tabs'].includes(str(asRecord(c.input).action)));
+        return looked ? plural(n, 'read a page', 'read # pages') : plural(n, 'used the browser once', 'used the browser # times');
+      }
       case 'SendMessage':
         return n === 1 ? `messaged ${messageTargetKind(str(asRecord(list[0]!.input).to))}` : `sent ${n} messages`;
       case 'ListSessions':
@@ -295,6 +299,8 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
       const actions = computerActions(input);
       return { verb: actions.length === 1 ? actionWords(actions[0]!) : `${actions.length} actions:`, target: actions.length === 1 ? '' : actions.map((a) => actionWords(a)).join(', ') };
     }
+    case 'Browser':
+      return browserStep(input);
     case 'WebFetch':
       return { verb: 'Fetched', target: str(input.url) };
     case 'WebSearch': {
@@ -345,3 +351,46 @@ export function messageReceipt(result: string): { kind: string; title: string; i
   return { kind, title: m[2]!, id: m[3]!, status: m[4]!.trim() };
 }
 
+
+/** One Browser step in words: its own summary when it gave one, else the action ("Opened amazon.de", "Read the page"). */
+function browserStep(input: Record<string, unknown>): { verb: string; target: string } {
+  const summary = str(input.summary);
+  if (summary) return { verb: summary, target: '' };
+  const host = (url: string) => {
+    try {
+      return new URL(url).host.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  };
+  switch (str(input.action)) {
+    case 'open':
+      return { verb: 'Opened', target: host(str(input.url)) };
+    case 'navigate':
+      return { verb: 'Went to', target: host(str(input.url)) };
+    case 'back':
+      return { verb: 'Went back', target: '' };
+    case 'read':
+      return { verb: 'Read the page', target: '' };
+    case 'find':
+      return { verb: 'Looked for', target: str(input.query) };
+    case 'click':
+      return { verb: 'Clicked', target: input.ref !== undefined ? `element ${String(input.ref)}` : 'on the page' };
+    case 'type':
+      return { verb: 'Typed', target: str(input.text) };
+    case 'key':
+      return { verb: 'Pressed', target: (Array.isArray(input.keys) ? input.keys : []).map(str).join('+') };
+    case 'scroll':
+      return { verb: Number(input.dy) < 0 ? 'Scrolled up' : 'Scrolled down', target: '' };
+    case 'select':
+      return { verb: 'Chose', target: str(input.option) };
+    case 'screenshot':
+      return { verb: 'Took a screenshot of the page', target: '' };
+    case 'tabs':
+      return { verb: 'Looked at its tabs', target: '' };
+    case 'close':
+      return { verb: 'Closed the tab', target: '' };
+    default:
+      return { verb: 'Used the browser', target: '' };
+  }
+}

@@ -2,7 +2,7 @@
  * Surface-specific plumbing: how the UI reaches the backend and how blobs are addressed.
  * Desktop talks over a MessagePort brokered by the preload; web uses a reconnecting WebSocket.
  */
-import { APP, type AppTier, type ComputerApp, type ComputerSettings, type ComputerStatus, type DeviceLending, type RpcMessage, type Transport } from '@atelier/protocol';
+import { APP, type AppTier, type BrowserStatus, type ComputerApp, type ComputerSettings, type ComputerStatus, type DeviceLending, type RpcMessage, type Transport } from '@atelier/protocol';
 
 export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'join-coop' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
 
@@ -120,6 +120,11 @@ interface DesktopBridge {
    * Computer use on this computer (ARCHITECTURE §22): its settings, and what the person allows on the cards. Only these
    * windows change it; `backend` is `local` for this computer's own sessions. Absent in desktop shells older than the UI.
    */
+  /** Atelier for Chrome (ARCHITECTURE §22): whether the extension is connected, and its folder for "Load unpacked". */
+  browserExtension?: {
+    status(): Promise<BrowserStatus & { extensionDir: string }>;
+    reveal(): Promise<void>;
+  };
   computer?: {
     status(): Promise<ComputerStatus>;
     settings(patch: Partial<Pick<ComputerSettings, 'enabled' | 'mode' | 'unhideOnFinish'>>): Promise<ComputerSettings>;

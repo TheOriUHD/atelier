@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Atelier for Chrome",
+  "description": "Lets Atelier work in web pages for you, in tabs of its own, while you keep using your browser.",
+  "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtD7fwURkdgHhymyyY6jOIiOblveV2OA+DuKdmMXpgusGagt0K11eFbbeIEgMGzK0BJfb5sjcuONMhMHDyvQpmfYUEjwJtWdjEU821+mnfxMVhg52FNH9nk3zT5ab/psfNLlpLIiIQvWm3nHzEDDi/VR/9LZ2YXG6ZN1oLu1uv8glk0AeLzZJraOTTteGceCQntZQ8Oz0azp0LLXIkT1WyVyPug8SJjdlx3BsQ4gHF7Wcf9sCBZSNHkqNCOpCb8mvuaY4s7BLalqmD7HMW0XFkKdkLLp7vpL04AYo959nQETVrtviBydb+WIkNVbgV5UYb/yzTQZMx+4dCdu2QIR9hwIDAQAB",
+  "minimum_chrome_version": "120",
+  "permissions": ["nativeMessaging", "tabs", "tabGroups", "debugger", "scripting", "webNavigation", "storage", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "worker.js", "type": "module" },
+  "icons": { "128": "icon-128.png" }
+}

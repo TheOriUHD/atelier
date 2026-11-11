@@ -165,6 +165,7 @@ Desktop app only.
 | **Denied apps** *(only where it works)* | Atelier never uses these apps: asking for them is turned down without a question. |
 | **Apps allowed for good** *(only where it works)* | Apps you allowed with “Always allow on this computer”; every session may use them. |
 | **Accessibility** *(only where it works)* | macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission. |
+| **Atelier for Chrome** *(only where it works)* | The browser extension through which Atelier works in web pages, in tabs of its own in an “Atelier” group, in the background: it reads pages instead of looking at them, and never uses your own tabs. Works in Chrome, Brave, Edge and Arc. Chrome shows “started debugging this browser” while it acts in a page. |
 | **Screen recording** *(only where it works)* | macOS lets Atelier take screenshots of the apps you allow with this permission. macOS asks again from time to time. |
 | **Folders for sessions without one** *(only where it works)* | The server can make a new, empty folder on this computer for each session you start without a folder. |
 | **SSH hosts reached from here** *(only where it works)* | Hosts the server may connect to from this computer, with its ssh, keys and known hosts. Choosing a host here adds it. |

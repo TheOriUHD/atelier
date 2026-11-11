@@ -7,7 +7,9 @@ export type BackendRequest =
   | { kind: 'req'; id: number; op: 'decrypt'; value: string }
   | { kind: 'req'; id: number; op: 'chatgptChat'; operation: 'status' | 'open' | 'hide' | 'disconnect' | 'models' | 'start' | 'poll' | 'stop'; value: string }
   /** Computer use for a session (`method` of ControllerMethods, or `available`); main answers JSON. */
-  | { kind: 'req'; id: number; op: 'computer'; sessionId: string; method: string; params: unknown };
+  | { kind: 'req'; id: number; op: 'computer'; sessionId: string; method: string; params: unknown }
+  /** Atelier for Chrome (`method` of BrowserMethods); main answers JSON. */
+  | { kind: 'req'; id: number; op: 'browser'; method: string; params: unknown };
 
 export type MainResponse = { kind: 'res'; id: number; ok: true; value: string } | { kind: 'res'; id: number; ok: false; error: string };
 

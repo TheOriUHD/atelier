@@ -132,6 +132,8 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   // And a sound: speech costs little, music more, and the per-turn limit (6 by default) and the daily limits stand in for review.
   if (auto && call.name === 'GenerateAudio') return { behavior: 'allow', reason: 'It only makes a sound.' };
   if (call.name === 'ComputerAction' && onlyLooks(call.input)) return { behavior: 'allow', reason: 'It only looks at the screen.' };
+  // Reading a page in Atelier's own browser tab, its screenshot or the list of those tabs (tools/browser.ts).
+  if (call.name === 'Browser' && ['read', 'find', 'screenshot', 'tabs'].includes(String(call.input.action))) return { behavior: 'allow', reason: 'It only reads the page.' };
 
   // A connector describes its own tools: a read-only hint lets a call into plan mode but never skips the prompt,
   // and its paths are the server's, not the workspace's.

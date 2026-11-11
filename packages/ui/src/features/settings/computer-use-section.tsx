@@ -80,6 +80,7 @@ export function ComputerUseSection() {
           )}
         </>
       )}
+      {settings.enabled && desktop.browserExtension && <BrowserRow />}
       {status.platform === 'linux' && status.session === 'wayland' && <p className="pt-2 text-body text-fg-muted">{WAYLAND}</p>}
       {status.platform === 'linux' && <p className="pt-2 text-body text-fg-muted">{NO_PASSWORD_CHECK}</p>}
       {status.platform === 'darwin' && (
@@ -157,6 +158,31 @@ function PermissionRow({ id, granted, kind }: { id: SettingId; granted: boolean;
           </Button>
           <Button size="sm" variant="ghost" onClick={() => void computer.openPermissionSettings(kind)}>
             Open System Settings
+          </Button>
+        </div>
+      )}
+    </SettingRow>
+  );
+}
+
+/**
+ * Atelier for Chrome: connected (and in which browser), or how to install it. Until it is in the Chrome Web Store it is
+ * loaded unpacked from the app's own folder.
+ */
+function BrowserRow() {
+  const { data: browser } = useQuery({ queryKey: ['desktop', 'browser'], queryFn: () => desktop!.browserExtension!.status(), refetchInterval: 5_000 });
+  if (!browser) return null;
+  return (
+    <SettingRow id="system.computerBrowser" stacked detail={browser.connected ? `Connected in ${browser.browser ?? 'your browser'}` : undefined}>
+      {!browser.connected && (
+        <div className="flex flex-col gap-2 text-body text-fg-muted">
+          <p>{browser.problem ?? 'Not connected.'}</p>
+          <ol className="list-decimal pl-5">
+            <li>In Chrome (or Brave, Edge, Arc), open chrome://extensions and turn on Developer mode.</li>
+            <li>Choose Load unpacked and pick the Atelier for Chrome folder.</li>
+          </ol>
+          <Button size="sm" className="self-start" onClick={() => void desktop!.browserExtension!.reveal()}>
+            Show the folder
           </Button>
         </div>
       )}

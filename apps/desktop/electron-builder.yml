@@ -30,6 +30,12 @@ mac:
   # Runner builds (`pnpm runner:build`): this machine's for local folders, Linux and macOS ones (with their
   # checksums) to upload to SSH hosts.
   extraResources:
+    # Atelier for Chrome (apps/browser-extension, `pnpm --filter @atelier/browser-extension build`): the extension for
+    # "Load unpacked", and the native messaging host a browser starts (outside the asar, run as Node).
+    - from: ../browser-extension/dist
+      to: browser-extension
+    - from: dist/browser-host.cjs
+      to: browser/browser-host.cjs
     - from: ../../runner/bin
       to: runner
       filter: ['atelier-runner-darwin-*', 'atelier-runner-linux-*', 'checksums.json']
@@ -54,6 +60,12 @@ mac:
 win:
   icon: resources/icon-full.png
   extraResources:
+    # Atelier for Chrome (apps/browser-extension, `pnpm --filter @atelier/browser-extension build`): the extension for
+    # "Load unpacked", and the native messaging host a browser starts (outside the asar, run as Node).
+    - from: ../browser-extension/dist
+      to: browser-extension
+    - from: dist/browser-host.cjs
+      to: browser/browser-host.cjs
     - from: ../../runner/bin
       to: runner
       filter: ['atelier-runner-windows-*', 'atelier-runner-linux-*', 'atelier-runner-darwin-*', 'checksums.json']
@@ -95,6 +107,12 @@ linux:
   executableName: atelier
   icon: resources/icon-full.png
   extraResources:
+    # Atelier for Chrome (apps/browser-extension, `pnpm --filter @atelier/browser-extension build`): the extension for
+    # "Load unpacked", and the native messaging host a browser starts (outside the asar, run as Node).
+    - from: ../browser-extension/dist
+      to: browser-extension
+    - from: dist/browser-host.cjs
+      to: browser/browser-host.cjs
     - from: ../../runner/bin
       to: runner
       filter: ['atelier-runner-linux-*', 'atelier-runner-darwin-*', 'checksums.json']

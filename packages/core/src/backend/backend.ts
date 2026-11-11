@@ -1,3 +1,4 @@
+import type { BrowserCall } from '../tools/browser.ts';
 /**
  * The whole app backend, shared by the Electron utility process and the web server. `platform`
  * injects the only surface-specific pieces; everything else is identical on desktop and web.
@@ -201,6 +202,8 @@ export interface Platform {
    * The desktop: computer use on this computer (ARCHITECTURE §22), through the app's main process, which decides what
    * each session may do there. `onEvent` hears when the person held Esc or took the mouse back.
    */
+  /** The desktop: Atelier for Chrome on this computer (ARCHITECTURE §22), through the app's main process. */
+  browser?: { call: BrowserCall };
   computer?: {
     available(): Promise<boolean>;
     call<M extends keyof ControllerMethods>(sessionId: string, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']>;
@@ -1306,6 +1309,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     ...(platform.computer
       ? { computer: { available: () => platform.computer!.available(), call: (session, method, params) => platform.computer!.call(session.id, method, params) } }
       : {}),
+    ...(platform.browser ? { browser: { call: platform.browser.call } } : {}),
     // AddConnector, once the person agreed: one of their own connectors on a server, Settings › Connectors on a desktop.
     addConnector: async (session, c) => {
       const toolNames = (status: McpServerStatus) => status.tools.filter((t) => t.enabled).map((t) => mcpToolName(c.name, t.name));

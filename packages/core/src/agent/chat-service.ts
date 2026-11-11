@@ -101,6 +101,7 @@ import { Loops, type LoopTick } from './loops.ts';
 import { approvedMode, createExitPlanModeTool } from '../tools/exit-plan-mode.ts';
 import { createAddConnectorTool, type AddedConnector, type NewConnector } from '../tools/add-connector.ts';
 import { createComputerTools, type ComputerCall } from '../tools/computer.ts';
+import { browserConnected, createBrowserTool, type BrowserCall } from '../tools/browser.ts';
 import { keepRecentGenerated, keepRecentScreenshots } from './screenshots.ts';
 import { credentialPath } from '../permissions/sensitive.ts';
 import { flavorOfSep } from '../paths.ts';
@@ -258,6 +259,8 @@ export interface ChatServiceDeps {
     available(session: SessionRow): Promise<boolean>;
     call<M extends keyof ControllerMethods>(session: SessionRow, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']>;
   };
+  /** Atelier for Chrome on the person's computer (ARCHITECTURE §22): web pages in tabs of its own; offered while connected. */
+  browser?: { call: BrowserCall };
   /** Image generation (ARCHITECTURE §23): the tools a session gets when it has an image model, and what it's told about them. */
   images?: {
     generate: GenerateImageDeps['generate'];
@@ -559,6 +562,7 @@ export class ChatService {
   private readonly changeDirectory: Tool;
   private readonly addConnector: Tool;
   private readonly computerTools: Tool[];
+  private readonly browserTool: Tool | null;
   private readonly askUser: Tool;
   private readonly exitPlanMode: Tool;
   private readonly skill: Tool;
@@ -668,6 +672,7 @@ export class ChatService {
       },
       wanted: (sessionId) => this.computerWanted(sessionId),
     });
+    this.browserTool = this.deps.browser ? createBrowserTool({ call: this.deps.browser.call, blobs: this.deps.blobs }) as Tool : null;
     this.addConnector = createAddConnectorTool({
       approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
       add: async (sessionId, connector) => this.deps.addConnector!(await this.requireSession(sessionId), connector),
@@ -2401,6 +2406,8 @@ export class ChatService {
     const connect = this.deps.addConnector && !session.parentSessionId && !shared ? [this.addConnector] : [];
     // Computer use: top-level Code and Cowork sessions only (a sub-agent can't ask for apps, and several would fight over one mouse).
     const computer = (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && !shared && (await this.deps.computer?.available(session)) ? this.computerTools : [];
+    // Web pages through the extension, where it is connected: top-level Code and Cowork sessions, as computer use.
+    const browser = this.browserTool && (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && !shared && (await browserConnected(this.deps.browser!.call)).connected ? [this.browserTool] : [];
     const memory = shared ? [] : (this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? []);
     const inlineVisual = !session.parentSessionId && (session.mode === 'chat' || session.mode === 'work') ? [createInlineVisualTool()] : [];
     // The clock for everyone; the usage figures only where the model's provider has limits or a cost, and not for sub-agents.
@@ -2448,7 +2455,7 @@ export class ChatService {
     const saveVideo = workspace && videos.length ? [createSaveVideoTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
     // And with sound: SaveAudio exists only where a session can make one.
     const saveAudio = workspace && sounds.length ? [createSaveAudioTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
-    return [...code, this.todoWrite, this.askUser, agent, ...between, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...memory, ...mcp];
+    return [...code, this.todoWrite, this.askUser, agent, ...between, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...browser, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */

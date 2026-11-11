@@ -61,6 +61,15 @@ const backend = await createBackend({
   folderTrusted: (root) => send({ kind: 'trusted', root }),
   // Guests work on this computer while a co-op room is open: main keeps it awake (keep-awake.ts).
   coopAwake: (sessionIds) => send({ kind: 'coop-awake', sessionIds }),
+  // Atelier for Chrome: main holds the extension's connection (browser/bridge.ts).
+  browser: {
+    call: async (method, params) =>
+      new Promise<string>((resolve, reject) => {
+        const id = nextId++;
+        pending.set(id, { resolve, reject });
+        send({ kind: 'req', id, op: 'browser', method, params });
+      }).then((json) => JSON.parse(json) as never),
+  },
   computer: {
     available: async () => (await askComputer('', 'available', {})) === true,
     call: async (sessionId, method, params) => (await askComputer(sessionId, method, params)) as never,

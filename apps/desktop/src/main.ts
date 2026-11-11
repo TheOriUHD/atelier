@@ -17,12 +17,12 @@ import { homedir, hostname, networkInterfaces, userInfo } from 'node:os';
 import { basename, join, normalize, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { APP, AppTier, artifactRuntimeCsp, blobHeaders, blobResponse, ComputerApp, ComputerMode, shortcutBindings, ShortcutPrefs, toAccelerator, type ControllerMethods, type ShortcutBindings, type ShortcutId } from '@atelier/protocol';
+import { APP, AppTier, artifactRuntimeCsp, blobHeaders, blobResponse, ComputerApp, ComputerMode, shortcutBindings, ShortcutPrefs, toAccelerator, type BrowserMethods, type ControllerMethods, type ShortcutBindings, type ShortcutId } from '@atelier/protocol';
 import type { BackendToMain, MainToBackend, MenuCommand } from './bridge.ts';
 
 import { BROWSER_PARTITION, attachGuest, fetchFavicon, hardenWebview, prepareBrowserSession, type BrowserEvents } from './browser.ts';
 import { healthCheck, resolveConnection, scanNetwork, type Connection, type LinkProblem } from '@atelier/core/device';
-import { localDataDir } from './data-dir.ts';
+import { localConfigDir, localDataDir } from './data-dir.ts';
 import { readTrustedFolders, trustedPath } from '@atelier/core/device';
 import { KeepAwake } from './keep-awake.ts';
 import { FileReads, PAGES_PRIVILEGES, PAGES_SCHEME, WorkspacePages } from './workspace-pages.ts';
@@ -33,6 +33,7 @@ import { parseShortTime, systemHourCycle, type HourCycle } from './clock.ts';
 import { createBundleSwap } from './bundle-swap.ts';
 import { createUpdates, inertUpdater, type Updater } from './updater.ts';
 import { ComputerController } from './computer/controller.ts';
+import { startBrowserBridge, type BrowserBridge } from './browser/bridge.ts';
 import { ComputerHelper } from './computer/helper.ts';
 import { createOverlay, type ScreenOverlay } from './computer/overlay.ts';
 import { stepAside, stepBack } from './computer/step-aside.ts';
@@ -350,6 +351,16 @@ function startBackend(): void {
       } catch (error) {
         child.postMessage({ kind: 'res', id: m.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies MainToBackend);
       }
+    } else if (m.kind === 'req' && m.op === 'browser') {
+      // Atelier for Chrome, for the desktop's own backend (a server's sessions reach it through the device link later).
+      try {
+        if (connection?.mode !== 'local') throw new Error('The browser is for this computer’s own sessions.');
+        if (!browserBridge) throw new Error('Atelier for Chrome isn’t available in this app.');
+        const value = m.method === 'status' ? browserBridge.status() : await browserBridge.call(m.method as keyof BrowserMethods, m.params as never);
+        child.postMessage({ kind: 'res', id: m.id, ok: true, value: JSON.stringify(value) } satisfies MainToBackend);
+      } catch (error) {
+        child.postMessage({ kind: 'res', id: m.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies MainToBackend);
+      }
     } else if (m.kind === 'req') {
       try {
         const value =
@@ -663,6 +674,8 @@ function registerComputerIpc(): void {
   const Backend = z.string().min(1).max(2048);
   const SessionId = z.string().min(1).max(100);
   ipcMain.handle('computer:status', () => computer.status());
+  ipcMain.handle('browserExtension:status', () => ({ ...(browserBridge?.status() ?? { connected: false, problem: 'Atelier for Chrome isn’t available in this app.' }), extensionDir: browserExtensionDir }));
+  ipcMain.handle('browserExtension:reveal', () => shell.showItemInFolder(join(browserExtensionDir, 'manifest.json')));
   ipcMain.handle('computer:settings', (_e, input: unknown) => {
     const patch = z.object({ enabled: z.boolean().optional(), mode: ComputerMode.optional(), unhideOnFinish: z.boolean().optional() }).strict().parse(input);
     return computer.settings((s) => ({ ...s, ...patch }));
@@ -1033,6 +1046,24 @@ async function repairOwnShortcuts(): Promise<void> {
   await writeFile(marker, app.getVersion()).catch(() => {});
 }
 
+/** Atelier for Chrome: the extension's folder (for "Load unpacked") and its native host, started with the app. */
+let browserBridge: BrowserBridge | null = null;
+const browserExtensionDir = app.isPackaged ? join(process.resourcesPath, 'browser-extension') : join(import.meta.dirname, '..', '..', 'browser-extension', 'dist');
+function startBrowser(): void {
+  try {
+    browserBridge = startBrowserBridge({
+      configDir: localConfigDir(),
+      executable: process.execPath,
+      hostJs: app.isPackaged ? join(process.resourcesPath, 'browser', 'browser-host.cjs') : join(import.meta.dirname, 'browser-host.cjs'),
+      // A test run with a config folder of its own leaves the person's browsers alone.
+      register: !process.env.ATELIER_CONFIG_DIR || process.env.ATELIER_BROWSER_REGISTER === '1',
+      log: logMain,
+    });
+  } catch (error) {
+    logMain(`Atelier for Chrome couldn't start: ${describe(error)}`);
+  }
+}
+
 async function startApp(): Promise<void> {
   // A packaged app has its icon in the bundle; run from the bare Electron binary (development), the Dock would show
   // Electron's.
@@ -1046,6 +1077,7 @@ async function startApp(): Promise<void> {
   }
   registerProtocols();
   buildMenu();
+  startBrowser();
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
   prepareBrowserSession(session.fromPartition(BROWSER_PARTITION), browserEvents);
   session.fromPartition(BROWSER_PARTITION).protocol.handle(PAGES_SCHEME, (request) => workspacePages.handle(request));

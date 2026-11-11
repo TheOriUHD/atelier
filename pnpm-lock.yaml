@@ -52,6 +52,16 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(@types/node@24.19.2)(happy-dom@20.14.6)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
+  apps/browser-extension:
+    dependencies:
+      '@atelier/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+    devDependencies:
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+
   apps/cli:
     dependencies:
       '@atelier/client':

@@ -108,6 +108,26 @@ These parts of macOS aren't public and can change with an update. Atelier looks 
 them it falls back to the public way of sending input, in which Chrome and Electron apps take only buttons, links and
 fields (through Accessibility) and the assistant asks for Full control for the rest.
 
+### Web pages: Atelier for Chrome
+
+With the **Atelier for Chrome** extension in Chrome, Brave, Edge or Arc, the assistant works in web pages through the
+browser itself instead of its pictures:
+
+- **In tabs of its own.** It opens pages in background tabs in an orange **Atelier** group of your browser window, never
+  in your own tabs, and closes them when it is done. Your tab stays in front and the browser doesn't come forward.
+- **It reads pages.** It gets the page's text and a list of its links, buttons and fields, and acts on them by name, so
+  it needs far fewer screenshots and doesn't miss a button by a few pixels. It can choose from lists, which the
+  background mode for apps can't.
+- **Chrome says so.** While it acts in a page, the browser shows a bar saying Atelier "started debugging this browser";
+  **Cancel** there stops it in that tab, and it asks you before going on. The bar goes when it has been idle a moment.
+- **The same rules.** Your permission mode applies to every step that changes something (reading a page doesn't ask).
+  It never types passwords or completes a purchase, and it asks before accepting terms or sending anything.
+
+Until the extension is in the Chrome Web Store, install it from the app: **Settings › System › Computer use › Atelier
+for Chrome** shows the folder; in your browser open `chrome://extensions`, turn on **Developer mode**, choose **Load
+unpacked** and pick that folder. The row says **Connected in …** once it works. Atelier registers the extension's
+helper with the browsers it finds each time it starts.
+
 ### Denied apps
 
 **Denied apps** in Settings lists apps the assistant may not even ask for: requests for them are turned down without a
