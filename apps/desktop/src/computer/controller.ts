@@ -11,6 +11,7 @@ import {
   maxTier,
   type AppGrant,
   type AppTier,
+  type CapturedElement,
   type ComputerActionItem,
   type ComputerActionResult,
   type ComputerApp,
@@ -24,6 +25,7 @@ import {
   type PermissionsStatus,
   type PreparedApp,
   type ScreenRect,
+  type ScreenshotElement,
   type ScreenshotSize,
 } from '@atelier/protocol';
 import { HelperError, type ComputerHelper } from './helper.ts';
@@ -85,6 +87,8 @@ interface SessionState {
   target: string | null;
   /** The person held Esc: the computer is theirs until this turn ends. */
   takenBack: boolean;
+  /** Background: the controls of the latest screenshot, for actions aimed at an `element`. */
+  elements?: ScreenshotElement[];
 }
 
 /**
@@ -695,7 +699,7 @@ export class ComputerController {
     if (app?.trim() && !named) throw new Error(`You may not use ${app}: ask with ComputerAccess first.`);
     const grant = named ?? policy.grants.find((g) => g.app.id === state.target) ?? (policy.grants.length === 1 ? policy.grants[0] : undefined);
     if (!grant) throw new Error(`Say which app to look at: Screenshot with \`app\` (in the background you work in one app at a time). You may use ${policy.grants.map((g) => g.app.name).join(', ')}.`);
-    const capture = () => this.deps.helper.call('window.capture', { app: grant.app.id, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8 });
+    const capture = () => this.deps.helper.call('window.capture', { app: grant.app.id, maxWidth: size.maxWidth, maxHeight: size.maxHeight, format: 'jpeg', quality: 0.8, elements: true });
     const shot = await capture()
       .catch(async (e: unknown) => {
         // A hidden app (macOS) is shown again, without being brought forward, and looked at once more.
@@ -708,6 +712,7 @@ export class ComputerController {
       .catch((e: unknown) => Promise.reject(new Error(e instanceof HelperError && e.code === -32033 ? `${grant.app.name} has no window open: open it with OpenApp first.` : helperMessage(e))));
     state.target = grant.app.id;
     state.frame = { rect: shot.rect, width: shot.width, height: shot.height, window: { id: shot.window, app: grant.app.id, name: grant.app.name } };
+    state.elements = screenshotElements(shot);
     return {
       data: shot.data,
       mime: shot.mime,
@@ -715,6 +720,7 @@ export class ComputerController {
       height: shot.height,
       display: `${grant.app.name}’s window${shot.title ? ` “${shot.title}”` : ''}`,
       note: 'Only this window, as it is, even where others cover it. Your actions go to it; coordinates are pixels of this image.',
+      ...(state.elements.length ? { elements: state.elements } : {}),
     };
   }
 
@@ -753,6 +759,12 @@ export class ComputerController {
     const frame = state.frame;
     const window = frame?.window;
     if (!frame || !window) return refuse('Take a Screenshot of the app first: in the background your actions go to its window.');
+    // A control from the latest screenshot's list stands for its centre.
+    if (item.element !== undefined) {
+      const target = state.elements?.find((e) => e.n === item.element);
+      if (!target) return refuse(`The latest Screenshot has no element ${item.element}: take a new one.`);
+      item = { ...item, coordinate: [target.x, target.y] };
+    }
     const tier = policy.tier(window.app);
     if (!tier) return refuse(`You may not use ${window.name}: ask with ComputerAccess first.`);
     const point = (c: [number, number] | undefined) => {
@@ -942,3 +954,15 @@ function helperMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+
+/** A window capture's controls as the model aims at them: numbered from 1, centres in the screenshot's pixels. */
+export function screenshotElements(shot: { rect: { x: number; y: number; width: number; height: number }; width: number; height: number; elements?: CapturedElement[] | null }): ScreenshotElement[] {
+  const sx = shot.width / shot.rect.width;
+  const sy = shot.height / shot.rect.height;
+  return (shot.elements ?? []).flatMap((e, i) => {
+    const x = Math.round((e.rect.x + e.rect.width / 2 - shot.rect.x) * sx);
+    const y = Math.round((e.rect.y + e.rect.height / 2 - shot.rect.y) * sy);
+    if (x < 0 || y < 0 || x >= shot.width || y >= shot.height) return [];
+    return [{ n: i + 1, role: e.role, name: e.name, ...(e.value ? { value: e.value } : {}), x, y, ...(e.disabled ? { disabled: true } : {}) }];
+  });
+}

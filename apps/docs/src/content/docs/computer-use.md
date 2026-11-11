@@ -90,6 +90,9 @@ app stays behind yours and your pointer and keyboard stay with you. This works i
 browsers, in apps built on them (Slack, VS Code, Discord, Notion and other Electron apps) and in native apps. A few
 things behave differently from the real mouse and keyboard:
 
+- **The screenshot comes with the window's controls.** Each background screenshot carries a list of the window's
+  buttons, fields, checkboxes and lists, with their names and values, read through Accessibility; the assistant aims at
+  one by its number instead of a pixel, so it misses less and does several steps in one go.
 - **A covered window is shown for its screenshot.** Browsers stop drawing a window that other windows hide completely,
   so for each screenshot of a covered window Atelier shifts it just far enough for a strip of it to show past the
   windows in front, waits for it to draw, and puts it back. You may see that strip at the edge of your screen for about

@@ -422,6 +422,25 @@ public struct WindowCaptureParams: Codable, Sendable {
   public var maxHeight: Double
   public var format: ImageFormat
   public var quality: Double?
+  /// The window's controls too (Elements.swift), for aiming by element instead of by pixel.
+  public var elements: Bool?
+}
+
+/// One control of a captured window, in global points.
+public struct CapturedElement: Codable, Sendable, Equatable {
+  public var role: String
+  public var name: String
+  public var value: String?
+  public var rect: ScreenRect
+  public var disabled: Bool?
+
+  public init(role: String, name: String, value: String?, rect: ScreenRect, disabled: Bool? = nil) {
+    self.role = role
+    self.name = name
+    self.value = value
+    self.rect = rect
+    self.disabled = disabled
+  }
 }
 
 /// The window as it is, even when other windows cover it. `rect`: the window in global points.
@@ -435,8 +454,9 @@ public struct WindowCaptureResult: Codable, Sendable {
   /// The window number, for the `bg.*` calls that follow.
   public var window: String
   public var title: String?
+  public var elements: [CapturedElement]?
 
-  public init(data: String, mime: String, width: Int, height: Int, rect: ScreenRect, window: String, title: String?) {
+  public init(data: String, mime: String, width: Int, height: Int, rect: ScreenRect, window: String, title: String?, elements: [CapturedElement]? = nil) {
     self.data = data
     self.mime = mime
     self.width = width
@@ -444,11 +464,12 @@ public struct WindowCaptureResult: Codable, Sendable {
     self.rect = rect
     self.window = window
     self.title = title
+    self.elements = elements
   }
 
-  enum CodingKeys: String, CodingKey { case data, mime, width, height, rect, window, title }
+  enum CodingKeys: String, CodingKey { case data, mime, width, height, rect, window, title, elements }
 
-  // `title` is `string | null`: written as null, not left out.
+  // `title` is `string | null`: written as null, not left out. `elements` only when asked for.
   public func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
     try c.encode(data, forKey: .data)
@@ -458,6 +479,7 @@ public struct WindowCaptureResult: Codable, Sendable {
     try c.encode(rect, forKey: .rect)
     try c.encode(window, forKey: .window)
     try c.encode(title, forKey: .title)
+    try c.encodeIfPresent(elements, forKey: .elements)
   }
 }
 

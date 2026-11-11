@@ -233,9 +233,10 @@ enum Capture {
       throw mapError(error)
     }
     let data = try ImageEncoder.encode(image, format: params.format, quality: quality)
+    let elements = params.elements == true ? Elements.collect(in: window) : nil
     return WindowCaptureResult(
       data: data.base64EncodedString(), mime: params.format.mime, width: image.width, height: image.height,
-      rect: ScreenRect(rect), window: String(window.id), title: windowTitle(shareable.title))
+      rect: ScreenRect(rect), window: String(window.id), title: windowTitle(shareable.title), elements: elements)
   }
 
   /// A window title for the wire: trimmed, at most 200 characters, nil when empty.

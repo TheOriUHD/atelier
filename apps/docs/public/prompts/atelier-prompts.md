@@ -2285,6 +2285,7 @@ Takes over the mouse and keyboard (`request`, the person agrees first) or hands 
 ````text
 Clicks, types, presses keys and scrolls in the apps you may use: a list of actions run in order, stopping at the first one refused or failing. In Full control it takes the mouse and keyboard; in the background it works in the window of your latest Screenshot without them.
 - Coordinates are pixels of your latest Screenshot (or the latest screenshot action). Take one before acting, and check the result after: add a `screenshot` action at the end of a batch.
+- In the background a Screenshot also lists the window’s controls as `[n] role "name"`: aim a click, a scroll or the field for typing at one with `element: n` instead of a coordinate. It is exact; batch several steps on the same list.
 - Batch steps whose outcome you can predict; give each a short `summary` of its effect ("Opens the File menu"), naming what it agrees to, sends or deletes when it does.
 - `type` types text where the keyboard focus is, after what the field already holds: set `replace` to put it in place of that. `key` presses keys together, like `cmd+s` on macOS, `ctrl+s` on Windows and Linux, or `return`.
 - Fix a slip the way a person would (select and retype, undo); never reload a page or restart an app to undo it: that loses everything else set there.
@@ -2376,6 +2377,10 @@ Clicks, types, presses keys and scrolls in the apps you may use: a list of actio
           "summary": {
             "type": "string",
             "description": "What it does, in a few words."
+          },
+          "element": {
+            "type": "integer",
+            "description": "Background: a control from the latest Screenshot’s list, instead of coordinate."
           }
         },
         "required": [

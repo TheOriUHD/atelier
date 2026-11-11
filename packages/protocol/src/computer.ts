@@ -273,6 +273,18 @@ export interface WindowCaptureParams {
   maxHeight: number;
   format: 'jpeg' | 'png';
   quality?: number;
+  /** macOS: the window's controls too, read through Accessibility, for aiming by element instead of by pixel. */
+  elements?: boolean;
+}
+
+/** One control of a captured window: what it is, its name, and where it is (global coordinates, as `rect`). */
+export interface CapturedElement {
+  /** button, textfield, textarea, password, checkbox, radio, list, link, tab, cell, slider … */
+  role: string;
+  name: string;
+  value?: string | null;
+  rect: { x: number; y: number; width: number; height: number };
+  disabled?: boolean | null;
 }
 
 /** The window as it is, even when other windows cover it. `rect`: the window in global coordinates (points on macOS, pixels on Windows). */
@@ -280,6 +292,8 @@ export interface WindowCaptureResult extends CaptureResult {
   /** The window, for the `bg.*` calls that follow (macOS: its window number; Windows: its handle). */
   window: string;
   title: string | null;
+  /** With `elements`: its controls in reading order, at most 60. */
+  elements?: CapturedElement[] | null;
 }
 
 /** A point in global coordinates inside `window` (from `window.capture`). */
@@ -424,6 +438,8 @@ export const ComputerActionItem = z.object({
   region: z.tuple([z.number().int().min(0), z.number().int().min(0), z.number().int().min(0), z.number().int().min(0)]).optional(),
   /** What the action does, in a few words, for the transcript and the person. */
   summary: z.string().max(200).optional(),
+  /** Background: a control from the latest Screenshot's list, instead of `coordinate`. */
+  element: z.number().int().min(1).max(500).optional(),
 });
 export type ComputerActionItem = z.infer<typeof ComputerActionItem>;
 
@@ -440,6 +456,17 @@ export const PreparedApp = z.object({
   granted: AppTier.nullable(),
 });
 export type PreparedApp = z.infer<typeof PreparedApp>;
+
+/** A control in a background screenshot, numbered for `element`, with its centre in the screenshot's pixels. */
+export interface ScreenshotElement {
+  n: number;
+  role: string;
+  name: string;
+  value?: string;
+  x: number;
+  y: number;
+  disabled?: boolean;
+}
 
 export interface ComputerScreenshot {
   /** Base64. */
@@ -493,7 +520,7 @@ export interface ControllerMethods {
    * Full control: the display (the screen as the person sees it, but for their denied apps). Background: `app`'s window
    * as it is (the app it works in from then on), or the one it works in already.
    */
-  screenshot: { params: { display?: string; app?: string; size: ScreenshotSize }; result: ComputerScreenshot & { display: string; note?: string } };
+  screenshot: { params: { display?: string; app?: string; size: ScreenshotSize }; result: ComputerScreenshot & { display: string; note?: string; elements?: ScreenshotElement[] } };
   /** Takes the mouse and keyboard, once the person agreed on this computer (or always lets it). */
   'control.request': { params: Record<string, never>; result: { granted: boolean; reason?: string } };
   'control.batch': { params: { actions: ComputerActionItem[]; size: ScreenshotSize }; result: { results: ComputerActionResult[] } };

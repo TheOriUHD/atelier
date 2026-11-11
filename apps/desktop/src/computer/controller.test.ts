@@ -642,3 +642,24 @@ describe('keys and names', () => {
     expect(matchApp(APPS, 'Xcode')).toBeUndefined();
   });
 });
+
+describe('background screenshot controls', () => {
+  it('numbers them from 1 with their centres in the screenshot’s pixels, leaving out what is outside it', async () => {
+    const { screenshotElements } = await import('./controller.ts');
+    const shot = {
+      rect: { x: 100, y: 50, width: 800, height: 600 },
+      width: 1280,
+      height: 960,
+      elements: [
+        { role: 'button', name: 'Save', rect: { x: 120, y: 60, width: 60, height: 20 } },
+        { role: 'textfield', name: 'Name', value: 'Ada', rect: { x: 200, y: 100, width: 200, height: 24 }, disabled: true },
+        { role: 'button', name: 'Outside', rect: { x: 2000, y: 60, width: 60, height: 20 } },
+      ],
+    };
+    expect(screenshotElements(shot)).toEqual([
+      { n: 1, role: 'button', name: 'Save', x: 80, y: 32 },
+      { n: 2, role: 'textfield', name: 'Name', value: 'Ada', x: 320, y: 99, disabled: true },
+    ]);
+    expect(screenshotElements({ ...shot, elements: null })).toEqual([]);
+  });
+});

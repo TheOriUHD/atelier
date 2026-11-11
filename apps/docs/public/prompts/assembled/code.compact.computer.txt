@@ -81,7 +81,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 20, 14476 characters of JSON
+# Tools: 20, 14601 characters of JSON
 
 [
   {
@@ -744,6 +744,10 @@ Recent commit subjects:
               "summary": {
                 "type": "string",
                 "description": "What it does, in a few words."
+              },
+              "element": {
+                "type": "integer",
+                "description": "Background: a control from the latest Screenshot’s list, instead of coordinate."
               }
             },
             "required": [
