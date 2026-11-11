@@ -116,7 +116,7 @@ import { NO_MEMORY, type MemoryAccess } from '../memory/access.ts';
 import type { MemoryHooks } from '../memory/memory-service.ts';
 import type { Checkpoints } from '../checkpoints/checkpoints.ts';
 import { hooksFor, runHooks, type HookInput, type HookOutcome } from '../hooks/hooks.ts';
-import { deferConnectors } from '../tools/deferred-connectors.ts';
+import { deferConnectors, shouldDeferConnectors } from '../tools/deferred-connectors.ts';
 import { toolSpecPrompt } from '../providers/prompted-tools.ts';
 import { createWebFetchTool } from '../tools/web-fetch.ts';
 import { createWebSearchTool } from '../tools/web-search.ts';
@@ -3008,7 +3008,7 @@ export class ChatService {
       const def = frozen.get(t.name);
       return def ? { ...t, description: def.description, inputSchema: def.inputSchema } : t;
     });
-    const deferred = model.adapter.type === 'chatgpt-chat' ? deferConnectors(describedTools, await this.deps.repo.history(session.id)) : null;
+    const deferred = shouldDeferConnectors(describedTools, model.adapter.type) ? deferConnectors(describedTools, await this.deps.repo.history(session.id)) : null;
     const tools = deferred?.tools ?? describedTools;
     const toolDefs = (deferred?.available() ?? tools).map(toolDef);
     const system = snapshot.blocks;

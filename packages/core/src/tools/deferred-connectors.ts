@@ -2,7 +2,22 @@ import type { Message } from '@atelier/protocol';
 import type { DescribedTool } from './types.ts';
 import { textOutput } from './types.ts';
 
-/** Keeps connector schemas out of browser prompts until the model asks for them. */
+/**
+ * Above this many characters of connector tool definitions (about 6k tokens) they wait in a catalog until the model
+ * loads them with ToolSearch. Measured 2026-11-11: two connectors (Notion, Fusion 360) made every Cowork request about
+ * 72k tokens, of which about 60k were their schemas, so each step of a computer-use task took 3 s and more to start.
+ */
+export const DEFER_CONNECTORS_OVER = 24_000;
+
+/** Whether a session's connector tools are deferred: always in ChatGPT Chat's browser prompts, elsewhere when large. */
+export function shouldDeferConnectors(tools: Pick<DescribedTool, 'name' | 'description' | 'inputSchema'>[], adapterType: string): boolean {
+  if (adapterType === 'chatgpt-chat') return true;
+  let chars = 0;
+  for (const tool of tools) if (tool.name.startsWith('mcp__')) chars += tool.name.length + tool.description.length + JSON.stringify(tool.inputSchema).length;
+  return chars > DEFER_CONNECTORS_OVER;
+}
+
+/** Keeps connector schemas out of the prompt until the model asks for them. */
 export function deferConnectors(tools: DescribedTool[], history: Message[]): { tools: DescribedTool[]; available(): DescribedTool[] } {
   const connectors = tools.filter(tool => tool.name.startsWith('mcp__'));
   if (!connectors.length) return { tools, available: () => tools };
