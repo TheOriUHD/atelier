@@ -25,8 +25,11 @@ export function failedCount(steps: readonly ActivityStepView[]): number {
   }).length;
 }
 
-/** What a running run of calls is doing now: the step still running, else the latest one. */
-export function activityLabel(steps: readonly ActivityStepView[], root: string | null): string {
+/**
+ * What a running run of calls is doing now: the step still running, else the latest one. `asking`: the call an open
+ * card belongs to (the person is being asked about it), so "Asking…" shows only while it really asks.
+ */
+export function activityLabel(steps: readonly ActivityStepView[], root: string | null, asking: string | null = null): string {
   const step = steps.findLast((s) => s.kind === 'tool' && s.running) ?? steps.at(-1);
   if (!step) return 'Working';
   if (step.kind === 'thinking') return 'Thinking';
@@ -72,7 +75,7 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
     case 'AddConnector':
       return `Adding ${text(args.name) || 'a connector'}`;
     case 'ComputerAccess':
-      return 'Asking to use apps';
+      return asking === step.call.id ? 'Asking to use your computer' : 'Using your computer';
     case 'ComputerApps':
       return 'Looking up apps';
     case 'OpenApp':
@@ -80,7 +83,8 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
     case 'Screenshot':
       return 'Taking a screenshot';
     case 'FullControl':
-      return args.action === 'release' ? 'Handing back the mouse and keyboard' : 'Asking for the mouse and keyboard';
+      if (args.action === 'release') return 'Handing back the mouse and keyboard';
+      return asking === step.call.id ? 'Asking for the mouse and keyboard' : 'Using your computer';
     case 'ComputerAction':
       return 'Using your computer';
     case 'SendMessage':

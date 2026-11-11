@@ -387,15 +387,24 @@ describe('the environment and folder chips in the desktop app', () => {
     platform.desktop = desktopBridge('local');
     const scratch = ws('scratch-2026-10-14-c31ade', { scratch: true, root: '/data/scratch-workspaces/u1/scratch-2026-10-14-c31ade', lastUsedAt: 5 });
     renderHome([ws('site', { lastUsedAt: 3 }), scratch], {}, { id: scratch.id });
-    const menu = await openMenu('scratch-2026-10-14-c31ade');
+    // A scratch folder never shows by its name or path: the session has no folder.
+    const menu = await openMenu('No folder');
     expect(rows(menu, 'menuitemradio')).toEqual([
       ['No folder', false, false],
-      ['scratch-2026-10-14-c31ade', false, true],
+      ["No folder, this session's files", false, true],
       ['site', false, false],
     ]);
-    expect(within(menu).getByRole('menuitemradio', { name: 'scratch-2026-10-14-c31ade' }).getAttribute('title')).toBe(scratch.root);
+    expect(menu.textContent).not.toContain('scratch');
     fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'No folder' }));
     expect(await screen.findByRole('button', { name: 'No folder' })).toBeTruthy();
+  });
+
+  it('shows a session in a scratch folder as having no folder, which it can move to one', () => {
+    const scratch = ws('scratch-2026-10-14-c31ade', { scratch: true, root: '/data/scratch-workspaces/u1/scratch-2026-10-14-c31ade' });
+    render(<FolderBadge workspace={scratch} />);
+    expect(screen.getByText('No folder')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('scratch');
+    expect(document.body.innerHTML).not.toContain('scratch-workspaces');
   });
 
   it('start with no folder in a fresh desktop app', async () => {

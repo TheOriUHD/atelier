@@ -31,7 +31,7 @@ import { InteractionCard } from '../code/interaction-card.tsx';
 import { SelectionReply } from '../chat/selection-reply.tsx';
 import { LiveStatus } from '../code/live-status.tsx';
 import { TaskCard } from '../code/tasks-pane.tsx';
-import { CodeActivity, SessionTasks, ToolCardsOpen, TranscriptSession, WorkspaceRoot } from '../code/tool-cards.tsx';
+import { AskingCall, askingCall, CodeActivity, SessionTasks, ToolCardsOpen, TranscriptSession, WorkspaceRoot } from '../code/tool-cards.tsx';
 import { FolderBadge } from '../code/workspace-picker.tsx';
 import { FileCard, OutputFiles } from './file-cards.tsx';
 import { FilePreview } from './file-preview.tsx';
@@ -129,6 +129,7 @@ export function WorkPage() {
     <CoopContext.Provider value={coop}>
     <WorkspaceRoot.Provider value={root}>
       <TranscriptSession.Provider value={sessionId}>
+      <AskingCall.Provider value={askingCall(live.pending)}>
       <SessionTasks.Provider value={sessionTasks}>
       <div className="@container relative flex min-h-0 flex-1">
         {/* Narrow screens: the preview covers the column instead. */}
@@ -228,6 +229,7 @@ export function WorkPage() {
         {sidePanel.open && !preview && <SideChatPanel chats={sideChats} panel={sidePanel} />}
       </div>
       </SessionTasks.Provider>
+      </AskingCall.Provider>
       </TranscriptSession.Provider>
     </WorkspaceRoot.Provider>
     </CoopContext.Provider>

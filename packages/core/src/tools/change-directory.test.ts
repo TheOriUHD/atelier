@@ -25,6 +25,17 @@ describe('ChangeDirectory', () => {
     expect(text(out)).toBe('Now in ../api.');
   });
 
+  it('asks without a path for a session that has no folder yet', async () => {
+    const asked: PermissionRequest[] = [];
+    const tool = createChangeDirectoryTool({
+      approve: async (_s, request) => (asked.push(request), { behavior: 'allow' }),
+      current: async () => ({ root: '/data/scratch-workspaces/u1/scratch-2026-11-11-fad25c', host: null, scratch: true }),
+      move: async (_s, path) => `Now in ${path}.`,
+    });
+    await tool.run({ path: '~/Projects/site' }, ctx);
+    expect(asked[0]!.input).toEqual({ path: '~/Projects/site', reason: '', from: '', host: null, noFolder: true });
+  });
+
   it('moves to the folder the person corrected or picked instead', async () => {
     const { tool, deps } = setup({ behavior: 'allow', path: '/other/place' });
     await tool.run({ path: '../api' }, ctx);

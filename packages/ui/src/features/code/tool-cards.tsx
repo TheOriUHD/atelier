@@ -41,6 +41,15 @@ export const ToolCardsOpen = createContext(true);
 
 /** The session whose calls the cards show: an Edit's whole-file view reads the file through it. */
 export const TranscriptSession = createContext<string | null>(null);
+/** The tool call the session's open card asks the person about (its `callId`), for the "Asking…" line. */
+export const AskingCall = createContext<string | null>(null);
+
+/** The tool call an open card asks about, from the session's pending interaction (a permission card names its call). */
+export function askingCall(pending: { kind: string; payload: unknown } | null | undefined): string | null {
+  if (pending?.kind !== 'permission') return null;
+  const callId = (pending.payload as { callId?: unknown } | null)?.callId;
+  return typeof callId === 'string' ? callId : null;
+}
 
 /**
  * The session's background commands, sub-agents and loops, and showing one in the Background tasks pane (Code; Cowork
@@ -73,6 +82,7 @@ export function CodeActivity({ steps, live = false, turnSince }: { steps: Activi
  */
 function CompactActivity({ steps, live, thinking, turnSince }: { steps: ActivityStepView[]; live: boolean; thinking: boolean; turnSince?: number }) {
   const root = useContext(WorkspaceRoot);
+  const asking = useContext(AskingCall);
   const [open, setOpen] = useState(false);
   const now = useNow(live);
   // Commands started in the background stay on their card too: they're tasks with a life of their own.
@@ -88,7 +98,7 @@ function CompactActivity({ steps, live, thinking, turnSince }: { steps: Activity
             <div role="status" aria-live="off" className="flex">
               <Summary open={open} onToggle={() => setOpen((o) => !o)}>
                 <ThinkingDots />
-                <span className="truncate">{activityLabel(folded, root)}</span>
+                <span className="truncate">{activityLabel(folded, root, asking)}</span>
                 {since !== undefined && <span className="shrink-0 text-fg-muted tabular-nums">{elapsed(now, since)}</span>}
               </Summary>
             </div>

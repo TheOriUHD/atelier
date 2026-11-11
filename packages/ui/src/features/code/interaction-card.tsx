@@ -559,7 +559,7 @@ function FolderRequest({ request, sending, respond }: { request: PermissionReque
       keys={withReason(why, { escape: stay, mod: path.trim() && !sending ? () => move(path) : undefined, digit: (n) => (n === 1 ? stay() : undefined) })}
     >
       {reason && <p className="text-body text-fg-secondary">{reason}</p>}
-      <Field label={host ? `Folder on ${host}` : 'Folder'} description={from ? `Now in ${from}` : undefined}>
+      <Field label={host ? `Folder on ${host}` : 'Folder'} description={input.noFolder === true ? 'It has no folder yet' : from ? `Now in ${from}` : undefined}>
         <TextField
           value={path}
           onChange={(e) => setPath(e.target.value)}

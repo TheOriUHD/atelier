@@ -392,6 +392,18 @@ describe('compact transcript (Normal view)', () => {
     expect(activityLabel([step('Read', { file_path: '/repo/a.ts' }, { running: true })], '/repo')).toBe('Reading a.ts');
   });
 
+  it('says it asks to use the computer only while a card asks the person', () => {
+    const access = step('ComputerAccess', { apps: ['Google Chrome'] }, { running: true });
+    const control = step('FullControl', { action: 'request', reason: 'x' }, { running: true });
+    // Apps the person named, or allowed before: no card, it just goes on.
+    expect(activityLabel([access], '/repo')).toBe('Using your computer');
+    expect(activityLabel([access], '/repo', access.call.id)).toBe('Asking to use your computer');
+    expect(activityLabel([control], '/repo')).toBe('Using your computer');
+    expect(activityLabel([control], '/repo', control.call.id)).toBe('Asking for the mouse and keyboard');
+    // A card about another call doesn't count.
+    expect(activityLabel([control], '/repo', 'another-call')).toBe('Using your computer');
+  });
+
   it('says what a running run does now, and keeps sub-agents on their own card', () => {
     compact(
       [

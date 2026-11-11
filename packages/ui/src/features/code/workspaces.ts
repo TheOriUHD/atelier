@@ -2,6 +2,8 @@ import type { SessionSummary, WorkspaceSummary } from '@atelier/protocol';
 
 /** How the header and the picker name a folder: SSH folders as `host:path`. */
 export function workspaceLabel(w: WorkspaceSummary): string {
+  // A scratch folder is no folder of the person's: a session in one has no folder until it moves to one.
+  if (w.scratch) return 'No folder';
   return w.kind === 'ssh' ? `${w.host}:${w.root}` : w.name;
 }
 

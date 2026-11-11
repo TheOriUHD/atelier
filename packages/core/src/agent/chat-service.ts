@@ -647,8 +647,10 @@ export class ChatService {
     this.changeDirectory = createChangeDirectoryTool({
       approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
       current: async (sessionId) => {
-        const ws = await this.deps.workspace?.(await this.requireSession(sessionId));
-        return { root: ws?.root ?? '', host: ws?.host ?? null };
+        const session = await this.requireSession(sessionId);
+        const ws = await this.deps.workspace?.(session);
+        const folder = await this.deps.attachmentFolder?.(session).catch(() => null);
+        return { root: ws?.root ?? '', host: ws?.host ?? null, scratch: folder?.scratch ?? false };
       },
       move: (sessionId, path) => this.moveSession(sessionId, path),
     });

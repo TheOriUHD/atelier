@@ -55,7 +55,7 @@ import { TerminalCommands, TerminalFolders, TerminalPane } from './terminal-pane
 import { RunInTerminal } from '../chat/run-in-terminal.ts';
 import { TodoWidget } from './todo-widget.tsx';
 import { FolderBadge } from './workspace-picker.tsx';
-import { CodeActivity, OpenWorkspaceFile, SessionTasks, TranscriptSession, WorkspaceRoot } from './tool-cards.tsx';
+import { AskingCall, askingCall, CodeActivity, OpenWorkspaceFile, SessionTasks, TranscriptSession, WorkspaceRoot } from './tool-cards.tsx';
 import { canServePages, pageUrl } from './workspace-pages.ts';
 import { ContextButton } from './context-popover.tsx';
 import { formatTokenCount } from './live-context.ts';
@@ -327,6 +327,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
     <CoopContext.Provider value={coop}>
     <WorkspaceRoot.Provider value={workspace?.root ?? null}>
       <TranscriptSession.Provider value={sessionId}>
+      <AskingCall.Provider value={askingCall(live.pending)}>
       <OpenWorkspaceFile.Provider value={workspaceId ? openFile : null}>
         <SessionTasks.Provider value={sessionTasks}>
           <ArtifactPaneContext.Provider value={artifactCards}>
@@ -506,6 +507,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
           </ArtifactPaneContext.Provider>
         </SessionTasks.Provider>
       </OpenWorkspaceFile.Provider>
+    </AskingCall.Provider>
     </TranscriptSession.Provider>
     </WorkspaceRoot.Provider>
     </CoopContext.Provider>

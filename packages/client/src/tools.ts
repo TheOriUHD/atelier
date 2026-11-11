@@ -281,7 +281,8 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
     case 'AddConnector':
       return { verb: 'Added connector', target: str(input.name) || str(input.url) };
     case 'ComputerAccess':
-      return { verb: 'Asked to use', target: (Array.isArray(input.apps) ? input.apps : []).map(str).filter(Boolean).join(', ') };
+      // Not "asked": apps the person named, or allowed before, need no card.
+      return { verb: 'Got access to', target: (Array.isArray(input.apps) ? input.apps : []).map(str).filter(Boolean).join(', ') };
     case 'ComputerApps':
       return { verb: 'Looked up apps', target: str(input.query) };
     case 'OpenApp':

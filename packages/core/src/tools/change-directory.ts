@@ -8,7 +8,8 @@ import { textOutput, type DescribeContext, type Tool } from './types.ts';
 export interface ChangeDirectoryDeps {
   approve(sessionId: string, request: PermissionRequest, signal: AbortSignal): Promise<PermissionAnswer>;
   /** The folder the session works in and the SSH host it lives on (null on this computer). */
-  current(sessionId: string): Promise<{ root: string; host: string | null }>;
+  /** Where the session works now; `scratch` when it has no folder (a scratch folder of its own, never shown as one). */
+  current(sessionId: string): Promise<{ root: string; host: string | null; scratch?: boolean }>;
   /** Moves the session; what the model needs to know about the new folder. Throws an Error whose message is for the person. */
   move(sessionId: string, path: string): Promise<string>;
 }
@@ -45,7 +46,7 @@ export function createChangeDirectoryTool(deps: ChangeDirectoryDeps): Tool<{ pat
         {
           callId: ctx.callId,
           toolName: 'ChangeDirectory',
-          input: { path: wanted, reason: reason?.trim() ?? '', from: from.root, host: from.host },
+          input: { path: wanted, reason: reason?.trim() ?? '', from: from.scratch ? '' : from.root, host: from.host, ...(from.scratch ? { noFolder: true } : {}) },
           reason: 'The assistant wants to work in another folder.',
           suggestedRule: '',
         },

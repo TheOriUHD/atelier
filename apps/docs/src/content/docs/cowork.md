@@ -40,8 +40,9 @@ control as Chat; see [Effort](/effort/).
 
 **No folder** (desktop app on "Run on this computer" only, for this computer or an SSH host) gives the task a new, empty scratch
 folder in the data folder under `scratch-workspaces/<account>/scratch-<date>-<code>` (on an SSH host, in
-its `~/.atelier`). It stays on disk when the task is deleted, is left out of **Recent**, and is grouped under "No folder"
-in your list. In a browser, use a codespace or a folder another of your
+its `~/.atelier`). The task shows as having **No folder** (the scratch folder's name and path never show) until you move
+it with the folder chip at the top, or the assistant does (it asks first). The scratch folder stays on disk when the task
+is deleted, is left out of **Recent**, and is grouped under "No folder" in your list. In a browser, use a codespace or a folder another of your
 computers lends.
 
 The first time you use a folder from your computer, Atelier asks **Trust this workspace?** and shows the path; only

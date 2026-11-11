@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **"Asking…" only while it asks.** Computer use read "Asking to use apps" and "Asking for the mouse and keyboard" even when no card came (apps you named, control already allowed). It now reads **Using your computer** unless a card is open for that step, and a finished step says **Got access to** the apps instead of "Asked to use".
+- **Scratch folders don't show.** A Code or Cowork session started with no folder reads **No folder** at the top, in the folder menu and in moved notices, never `scratch-2026-…` or its path; it has no folder until you move it with the chip or the assistant does (ChangeDirectory's card says "It has no folder yet" instead of the scratch path).
 - **Computer use in the background works again after you stop it with Esc.** Holding Esc during Full control locked the computer-use helper against all input until the next Full control, so a later Background session's clicks and typing were all refused and nothing happened. The lock now lifts when the turn that was stopped ends.
 - **Apps you name yourself are allowed without a card.** When your own messages in the conversation name an app ("keep browsing in Chrome"), the assistant may use it at once, at its usual level. The name counts as people say it (Chrome for Google Chrome, Brave for Brave Browser, Word for Microsoft Word), as a whole word. In Bypass no app asks. Only your own messages count, not a co-op guest's, the assistant's or a screen's, and only on this computer's own backend. Taking over the mouse and keyboard still asks.
 - **Nothing shows on your screen while Atelier works in the background.** The note below the menu bar ("Atelier is working in …") is gone.

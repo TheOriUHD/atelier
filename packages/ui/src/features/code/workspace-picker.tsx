@@ -281,8 +281,8 @@ export function WorkspaceChips({ environment, folders, value, noFolder, onEnviro
               </MenuRadioItem>
               {/* `/clear` goes on in its session's scratch folder. */}
               {folder?.scratch && (
-                <MenuRadioItem value={folder.id} icon={FolderDot} title={folder.root} closeOnClick>
-                  {workspaceLabel(folder)}
+                <MenuRadioItem value={folder.id} icon={FolderDot} title="No folder, with this session's files" closeOnClick>
+                  No folder, this session's files
                 </MenuRadioItem>
               )}
             </MenuRadioGroup>
@@ -420,7 +420,7 @@ const BADGE_CLASS = 'flex h-6 min-w-0 items-center gap-1 rounded-sm bg-badge-bg 
 export function FolderBadge({ workspace, session }: { workspace: WorkspaceSummary; session?: SessionSummary }) {
   const chip = (
     <>
-      <Icon icon={FolderClosed} className="size-3.5" />
+      <Icon icon={workspace.scratch ? FolderDot : FolderClosed} className="size-3.5" />
       <span className="truncate">{workspaceLabel(workspace)}</span>
     </>
   );
@@ -431,7 +431,7 @@ export function FolderBadge({ workspace, session }: { workspace: WorkspaceSummar
           {chip}
         </FolderMenu>
       ) : (
-        <span title={workspace.root} className={BADGE_CLASS}>
+        <span title={workspace.scratch ? undefined : workspace.root} className={BADGE_CLASS}>
           {chip}
         </span>
       )}
@@ -545,7 +545,14 @@ function FolderMenu({ session, workspace, children }: { session: SessionSummary;
     <>
       <Menu>
         <MenuTrigger
-          render={<button type="button" title={workspace.root} aria-label={`Folder: ${workspaceLabel(workspace)}`} className={cn(BADGE_CLASS, 'app-no-drag outline-none focus-ring hover:bg-fill-ghost-hover hover:text-fg')} />}
+          render={
+            <button
+              type="button"
+              title={workspace.scratch ? 'Move this session to a folder' : workspace.root}
+              aria-label={workspace.scratch ? 'No folder: move this session to a folder' : `Folder: ${workspaceLabel(workspace)}`}
+              className={cn(BADGE_CLASS, 'app-no-drag outline-none focus-ring hover:bg-fill-ghost-hover hover:text-fg')}
+            />
+          }
         >
           {children}
           {adding ? <Spinner size="sm" label="Adding the folder" /> : <Icon icon={ChevronDown} className="size-3 shrink-0" />}
@@ -586,7 +593,7 @@ function FolderMenu({ session, workspace, children }: { session: SessionSummary;
             <>
               <MenuSeparator />
               <MenuItem icon={Undo2} onClick={stay}>
-                Stay in {workspaceLabel(workspace)}
+                {workspace.scratch ? 'Stay without a folder' : `Stay in ${workspaceLabel(workspace)}`}
               </MenuItem>
             </>
           )}

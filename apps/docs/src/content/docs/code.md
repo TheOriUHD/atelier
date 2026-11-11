@@ -51,6 +51,7 @@ The backend keeps the answer, so it holds for any client, a browser included. Un
 - Scratch folders live under `scratch-workspaces/<your account id>/scratch-<date>-<code>` in the data folder (`~/.atelier/data` by default), and under `~/.atelier/scratch-workspaces/` on an SSH host.
 - Git never looks above a scratch folder, so a repository around it (such as a home folder kept in git) isn't taken for the session's. `git init` makes it a repository like any other.
 - Deleting a session leaves its scratch folder on disk; delete it yourself.
+- A session in a scratch folder shows **No folder** at the top, never the scratch folder's name or path. The chip moves it into a folder of yours; the assistant can move it too, after asking.
 - `/clear` goes on in the same scratch folder. **New**, and the **+** of the sidebar's **No folder** group, start a session in a new one.
 - Elsewhere (a browser, a codespace, Remote Control) it isn't offered.
 
