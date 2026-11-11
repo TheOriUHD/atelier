@@ -127,6 +127,7 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
   },
   focusWindow: () => ipcRenderer.send('window:focus'),
   openWindow: (hash: string) => ipcRenderer.invoke('window:open', hash),
+  openLiveView: (sessionId: string) => ipcRenderer.invoke('window:live', sessionId),
   onMenu: (handler: (command: MenuCommand) => void) => {
     const listener = (_e: unknown, command: MenuCommand) => handler(command);
     ipcRenderer.on('menu', listener);

@@ -210,6 +210,11 @@ interface DesktopBridge {
   focusWindow(): void;
   /** Another window of the app on a route ("#/code/<id>"). */
   openWindow(hash: string): Promise<boolean>;
+  /**
+   * A task's live view popped out: a small window that stays on top, one per session. Absent in desktop shells older
+   * than the UI bundle.
+   */
+  openLiveView?(sessionId: string): Promise<boolean>;
   onMenu(handler: (command: MenuCommand) => void): () => void;
   /**
    * The keyboard shortcuts in force (Settings › Shortcuts), so the native menu's accelerators follow them; null

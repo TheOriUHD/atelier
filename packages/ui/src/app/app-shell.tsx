@@ -19,7 +19,7 @@ import { CommandPalette } from './command-palette.tsx';
 import { JoinLinkDialog } from '../features/coop/join-link-dialog.tsx';
 import { useLockNow } from '../features/auth/screen-lock.ts';
 import { rememberTab, tabOf } from './last-tab.ts';
-import { solo } from './solo.ts';
+import { liveWindow, solo } from './solo.ts';
 import { useMode, useNewChat, useNewTemporaryChat, useOpenSettings } from './navigation.ts';
 import { Sidebar, SidebarDrawer } from './sidebar.tsx';
 
@@ -28,7 +28,7 @@ export function AppShell() {
   const { prefs } = usePrefs();
   useAppearance(prefs);
   useAppShortcuts();
-  useTaskNotifications();
+  useTaskNotifications(!liveWindow);
   const narrow = useNarrow();
   const sidebarHidden = useSidebarHidden();
   // The next start opens in the tab you are in now.

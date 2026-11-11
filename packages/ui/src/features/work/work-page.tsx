@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { isCoopMirror, type BackgroundTask, type Todo, type WorkspaceSummary } from '@atelier/protocol';
+import { isCoopMirror, type BackgroundTask, type Message, type Todo, type WorkspaceSummary } from '@atelier/protocol';
 import { Spinner, cn, toast } from '../../components/ui/index.ts';
 import { draftKeys } from '../../lib/drafts.ts';
 import { useLiveSession } from '../../lib/live-session.ts';
@@ -37,6 +37,7 @@ import { FileCard, OutputFiles } from './file-cards.tsx';
 import { FilePreview } from './file-preview.tsx';
 import { latestRun, openAction, outputFiles, saveFile, type OutputFile } from './output-files.ts';
 import { TaskProgressList } from './task-progress.tsx';
+import { LiveView } from './live-view.tsx';
 import { SideChatPanel, btwCommand, useSideChatPanel, useSideChats } from '../chat/side-chat.tsx';
 import { CoopContext, useCoop } from '../coop/coop.ts';
 import { CoopBanner, CoopTyping, coopCommands, coopContextNote, coopReadOnly, useGuestModel } from '../coop/coop-notices.tsx';
@@ -116,6 +117,7 @@ export function WorkPage() {
       <TaskPanel
         className={className}
         sessionId={sessionId}
+        messages={live.messages}
         todos={live.todos}
         tasks={live.tasks}
         running={busy}
@@ -243,10 +245,14 @@ function listLoops(tasks: BackgroundTask[]) {
   else toast(loops === 1 ? 'One loop is running.' : `${loops} loops are running.`, { description: 'They are listed under Background, with Stop.' });
 }
 
-/** Beside the transcript: the steps, what runs in the background, then every file the task created or changed. */
+/**
+ * Beside the transcript: what computer use sees while it works in an app or a page, the steps, what runs in the
+ * background, then every file the task created or changed.
+ */
 function TaskPanel({
   className,
   sessionId,
+  messages,
   todos,
   tasks,
   running,
@@ -256,6 +262,7 @@ function TaskPanel({
 }: {
   className: string;
   sessionId: string;
+  messages: readonly Message[];
   todos: Todo[];
   tasks: BackgroundTask[];
   running: boolean;
@@ -266,6 +273,7 @@ function TaskPanel({
   const background = tasks.filter((t) => t.status === 'running');
   return (
     <aside aria-label="Task progress" className={cn('flex flex-col gap-6', className)}>
+      <LiveView sessionId={sessionId} messages={messages} running={running} />
       <TaskProgressList todos={todos} running={running} />
       {background.length > 0 && (
         <section aria-label="Background" className="flex flex-col gap-1.5">

@@ -67,16 +67,16 @@ export function createTaskNotifier() {
 }
 
 /** Mounted once in the app shell: watches the person's Work sessions wherever they are in the app. */
-export function useTaskNotifications(): void {
+export function useTaskNotifications(enabled = true): void {
   const { prefs } = usePrefs();
   const navigate = useNavigate();
   const { data: tasks } = useSessions({ mode: 'work' });
   const [notifier] = useState(createTaskNotifier);
   useEffect(() => {
-    if (tasks) notifier.seed(tasks);
-  }, [notifier, tasks]);
+    if (tasks && enabled) notifier.seed(tasks);
+  }, [notifier, tasks, enabled]);
   useEffect(
-    () => rpc().on('sessions.changed', (session) => notifier.update(session, prefs, (sessionId) => void navigate({ to: '/work/$sessionId', params: { sessionId } }))),
-    [notifier, prefs, navigate],
+    () => (enabled ? rpc().on('sessions.changed', (session) => notifier.update(session, prefs, (sessionId) => void navigate({ to: '/work/$sessionId', params: { sessionId } }))) : undefined),
+    [notifier, prefs, navigate, enabled],
   );
 }

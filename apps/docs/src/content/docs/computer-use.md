@@ -214,6 +214,14 @@ Computer use steps read like the others: "Took a screenshot", "Clicked", "Typed"
 thumbnails beside the summary line (hover to preview, click to open). Only the newest few screenshots go back to the
 model with each request; the conversation keeps them all.
 
+### The live view
+
+While a Cowork task works in an app or a web page, the top of the panel beside it shows what it last saw: the app's
+window or the page, its name, and the step it is on ("Clears the calculator"). Click the picture to see it full size.
+**✕** hides the view for that task while the task goes on; **Show what it sees** brings it back. In the desktop app,
+**Pop out** opens it in a small window that stays above your other windows, so you can follow along while you work in
+something else. The view goes away when the task ends; the popped-out window says "Finished" and stays until you close it.
+
 ## Permissions and modes
 
 Computer use follows the [permission mode](/permissions/) like everything else the assistant does:

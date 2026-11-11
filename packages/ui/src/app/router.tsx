@@ -10,6 +10,7 @@ import { FolderHome } from '../features/code/code-home.tsx';
 import type { FolderSearch } from '../features/code/workspaces.ts';
 import { CodePage } from '../features/code/code-page.tsx';
 import { WorkPage } from '../features/work/work-page.tsx';
+import { LiveViewPage } from '../features/work/live-view.tsx';
 import { CoworkHome } from '../features/work/cowork-home.tsx';
 import { ArtifactsPage } from '../features/artifacts/artifacts-page.tsx';
 import { ImagesPage } from '../features/images/images-page.tsx';
@@ -50,6 +51,8 @@ const folderSearch = (search: Record<string, unknown>): FolderSearch => ({
 });
 const workRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work', component: CoworkHome, validateSearch: folderSearch });
 const workSessionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work/$sessionId', component: WorkPage, remountDeps: ({ params }) => params.sessionId });
+/** A task's live view, popped out into a small window of its own (desktop: `openLiveView`). */
+const liveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/live/$sessionId', component: LiveViewPage, remountDeps: ({ params }) => params.sessionId });
 const codeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/code', component: () => <FolderHome mode="code" />, validateSearch: folderSearch });
 /** `?split=<session>`: a second Code session beside this one (split view). */
 const codeSessionRoute = createRoute({
@@ -97,6 +100,7 @@ const routeTree = rootRoute.addChildren([
   chatRoute,
   workRoute,
   workSessionRoute,
+  liveRoute,
   codeRoute,
   codeSessionRoute,
   projectsRoute,

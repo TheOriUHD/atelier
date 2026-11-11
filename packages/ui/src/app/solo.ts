@@ -9,3 +9,6 @@ export function isSoloHash(hash: string): boolean {
 }
 
 export const solo = typeof window !== 'undefined' && isSoloHash(window.location.hash);
+
+/** A task's live view popped out: it shows one picture, and leaves notifications to the app's other windows. */
+export const liveWindow = solo && window.location.hash.startsWith('#/live/');

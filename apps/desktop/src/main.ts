@@ -257,6 +257,8 @@ let steppedAside: BrowserWindow[] = [];
 // A test run with hidden windows doesn't light up the screen of the computer running it.
 const screenOverlay: ScreenOverlay = process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {}, owns: () => false } : createOverlay();
 const appWindows = new AppWindows<BrowserWindow>();
+/** Tasks' live views popped out, by session. */
+const liveWindows = new Map<string, BrowserWindow>();
 app.on('browser-window-focus', (_event, win) => appWindows.focused(win));
 const atelierWindows = () => appWindows.list();
 const computer = new ComputerController({
@@ -519,18 +521,19 @@ const THEME_OVERLAY = {
   dark: { color: '#00000000', symbolColor: '#C3C2B7', height: 36 },
 };
 
-/** `hash` opens a window on a route of the app ("#/code/<id>"), for "Open in new window". */
-function createWindow(hash = ''): BrowserWindow {
+/**
+ * `hash` opens a window on a route of the app ("#/code/<id>"), for "Open in new window". `live`: a task's live view
+ * popped out, small and above the other windows.
+ */
+function createWindow(hash = '', kind: 'app' | 'live' = 'app'): BrowserWindow {
+  const live = kind === 'live';
   const win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 760,
-    minHeight: 520,
+    ...(live ? { width: 420, height: 300, minWidth: 240, minHeight: 170, alwaysOnTop: true, fullscreenable: false } : { width: 1440, height: 900, minWidth: 760, minHeight: 520 }),
     show: false,
     backgroundColor: '#FCFCFB',
     titleBarStyle: 'hidden',
     ...windowIconOption(),
-    ...(isMac ? { trafficLightPosition: { x: 16, y: 18 } } : { titleBarOverlay: THEME_OVERLAY.light }),
+    ...(isMac ? { trafficLightPosition: live ? { x: 12, y: 11 } : { x: 16, y: 18 } } : { titleBarOverlay: live ? { ...THEME_OVERLAY.light, height: 36 } : THEME_OVERLAY.light }),
     webPreferences: {
       preload: join(import.meta.dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -956,6 +959,20 @@ function registerIpc(): void {
   // "Open in › New window": a window with only that session in it (`?solo=1`: no sidebar).
   ipcMain.handle('window:open', (_e, input: unknown): boolean => {
     createWindow(z.string().regex(/^#\/(code|work|chat)\/[A-Za-z0-9_-]{1,64}(\?solo=1)?$/).parse(input));
+    return true;
+  });
+  // A task's live view popped out: one small window per session, above the others, brought forward when open already.
+  ipcMain.handle('window:live', (_e, input: unknown): boolean => {
+    const sessionId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).parse(input);
+    const open = liveWindows.get(sessionId);
+    if (open && !open.isDestroyed()) {
+      open.show();
+      return true;
+    }
+    const win = createWindow(`#/live/${sessionId}?solo=1`, 'live');
+    win.setAlwaysOnTop(true, 'floating');
+    liveWindows.set(sessionId, win);
+    win.on('closed', () => liveWindows.delete(sessionId));
     return true;
   });
   // A notification was clicked: bring its window to the front.
