@@ -664,6 +664,7 @@ export class ChatService {
         const tier = ref ? (await this.deps.models.resolve(ref, session.userId).catch(() => null))?.info.tier : undefined;
         return tier === 'compact' ? { maxWidth: 1024, maxHeight: 1024 } : { maxWidth: 1280, maxHeight: 1280 };
       },
+      wanted: (sessionId) => this.computerWanted(sessionId),
     });
     this.addConnector = createAddConnectorTool({
       approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
@@ -1625,6 +1626,27 @@ export class ChatService {
     const root = this.deps.coop ? await this.deps.coop.rootOf(sessionId) : sessionId;
     const row = await this.deps.repo.getRow(root);
     return row?.userId ? accountParticipant(row.userId) : null;
+  }
+
+  /**
+   * What the person asked for in their own words, for computer use: in Bypass any app is allowed, and an app they named in
+   * their recent messages needs no card. A co-op guest's turn gets neither: a guest's words don't open the host's apps.
+   */
+  private async computerWanted(sessionId: string): Promise<{ all: boolean; said: string }> {
+    const session = await this.requireSession(sessionId);
+    const asker = askerOf(session);
+    const actor = this.actors.get(session.id) ?? this.actors.get(asker);
+    const guest = (!!actor?.shared && !!actor.participant && actor.participant.role !== 'host') || this.guestJoined.has(asker) || this.guestJoined.has(session.id) || this.guestAgents.has(session.id);
+    if (guest) return { all: false, said: '' };
+    const main = isSideChat(session) ? await this.deps.repo.getRow(session.parentSessionId!) : undefined;
+    const ctx = await this.deps.permissionContext?.(main ?? session);
+    const hostId = actor?.shared ? await this.hostParticipantId(session.id) : null;
+    const said = (await this.deps.repo.history(asker))
+      .filter((m) => m.role === 'user' && m.kind === 'normal' && (!m.author || m.author === hostId))
+      .slice(-COMPUTER_SAID_MESSAGES)
+      .map((m) => messageText(m.parts))
+      .join('\n');
+    return { all: ctx?.mode === 'bypassPermissions', said };
   }
 
   /**
@@ -3497,6 +3519,9 @@ function snapshotFacts(s: SystemSnapshot): NoteState {
 function askerOf(session: SessionRow): string {
   return session.parentSessionId && !isSideChat(session) ? session.parentSessionId : session.id;
 }
+
+/** How many of the person's latest messages count for the apps they named (computer use). */
+const COMPUTER_SAID_MESSAGES = 20;
 
 /** How often Stop hooks may send the model back to work in one turn. */
 const MAX_STOP_ROUNDS = 3;

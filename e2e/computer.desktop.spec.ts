@@ -57,21 +57,23 @@ test('desktop: computer use is turned on in Settings, the person allows apps, an
     const box = page.getByRole('textbox', { name: 'Message', exact: true });
     await box.fill(
       [
-        call('ComputerAccess', { apps: ['TextEdit', 'Safari', 'Terminal'], reason: 'Write the notes into a document.' }),
+        // The fake model reads its calls from the message, so the person names TextEdit here; Safari is written as \u0053afari,
+        // which the model reads as Safari but the person didn't name.
+        call('ComputerAccess', { apps: ['TextEdit', 'SAFARI', 'Terminal'], reason: 'Write the notes into a document.' }).replace('SAFARI', '\\u0053afari'),
         call('Screenshot', { app: 'TextEdit' }),
         call('ComputerAction', { actions: [{ action: 'left_click', coordinate: [100, 100], summary: 'Clicks into the document' }, { action: 'type', text: 'hello', replace: true }] }),
       ].join('\n'),
     );
     await box.press('Enter');
 
-    // Terminal is denied: it isn't asked about. Browsers start with full use like other apps; the card says how
-    // Background works.
-    const access = page.getByRole('region', { name: 'Let Atelier use 2 apps?' });
+    // Terminal is denied: it isn't asked about. TextEdit, which the person named, needs no card. Browsers start with full
+    // use like other apps; the card says how Background works.
+    const access = page.getByRole('region', { name: 'Let Atelier use Safari?' });
     await expect(access).toContainText('Write the notes into a document.');
     await expect(access).toContainText('in the background, one at a time, without your mouse and keyboard');
     await expect(access.getByRole('list', { name: 'Apps' })).not.toContainText('Terminal');
+    await expect(access.getByRole('list', { name: 'Apps' })).not.toContainText('TextEdit');
     await expect(access.getByRole('combobox', { name: 'What Atelier may do in Safari' })).toContainText('Full use');
-    await expect(access.getByRole('combobox', { name: 'What Atelier may do in TextEdit' })).toContainText('Full use');
     await access.getByRole('button', { name: 'Allow for this session' }).click();
 
     // Ask mode asks for clicking and typing like any action, each step spelled out. Background never takes over: the

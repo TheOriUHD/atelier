@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AppGrant, ControllerMethods, PermissionAnswer, PermissionRequest, PreparedApp } from '@atelier/protocol';
-import { createComputerTools, type ComputerCall } from './computer.ts';
+import { createComputerTools, namedIn, type ComputerCall, type ComputerToolDeps } from './computer.ts';
 import type { Tool, ToolContext } from './types.ts';
 
 const ctx: ToolContext = { sessionId: 's1', messageId: 'm1', callId: 'c1', signal: new AbortController().signal, emit: () => {} };
@@ -21,7 +21,7 @@ const prepared = (name: string, over: Partial<PreparedApp> = {}): PreparedApp =>
 });
 
 /** The tools against a pretend controller: `answers` are the person's, in order; every call is recorded. */
-function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof ControllerMethods]: (p: ControllerMethods[M]['params']) => ControllerMethods[M]['result'] }>) {
+function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof ControllerMethods]: (p: ControllerMethods[M]['params']) => ControllerMethods[M]['result'] }>, wanted?: ComputerToolDeps['wanted']) {
   const asked: PermissionRequest[] = [];
   const calls: { method: string; params: unknown }[] = [];
   const call: ComputerCall = async (_session, method, params) => {
@@ -35,6 +35,7 @@ function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof Cont
     call,
     blobs: { put: async () => ({ sha256: 'blob1' }) as never },
     size: async () => ({ maxWidth: 1280, maxHeight: 800 }),
+    ...(wanted ? { wanted } : {}),
   });
   const tool = (name: string) => tools.find((t) => t.name === name) as Tool<Record<string, unknown>>;
   return { tool, asked, calls };
@@ -80,6 +81,50 @@ describe('ComputerAccess', () => {
     expect(text(out)).toBe("The person didn't allow it and said: Use the API.");
   });
 
+  it('allows the apps the person named in their own words without a card', async () => {
+    const chrome = prepared('Google Chrome', { app: { id: 'com.google.Chrome', name: 'Google Chrome' } });
+    const { tool, asked, calls } = setup(
+      [{ behavior: 'allow' }],
+      {
+        'access.prepare': () => ({ apps: [chrome, prepared('Zen')], unknown: [] }),
+        'access.allow': ({ ids }) => ({ allowed: ids }),
+        'access.state': () => ({ ...state([{ app: chrome.app, tier: 'full' }, { app: { id: 'com.example.Zen', name: 'Zen' }, tier: 'full' }]), background: true }),
+      },
+      async () => ({ all: false, said: 'No, use chrome. Find me a gift on Amazon.' }),
+    );
+    const out = await tool('ComputerAccess').run({ apps: ['Google Chrome', 'Zen'] }, ctx);
+    expect(calls.find((c) => c.method === 'access.allow')?.params).toEqual({ ids: ['com.google.Chrome'] });
+    // Zen wasn't named: it still asks.
+    expect((asked[0]!.input as { apps: PreparedApp[] }).apps.map((a) => a.app.name)).toEqual(['Zen']);
+    // Chrome only takes screenshots in the background: it says so, and how to get more.
+    expect(text(out)).toContain('Google Chrome only shows screenshots in the background: to click, type or scroll there, ask for Full control with FullControl.');
+  });
+
+  it('asks for nothing in Bypass, and keeps the tier the person picked for an app it has', async () => {
+    const { tool, asked, calls } = setup(
+      [],
+      {
+        'access.prepare': () => ({ apps: [prepared('TextEdit'), prepared('Notes', { granted: 'view' })], unknown: [] }),
+        'access.allow': ({ ids }) => ({ allowed: ids }),
+        'access.state': () => state([textEdit]),
+      },
+      async () => ({ all: true, said: '' }),
+    );
+    await tool('ComputerAccess').run({ apps: ['TextEdit', 'Notes'] }, ctx);
+    expect(asked).toHaveLength(0);
+    expect(calls.find((c) => c.method === 'access.allow')?.params).toEqual({ ids: ['com.example.TextEdit'] });
+  });
+
+  it('still asks when the computer allows nothing itself (a server’s session)', async () => {
+    const { tool, asked } = setup(
+      [{ behavior: 'allow' }],
+      { 'access.prepare': () => ({ apps: [prepared('TextEdit')], unknown: [] }), 'access.allow': () => ({ allowed: [] }), 'access.state': () => state([textEdit]) },
+      async () => ({ all: false, said: 'open textedit' }),
+    );
+    await tool('ComputerAccess').run({ apps: ['TextEdit'] }, ctx);
+    expect(asked).toHaveLength(1);
+  });
+
   it('says when computer use is off', async () => {
     const { tool } = setup([], {
       'access.prepare': () => {
@@ -87,6 +132,24 @@ describe('ComputerAccess', () => {
       },
     });
     expect(text(await tool('ComputerAccess').run({ apps: ['TextEdit'] }, ctx))).toBe("Computer use isn't available: Computer use is off on this computer: turn it on in Settings › System.");
+  });
+});
+
+describe('namedIn', () => {
+  it('finds an app named as people name it, as a whole word', () => {
+    expect(namedIn('No bro chrome why zen', 'Google Chrome')).toBe(true);
+    expect(namedIn('keep browsing in CHROME', 'Google Chrome')).toBe(true);
+    expect(namedIn('use brave', 'Brave Browser')).toBe(true);
+    expect(namedIn('open Microsoft Word', 'Microsoft Word')).toBe(true);
+    expect(namedIn('write it in word', 'Microsoft Word')).toBe(true);
+    expect(namedIn('the Visual Studio Code window', 'Visual Studio Code')).toBe(true);
+    expect(namedIn('check my mail', 'Mail')).toBe(true);
+    // Part of a word isn't a name.
+    expect(namedIn('the citizen app', 'Zen')).toBe(false);
+    expect(namedIn('search for it', 'Arc')).toBe(false);
+    expect(namedIn('my mailchimp list', 'Mail')).toBe(false);
+    expect(namedIn('use the browser', 'Brave Browser')).toBe(false);
+    expect(namedIn('google it', 'Google Chrome')).toBe(false);
   });
 });
 

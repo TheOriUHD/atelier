@@ -8,6 +8,7 @@ import {
   appCategory,
   defaultTier,
   linkSensitive,
+  takesBackgroundInput,
   maxTier,
   type AppGrant,
   type AppTier,
@@ -36,8 +37,6 @@ export interface Overlay {
   esc(phase: 'down' | 'up' | 'stopped'): void;
   /** Its actions wait while the person uses the mouse or keyboard. */
   paused(on: boolean): void;
-  /** Background: a small note that it works in an app (null: none). */
-  working(app: string | null): void;
   /**
    * Linux: the windows can't be kept out of a screenshot there (X11 has no capture exclusion), so they are taken off the
    * screen for the moment of the capture and put back after. Absent where the system leaves them out itself.
@@ -186,10 +185,13 @@ export class ComputerController {
   private control: Control | null = null;
   private apps: { at: number; list: HelperApp[] } | null = null;
   private writes: Promise<unknown> = Promise.resolve();
-  /** The session whose background note shows. */
-  private working: string | null = null;
   /** Secure input is on (a password field somewhere): typing is refused, the Esc watch is blind. */
   private secureInput = false;
+  /**
+   * The helper refuses all input after an Esc hold, background input too, until `control.resume`. The session that held
+   * it keeps the computer away until its turn ends (`takenBack`); after that the lock is lifted before any more input.
+   */
+  private helperStopped = false;
 
   constructor(private readonly deps: ControllerDeps) {
     deps.helper.onNotification((n) => this.notified(n));
@@ -339,6 +341,22 @@ export class ComputerController {
         }
         return { apps, unknown };
       },
+      'access.allow': async ({ ids }: ControllerMethods['access.allow']['params']): Promise<ControllerMethods['access.allow']['result']> => {
+        // A server can't allow anything here: only the person can, on the card in this computer's window.
+        if (backend !== 'local') return { allowed: [] };
+        const installed = await this.appList();
+        const allowed: string[] = [];
+        for (const id of ids) {
+          const app = installed.find((a) => a.id === id);
+          const tier = defaultTier(appCategory(id));
+          // An app it has already keeps what the person picked for it on a card: more is theirs to give there.
+          if (!app || !tier || settings.denied.some((d) => d.id === id) || policy.tier(id)) continue;
+          state().grants.set(id, { app: { id, name: app.name }, tier });
+          allowed.push(id);
+        }
+        if (allowed.length) this.deps.changed();
+        return { allowed };
+      },
       'access.state': async (): Promise<ControllerMethods['access.state']['result']> => {
         const { displays } = await this.deps.helper.call('displays.list', {});
         return {
@@ -427,8 +445,8 @@ export class ComputerController {
       },
       'turn.end': async () => {
         if (this.control?.key === key) await this.end(this.control, { focus: true });
-        this.notWorking(key);
         state().takenBack = false;
+        await this.reopen();
         return {};
       },
       'turn.wait': async ({ kind }: ControllerMethods['turn.wait']['params']) => {
@@ -446,7 +464,7 @@ export class ComputerController {
         await this.end(control, { focus: true });
         return {};
       },
-      // (A background session has nothing to hand back: its note goes when the turn ends.)
+      // (A background session has nothing to hand back: it never had the mouse and keyboard.)
     };
   }
 
@@ -590,6 +608,7 @@ export class ComputerController {
     const control: Control = { key: keyOf(backend, sessionId), backend, sessionId, hidden: [], stopped: false, lastInput: 0, front: null };
     this.control = control;
     await helper.call('control.resume', {});
+    this.helperStopped = false;
     await helper.call('control.begin', {});
     this.deps.overlay.show();
     this.deps.changed();
@@ -648,6 +667,7 @@ export class ComputerController {
       this.deps.overlay.esc(n.params.phase);
       if (n.params.phase === 'stopped') {
         control.stopped = true;
+        this.helperStopped = true;
         // The turn goes on without the computer: the agent hears it and finishes another way or says why it can't.
         this.session(control.backend, control.sessionId).takenBack = true;
         void this.end(control).then(() => this.deps.event(control.backend, control.sessionId, { type: 'stopped' }));
@@ -669,10 +689,8 @@ export class ComputerController {
    */
   private async windowShot(backend: string, sessionId: string, policy: Policy, app: string | undefined, size: ScreenshotSize): Promise<ControllerMethods['screenshot']['result']> {
     const state = this.session(backend, sessionId);
-    const wanted = app?.trim().toLowerCase().replace(/\.app$/, '');
-    const named = wanted
-      ? (policy.grants.find((g) => g.app.id.toLowerCase() === wanted || g.app.name.toLowerCase() === wanted) ?? policy.grants.find((g) => g.app.name.toLowerCase().startsWith(wanted)))
-      : undefined;
+    const match = app?.trim() ? matchApp(policy.grants.map((g) => g.app), app) : undefined;
+    const named = match && policy.grants.find((g) => g.app.id === match.id);
     if (app?.trim() && !named) throw new Error(`You may not use ${app}: ask with ComputerAccess first.`);
     const grant = named ?? policy.grants.find((g) => g.app.id === state.target) ?? (policy.grants.length === 1 ? policy.grants[0] : undefined);
     if (!grant) throw new Error(`Say which app to look at: Screenshot with \`app\` (in the background you work in one app at a time). You may use ${policy.grants.map((g) => g.app.name).join(', ')}.`);
@@ -689,7 +707,6 @@ export class ComputerController {
       .catch((e: unknown) => Promise.reject(new Error(e instanceof HelperError && e.code === -32033 ? `${grant.app.name} has no window open: open it with OpenApp first.` : helperMessage(e))));
     state.target = grant.app.id;
     state.frame = { rect: shot.rect, width: shot.width, height: shot.height, window: { id: shot.window, app: grant.app.id, name: grant.app.name } };
-    this.workingIn(keyOf(backend, sessionId), grant.app.name);
     return {
       data: shot.data,
       mime: shot.mime,
@@ -700,10 +717,18 @@ export class ComputerController {
     };
   }
 
+  /** Lifts the helper's Esc lock when nobody holds the computer back any more (an earlier turn's Esc). */
+  private async reopen(): Promise<void> {
+    if (!this.helperStopped || this.control || [...this.sessions.values()].some((s) => s.takenBack)) return;
+    await this.deps.helper.call('control.resume', {});
+    this.helperStopped = false;
+  }
+
   /** Background actions: into the window of the latest screenshot, the cursor unmoved, the app left where it is. */
   private async inBackground(backend: string, sessionId: string, actions: ComputerActionItem[], size: ScreenshotSize, policy: Policy): Promise<ComputerActionResult[]> {
     const state = this.session(backend, sessionId);
     const results: ComputerActionResult[] = [];
+    await this.reopen();
     for (const item of actions) {
       const result = await this.actInBackground(backend, sessionId, state, item, size, policy).catch((e: unknown) => ({ action: item.action, ok: false, note: backgroundMessage(e) }));
       results.push(result);
@@ -729,6 +754,9 @@ export class ComputerController {
     if (!frame || !window) return refuse('Take a Screenshot of the app first: in the background your actions go to its window.');
     const tier = policy.tier(window.app);
     if (!tier) return refuse(`You may not use ${window.name}: ask with ComputerAccess first.`);
+    if (item.action !== 'mouse_move' && item.action !== 'cursor_position' && !takesBackgroundInput(window.app, this.deps.platform)) {
+      return refuse(`${window.name} doesn't take clicks, typing or scrolling in the background (its screenshots work). Ask for Full control with FullControl to act in it.`);
+    }
     const point = (c: [number, number] | undefined) => {
       if (!c) throw new Error('It needs a coordinate.');
       return { x: frame.rect.x + (c[0] * frame.rect.width) / frame.width, y: frame.rect.y + (c[1] * frame.rect.height) / frame.height };
@@ -791,18 +819,6 @@ export class ComputerController {
         return done();
       }
     }
-  }
-
-  /** The note that a session works in an app, in the background (one at a time: the latest). */
-  private workingIn(key: string, app: string): void {
-    this.working = key;
-    this.deps.overlay.working(app);
-  }
-
-  private notWorking(key: string): void {
-    if (this.working !== key) return;
-    this.working = null;
-    this.deps.overlay.working(null);
   }
 
   /** Waits while the person uses the mouse or keyboard (the popup says so), at most a few minutes. */
@@ -901,7 +917,7 @@ export class ComputerController {
 }
 
 /** An app by its id, its name, or the start or part of its name. */
-export function matchApp(apps: HelperApp[], name: string): HelperApp | undefined {
+export function matchApp<T extends { id: string; name: string }>(apps: T[], name: string): T | undefined {
   const n = name.trim().toLowerCase().replace(/\.app$/, '');
   return (
     apps.find((a) => a.id.toLowerCase() === n) ??

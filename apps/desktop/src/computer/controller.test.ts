@@ -100,7 +100,7 @@ beforeEach(async () => {
     helper: helper as unknown as ComputerHelper,
     hasHelper: true,
     settingsPath,
-    overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`), paused: (on) => overlay.push(`paused:${on}`), working: (app) => overlay.push(`working:${app}`) },
+    overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`), paused: (on) => overlay.push(`paused:${on}`) },
     windows: { hide() {}, restore() {}, focus: () => overlay.push('focus') },
     event: (_backend, sessionId, event) => events.push({ sessionId, event }),
     changed() {},
@@ -331,7 +331,8 @@ describe('full control', () => {
     await expect(ask('screenshot', { size: SIZE })).rejects.toThrow(/took the computer back/);
     await ask('turn.end', {});
     expect(await ask('control.request', {})).toEqual({ granted: true });
-    expect(helper.did('control.resume')).toHaveLength(2);
+    // Once when it began, once when the turn ended (the lock lifted), once when it began again.
+    expect(helper.did('control.resume')).toHaveLength(3);
   });
 
   it('goes on when the person moves the pointer, waits while they click or type, and stops only when they switch apps', async () => {
@@ -399,7 +400,8 @@ describe('in the background', () => {
     const shot = await ask('screenshot', { app: 'textedit', size: SIZE });
     expect(shot).toMatchObject({ width: 400, height: 300, display: 'TextEdit’s window “Untitled”' });
     expect(helper.did('window.capture').at(-1)?.params).toMatchObject({ app: 'com.apple.TextEdit' });
-    expect(overlay).toEqual(['working:TextEdit']);
+    // Nothing shows on the screen: the person's screen stays as it is.
+    expect(overlay).toEqual([]);
     // Image pixels map onto the window's rect; nothing takes the mouse.
     const batch = async (actions: ControllerMethods['control.batch']['params']['actions']) => (await ask('control.batch', { actions, size: SIZE })).results;
     expect(await batch([{ action: 'left_click', coordinate: [200, 150] }, { action: 'type', text: 'hi', replace: true }, { action: 'scroll', direction: 'down' }])).toEqual([
@@ -423,9 +425,61 @@ describe('in the background', () => {
     expect((await batch([{ action: 'type', text: 'x' }]))[0]).toMatchObject({ ok: false, note: /You may not type in Safari\. Ask with ComputerAccess for more/ });
     // An app it may not use isn't looked at.
     await expect(ask('screenshot', { app: 'Mail', size: SIZE })).rejects.toThrow(/You may not use Mail/);
-    // The turn ends: the note goes.
     await ask('turn.end', {});
-    expect(overlay.at(-1)).toBe('working:null');
+    expect(overlay).toEqual([]);
+  });
+
+  it('works again in the background after the person held Esc in an earlier turn', async () => {
+    // Full control first, stopped with Esc: the helper refuses all input until it's told to go on.
+    await ready([{ id: 'com.apple.TextEdit', tier: 'full' }]);
+    helper.notify({ method: 'control.esc', params: { phase: 'stopped', heldMs: 1000 } });
+    await ask('turn.end', {});
+    const resumes = helper.did('control.resume').length;
+    // The next turn, in the background: the lock is lifted before anything is done.
+    await controller.settings((s) => ({ ...s, mode: 'background' }));
+    helper.background = true;
+    await ask('screenshot', { app: 'TextEdit', size: SIZE });
+    expect((await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [200, 150] }], size: SIZE })).results[0]).toEqual({ action: 'left_click', ok: true });
+    expect(helper.did('control.resume')).toHaveLength(resumes);
+    expect(helper.calls.findIndex((c) => c.method === 'bg.click')).toBeGreaterThan(helper.calls.findLastIndex((c) => c.method === 'control.resume'));
+  });
+
+  it('keeps the lock while the session that held Esc is still in its turn', async () => {
+    await ready([{ id: 'com.apple.TextEdit', tier: 'full' }]);
+    helper.notify({ method: 'control.esc', params: { phase: 'stopped', heldMs: 1000 } });
+    const resumes = helper.did('control.resume').length;
+    // Another session in the background: the computer is still the person's.
+    await controller.grant('local', 's2', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
+    await controller.settings((s) => ({ ...s, mode: 'background' }));
+    helper.background = true;
+    await ask('screenshot', { app: 'TextEdit', size: SIZE }, 's2');
+    await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }], size: SIZE }, 's2');
+    expect(helper.did('control.resume')).toHaveLength(resumes);
+  });
+
+  it('asks for Full control to act in a Chromium browser, whose screenshots work', async () => {
+    helper.background = true;
+    helper.apps = [...APPS, app('com.google.Chrome', 'Google Chrome')];
+    await controller.grant('local', 's1', [{ id: 'com.google.Chrome', tier: 'full' }], false);
+    expect(await ask('screenshot', { app: 'chrome', size: SIZE })).toMatchObject({ width: 400 });
+    const { results } = await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }, { action: 'type', text: 'x' }], size: SIZE });
+    expect(results[0]).toMatchObject({ ok: false, note: /Google Chrome doesn't take clicks, typing or scrolling in the background \(its screenshots work\)\. Ask for Full control with FullControl/ });
+    // The batch stops there.
+    expect(results).toHaveLength(1);
+    expect(helper.did('bg.click')).toHaveLength(0);
+    expect(helper.did('bg.type')).toHaveLength(0);
+  });
+});
+
+describe('apps the person asked for', () => {
+  it('are allowed without a card, at their usual tier, on this computer only', async () => {
+    const allowed = await ask('access.allow', { ids: ['com.apple.TextEdit', 'com.apple.Terminal', 'com.1password.1password', 'com.apple.systempreferences', 'com.example.Missing'] });
+    // A password manager is denied by default, System Settings isn't offered, an app that isn't installed isn't allowed.
+    expect(allowed).toEqual({ allowed: ['com.apple.TextEdit', 'com.apple.Terminal'] });
+    const state = await ask('access.state', {});
+    expect(state.apps).toEqual([{ app: { id: 'com.apple.TextEdit', name: 'TextEdit' }, tier: 'full' }, { app: { id: 'com.apple.Terminal', name: 'Terminal' }, tier: 'click' }]);
+    // A server's sessions can't: only the card on this computer allows anything.
+    expect(await controller.handle('server-1', 's1', 'access.allow', { ids: ['com.apple.Notes'] })).toEqual({ allowed: [] });
   });
 
   it('says when an app has no window open', async () => {
@@ -441,7 +495,7 @@ describe('on Windows', () => {
       helper: helper as unknown as ComputerHelper,
       hasHelper: true,
       settingsPath,
-      overlay: { show() {}, hide() {}, esc() {}, paused() {}, working() {} },
+      overlay: { show() {}, hide() {}, esc() {}, paused() {} },
       windows: { hide() {}, restore() {}, focus() {} },
       event() {},
       changed() {},
@@ -474,7 +528,6 @@ describe('on Linux', () => {
         hide() {},
         esc() {},
         paused() {},
-        working() {},
         capturing: async (on) => void log.push(`capturing:${on}`),
       },
       windows: { hide() {}, restore() {}, focus() {} },

@@ -607,7 +607,7 @@ export const SETTINGS_INDEX = [
     page: 'system',
     label: 'How Atelier uses the apps you allow',
     description:
-      'Background: asks you for each app, then works in one app at a time in the background, without your mouse and keyboard, while you keep working (macOS and Windows; on Linux this is “Ask per app”: you allow apps one by one and Atelier asks before it takes over your mouse and keyboard). Full control: takes over your computer as it is, any app but your denied ones, without asking.',
+      'Background: works in one app at a time in the background, without your mouse and keyboard, while you keep working. Apps you name yourself are allowed without asking; others ask first. When an app doesn’t take input in the background (Chrome and other Chromium browsers on macOS), Atelier asks you for full control. On Linux this is “Ask per app”: you allow apps one by one and Atelier asks before it takes over your mouse and keyboard. Full control: takes over your computer as it is, any app but your denied ones, without asking.',
     keywords: ['computer use', 'background', 'ask per app', 'full control', 'mouse', 'keyboard', 'mode'],
     available: () => !!desktop?.computer,
   },

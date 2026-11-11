@@ -19,6 +19,21 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.6.1',
+    intro: 'Computer use in the background, fixed: it works, asks less, and stays off your screen.',
+    highlights: [
+      {
+        icon: MousePointerClick,
+        title: 'Background computer use that works',
+        body: 'After you held Esc to stop Full control, later background work did nothing; now it goes on as soon as that turn ends. Apps you name yourself, like “keep browsing in Chrome”, are allowed without a card, and nothing shows on your screen while Atelier works in the background.',
+      },
+    ],
+    also: [
+      'On a Mac, Chrome, Edge, Brave and Arc only take screenshots in the background: Atelier asks you for Full control to click or type there.',
+      'In Bypass, using an app doesn’t ask; taking over the mouse and keyboard still does.',
+    ],
+  },
+  {
     version: '0.6.0',
     intro: 'Atelier CLI: a Code session in your terminal, on your own Atelier server or on its own.',
     highlights: [

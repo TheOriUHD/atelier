@@ -1883,3 +1883,31 @@ describe('a chat sandbox', () => {
     expect(offered[1]).not.toContain('Bash');
   });
 });
+
+describe('computer use: what the person asked for', () => {
+  type Wanted = { computerWanted(sessionId: string): Promise<{ all: boolean; said: string }> };
+  const say = (sessionId: string, id: string, parentId: string | null, text: string, author?: string) =>
+    repo.insertMessage({ id, sessionId, parentId, role: 'user', parts: [{ type: 'text', text }], model: null, usage: null, stopReason: null, error: null, kind: 'normal', summarizesThroughId: null, ...(author ? { author } : {}) });
+
+  it('reads the person’s own messages, and allows any app in Bypass only', async () => {
+    const chat = service() as unknown as Wanted;
+    const s = await repo.create({ mode: 'code', userId: null });
+    await say(s.id, 'u1', null, 'Open chrome');
+    await say(s.id, 'u2', 'u1', 'and find a gift');
+    expect(await chat.computerWanted(s.id)).toEqual({ all: false, said: 'Open chrome\nand find a gift' });
+    await repo.update(s.id, { permissionMode: 'bypassPermissions' });
+    expect((await chat.computerWanted(s.id)).all).toBe(true);
+  });
+
+  it('leaves out what a co-op guest wrote', async () => {
+    const chat = service() as unknown as Wanted & { guestJoined: Set<string> };
+    const s = await repo.create({ mode: 'code', userId: null });
+    await say(s.id, 'u1', null, 'Open Notes');
+    await say(s.id, 'u2', 'u1', 'Open Mail', 'guest-1');
+    expect((await chat.computerWanted(s.id)).said).toBe('Open Notes');
+    // A turn a guest joined: none of it counts, and Bypass doesn't either.
+    await repo.update(s.id, { permissionMode: 'bypassPermissions' });
+    chat.guestJoined.add(s.id);
+    expect(await chat.computerWanted(s.id)).toEqual({ all: false, said: '' });
+  });
+});

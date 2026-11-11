@@ -473,6 +473,12 @@ export interface ControllerMethods {
     };
   };
   'apps.list': { params: { query?: string }; result: { apps: { app: ComputerApp; category: AppCategory; running: boolean; granted: AppTier | null }[] } };
+  /**
+   * Allows apps the person asked for in their own words (or everything, in Bypass), at the tier the card would offer, so
+   * no card asks again. Only this computer's own backend may: a server's sessions still ask on the card. `allowed`: the
+   * apps it allowed.
+   */
+  'access.allow': { params: { ids: string[] }; result: { allowed: string[] } };
   'apps.open': { params: { id: string }; result: Record<string, never> };
   /**
    * Full control: the display (the screen as the person sees it, but for their denied apps). Background: `app`'s window

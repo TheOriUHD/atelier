@@ -43,10 +43,11 @@ Windows asks for nothing. Two things work differently there:
 **How Atelier uses the apps you allow** in Settings decides how much it asks (on Linux the first choice is called
 **Ask per app**, see [Linux](#linux)):
 
-- **Background** (the default): it asks for each app, then works in one app at a time **in the background**: it sees
-  that app's window as it is (even when other windows cover it) and clicks, types and scrolls in it without moving your
-  pointer or bringing it forward, while you keep working. A small note below the menu bar says **Atelier is working in
-  …**. Dragging and zooming in need Full control; it asks for that with a card when it needs it.
+- **Background** (the default): it works in one app at a time **in the background**: it sees that app's window as it is
+  (even when other windows cover it) and clicks, types and scrolls in it without moving your pointer or bringing it
+  forward, while you keep working. Nothing shows on your screen while it does. What can't be done in the background
+  (dragging, zooming in, or an app that doesn't take input there) needs Full control, and it asks you for that with a
+  card when it needs it.
 - **Full control**: it takes over your computer as it is. No cards: it may do anything in any app, terminals and code
   editors included, except your denied apps, Atelier itself and the parts of macOS that ask for passwords. Typing in a
   terminal runs commands without Atelier's permission prompts, so use Full control only when you would let it do that.
@@ -56,7 +57,12 @@ Windows asks for nothing. Two things work differently there:
 
 ### Allowing apps (Background)
 
-When the assistant needs an app, it asks with a card: **Let Atelier use TextEdit?**, with the reason it gave. Each app
+An app you name yourself needs no card: when you write "keep browsing in Chrome", the assistant may use Google Chrome
+right away. Atelier checks that against your own messages in the conversation (the app's name, or the name without the
+maker, as in "Chrome" or "Word"), not against what the assistant says or what a screen shows. In co-op, only the host's
+messages count. In **Bypass** no app asks.
+
+For any other app, the assistant asks with a card: **Let Atelier use TextEdit?**, with the reason it gave. Each app
 comes with what Atelier may do there:
 
 | Choice | What it allows | Default for |
@@ -74,6 +80,13 @@ tells the assistant to go on without them.
 
 Some apps are never used: Atelier itself, System Settings, the login window and the other parts of macOS that ask for
 passwords. In the background its screenshots show only the window of the app it works in.
+
+### Browsers in the background
+
+On a Mac, Chrome and the other Chromium browsers (Edge, Brave, Arc, Opera, Vivaldi) ignore clicks and typing sent to a
+window in the background, so there the assistant can only take screenshots. To click or type in one, it asks you for
+Full control. Safari and Firefox work in the background as other apps do. The same goes for any app that turns out to
+ignore what the assistant does in the background: it asks for Full control instead of trying again.
 
 ### Denied apps
 
@@ -167,4 +180,6 @@ Computer use follows the [permission mode](/permissions/) like everything else t
   reviewer watch them, letting ordinary use through and stopping only for what matters (a purchase or payment, sending a
   message, deleting something, accepting terms, changing account or security settings, typing a password); **Ask** and
   **Accept edits** ask each time, listing the steps and what would be typed; **Plan** only looks.
-- The cards for apps and for taking over (Background) ask in every mode, Bypass included.
+- The card for an app asks in every mode except **Bypass**, unless you named the app yourself (see
+  [Allowing apps](#allowing-apps-background)). The card for taking over the mouse and keyboard (Background) asks in every
+  mode, Bypass included.

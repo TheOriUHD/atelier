@@ -425,6 +425,26 @@ export function maxTier(category: AppCategory): AppTier | null {
   return 'full';
 }
 
+/**
+ * Apps that don't take clicks, typing or scrolling in the background on macOS: Chromium browsers ignore input sent to a
+ * window that isn't the active one, and show their pages to Accessibility only now and then (checked on a Mac on
+ * 2026-11-11). Their screenshots work in the background; acting in them needs Full control.
+ */
+const MAC_NO_BACKGROUND_INPUT: readonly string[] = [
+  'com.google.Chrome',
+  'com.google.Chrome.canary',
+  'org.chromium.Chromium',
+  'com.microsoft.edgemac',
+  'com.brave.Browser',
+  'company.thebrowser.Browser',
+  'company.thebrowser.dia',
+  'com.operasoftware.Opera',
+  'com.vivaldi.Vivaldi',
+];
+
+/** Whether an app takes clicks and typing in the background on this system (see MAC_NO_BACKGROUND_INPUT). */
+export const takesBackgroundInput = (id: string, platform: string): boolean => !(platform === 'darwin' && MAC_NO_BACKGROUND_INPUT.some((known) => matches(id, known)));
+
 /** Mail and messaging apps: their links aren't clicked (they lead to wherever a message says). */
 export const linkSensitive = (category: AppCategory): boolean => category === 'mail' || category === 'messaging';
 

@@ -3,7 +3,7 @@
  * app on a card (ComputerAccess) and agrees before it takes over the mouse and keyboard (FullControl); the computer
  * itself decides what each action may do (`apps/desktop/src/computer/`). These tools only ask it and report.
  */
-import { ComputerActionItem, type AppGrant, type ComputerScreenshot, type ControllerMethods, type PermissionAnswer, type PermissionRequest, type PreparedApp, type ScreenshotSize } from '@atelier/protocol';
+import { ComputerActionItem, takesBackgroundInput, type AppGrant, type ComputerScreenshot, type ControllerMethods, type PermissionAnswer, type PermissionRequest, type PreparedApp, type ScreenshotSize } from '@atelier/protocol';
 import type { BlobStore } from '../store/blobs.ts';
 import { textOutput, type DescribeContext, type Tool, type ToolOutput } from './types.ts';
 
@@ -15,6 +15,26 @@ export interface ComputerToolDeps {
   blobs: Pick<BlobStore, 'put'>;
   /** How large this session's model takes screenshots. */
   size(sessionId: string): Promise<ScreenshotSize>;
+  /**
+   * What the person asked for themselves: `all` when the session runs in Bypass, and the text of their own recent messages
+   * (not a co-op guest's), where an app named outright is allowed without a card. Absent: every new app asks.
+   */
+  wanted?(sessionId: string): Promise<{ all: boolean; said: string }>;
+}
+
+/** Words before or after an app's name that people leave out when they name it ("chrome" for Google Chrome). */
+const VENDORS = /^(google|microsoft|apple|adobe|mozilla|jetbrains|the)\s+/i;
+const SUFFIXES = /\s+(browser|app|desktop)$/i;
+
+/**
+ * Whether the person named an app in their own words: its name, or its name without the vendor or a "Browser"/"App"
+ * suffix, as a whole word (any case). Names under three letters only count in full.
+ */
+export function namedIn(said: string, name: string): boolean {
+  const full = name.trim().replace(/\.app$/i, '');
+  const short = full.replace(VENDORS, '').replace(SUFFIXES, '');
+  const names = [...new Set([full, full.replace(VENDORS, ''), full.replace(SUFFIXES, ''), short])].filter((n, i) => n.length >= 3 || (i === 0 && n.length > 0));
+  return names.some((n) => new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'iu').test(said));
 }
 
 const TIER_WORDS: Record<AppGrant['tier'], string> = { view: 'view only (screenshots)', click: 'click only (left clicks and scrolling)', full: 'full' };
@@ -107,13 +127,21 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
         const prepared = await deps.call(ctx.sessionId, 'access.prepare', { names: apps });
         const refused = prepared.apps.filter((p) => p.denied || p.tier === null);
         // An app it has with less than it could get comes up again: asking again is how it gets more.
-        const pending = prepared.apps
+        let pending = prepared.apps
           .filter((p) => !p.denied && p.tier !== null && (p.granted === null || (p.maxTier !== null && TIER_RANK[p.granted] < TIER_RANK[p.maxTier])))
           .map((p) => (p.granted ? { ...p, tier: p.maxTier } : p));
         const notes = [
           ...prepared.unknown.map((name) => `No app called "${name}" is on this computer.`),
           ...refused.map((p) => (p.denied ? `${p.app.name} is on the person's denied list: don't ask for it again.` : `${p.app.name} can't be used: it's part of the system or Atelier itself.`)),
         ];
+        // What the person asked for outright needs no card: an app they named, or any app in Bypass. Only new apps, at their
+        // usual tier: an app the person gave less on a card keeps what they picked until they allow more there.
+        const wanted = pending.length ? await deps.wanted?.(ctx.sessionId) : undefined;
+        const named = wanted ? pending.filter((p) => p.granted === null && (wanted.all || namedIn(wanted.said, p.app.name))) : [];
+        if (named.length) {
+          const { allowed } = await deps.call(ctx.sessionId, 'access.allow', { ids: named.map((p) => p.app.id) });
+          pending = pending.filter((p) => !allowed.includes(p.app.id) && !(wanted?.all && p.granted !== null));
+        } else if (wanted?.all) pending = pending.filter((p) => p.granted === null);
         if (pending.length) {
           const answer = await deps.approve(
             ctx.sessionId,
@@ -128,8 +156,15 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
         if (state.mode === 'full') return textOutput([fullControlText(state.denied, state.platform), ...notes].join('\n'));
         if (!state.apps.length) return textOutput(['You may use no apps on this computer.', ...notes].join('\n'), true);
         const limited = state.apps.some((g) => g.tier !== 'full') ? ` ${MORE}` : '';
+        const viewOnly = state.apps.filter((g) => !takesBackgroundInput(g.app.id, state.platform)).map((g) => g.app.name);
         const how = state.background
-          ? 'You work in the background, in one app at a time, without the person’s mouse and keyboard: take a Screenshot with `app` to pick it (OpenApp opens one); your actions then go to that window. Dragging and zooming need Full control (FullControl, which asks the person).'
+          ? [
+              'You work in the background, in one app at a time, without the person’s mouse and keyboard: take a Screenshot with `app` to pick it (OpenApp opens one); your actions then go to that window.',
+              viewOnly.length ? `${viewOnly.join(', ')} only ${viewOnly.length === 1 ? 'shows' : 'show'} screenshots in the background: to click, type or scroll there, ask for Full control with FullControl.` : '',
+              'Dragging and zooming need Full control too, and so does an app that ignores what you do in the background (nothing changes on the next screenshot): ask with FullControl, which asks the person.',
+            ]
+              .filter(Boolean)
+              .join(' ')
           : 'Taking over the mouse and keyboard (ComputerAction) asks the person first. Take a Screenshot to see them.';
         return textOutput([`You may use: ${grantsText(state.apps)}. ${how}${limited}`, ...notes].join('\n'));
       } catch (e) {

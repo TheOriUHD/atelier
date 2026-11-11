@@ -4,6 +4,13 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Computer use in the background works again after you stop it with Esc.** Holding Esc during Full control locked the computer-use helper against all input until the next Full control, so a later Background session's clicks and typing were all refused and nothing happened. The lock now lifts when the turn that was stopped ends.
+- **Apps you name yourself are allowed without a card.** When your own messages in the conversation name an app ("keep browsing in Chrome"), the assistant may use it at once, at its usual level. The name counts as people say it (Chrome for Google Chrome, Brave for Brave Browser, Word for Microsoft Word), as a whole word. In Bypass no app asks. Only your own messages count, not a co-op guest's, the assistant's or a screen's, and only on this computer's own backend. Taking over the mouse and keyboard still asks.
+- **Nothing shows on your screen while Atelier works in the background.** The note below the menu bar ("Atelier is working in …") is gone.
+- **Chrome-family browsers ask for Full control instead of failing silently.** On a Mac, Chrome, Edge, Brave, Arc, Opera and Vivaldi ignore clicks and typing sent to a window in the background (checked on a Mac: only their screenshots work). The assistant is told so when it gets the app, a background click there says to ask for Full control with FullControl, and any app that ignores background input gets the same advice.
+- **A background screenshot finds an app by part of its name** ("chrome" for Google Chrome), as opening an app does.
+- **Releases rehearse first.** `pnpm release` runs the Linux and Windows build machines' test steps on the commit (the terminal app's tests in a real terminal, with CI set) side by side before anything is tagged; `pnpm release --rehearse` runs only that, in about two minutes.
+
 ## [0.6.0] — 2026-11-10
 
 - **Atelier CLI: Atelier in the terminal.** `atelier` in a project folder starts a Code session there, laid out like the terminal coding agents people know: the transcript printed as it finishes, each step one line (`● Read src/app.ts · 84 lines`, edits with their changed lines, commands with their last output), the line while it works, and a footer with the mode, the context, the connection and the model. Install with `curl -fsSL https://updates.atelierhq.dev/cli | sh` (Windows: `irm https://updates.atelierhq.dev/cli.ps1 | iex`): it installs for the person alone, brings its own Node.js and runner, and updates itself (`atelier update`), each version checked against the release key.
