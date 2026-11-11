@@ -31,6 +31,14 @@ final class WindowChoiceTests: XCTestCase {
     XCTAssertNil(WindowChoice.frontmost([], pids: [20]))
   }
 
+  func testFrontmostPrefersAWindowWithATitle() {
+    let popup = WindowInfo(id: 1, pid: 20, layer: 0, bounds: CGRect(x: 0, y: 25, width: 640, height: 480))
+    let browser = WindowInfo(id: 2, pid: 20, layer: 0, bounds: CGRect(x: 0, y: 25, width: 1200, height: 800), title: "New Tab")
+    XCTAssertEqual(WindowChoice.frontmost([popup, browser], pids: [20])?.id, 2)
+    // Without a titled one, the frontmost untitled window.
+    XCTAssertEqual(WindowChoice.frontmost([popup], pids: [20])?.id, 1)
+  }
+
   func testFrontmostAcrossTheAppsProcesses() {
     let list = [window(1, pid: 10), window(2, pid: 21), window(3, pid: 20)]
     XCTAssertEqual(WindowChoice.frontmost(list, pids: [20, 21])?.id, 2)

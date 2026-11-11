@@ -117,9 +117,11 @@ enum SkyLight {
   /// is let go of first (nothing is sent to any other app).
   static func makeKey(pid: pid_t, window: CGWindowID) throws {
     guard let psn = processSerialNumber(pid) else { throw RPCError.unsupported("the app's process can't be reached") }
+    // Always sent, even when Accessibility names the window as the key one: an inactive app reports its last key window
+    // (Chrome does), and a shortcut sent without the records reaches an app whose window isn't key, which makes it bring
+    // a window forward itself (Chrome on cmd+L, every time, on a Mac where it had been active before).
     let current = keyWindow(of: pid)
-    if current == window { return }
-    if let current { post(focusRecord(window: current, direction: 2), to: psn) ; usleep(120_000) }
+    if let current, current != window { post(focusRecord(window: current, direction: 2), to: psn); usleep(120_000) }
     guard post(focusRecord(window: window, direction: 1), to: psn) else {
       throw RPCError.unsupported("the window server refused to focus the app's window")
     }

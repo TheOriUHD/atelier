@@ -12,14 +12,19 @@ public struct WindowInfo: Equatable, Sendable {
   public var bounds: CGRect
   public var alpha: Double
   public var onScreen: Bool
+  /// The window's title (it takes the Screen Recording permission to read); nil when it has none.
+  public var title: String?
 
-  public init(id: CGWindowID, pid: pid_t, layer: Int, bounds: CGRect, alpha: Double = 1, onScreen: Bool = true) {
+  public init(
+    id: CGWindowID, pid: pid_t, layer: Int, bounds: CGRect, alpha: Double = 1, onScreen: Bool = true, title: String? = nil
+  ) {
     self.id = id
     self.pid = pid
     self.layer = layer
     self.bounds = bounds
     self.alpha = alpha
     self.onScreen = onScreen
+    self.title = title
   }
 
   /// One entry of the window list; nil when it lacks a number, an owner or bounds.
@@ -32,7 +37,8 @@ public struct WindowInfo: Equatable, Sendable {
     self.init(
       id: number, pid: pid, layer: (entry[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0, bounds: bounds,
       alpha: (entry[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1,
-      onScreen: (entry[kCGWindowIsOnscreen as String] as? NSNumber)?.boolValue ?? false)
+      onScreen: (entry[kCGWindowIsOnscreen as String] as? NSNumber)?.boolValue ?? false,
+      title: (entry[kCGWindowName as String] as? String).flatMap { $0.isEmpty ? nil : $0 })
   }
 }
 
@@ -49,11 +55,14 @@ public enum WindowChoice {
 
   /// The app's frontmost normal window: the first of its processes' in a front-to-back window list that is on a display
   /// (some apps park windows far outside every display; with no displays given, that isn't checked).
+  /// The app's frontmost normal window, one with a title first: an app's untitled windows are mostly passing ones (a
+  /// browser's pop-up or sign-in sheet, which Esc closes), its main windows carry a title (a browser's, the tab's).
   public static func frontmost(_ windows: [WindowInfo], pids: Set<pid_t>, displays: [CGRect] = []) -> WindowInfo? {
-    windows.first { window in
+    let candidates = windows.filter { window in
       pids.contains(window.pid) && isNormal(window)
         && (displays.isEmpty || displays.contains { $0.intersects(window.bounds) })
     }
+    return candidates.first { $0.title != nil } ?? candidates.first
   }
 
   /// The window number a `bg.*` call names, as `window.capture` wrote it.
