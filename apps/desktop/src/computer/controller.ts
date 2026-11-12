@@ -819,6 +819,16 @@ export class ComputerController {
     switch (item.action) {
       case 'type': {
         if (!item.text) return refuse('Nothing to type.');
+        // Aimed at a field (an element of the screenshot, or a coordinate): it is clicked first, so the text goes there.
+        if (item.coordinate) {
+          const at = point(item.coordinate);
+          const where = await check(at, 'click');
+          if (where) return refuse(where);
+          const clicked = await helper.call('bg.click', { window: window.id, ...at, button: 'left', count: 1, modifiers: [] });
+          if (clicked.fronted) return refuse(fronted(clicked)!);
+          this.cursor(state, window.id, at, true);
+          if (this.deps.platform !== 'darwin') await sleep(150);
+        }
         const why = await checkKeys();
         if (why) return refuse(why);
         // macOS: the helper clears the field the way the app takes it (cmd+A selects nothing in a Chromium app's page).

@@ -441,6 +441,17 @@ describe('in the background', () => {
     expect(overlay).toEqual([]);
   });
 
+  it('types into the field a type action aims at, clicking it first', async () => {
+    helper.background = true;
+    await controller.grant('local', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
+    await ask('screenshot', { app: 'TextEdit', size: SIZE });
+    const { results } = await ask('control.batch', { actions: [{ action: 'type', text: 'Berlin', coordinate: [200, 150] }], size: SIZE });
+    expect(results).toEqual([{ action: 'type', ok: true }]);
+    const order = helper.calls.map((c) => c.method).filter((m) => m === 'bg.click' || m === 'bg.type');
+    expect(order).toEqual(['bg.click', 'bg.type']);
+    expect(helper.did('bg.click').at(-1)?.params).toMatchObject({ x: 500, y: 350 });
+  });
+
   it('shows the software cursor where it clicks, keeps it there while typing, and takes it away at the end', async () => {
     helper.background = true;
     await controller.grant('local', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
