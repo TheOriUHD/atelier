@@ -311,6 +311,19 @@ final class BackgroundRequestTests: XCTestCase {
     BgClickParams(window: window, x: x, y: y, button: button, count: count, modifiers: modifiers)
   }
 
+  func testRowsWithAnActionAreNotMenus() {
+    // Maps' recent route: no value, the row's own action and "More".
+    XCTAssertTrue(Background.isActionRow(value: nil, actions: ["AXPress", "AXShowMenu", "Name:Alexanderplatz\nTarget:0x0\nSelector:(null)", "Name:More\nTarget:0x0\nSelector:(null)"]))
+    // A real pop-up button shows its choice.
+    XCTAssertFalse(Background.isActionRow(value: "Medium", actions: ["AXPress", "AXShowMenu"]))
+    XCTAssertFalse(Background.isActionRow(value: nil, actions: ["AXPress", "AXShowMenu"]))
+    XCTAssertTrue(Background.menuRoles.contains("AXPopUpButton"))
+    // The row's own action, never its menu.
+    XCTAssertEqual(Background.rowAction(["AXPress", "Name:Alexanderplatz\nTarget:0x0\nSelector:(null)", "Name:More\nTarget:0x0\nSelector:(null)"]), "Name:Alexanderplatz\nTarget:0x0\nSelector:(null)")
+    XCTAssertNil(Background.rowAction(["AXPress", "Name:More\nTarget:0x0\nSelector:(null)"]))
+    XCTAssertNil(Background.rowAction(["AXPress", "AXShowMenu"]))
+  }
+
   func testNativeControlsArePressedAndChromiumClicked() throws {
     // A plain click on a native app's control goes through AXPress; Chromium pages, other buttons, double clicks and
     // clicks with modifiers get the real click.

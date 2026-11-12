@@ -316,7 +316,7 @@ enum Background {
     for _ in 0..<3 {
       guard let node = current else { return false }
       if Inspect.role(of: node) == "AXPopUpButton" {
-        guard Chromium.inPage(node) else { return true }
+        guard Chromium.inPage(node) else { return !isActionRow(value: Inspect.copy(node, kAXValueAttribute), actions: Inspect.actions(of: node)) }
         let children = (Inspect.copy(node, kAXChildrenAttribute) as? [AXUIElement]) ?? []
         return children.contains { ["AXMenu", "AXMenuItem"].contains(Inspect.role(of: $0) ?? "") }
       }
@@ -324,6 +324,38 @@ enum Background {
     }
     return false
   }
+
+  /// A pop-up button that is really a row with an action of its own: SwiftUI's rows with a menu attached (Maps' recent
+  /// routes: "Alexanderplatz, From Brandenburg Gate, More") show to Accessibility as a pop-up button with no value and
+  /// named custom actions, and a click on them does the row's action; only their "More" opens a menu. A real pop-up
+  /// shows its current choice as its value. If a click opens a menu after all, it is closed again and reported.
+  static func isActionRow(value: Any?, actions: [String]) -> Bool {
+    if let text = value as? String, !text.isEmpty { return false }
+    return actions.contains { $0.hasPrefix("Name:") }
+  }
+
+  /// The row's own action among its custom actions ("Name:Alexanderplatz…"): the first one named, unless that is the
+  /// menu ("More"). Nil when it has none.
+  static func rowAction(_ actions: [String]) -> String? {
+    actions.filter { $0.hasPrefix("Name:") }.first { !$0.hasPrefix("Name:More\n") && $0 != "Name:More" }
+  }
+
+  /// The action row a plain click on `hit` lands on (`hit` itself or a label, icon or group up to three levels below it).
+  static func actionRow(from hit: AXUIElement) -> AXUIElement? {
+    var node: AXUIElement? = hit
+    for _ in 0...pressDepth {
+      guard let current = node, let role = Inspect.role(of: current) else { return nil }
+      if role == "AXPopUpButton" {
+        return isActionRow(value: Inspect.copy(current, kAXValueAttribute), actions: Inspect.actions(of: current)) ? current : nil
+      }
+      if !passiveRoles.contains(role) { return nil }
+      node = Inspect.parent(of: current)
+    }
+    return nil
+  }
+
+  /// Controls whose press opens their menu: these get the real click, which does what the person's click would.
+  static let menuRoles: Set<String> = ["AXPopUpButton", "AXMenuButton"]
 
   /// The window level of a menu that pops up (`NSPopUpMenuWindowLevel`).
   static let popUpMenuLevel = 101
@@ -361,7 +393,17 @@ enum Background {
       throw RPCError.unsupported(Self.passwordField)
     }
     if let hit, let role, Chromium.textRoles.contains(role) { Chromium.remember(window.pid, hit) }
-    if pressesInstead(click, chromium: chromium), let hit, let control = pressable(hit) {
+    // A row with its own action (Maps' recent routes) ignores a posted click while covered: its action does the same.
+    if pressesInstead(click, chromium: chromium), let hit, let row = actionRow(from: hit), let action = rowAction(Inspect.actions(of: row)) {
+      var done = false
+      let fronted = try keepingFront(window.pid) {
+        try input.ready()
+        done = try outcome(AXUIElementPerformAction(row, action as CFString)) == .pressed
+        if done { usleep(50_000) }
+      }
+      if done { return fronted }
+    }
+    if pressesInstead(click, chromium: chromium), let hit, let control = pressable(hit), !menuRoles.contains(Inspect.role(of: control) ?? "") {
       var pressed = false
       let fronted = try keepingFront(window.pid) {
         pressed = try press(control, input: input)

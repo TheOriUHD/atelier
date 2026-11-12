@@ -63,7 +63,9 @@ enum Elements {
     let value = Inspect.copy(element, kAXValueAttribute)
     let text = value as? String
     let name = Inspect.title(title: title, description: description ?? help, value: role == "AXTextField" || role == "AXTextArea" ? nil : text, secure: secure) ?? ""
-    var item = CapturedElement(role: shortRole(role, subrole: subrole), name: name, value: nil, rect: ScreenRect(frame))
+    // A row with its own action (Maps' recent routes) shows as a pop-up button but is clicked like a button.
+    let row = role == "AXPopUpButton" && Background.isActionRow(value: value, actions: Inspect.actions(of: element))
+    var item = CapturedElement(role: row ? "button" : shortRole(role, subrole: subrole), name: name, value: nil, rect: ScreenRect(frame))
     if secure {
       item.value = nil
     } else if let text, role == "AXTextField" || role == "AXTextArea" || role == "AXSearchField" || role == "AXComboBox" {
