@@ -95,6 +95,9 @@ interface SessionState {
   pointer?: { window: string; x: number; y: number };
 }
 
+/** Digits and arithmetic signs only, with a digit: what a model sends as a `key` when it means to type a number or a sum. */
+const TYPED_AS_KEY = /^(?=.*\d)[\d.,+\-*/×÷%=()^ ]{2,}$/;
+
 /** How long a screenshot waits for the first window of an app it just opened. */
 const OPEN_WAIT_MS = 5000;
 
@@ -838,8 +841,8 @@ export class ComputerController {
         return done(fronted(typed));
       }
       case 'key': {
-        // A number given as a key ("2340") is no key's name: it is typed, as the person would.
-        if (/^\d[\d.,]+$/.test(item.text?.trim() ?? '')) return this.actInBackground(backend, sessionId, state, { ...item, action: 'type', text: item.text!.trim() }, size, policy).then((r) => ({ ...r, action: 'key' }));
+        // A number or a sum given as a key ("2340", "2340*17.5%") is no key's name: it is typed, as the person would.
+        if (TYPED_AS_KEY.test(item.text?.trim() ?? '')) return this.actInBackground(backend, sessionId, state, { ...item, action: 'type', text: item.text!.trim() }, size, policy).then((r) => ({ ...r, action: 'key' }));
         const keys = parseKeys(item.text ?? '');
         if (!keys.length) return refuse('Which keys? Like "cmd+s" or "return".');
         const why = await checkKeys();

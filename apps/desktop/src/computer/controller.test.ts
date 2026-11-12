@@ -445,10 +445,10 @@ describe('in the background', () => {
     helper.background = true;
     await controller.grant('local', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
     await ask('screenshot', { app: 'TextEdit', size: SIZE });
-    const { results } = await ask('control.batch', { actions: [{ action: 'key', text: '2340' }, { action: 'key', text: '7' }], size: SIZE });
-    expect(results).toEqual([{ action: 'key', ok: true }, { action: 'key', ok: true }]);
-    expect(helper.did('bg.type').map((c) => (c.params as { text: string }).text)).toEqual(['2340']);
-    expect(helper.did('bg.key').map((c) => (c.params as { keys: string[] }).keys)).toEqual([['7']]);
+    const { results } = await ask('control.batch', { actions: [{ action: 'key', text: '2340' }, { action: 'key', text: '2340*17.5%' }, { action: 'key', text: '7' }, { action: 'key', text: 'cmd+1' }], size: SIZE });
+    expect(results.map((r) => r.ok)).toEqual([true, true, true, true]);
+    expect(helper.did('bg.type').map((c) => (c.params as { text: string }).text)).toEqual(['2340', '2340*17.5%']);
+    expect(helper.did('bg.key').map((c) => (c.params as { keys: string[] }).keys)).toEqual([['7'], ['cmd', '1']]);
   });
 
   it('types into the field a type action aims at, clicking it first', async () => {
