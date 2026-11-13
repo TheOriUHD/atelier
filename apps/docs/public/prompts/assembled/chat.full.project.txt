@@ -129,9 +129,226 @@ Answer as the club secretary would.
 
 # Notes on the first message: 0
 
-# Tools: 7, 8672 characters of JSON
+# Tools: 13, 17216 characters of JSON
 
 [
+  {
+    "name": "TaskStop",
+    "description": "Stops background tasks of this conversation: sub-agents started with the Agent tool's `run_in_background`, and loops.\n- `task_id` is the ID the start reported (the task id of the sub-agent). `task_ids` takes several at once, and `all: true` stops every task that is still running: one call, not one per task.\n- Use it for work you no longer need, such as sub-agents whose question was answered another way, or everything when the person tells you to stop the background work. A stopped sub-agent sends no report.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "task_id": {
+          "type": "string"
+        },
+        "task_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "all": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TodoWrite",
+    "description": "Keeps the task list for this session, which the person watches while you work.\n- Use it for work with three or more distinct steps, for several requests in one message, or for a plan that was just approved. Skip it for one small change or a question.\n- Send the whole list every time. Each item has `content` in the imperative (\"Run the tests\"), `activeForm` in the continuous form shown while it is under way (\"Running the tests\") and a `status`.\n- Keep exactly one item `in_progress` while you work (one per track while sub-agents work on several at once). Mark an item `completed` as soon as it is done, not in batches.\n- Completed means really done: not with failing tests, not half-built, not blocked. When something blocks an item, keep it open and add one that describes the blocker.\n- Add follow-up items you discover, and remove items that are no longer needed.\n- List only your own work. Never add an item for the person (testing, approving, deciding, installing); say what you need from them in your message instead.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "todos": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "description": "What to do, in the imperative (\"Run the tests\")."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "in_progress",
+                  "completed"
+                ]
+              },
+              "activeForm": {
+                "type": "string",
+                "maxLength": 300,
+                "description": "The same step in the continuous form, shown while it is in progress (\"Running the tests\")."
+              }
+            },
+            "required": [
+              "content",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "todos"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "AskUser",
+    "description": "Puts up to four questions with fixed choices to the person and waits for their answers.\n- Use it when you can't go on without a choice that belongs to the person: a preference, the scope, a trade-off with no clear default. Don't use it for something you can find out yourself, or to get permission for a tool call (the permission system asks for that).\n- Each question is the full question ending with \"?\", a `header` of at most 12 characters for its chip, and 2 to 4 options, each with a short `label` (1 to 5 words) and a `description` of what choosing it means. Put the option you recommend first and add \"(Recommended)\" to its label.\n- The person can always type an answer of their own, so don't add an \"Other\" option.\n- Set `multiSelect` when the choices aren't exclusive.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "The full question, ending with a question mark."
+              },
+              "header": {
+                "type": "string",
+                "maxLength": 12,
+                "description": "A label of at most 12 characters for the question's chip (\"Database\")."
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 4,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "description": "The choice in 1 to 5 words."
+                    },
+                    "description": {
+                      "type": "string",
+                      "maxLength": 300,
+                      "description": "What choosing this means."
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "multiSelect": {
+                "type": "boolean",
+                "description": "Whether several options can be chosen."
+              }
+            },
+            "required": [
+              "question",
+              "header",
+              "options",
+              "multiSelect"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "questions"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Agent",
+    "description": "Hands a self-contained task to a sub-agent that works in its own context and returns one report.\n- Use it when substantial independent work genuinely benefits from parallel execution or an isolated review. A sub-agent repeats context and tool setup, so delegation must save more work than it adds. Prefer direct tools for quick tasks; never delegate merely to look busy.\n- Don't use it for a file you can name, a read of two files, or anything you already delegated.\n- Agents started in one message run in parallel. Parallelize investigation and review, but make changes yourself or through one writing agent whose brief names the files it owns, so two agents never edit the same files.\n- `prompt` must be complete and self-contained, because the agent can't see this conversation: the goal and why, what is known or ruled out, the paths and lines involved, whether to change files or only investigate, and what to report and at what length.\n- Open the brief with the project and the agent's role. The agent gets the project's ATELIER.md and other instruction files as you do; point it to the notes files they link that bear on its task.\n- The report reaches only you. Tell the person what matters, and check edits an agent claims before you report them as done.\n- `run_in_background: true` starts the agent and returns at once, so you can go on working; its result arrives later as a note in this conversation, and a conversation that has gone quiet resumes for it. Use it when there is useful work to do meanwhile or for long investigations running side by side, and leave it off when your next step depends on the report. Until the note arrives you don't know what the agent found: don't guess, and don't wait for it with sleep or repeated checks. TaskStop with its task id stops it if you no longer need it.\n\nSub-agent types:\n- general-purpose: Any self-contained task, with your tools except asking the person questions and starting sub-agents.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "A label of 3 to 5 words for the task, shown to the person."
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50000,
+          "description": "The complete, self-contained brief for the sub-agent."
+        },
+        "subagent_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 130,
+          "description": "One of the sub-agent types listed in this description."
+        },
+        "run_in_background": {
+          "type": "boolean",
+          "description": "Return at once; the result arrives later as a note."
+        }
+      },
+      "required": [
+        "description",
+        "prompt",
+        "subagent_type"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "SendMessage",
+    "description": "Sends a message to another of the person's sessions, or to one of your sub-agents while it runs.\n- Use it only when the person asks you to tell, ask or hand something to another session, or when a running sub-agent needs a correction or information it lacks. Don't start conversations with other sessions on your own.\n- `to` is a session id (ListSessions finds the one the person means), or a sub-agent's task id as the Agent tool returned it.\n- The message arrives in that conversation as a note naming this session, so write it to stand on its own. An answer, if one comes, arrives here as a note: go on with your work and don't wait for it with sleep or repeated checks.\n- The result says whether the receiver reads it at its next step, started a turn for it, or has it waiting, and why.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A session id, or a sub-agent's task id."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000,
+          "description": "The message, complete in itself."
+        }
+      },
+      "required": [
+        "to",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "ListSessions",
+    "description": "Lists the person's other chats and Code sessions, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Words to look for in titles and messages."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
   {
     "name": "Time",
     "description": "Returns the current date, time and time zone. Use it when the time matters: how long ago something happened, how long a task has run, a deadline or \"later today\". The date in the environment block is the start of the session and can be days old.",

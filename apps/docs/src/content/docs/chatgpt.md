@@ -132,7 +132,7 @@ stop if it differs.
 
 - **Pro** is ChatGPT's most capable setting: slow, with its own much smaller allowance. The effort control draws it like
   Ultracode as a look only; it sends Max, with none of Ultracode's behavior.
-- **Starting level:** Medium in Chat, High in Cowork and Code.
+- **Starting level:** Medium in Chat, High in Code.
 - **If the list cannot be read** (not signed in, the page not loaded), Atelier lists a single model, **ChatGPT Chat**, that uses
   whatever model and setting the page already has; the effort levels then only change what the model is asked.
 - **While ChatGPT thinks**, the status row reads "Thinking…", then "Still thinking, a high effort setting can take a few

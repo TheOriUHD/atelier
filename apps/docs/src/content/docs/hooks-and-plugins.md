@@ -1,6 +1,6 @@
 ---
 title: Hooks and plugins
-description: Run your own commands at points of a Cowork or Code session with hooks, and bundle skills, commands, agents and hooks into plugins you install from a marketplace.
+description: Run your own commands at points of a Code session or a chat in a folder with hooks, and bundle skills, commands, agents and hooks into plugins you install from a marketplace.
 ---
 
 Two ways to extend Atelier beyond instructions and skills. **Hooks** are shell commands that run at fixed points of a
@@ -14,7 +14,7 @@ A hook is a command Atelier runs for you at a point of a turn. Typical uses: ref
 format a file after the model edits it, add a fact to the model's context when a session starts, or make the model keep
 going until the tests pass.
 
-Hooks run in **Cowork and Code**, where a session has a folder. Chat has no hooks. They run for a sub-agent's tool calls
+Hooks run where a session has a folder: in **Code**, and in a chat you gave a folder. A chat without one runs no hooks. They run for a sub-agent's tool calls
 too (`PreToolUse` and `PostToolUse` only).
 
 ### Where hooks come from

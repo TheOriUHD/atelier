@@ -762,9 +762,9 @@ describe('GitHub Copilot', () => {
 });
 
 describe('sessions without a folder', () => {
-  it('get no scratch folder on the web, and none in Chat', async () => {
+  it('get no scratch folder on the web without a desktop to make one, in Code or a chat', async () => {
     expect(await code(client.call('sessions.create', { mode: 'code', scratch: {} }))).toBe('workspace_unavailable');
-    expect(await code(client.call('sessions.create', { mode: 'chat', scratch: {} }))).toBe('unsupported');
+    expect(await code(client.call('sessions.create', { mode: 'chat', scratch: {} }))).toBe('workspace_unavailable');
     expect(await client.call('workspaces.list', {})).toEqual([]);
   });
 

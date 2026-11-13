@@ -574,7 +574,7 @@ describe('ChatService', () => {
     expect(terminal).not.toContain('artifact');
   });
 
-  it('with Chat and Cowork in one, gives a chat Cowork’s tools on a sandbox made only when one runs; temporary chats stay plain', async () => {
+  it('gives a chat Cowork’s tools on a sandbox made only when one runs; old Cowork tasks read as chats; temporary chats stay plain', async () => {
     let made = 0;
     const sandbox = { id: 'sb', root: '/sandbox', home: '/home/ada', pathSep: '/', sandbox: { confined: true } } as unknown as Workspace;
     const chat = service(undefined, undefined, { chatSandboxAvailable: () => true, chatSandbox: async () => (made++, sandbox) });
@@ -586,45 +586,19 @@ describe('ChatService', () => {
       const request = seen.find((r) => !r.system.some((b) => b.text.includes('short title')))!;
       return { tools: request.tools!.map((t) => t.name), system: request.system.map((b) => b.text).join('\n') };
     };
-    // Off (the default): a chat as before.
-    const plain = await turn('chat');
-    expect(plain.tools).not.toContain('Write');
-    expect(plain.tools).not.toContain('TodoWrite');
-    settings.capabilities.unifiedChat = true;
-    try {
-      const merged = await turn('chat');
-      expect(merged.tools).toEqual(expect.arrayContaining(['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'AskUser', 'Agent', 'artifact']));
-      expect(merged.system).toContain('# Working on tasks');
-      // A quick question made no sandbox: it is made when a file or command tool first runs.
-      expect(made).toBe(0);
-      // An old Cowork task reads as a merged chat: Chat's prompt with the task part, not Cowork's own.
-      const old = await turn('work');
-      expect(old.system).toContain('# Working on tasks');
-      expect(old.system).not.toContain('You are the task agent in Cowork');
-      // A temporary chat keeps to Chat's tools.
-      const temporary = await turn('chat', 'fresh');
-      expect(temporary.tools).not.toContain('TodoWrite');
-      expect(temporary.system).not.toContain('# Working on tasks');
-    } finally {
-      settings.capabilities.unifiedChat = false;
-    }
-  });
-
-  it('keeps a chat’s sandbox tools to its sandbox: a chat left in a folder by Chat and Cowork in one gets none there', async () => {
-    const toolsIn = async (workspace: Workspace) => {
-      seen.length = 0;
-      const chat = service(undefined, undefined, { chatSandboxAvailable: () => true, chatSandbox: async () => workspace, workspace: async () => workspace });
-      const s = await repo.create({ mode: 'chat', workspaceId: workspace.id });
-      await chat.send(s.id, [{ type: 'text', text: 'Hi' }]);
-      await chat.settle(s.id);
-      return seen.find((r) => !r.system.some((b) => b.text.includes('short title')))!.tools!.map((t) => t.name);
-    };
-    const sandbox = { id: 'sb', root: '/sandbox', home: '/home/ada', pathSep: '/', sandbox: { confined: true } } as unknown as Workspace;
-    const folder = { id: 'f', root: '/home/ada/project', home: '/home/ada', pathSep: '/' } as unknown as Workspace;
-    expect(await toolsIn(sandbox)).toEqual(expect.arrayContaining(['Bash', 'Read']));
-    const inFolder = await toolsIn(folder);
-    expect(inFolder).not.toContain('Bash');
-    expect(inFolder).not.toContain('Read');
+    const merged = await turn('chat');
+    expect(merged.tools).toEqual(expect.arrayContaining(['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'AskUser', 'Agent', 'artifact']));
+    expect(merged.system).toContain('# Working on tasks');
+    // A quick question made no sandbox: it is made when a file or command tool first runs.
+    expect(made).toBe(0);
+    // An old Cowork task reads as a chat: Chat's prompt with the task part, not Cowork's own.
+    const old = await turn('work');
+    expect(old.system).toContain('# Working on tasks');
+    expect(old.system).not.toContain('You are the task agent in Cowork');
+    // A temporary chat keeps to Chat's own tools.
+    const temporary = await turn('chat', 'fresh');
+    expect(temporary.tools).not.toContain('TodoWrite');
+    expect(temporary.system).not.toContain('# Working on tasks');
   });
 
   it('offers the clock everywhere and the usage figures only where the model\'s provider has some', async () => {
@@ -865,7 +839,7 @@ describe('ChatService', () => {
     expect(asked).toContain('fake/code');
   });
 
-  it('with Chat and Cowork in one, carries an old Cowork task on with Chat’s default model, not Cowork’s', async () => {
+  it('carries an old Cowork task on with Chat’s default model, not Cowork’s', async () => {
     const asked: string[] = [];
     const chat = service({
       resolve: async (ref) => {
@@ -876,15 +850,10 @@ describe('ChatService', () => {
     settings.models.defaults.chat = 'fake/chat';
     settings.models.defaults.work = 'fake/cowork';
     const old = await repo.create({ mode: 'work' });
-    settings.capabilities.unifiedChat = true;
-    try {
-      await chat.send(old.id, [{ type: 'text', text: 'Hi' }]);
-      await chat.settle(old.id);
-      expect(asked).toContain('fake/chat');
-      expect(asked).not.toContain('fake/cowork');
-    } finally {
-      settings.capabilities.unifiedChat = false;
-    }
+    await chat.send(old.id, [{ type: 'text', text: 'Hi' }]);
+    await chat.settle(old.id);
+    expect(asked).toContain('fake/chat');
+    expect(asked).not.toContain('fake/cowork');
   });
 
   it('sanitizes titles', () => {

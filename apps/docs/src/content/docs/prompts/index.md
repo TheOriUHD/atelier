@@ -15,7 +15,6 @@ here.
 | I want to… | Go to |
 |---|---|
 | Read Chat's system prompt | [Chat prompts](/prompts/chat/) |
-| Read Cowork's | [Cowork prompts](/prompts/cowork/) |
 | Read Code's | [Code prompts](/prompts/code/) |
 | Read the fragments (search, artifacts, memory), the sub-agent prompt, the optional safeguards and the instruction-file header | [Shared prompts](/prompts/shared/) |
 | Read the prompts for Auto mode review, compaction, memory updates, titles and web page questions | [Side prompts](/prompts/side-prompts/) |

@@ -407,7 +407,6 @@ describe('assembled prompts', () => {
       expect(schema(await assemble({ mode: 'chat', tier }))?.required, tier).toEqual(['command', 'identifier']);
     }
     expect(schema(await assemble({ mode: 'code', subagent: 'general-purpose' }))).toBeUndefined();
-    expect(schema(await assemble({ mode: 'work' }))).toBeUndefined();
   });
 
   it('point sessions without web search to the administrator, and Code nowhere', async () => {
@@ -430,7 +429,8 @@ describe('assembled prompts', () => {
     expect((await size({ mode: 'code' })).prefix).toBeLessThan(16_000 * 1.1);
     expect((await size({ mode: 'code' })).tools).toBeLessThan(18_000 * 1.1);
     expect((await size({ mode: 'chat' })).prefix).toBeLessThan(14_000 * 1.1);
-    expect((await size({ mode: 'work' })).prefix).toBeLessThan(11_000 * 1.1);
+    // A chat with its sandbox carries the task part too.
+    expect((await size({ mode: 'chat', sandbox: true })).prefix).toBeLessThan(20_000 * 1.1);
     expect((await size({ mode: 'code', tier: 'compact', skills: false })).tools).toBeLessThan(6_000 * 1.1);
     // Compact connector descriptions are cut to their first sentence.
     const connectors = await assemble({
@@ -528,18 +528,10 @@ describe('compact budget', () => {
     expect(cuts(a)).toEqual({ skills: false, connectors: false, instructions: false });
   });
 
-  it('fits a merged chat (Chat and Cowork in one) into a compact prompt without cutting anything', async () => {
-    const a = await assemble({ mode: 'chat', tier: 'compact', sandbox: true, unified: true });
-    expect(a.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['Bash', 'Write', 'Edit', 'TodoWrite', 'AskUser']));
-    expect(a.system.map((b) => b.text).join('')).toContain('Tasks: when the person asks for a piece of work');
-    expect(size(a)).toBeLessThanOrEqual(COMPACT_BUDGET_CHARS);
-    expect(cuts(a)).toEqual({ skills: false, connectors: false, instructions: false });
-  });
-
-  it('fits a chat with its sandbox into a compact prompt without cutting anything', async () => {
+  it('fits a chat with Cowork’s tools in its sandbox into a compact prompt without cutting anything', async () => {
     const a = await assemble({ mode: 'chat', tier: 'compact', sandbox: true });
-    expect(a.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['Bash', 'Read']));
-    expect(a.system.map((b) => b.text).join('')).toContain('This chat has its own sandbox folder');
+    expect(a.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['Bash', 'Read', 'Write', 'Edit', 'TodoWrite', 'AskUser']));
+    expect(a.system.map((b) => b.text).join('')).toContain('Tasks: when the person asks for a piece of work');
     expect(size(a)).toBeLessThanOrEqual(COMPACT_BUDGET_CHARS);
     expect(cuts(a)).toEqual({ skills: false, connectors: false, instructions: false });
   });

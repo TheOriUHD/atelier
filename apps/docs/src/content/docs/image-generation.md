@@ -3,9 +3,9 @@ title: Image generation
 description: Add image providers such as ComfyUI, Forge, OpenAI or Google, and any text model can make images and show them in the conversation, edit them when you ask, and save them to your folder.
 ---
 
-Add an image provider, and the assistant can make images in Chat, Code and Cowork. You ask in your own words, the text
+Add an image provider, and the assistant can make images in Chat and Code. You ask in your own words, the text
 model writes the prompt, and the image appears in the conversation while you watch it being made. Ask for a change and
-the model edits that image. In Code and Cowork it can save an image into your folder.
+the model edits that image. In Code and in a chat with a folder it can save an image into the folder.
 
 Image providers are separate from the [text providers](/providers/), and the same page adds [video providers](/video-generation/) and [audio providers](/audio-generation/). A text model calls the image model as a tool, so it
 works with any text model that can call tools, local ones included. Nothing changes until you add one: without an image
@@ -84,8 +84,8 @@ On local models you can ask for quality: `high` adds a second pass and a face fi
   conversation the image was made in. It needs an image model that takes a mask: OpenAI's GPT Image models, Stability AI,
   Ideogram, Amazon Bedrock's Stable Diffusion 3.5 Large, ComfyUI (SD 1.5, SDXL and the other checkpoint families it lists as able), Forge and AUTOMATIC1111, and SwarmUI. If the model in use can't, you are told, and
   the assistant offers one that can; it never quietly changes the whole picture instead.
-- **Save it.** In Code and Cowork, ask: "put it in public/hero.png". That's a file change like any other: it follows your
-  permissions, shows in Cowork's output files, and Rewind undoes it.
+- **Save it.** In Code or a chat with a folder, ask: "put it in public/hero.png". That's a file change like any other:
+  it follows your permissions, shows in a chat's output files, and Rewind undoes it in Code.
 - **Choose the model.** Set your default in **Settings › General**, or pick one for this conversation from the **+** menu
   under **Image model**. You can also just name one when you ask.
 

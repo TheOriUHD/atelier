@@ -33,8 +33,8 @@ The config folder holds what you could write by hand. Atelier watches it, so edi
 | Entry | What it is |
 |---|---|
 | `settings.json` | System settings, written by admins in Settings. See [Settings files](#settings-files). |
-| `AGENTS.md` | The **System AGENTS.md** (**Settings › Admin › Code**): instructions every Code session and Cowork task follows, for every account. |
-| `ATELIER.md` | On the desktop, your own personal instruction file for Code and Cowork. On a server, a system-level file read like `AGENTS.md`. |
+| `AGENTS.md` | The **System AGENTS.md** (**Settings › Admin › Code**): instructions every Code session and every chat in a folder follows, for every account. |
+| `ATELIER.md` | On the desktop, your own personal instruction file for Code and for chats in a folder. On a server, a system-level file read like `AGENTS.md`. |
 | `skills/`, `commands/`, `agents/` | Skills, slash commands and sub-agent definitions that belong to Atelier. See [Customize](/customize/). On the desktop, skills you install go to `~/.agents/skills` instead (see below). |
 | `skills-lock.json` | Which GitHub skills were installed from where (Settings › Skills › Install from GitHub). |
 | `plugins/cache/`, `plugins/installed.json` | Plugins Atelier installed, and the list of them. See [Hooks and plugins](/hooks-and-plugins/). |
@@ -58,8 +58,8 @@ On the desktop, Atelier also reads and writes folders it shares with other agent
 | `blobs/` | Attachments, images, generated files and other large content, each stored once under its SHA-256 name (`blobs/ab/cd/abcd…`). The database says what refers to what. |
 | `secret.key` | Server only: the 32-byte key that encrypts stored secrets, base64, mode 0600. Absent when `ATELIER_SECRET_KEY` is set. |
 | `screen-lock.json` | Desktop, **Run on this computer** only: the optional screen lock (a scrypt hash, auto-lock minutes, failed-attempt count). Deleting it removes the lock. See [Security](/security/#screen-lock-on-this-computer). |
-| `scratch-workspaces/<account id>/scratch-<date>-<hex>/` | The empty folders (`<account id>` is an internal id, not a username) Code and Cowork sessions get when you choose **No folder**. They stay on disk when the session is deleted. |
-| `chat-sandboxes/<account id>/chat-<date>-<hex>/` | Desktop only: the folder of a chat's sandbox (the model's Bash and Read in Chat). On a server the sandbox is in its own container instead. |
+| `scratch-workspaces/<account id>/scratch-<date>-<hex>/` | The empty folders (`<account id>` is an internal id, not a username) Code sessions get when you choose **No folder**, and the ones former Cowork tasks were given. They stay on disk when the session is deleted. |
+| `chat-sandboxes/<account id>/chat-<date>-<hex>/` | Desktop only: the folder of a chat's sandbox, where a chat without a folder runs its file and command tools. On a server the sandbox is in its own container instead. |
 | `ssh/` | Desktop only: a small askpass helper Atelier writes to answer `ssh` prompts for saved connections, and short-lived `askpass-*.log` files that record the questions `ssh` asked (never your answers). |
 | `sandbox/id_ed25519` | Server only: the key the server uses to log in to the sandbox container. Its public half is published to the `sandbox-keys` volume. |
 | `sandbox/slots.json` | Server only: which account has which Unix user in the sandbox container (`sbx000`, `sbx001`, …). Back it up with the rest: the users own the accounts' chat folders in `sandbox-home`. The sandbox refuses a user the server gives to another account than before, so a lost file does not hand one account another's folders. |
@@ -134,7 +134,7 @@ Every key is optional. This is the complete list with the default used when a ke
 | Key | Default | Notes |
 |---|---|---|
 | `providers` | `[]` | One object per provider: `id`, `type` (`ollama`, `llamacpp`, `anthropic`, `openai`, `openai-compatible`, `chatgpt`, `chatgpt-chat`, `copilot`, `mistral`, `mistral-vibe`), `name`, `baseUrl`, `apiKey` (usually `${secret:…}`), `headers`, `enabled` (`true`), and optional `parallelRequests` (1 to 64), `vramGiB`, `modelsAtOnce` (1 to 16) and, for ChatGPT Chat, `temporaryChat`. |
-| `models.defaults` | `{}` | `chat`, `work`, `code`, `small`: model references like `ollama/qwen3`. **Default model for everyone** is stored as `chat`; Cowork and Code follow it until a default of their own is set. |
+| `models.defaults` | `{}` | `chat`, `work`, `code`, `small`: model references like `ollama/qwen3`. **Default model for everyone** is stored as `chat`; Code follows it until `code` is set. `work` was Cowork's and is no longer used. |
 | `models.aliases` | `{}` | What `opus`, `sonnet`, `haiku` and `fable` stand for. |
 | `models.overrides` | `{}` | Per model: `hidden`, `displayName`, `favorite`, `order`, `contextLength`, `maxOutputTokens`, `temperature` (0 to 2), `toolCalling` (`native`, `prompted`, `none`), `vision`, `promptTier`, `manual`. |
 | `capabilities.webSearch` | `enabled: true`, `provider: "auto"` | `provider` is `auto`, `searxng`, `brave` or `tavily`; `url` for SearXNG, `apiKey` for Brave and Tavily. |
@@ -256,7 +256,7 @@ To restore, create an empty volume, unpack the archive into it, and start the se
 
 | To delete | Do |
 |---|---|
-| All your conversations | **Settings › Privacy › Your data › Delete all…**, then type `DELETE`. Every chat, Code session and Cowork task goes with its messages, files and artifacts. Projects, memory, settings and your account stay. Folders on disk are untouched. |
+| All your conversations | **Settings › Privacy › Your data › Delete all…**, then type `DELETE`. Every chat and Code session goes with its messages, files and artifacts. Projects, memory, settings and your account stay. Folders on disk are untouched. |
 | Old conversations automatically | **Settings › Privacy › History › Keep conversations**: 30, 90 or 365 days. Every 24 hours while the backend runs (the first time 24 hours after it started), conversations you have not touched for longer (pinned ones excepted) are deleted, then attachments nothing refers to any more. |
 | One conversation | Its title menu › **Delete**. |
 | Temporary chats | They delete themselves when you leave them. A sweep removes any left behind after a day. |

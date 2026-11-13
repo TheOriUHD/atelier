@@ -4,6 +4,9 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Chat and Cowork are one.** There is no Cowork tab any more: a chat answers a quick question as before, and when a request needs files, commands or your computer, the same chat works through it as a task, with Cowork's tools. Until you give it a folder (+ › Add folder) it works in its own sandbox, made only when a file or command tool first runs, so a quick question costs what it did. Progress, Background and Output files appear beside the chat once there is something in them, and a permission chip in the message box sets Auto, Ask, Accept edits or Bypass (a chat has no Plan: an admin default of Plan asks). Old Cowork tasks open as chats in their folder with Chat's default model, `/work` links lead to them, and search finds them. A chat that worked as a task notifies when it finishes, fails or needs you, and suggests your next message. Temporary chats stay plain. The 0.7.4 preview switch is gone. A server older than this keeps Cowork until it is updated. The docs fold the Cowork page into Chat, and the Cowork prompt is gone: a chat's prompt is Chat's with a task part when it has the file tools.
+- **Computer use has its own page in Settings**, right under General, instead of the bottom of System.
+- A permission card in a chat with a folder names the file by its path in the folder, not the whole path.
 ## [0.7.5] — 2026-11-13
 
 - **Computer use with a server.** A desktop app signed in to a server could turn computer use on, but the server's sessions never got its tools, so the assistant said it had none. The desktop now lends computer use to the server like its folders: a session uses the computer you last wrote from, apps are allowed only on the cards in that computer's window, and Full control still asks every time. Servers need this version too (Update server).

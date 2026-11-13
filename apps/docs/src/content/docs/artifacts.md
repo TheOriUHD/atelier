@@ -98,7 +98,7 @@ change inputs on, a quick prototype.
 | Listed on the Artifacts page | Yes | No |
 | Types | HTML, React, SVG, Diagram, Document, Code | An HTML fragment with CSS and script |
 | Size limit | 500,000 characters | 100,000 characters (title 120, description 1,000) |
-| Available in | Chat; Code (shows a file) | Chat and Cowork |
+| Available in | Chat; Code (shows a file) | Chat |
 | Controls | Copy, Download, versions | **Reset visual**, **Download as HTML**, **Expand visual** (fullscreen) |
 
 Every inline visual has a plain-language description, which is what a screen reader reads. If one fails to draw, the
@@ -179,19 +179,19 @@ outside Atelier has no such pictures, because they are only put in when it is sh
 - An artifact is stored with its conversation. Deleting the conversation, **Delete all…** in **Settings › Privacy**, or
   the **Keep conversations** period removes it too.
 
-## Artifacts in Code and Cowork
+## Artifacts in Code, and files in a chat
 
 - **Code** has an **Artifact** pane. Asked for something to look at, the model
   writes the file in your folder and shows it with the `artifact` tool, which takes a file path. The pane opens beside the
   transcript with the same preview, **Code** view, versions and sandbox. Showing the same file again after a change adds
   a version. The type comes from the extension (`.html`, `.svg`, `.md`, `.mmd`; anything else is shown as code). Files
   outside the session's folder, binary files and files over 500,000 characters are refused. See [Code](/code/).
-- **Cowork** has no artifacts. A task's result is a file in its folder, shown as a **file card**. A small explainer can still be
-  drawn inline there. See [Cowork](/cowork/#output-files-and-previews).
+- **A chat working as a task** writes its result as a file in its sandbox or folder, shown as a **file card**, and can
+  still make artifacts and inline visuals. See [Chat](/chat/#output-files-and-previews).
 
-| | Artifact (Chat) | File card (Cowork) |
+| | Artifact | File card |
 |---|---|---|
-| What it is | Content stored by Atelier with the conversation | A real file in your folder |
+| What it is | Content stored by Atelier with the conversation | A real file in the chat's sandbox or your folder |
 | Versions | Every change, kept | None (the folder is yours to version) |
 | Runs code | Yes, in the sandbox | No: it is previewed as text, Markdown or image, or opened in your file manager |
 | Leaves Atelier by | Copy or Download | It is already a file |

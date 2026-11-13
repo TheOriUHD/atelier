@@ -148,7 +148,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 22, 28365 characters of JSON
+# Tools: 22, 28358 characters of JSON
 
 [
   {
@@ -594,7 +594,7 @@ Recent commit subjects:
   },
   {
     "name": "ListSessions",
-    "description": "Lists the person's other Code sessions and Cowork tasks, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
+    "description": "Lists the person's other chats and Code sessions, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
     "inputSchema": {
       "type": "object",
       "properties": {

@@ -12,12 +12,14 @@ export interface TaskStopDeps {
   running(sessionId: string): Promise<string[]>;
 }
 
-function describe({ tier }: DescribeContext): string {
+function describe({ tier, has }: DescribeContext): string {
   if (tier === 'compact') return 'Stops background tasks by ID: one (`task_id`), several (`task_ids`) or every running one (`all`).';
+  // A chat without its sandbox or a folder has no commands, only sub-agents (and loops).
+  const commands = has('Bash');
   return [
-    'Stops background tasks of this conversation: commands started with Bash `run_in_background`, sub-agents started with the Agent tool\'s `run_in_background`, and loops.',
-    '- `task_id` is the ID the start reported (`exec-3`, or the task id of the sub-agent). `task_ids` takes several at once, and `all: true` stops every task that is still running: one call, not one per task.',
-    '- Use it for work you no longer need, such as a dev server once the task is done, sub-agents whose question was answered another way, or everything when the person tells you to stop the background work. A stopped sub-agent sends no report.',
+    `Stops background tasks of this conversation: ${commands ? 'commands started with Bash `run_in_background`, ' : ''}sub-agents started with the Agent tool's \`run_in_background\`, and loops.`,
+    `- \`task_id\` is the ID the start reported (${commands ? '`exec-3`, or ' : ''}the task id of the sub-agent). \`task_ids\` takes several at once, and \`all: true\` stops every task that is still running: one call, not one per task.`,
+    `- Use it for work you no longer need, such as ${commands ? 'a dev server once the task is done, ' : ''}sub-agents whose question was answered another way, or everything when the person tells you to stop the background work. A stopped sub-agent sends no report.`,
   ].join('\n');
 }
 

@@ -8,7 +8,7 @@ editUrl: false
 
 What a model really receives is more than the templates: the builder joins a core prompt, fragments, optional
 safeguards, an `<env>` block, instruction files, skills and personalization, and the request also carries the tool
-definitions. The files below are the complete assembled text of 55 typical sessions: every system block in
+definitions. The files below are the complete assembled text of 48 typical sessions: every system block in
 order (with the cache breakpoints marked), the notes on the first message, and the tools as JSON.
 
 They are produced by the project’s test suite with fixed inputs (the date 2026-01-15 in Europe/Berlin, fake model
@@ -22,37 +22,31 @@ prompts or replies.
 
 | Case | What it shows | Size |
 |---|---|---|
-| [`chat.full`](/prompts/assembled/chat.full.txt) | Chat, full tier, web search on: the baseline. | 23 KB |
-| [`chat.full.no-web`](/prompts/assembled/chat.full.no-web.txt) | Chat with web search and fetch switched off by an administrator. | 17 KB |
-| [`chat.full.project`](/prompts/assembled/chat.full.project.txt) | Chat inside a project: its instructions and files. | 23 KB |
-| [`chat.full.organization`](/prompts/assembled/chat.full.organization.txt) | Chat with an administrator’s instructions for everyone. | 24 KB |
-| [`chat.full.personality-technical`](/prompts/assembled/chat.full.personality-technical.txt) | Chat with a built-in personality selected (technical and earnest). | 24 KB |
+| [`chat.full`](/prompts/assembled/chat.full.txt) | Chat, full tier, web search on: the baseline. | 34 KB |
+| [`chat.full.no-web`](/prompts/assembled/chat.full.no-web.txt) | Chat with web search and fetch switched off by an administrator. | 28 KB |
+| [`chat.full.project`](/prompts/assembled/chat.full.project.txt) | Chat inside a project: its instructions and files. | 34 KB |
+| [`chat.full.organization`](/prompts/assembled/chat.full.organization.txt) | Chat with an administrator’s instructions for everyone. | 34 KB |
+| [`chat.full.personality-technical`](/prompts/assembled/chat.full.personality-technical.txt) | Chat with a built-in personality selected (technical and earnest). | 35 KB |
 | [`code.compact.personality-relaxed`](/prompts/assembled/code.compact.personality-relaxed.txt) | Code, compact tier, with a built-in personality selected (relaxed, more emoji). | 22 KB |
-| [`work.full.personality-custom`](/prompts/assembled/work.full.personality-custom.txt) | Cowork with a custom personality and a concise response style. | 42 KB |
-| [`chat.full.personalization`](/prompts/assembled/chat.full.personalization.txt) | Chat with a name, a response style and the person’s own instructions. | 23 KB |
-| [`chat.compact`](/prompts/assembled/chat.compact.txt) | Chat, compact tier. | 9 KB |
-| [`chat.compact.prompted`](/prompts/assembled/chat.compact.prompted.txt) | Chat, compact tier, for a model that calls tools through text (prompted tool calls). | 7 KB |
-| [`chat.full.sandbox`](/prompts/assembled/chat.full.sandbox.txt) | Chat with a conversation sandbox (Bash and Read). | 27 KB |
-| [`chat.compact.sandbox`](/prompts/assembled/chat.compact.sandbox.txt) | Chat, compact tier, with a conversation sandbox. | 11 KB |
-| [`chat.full.unified`](/prompts/assembled/chat.full.unified.txt) | Chat and Cowork in one (being built, off by default): a chat with Cowork’s tools, in its own sandbox until it has a folder. | 50 KB |
-| [`chat.compact.unified`](/prompts/assembled/chat.compact.unified.txt) | Chat and Cowork in one, compact tier. | 21 KB |
-| [`chat.full.unified.folder`](/prompts/assembled/chat.full.unified.folder.txt) | Chat and Cowork in one, with a folder of the person’s. | 51 KB |
-| [`chat.full.memory`](/prompts/assembled/chat.full.memory.txt) | Chat for a person with memory, with the memory tools and digest. | 32 KB |
-| [`chat.full.memory-explicit`](/prompts/assembled/chat.full.memory-explicit.txt) | Chat with memory where “Generate memory from chats” and chat search are off. | 29 KB |
-| [`chat.compact.memory`](/prompts/assembled/chat.compact.memory.txt) | Chat, compact tier, with memory. | 15 KB |
-| [`work.full`](/prompts/assembled/work.full.txt) | Cowork, full tier. | 41 KB |
-| [`work.full.no-web`](/prompts/assembled/work.full.no-web.txt) | Cowork with web access and skills switched off. | 34 KB |
-| [`work.compact`](/prompts/assembled/work.compact.txt) | Cowork, compact tier. | 21 KB |
-| [`work.full.memory`](/prompts/assembled/work.full.memory.txt) | Cowork for a person with memory. | 50 KB |
-| [`work.full.computer`](/prompts/assembled/work.full.computer.txt) | Cowork in the desktop app with computer use on: the computer use tools. | 51 KB |
-| [`work.full.browser`](/prompts/assembled/work.full.browser.txt) | Cowork with computer use on and Atelier for Chrome connected: the Browser tool. | 54 KB |
-| [`chat.full.images`](/prompts/assembled/chat.full.images.txt) | Chat with an image model: GenerateImage and how to use it. | 30 KB |
+| [`chat.full.personality-custom`](/prompts/assembled/chat.full.personality-custom.txt) | Chat with a custom personality and a concise response style. | 35 KB |
+| [`chat.full.personalization`](/prompts/assembled/chat.full.personalization.txt) | Chat with a name, a response style and the person’s own instructions. | 34 KB |
+| [`chat.compact`](/prompts/assembled/chat.compact.txt) | Chat, compact tier. | 14 KB |
+| [`chat.compact.prompted`](/prompts/assembled/chat.compact.prompted.txt) | Chat, compact tier, for a model that calls tools through text (prompted tool calls). | 11 KB |
+| [`chat.full.sandbox`](/prompts/assembled/chat.full.sandbox.txt) | Chat with a conversation sandbox, where its file and command tools run until it has a folder. | 50 KB |
+| [`chat.compact.sandbox`](/prompts/assembled/chat.compact.sandbox.txt) | Chat, compact tier, with a conversation sandbox. | 21 KB |
+| [`chat.full.folder`](/prompts/assembled/chat.full.folder.txt) | Chat given one of the person’s folders: the file and command tools work there. | 51 KB |
+| [`chat.full.memory`](/prompts/assembled/chat.full.memory.txt) | Chat for a person with memory, with the memory tools and digest. | 43 KB |
+| [`chat.full.memory-explicit`](/prompts/assembled/chat.full.memory-explicit.txt) | Chat with memory where “Generate memory from chats” and chat search are off. | 40 KB |
+| [`chat.compact.memory`](/prompts/assembled/chat.compact.memory.txt) | Chat, compact tier, with memory. | 20 KB |
+| [`chat.full.computer`](/prompts/assembled/chat.full.computer.txt) | Chat in the desktop app with computer use on: the computer use tools. | 60 KB |
+| [`chat.full.browser`](/prompts/assembled/chat.full.browser.txt) | Chat with computer use on and Atelier for Chrome connected: the Browser tool. | 63 KB |
+| [`chat.full.images`](/prompts/assembled/chat.full.images.txt) | Chat with an image model: GenerateImage and how to use it. | 40 KB |
 | [`code.full.images`](/prompts/assembled/code.full.images.txt) | Code with an image model: GenerateImage and SaveImage. | 58 KB |
 | [`code.compact.images`](/prompts/assembled/code.compact.images.txt) | Code, compact tier, with an image model: the shorter GenerateImage schema. | 24 KB |
-| [`chat.full.videos`](/prompts/assembled/chat.full.videos.txt) | Chat with a video model: GenerateVideo and how to use it. | 28 KB |
+| [`chat.full.videos`](/prompts/assembled/chat.full.videos.txt) | Chat with a video model: GenerateVideo and how to use it. | 38 KB |
 | [`code.full.videos`](/prompts/assembled/code.full.videos.txt) | Code with a video model: GenerateVideo and SaveVideo. | 56 KB |
 | [`code.compact.videos`](/prompts/assembled/code.compact.videos.txt) | Code, compact tier, with a video model: the shorter GenerateVideo schema. | 23 KB |
-| [`chat.full.audio`](/prompts/assembled/chat.full.audio.txt) | Chat with a sound model: GenerateAudio for speech, music and sound effects, and how to use it. | 30 KB |
+| [`chat.full.audio`](/prompts/assembled/chat.full.audio.txt) | Chat with a sound model: GenerateAudio for speech, music and sound effects, and how to use it. | 40 KB |
 | [`code.full.audio`](/prompts/assembled/code.full.audio.txt) | Code with a sound model: GenerateAudio and SaveAudio. | 58 KB |
 | [`code.compact.audio`](/prompts/assembled/code.compact.audio.txt) | Code, compact tier, with a sound model: the shorter GenerateAudio schema. | 23 KB |
 | [`code.compact.computer`](/prompts/assembled/code.compact.computer.txt) | Code, compact tier, with computer use on. | 26 KB |
@@ -70,12 +64,11 @@ prompts or replies.
 | [`code.compact.prompted`](/prompts/assembled/code.compact.prompted.txt) | Code, compact tier, with prompted tool calls. | 17 KB |
 | [`code.compact.connectors`](/prompts/assembled/code.compact.connectors.txt) | Code, compact tier, with three connectors of twenty tools each. | 40 KB |
 | [`code.compact.budget`](/prompts/assembled/code.compact.budget.txt) | Code, compact tier, over the 16,000 character budget: how the builder trims the skill list, connectors and instruction files. | 22 KB |
-| [`safeguards.chat.full`](/prompts/assembled/safeguards.chat.full.txt) | Chat with the administrator’s optional safeguards on. | 25 KB |
-| [`safeguards.chat.compact`](/prompts/assembled/safeguards.chat.compact.txt) | Chat, compact tier, with safeguards on. | 10 KB |
+| [`safeguards.chat.full`](/prompts/assembled/safeguards.chat.full.txt) | Chat with the administrator’s optional safeguards on. | 36 KB |
+| [`safeguards.chat.compact`](/prompts/assembled/safeguards.chat.compact.txt) | Chat, compact tier, with safeguards on. | 15 KB |
 | [`safeguards.code.full.all`](/prompts/assembled/safeguards.code.full.all.txt) | Code with every safeguard category on. | 55 KB |
 | [`safeguards.code.compact.all`](/prompts/assembled/safeguards.code.compact.all.txt) | Code, compact tier, with every safeguard category on. | 22 KB |
-| [`safeguards.work.full.person-on`](/prompts/assembled/safeguards.work.full.person-on.txt) | Cowork where the person turned safeguards on for themselves. | 44 KB |
-| [`safeguards.work.compact`](/prompts/assembled/safeguards.work.compact.txt) | Cowork, compact tier, with safeguards on. | 22 KB |
+| [`safeguards.chat.full.person-on`](/prompts/assembled/safeguards.chat.full.person-on.txt) | Chat where the person turned safeguards on for themselves. | 36 KB |
 | [`safeguards.code.full.subagent`](/prompts/assembled/safeguards.code.full.subagent.txt) | A sub-agent inheriting the person’s safeguards (some categories on). | 29 KB |
 
 ## One file with everything

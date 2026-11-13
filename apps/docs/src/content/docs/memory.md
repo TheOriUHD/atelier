@@ -10,7 +10,7 @@ Atelier can do two separate things for you across conversations:
 - **Search your earlier conversations** when you refer to something you discussed before.
 
 Both are per person: on a shared server nobody else sees your memory or your chats in the app. They are on by default,
-work in Chat and Cowork only (see [Where memory applies](#where-memory-applies)), and live in **Settings › Memory**.
+work in Chat only (see [Where memory applies](#where-memory-applies)), and live in **Settings › Memory**.
 
 ## What Atelier remembers
 
@@ -39,16 +39,15 @@ facts, one per line, close to how they were said, with the date when it is known
 
 | Conversation | Reads memory | Saves to memory | Searches past chats |
 |---|---|---|---|
-| Chat | Yes | Yes | Yes |
-| Cowork | Yes | Yes | Yes |
+| Chat (former Cowork tasks too) | Yes | Yes | Yes |
 | Code | No | No | No |
 | Sub-agents | No | No | No |
-| Side chats (`/btw`, in Chat and Cowork) | Yes | No | Yes |
+| Side chats (`/btw`, in Chat) | Yes | No | Yes |
 | Temporary chat, **Don’t save** | Yes | No | Yes |
 | Temporary chat, **Start fresh** | No | No | No |
 
 Code works from your project's instructions and doesn't use memory (see [Customize](/customize/)). Past-chat search
-does find Code sessions and Cowork tasks, though, when you search from Chat or Cowork. Temporary chats are covered [below](#temporary-chats).
+does find Code sessions, though, when you search from Chat. Temporary chats are covered [below](#temporary-chats).
 
 ## How the model uses it
 
@@ -77,12 +76,12 @@ and, for the background update, [Side prompts](/prompts/side-prompts/#memory-upd
 
 ## Search and reference chats
 
-With this on, the model in Chat and Cowork can search your past conversations when you refer to something you discussed
+With this on, the model in Chat can search your past conversations when you refer to something you discussed
 before ("what did we decide about the venue?"). Search matches words, not meaning: it ranks conversations by the words in your messages, the replies and the chat
 titles, and gives the model the best matches (up to 8, 6 by default) with a snippet of about 220 characters each. To read more it opens a window of at most 6 messages around a hit, each cut at 3,000 characters, and
 reads on if needed. It never loads whole conversations.
 
-It searches your own conversations in every mode (Chat, Cowork and Code). It does not see temporary chats, the
+It searches your own conversations in both modes (Chat and Code). It does not see temporary chats, the
 conversation you are in, or the work of sub-agents and side chats.
 
 ## Generate memory from chats

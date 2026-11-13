@@ -1524,7 +1524,8 @@ export class ChatService {
       if (!actor.shared && !this.titling.has(sessionId) && !(await this.deps.repo.getRow(sessionId))?.title) void this.generateTitle(sessionId, resolved);
       if (!session.parentSessionId && !signal.aborted && !actor.shared) this.deps.memory?.turnEnded(session);
       // A guess at the next message is one person's composer aid: not in co-op.
-      if (!session.parentSessionId && !signal.aborted && !actor.shared && result.stopReason === 'end' && (session.mode === 'code' || this.asTask(session)) && !session.temporary) {
+      // After Code turns and a chat's task (it has its sandbox or a folder), not after every quick answer: each guess is a request.
+      if (!session.parentSessionId && !signal.aborted && !actor.shared && result.stopReason === 'end' && (session.mode === 'code' || (this.asTask(session) && !!(await this.deps.repo.getRow(sessionId))?.workspaceId)) && !session.temporary) {
         void this.suggestReply(sessionId, resolved);
       }
     } catch (error) {
@@ -2221,7 +2222,7 @@ export class ChatService {
     }
     if (!target) return fail(unknown);
     const title = (row: SessionRow) => row.title || 'Untitled';
-    if (target.mode === 'chat' && !this.unified(target)) return fail(`"${title(target)}" is a Chat conversation, which can't receive messages; Code sessions and Cowork tasks can.`);
+    if (target.mode === 'chat' && !this.unified(target)) return fail(`"${title(target)}" is a temporary chat, which can't receive messages; other chats and Code sessions can.`);
     const sent =
       relation === 'session' ? `Sent to the session "${title(target)}" (id ${target.id}).` : relation === 'parent' ? `Sent to the sub-agent "${title(target)}" (task agent:${target.id}).` : `Sent to your parent session "${title(target)}" (id ${target.id}).`;
     if (this.closing || this.discarding.has(target.id)) return fail(`"${title(target)}" can't receive messages right now: it is closing.`);
@@ -2467,8 +2468,8 @@ export class ChatService {
     const artifact = terminal ? [] : session.mode === 'code' && workspace ? [createArtifactTool(this.deps.artifacts, workspace)] : merged ? [createArtifactTool(this.deps.artifacts)] : [];
     // Web pages as a browser shows them, in the desktop app's Browser pane (not a co-op session's: the pane is the host's).
     const preview = session.mode === 'code' && workspace && !shared && this.apps.get(session.id) === 'desktop' ? [createPreviewTool(workspace)] : [];
-    // Background commands and sub-agents can be stopped wherever commands run: a folder, or a merged chat's sandbox.
-    const stopTasks = workspace || code.length ? [this.taskStop] : [];
+    // Background sub-agents (and commands, where they run) can be stopped in every top-level conversation that has them.
+    const stopTasks = [this.taskStop];
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));
     const moveSession = movable && !shared ? [this.changeDirectory] : [];
@@ -2491,11 +2492,11 @@ export class ChatService {
 
   /** The chat sandbox's fixed rules for one call (permissions/engine.ts `sandboxDecide`), against its folder. */
   /**
-   * Chat and Cowork in one (capabilities.unifiedChat): a conversation that isn't temporary, and an old Cowork task read as
-   * one, works as a Cowork task when its request needs it: in its own sandbox until it is given a folder.
+   * Chat and Cowork are one: a conversation that isn't temporary, and an old Cowork task read as one, works as a Cowork
+   * task when its request needs it: in its own sandbox until it is given a folder.
    */
   private unified(session: Pick<SessionRow, 'mode' | 'temporary'>): boolean {
-    return this.deps.settings().capabilities.unifiedChat === true && (session.mode === 'chat' || session.mode === 'work') && !session.temporary;
+    return (session.mode === 'chat' || session.mode === 'work') && !session.temporary;
   }
 
   /** The model a session starts with before a choice of its own; with Chat and Cowork in one, an old Cowork task takes Chat's. */
@@ -3077,7 +3078,9 @@ export class ChatService {
     // Compact-tier models (small, local) keep to the core tools: a leaner prompt, and they rarely start background work.
     const side = isSideChat(session);
     const all = side ? sideChatTools(session.mode, await this.toolsFor(session)) : await this.toolsFor(session);
-    const skips = this.unified(session) ? COMPACT_MERGED_SKIPS : COMPACT_SKIPS;
+    // A chat with the file tools (its sandbox or a folder) carries the task part, so it leaves out more to fit; one
+    // without them (no sandbox on this server) keeps inline visuals.
+    const skips = this.unified(session) && all.some((t) => t.name === 'Write') ? COMPACT_MERGED_SKIPS : COMPACT_SKIPS;
     const offered = info.capabilities.tools === 'none' ? [] : orderTools(all.filter((t) => !(info.tier === 'compact' && skips.has(t.name))));
     const names = new Set(offered.map((t) => t.name));
     const described = offered.map((t) => compactConnector(describeTool(t, { tier: info.tier, mode: session.mode, has: (name) => names.has(name) }), info.tier));
@@ -3531,7 +3534,7 @@ const LOOKS = new Set(['Read', 'Glob', 'Grep']);
 const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage', 'SaveVideo', 'SaveAudio']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
 const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'ComputerApps', 'OpenApp', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);
-/** A merged chat (Chat and Cowork in one) has artifacts as well: its pictures go there, and commands run in the foreground. */
+/** A chat with the file tools has artifacts as well: its pictures go there, and commands run in the foreground. */
 const COMPACT_MERGED_SKIPS = new Set([...COMPACT_SKIPS, 'inline_visual', 'BashOutput', 'KillShell']);
 /** One instruction file of a folder the session moved to, at most this long in the tool's result. */
 const MOVED_INSTRUCTION_CHARS = 8_000;

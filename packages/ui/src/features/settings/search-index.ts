@@ -117,14 +117,14 @@ export const SETTINGS_INDEX = [
     id: 'notifications.taskFinished',
     page: 'general',
     label: 'Notify me when a task finishes',
-    description: 'A system notification when a Cowork task ends while you’re in another window or app.',
+    description: 'A system notification when a chat’s task ends while you’re in another window or app.',
     keywords: ['notifications', 'alert', 'done', 'work', 'background'],
   },
   {
     id: 'notifications.permissionNeeded',
     page: 'general',
     label: 'Notify me when a task needs me',
-    description: 'A system notification when a Cowork task waits for your answer or permission.',
+    description: 'A system notification when a chat’s task waits for your answer or permission.',
     keywords: ['notifications', 'alert', 'permission', 'question', 'input', 'work'],
   },
   {
@@ -174,7 +174,7 @@ export const SETTINGS_INDEX = [
     page: 'account',
     label: 'Your ATELIER.md',
     description:
-      'Your own conventions and preferences for Code sessions and Cowork tasks, in Markdown. Every new one and its sub-agents read them; where a project’s ATELIER.md disagrees, yours win.',
+      'Your own conventions and preferences for Code sessions and chats working in a folder, in Markdown. Every new one and its sub-agents read them; where a project’s ATELIER.md disagrees, yours win.',
     keywords: ['atelier.md', 'personal instructions', 'instruction file', 'conventions', 'memory', 'code'],
   },
   {
@@ -349,14 +349,14 @@ export const SETTINGS_INDEX = [
     page: 'privacy',
     label: 'Delete all conversations',
     description:
-      'Every chat, Cowork task and Code session, with its messages, files and artifacts. Projects stay. This can’t be undone.',
+      'Every chat and Code session, with its messages, files and artifacts. Projects stay. This can’t be undone.',
     keywords: ['erase', 'wipe', 'clear history', 'remove chats', 'sessions'],
   },
   {
     id: 'usage.overview',
     page: 'usage',
     label: 'Your usage',
-    description: 'Requests, tokens, images and cost of your chats, Cowork tasks and Code sessions.',
+    description: 'Requests, tokens, images and cost of your chats and Code sessions.',
     keywords: ['tokens', 'requests', 'cost', 'spend', 'statistics', 'dollars', 'everyone', 'images'],
   },
   {
@@ -385,7 +385,7 @@ export const SETTINGS_INDEX = [
     page: 'usage',
     label: 'Your limits',
     description:
-      'What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats, Cowork tasks and Code sessions, including deleted ones. A cost limit counts only requests to models with a price.',
+      'What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats and Code sessions, including deleted ones. A cost limit counts only requests to models with a price.',
     keywords: ['limit', 'quota', 'cap', 'budget', 'tokens', 'requests', 'cost', 'near limit', 'reset'],
     available: () => usageLimitsOffered(),
   },
@@ -428,7 +428,7 @@ export const SETTINGS_INDEX = [
     page: 'code',
     label: 'Always-allowed actions',
     description:
-      'What you approved with “Always allow” in a permission prompt. These rules apply in your Code and Cowork sessions and to connector tools in chats, on top of the rules your admin set.',
+      'What you approved with “Always allow” in a permission prompt. These rules apply in your Code sessions and chats, on top of the rules your admin set.',
     keywords: ['permissions', 'rules', 'always allow', 'approve', 'bash', 'claude code', 'connector', 'chat'],
   },
   {
@@ -459,7 +459,7 @@ export const SETTINGS_INDEX = [
     page: 'code',
     label: 'Suggested replies',
     description:
-      'After a reply in Code or Cowork, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply.',
+      'After a reply in Code or a chat’s task, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply.',
     keywords: ['suggestion', 'autocomplete', 'tab', 'next message', 'prompt suggestion'],
   },
   {
@@ -588,15 +588,15 @@ export const SETTINGS_INDEX = [
   },
   {
     id: 'system.computerUse',
-    page: 'system',
+    page: 'computer',
     label: 'Enable computer use',
-    description: 'Let the assistant in Code and Cowork see and use the apps you allow on this computer.',
+    description: 'Let the assistant in chats and Code see and use the apps you allow on this computer.',
     keywords: ['computer use', 'control', 'mouse', 'keyboard', 'screen', 'apps', 'automation', 'agent'],
     available: () => !!desktop?.computer,
   },
   {
     id: 'system.computerUnhide',
-    page: 'system',
+    page: 'computer',
     label: 'Unhide apps when Atelier finishes',
     description: 'Apps hidden while Atelier had full control of your screen come back when it stops.',
     keywords: ['computer use', 'hide', 'unhide', 'apps', 'full control'],
@@ -604,7 +604,7 @@ export const SETTINGS_INDEX = [
   },
   {
     id: 'system.computerMode',
-    page: 'system',
+    page: 'computer',
     label: 'How Atelier uses the apps you allow',
     description:
       'Background: works in one app at a time in the background, without your mouse and keyboard, while you keep working. Apps you name yourself are allowed without asking; others ask first. Lists to choose from, right clicks, dragging, or an app that ignores background input need full control, which Atelier asks you for. On Linux this is “Ask per app”: you allow apps one by one and Atelier asks before it takes over your mouse and keyboard. Full control: takes over your computer as it is, any app but your denied ones, without asking.',
@@ -613,7 +613,7 @@ export const SETTINGS_INDEX = [
   },
   {
     id: 'system.computerDenied',
-    page: 'system',
+    page: 'computer',
     label: 'Denied apps',
     description: 'Atelier never uses these apps: asking for them is turned down without a question.',
     keywords: ['computer use', 'deny', 'block', 'password manager', 'apps'],
@@ -621,7 +621,7 @@ export const SETTINGS_INDEX = [
   },
   {
     id: 'system.computerAlways',
-    page: 'system',
+    page: 'computer',
     label: 'Apps allowed for good',
     description: 'Apps you allowed with “Always allow on this computer”; every session may use them.',
     keywords: ['computer use', 'allow', 'always', 'apps'],
@@ -629,7 +629,7 @@ export const SETTINGS_INDEX = [
   },
   {
     id: 'system.computerAccessibility',
-    page: 'system',
+    page: 'computer',
     label: 'Accessibility',
     description: 'macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission.',
     keywords: ['computer use', 'permission', 'privacy', 'mouse', 'keyboard', 'system settings'],
@@ -637,7 +637,7 @@ export const SETTINGS_INDEX = [
   },
   {
     id: 'system.computerBrowser',
-    page: 'system',
+    page: 'computer',
     label: 'Atelier for Chrome',
     description:
       'The browser extension through which Atelier works in web pages, in tabs of its own in an “Atelier” group, in the background: it reads pages instead of looking at them, and never uses your own tabs. Works in Chrome, Brave, Edge and Arc. Chrome shows “started debugging this browser” while it acts in a page.',
@@ -646,7 +646,7 @@ export const SETTINGS_INDEX = [
   },
   {
     id: 'system.computerScreen',
-    page: 'system',
+    page: 'computer',
     label: 'Screen recording',
     description: 'macOS lets Atelier take screenshots of the apps you allow with this permission. macOS asks again from time to time.',
     keywords: ['computer use', 'permission', 'privacy', 'screenshot', 'screen recording', 'system settings'],
@@ -936,7 +936,7 @@ export const SETTINGS_INDEX = [
     id: 'models.defaults.chat',
     page: 'models',
     label: 'Default model for everyone',
-    description: 'New chats, Cowork and Code sessions start with this model unless people choose their own.',
+    description: 'New chats and Code sessions start with this model unless people choose their own.',
     keywords: ['default chat model', 'chat', 'server default', 'system default'],
   },
   {
@@ -1012,19 +1012,11 @@ export const SETTINGS_INDEX = [
     keywords: ['url', 'browse', 'read page', 'internet'],
   },
   {
-    id: 'capabilities.unifiedChat',
-    page: 'capabilities',
-    label: 'Chat and Cowork in one (preview)',
-    description:
-      'One kind of conversation: a chat works as a Cowork task when the request needs files, commands or the computer, in its own sandbox or a folder it is given. Cowork tasks open as chats. Still being finished.',
-    keywords: ['cowork', 'merge', 'unified', 'tasks', 'preview'],
-  },
-  {
     id: 'prompts.organizationInstructions',
     page: 'capabilities',
     label: 'Instructions for every conversation',
     description:
-      'What models are told in every Chat, Cowork and Code conversation, for every account, ahead of anything a person or project asks. Applies to new conversations. Code and Cowork also follow the system AGENTS.md (Admin › Code).',
+      'What models are told in every chat and Code session, for every account, ahead of anything a person or project asks. Applies to new conversations. Code and chats working in a folder also follow the system AGENTS.md (Admin › Code).',
     keywords: ['organization', 'company', 'system prompt', 'custom instructions', 'admin instructions', 'policy'],
   },
   {
@@ -1103,7 +1095,7 @@ export const SETTINGS_INDEX = [
     id: 'permissions.defaultMode',
     page: 'admin-code',
     label: 'Default permission mode',
-    description: 'The mode new Code sessions and Cowork tasks start in. People can switch it in each Code session.',
+    description: 'The mode new Code sessions and chats start in (a chat that would start in Plan asks instead). People can switch it in each conversation.',
     keywords: ['auto mode', 'classifier', 'ask', 'accept edits', 'plan mode', 'bypass', 'permissions'],
   },
   {
@@ -1154,7 +1146,7 @@ export const SETTINGS_INDEX = [
     page: 'admin-code',
     label: 'Hooks',
     description:
-      'Commands that run at points of every Code session and Cowork task on this computer, in Claude Code’s settings format. Projects bring their own in .atelier or .claude settings; people’s own devices run only those.',
+      'Commands that run at points of every Code session and chat task on this computer, in Claude Code’s settings format. Projects bring their own in .atelier or .claude settings; people’s own devices run only those.',
     keywords: [
       'pretooluse',
       'posttooluse',
@@ -1179,7 +1171,7 @@ export const SETTINGS_INDEX = [
     page: 'admin-code',
     label: 'System AGENTS.md',
     description:
-      'Instructions every Code session and Cowork task follows, for every account. Projects add their own CLAUDE.md and AGENTS.md.',
+      'Instructions every Code session and chat working in a folder follows, for every account. Projects add their own CLAUDE.md and AGENTS.md.',
     keywords: ['agents.md', 'claude.md', 'system prompt', 'instructions', 'memory', 'global'],
   },
   {

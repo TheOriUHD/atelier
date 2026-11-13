@@ -11,8 +11,9 @@ your chats and settings.
 
 - **One process, one data folder.** A single Node.js process keeps everything in one folder (SQLite and files). Do not
   run replicas; run one server per data folder.
-- **It never runs commands on its own machine.** Code and Cowork sessions run in a folder on a person's desktop app (lent
-  over a secure link, the device link), in a GitHub codespace, or, for Chat only, in a separate sandbox container. If the server cannot reach a runner, a session says so, for example
+- **It never runs commands on its own machine.** Code sessions and chats run in a folder on a person's desktop app (lent
+  over a secure link, the device link) or in a GitHub codespace; a chat without a folder runs in a separate sandbox
+  container. If the server cannot reach a runner, a session says so, for example
   "This server does not run commands on its own machine. Open the desktop app to add a folder on your computer."
 - **The models run elsewhere.** The server forwards prompts to the providers an admin configured. It needs network access to them, not a GPU.
 - **It is not a multi-tenant service.** Admins configure providers, instructions and connectors for everyone. Treat the
@@ -354,8 +355,9 @@ in that folder, and a value that lived only in your shell would be lost.
 
 ## The chat sandbox
 
-Chat can use a sandbox: the model gets **Bash** and **Read** in a folder of its own, under fixed rules and without
-permission prompts, to clone repositories and run code. On a server that folder is in the `sandbox` container. It:
+A chat without a folder runs its file and command tools in a sandbox: a folder of its own, under fixed rules and
+without permission prompts, to clone repositories, run code and write files. Without the sandbox service, such a chat
+has no file or command tools until it is given a folder ([Chat](/chat/#the-sandbox)). On a server that folder is in the `sandbox` container. It:
 
 - holds none of the server's data or secrets;
 - is reached by the server over SSH with a key the server makes itself the first time a chat needs it (in
@@ -392,17 +394,19 @@ Leave out the `sandbox` service and the `ATELIER_SANDBOX_*` variables and chats 
 
 ## Code in the browser
 
-Code and Cowork need somewhere to run commands, and the server never offers its own machine. A browser session can use:
+Code, and a chat given a folder, need somewhere to run commands, and the server never offers its own machine. A browser
+session can use:
 
 - **A desktop app's folders.** Your signed-in desktop app, online, lends the folders you trusted. In the browser,
-  choose **Remote Control** in the environment menu above the composer and pick the computer.
+  choose **Remote Control** in the environment menu above the Code composer and pick the computer, or pick one of its
+  folders under **+ › Add folder** in a new chat.
 - **A codespace.** In **Settings › Cloud**, people connect GitHub with a personal access token (scopes `codespace` and
   `repo`), or, if an admin sets **GitHub OAuth app** (the client id of an OAuth app with device flow enabled), with a
   device code. Then **Cloud** in the environment menu lists their codespaces. Codespaces have not been verified against a
   real account.
 
-Without either, a browser can still use Chat (including its sandbox), but Code and Cowork have no folder to open: their
-start page says "Open the desktop app to work in a folder on your computer, or use a codespace."
+Without either, a browser can still use Chat (including its sandbox), but Code has no folder to open: its start page
+says "Open the desktop app to work in a folder on your computer, or use a codespace."
 
 ## Data, backup and restore
 

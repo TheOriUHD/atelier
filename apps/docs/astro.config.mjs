@@ -9,7 +9,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Atelier Docs',
-      description: 'Install Atelier, connect your models, run a server, and get the most out of Chat, Cowork and Code.',
+      description: 'Install Atelier, connect your models, run a server, and get the most out of Chat and Code.',
       logo: { src: './src/assets/icon.svg', alt: 'Atelier' },
       favicon: '/icon.svg',
       customCss: ['./src/styles/theme.css'],
@@ -26,7 +26,7 @@ export default defineConfig({
         },
         {
           label: 'Using Atelier',
-          items: ['chat', 'artifacts', 'image-generation', 'video-generation', 'audio-generation', 'projects', 'cowork', 'code', 'permissions', 'co-op', 'computer-use', 'effort', 'sessions', 'loops', 'shortcuts', 'web-search', 'memory'],
+          items: ['chat', 'artifacts', 'image-generation', 'video-generation', 'audio-generation', 'projects', 'code', 'permissions', 'co-op', 'computer-use', 'effort', 'sessions', 'loops', 'shortcuts', 'web-search', 'memory'],
         },
         {
           label: 'Extend',
@@ -38,7 +38,7 @@ export default defineConfig({
         },
         {
           label: 'System prompts',
-          items: ['prompts', 'prompts/chat', 'prompts/cowork', 'prompts/code', 'prompts/shared', 'prompts/side-prompts', 'prompts/context-updates', 'prompts/assembled', 'prompts/design'],
+          items: ['prompts', 'prompts/chat', 'prompts/code', 'prompts/shared', 'prompts/side-prompts', 'prompts/context-updates', 'prompts/assembled', 'prompts/design'],
         },
         {
           label: 'Under the hood',

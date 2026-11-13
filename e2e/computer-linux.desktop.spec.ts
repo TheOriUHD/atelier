@@ -72,7 +72,7 @@ test('desktop on Linux: Full control clicks and types into another app through t
     target = await launchTarget();
 
     // Settings: this system has no Background mode, says why, and starts with the Linux password managers denied.
-    await page.evaluate(() => (location.hash = '#/?settings=system'));
+    await page.evaluate(() => (location.hash = '#/?settings=computer'));
     const settings = page.getByRole('dialog', { name: 'Settings' });
     await settings.getByRole('switch', { name: 'Enable computer use' }).click();
     await expect(settings.getByRole('radio', { name: 'Ask per app' })).toHaveAttribute('aria-checked', 'true');

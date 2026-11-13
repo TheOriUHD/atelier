@@ -56,7 +56,7 @@ export interface ComposerProps {
   research?: ResearchSwitch;
   /** The image model for this conversation (the + menu's row); absent with fewer than two to choose between. */
   imageModel?: ImageModelChoice;
-  /** A new conversation: + › Add folder turns it into a Cowork task in the folder picked. */
+  /** A new conversation: + › Add folder makes it work in the folder picked. */
   onAddFolder?(workspaceId: string): void;
   /**
    * What the run waits on (a permission prompt, a question, a plan, a folder change): docked to the top of the box, so

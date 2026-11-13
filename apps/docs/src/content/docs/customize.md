@@ -7,10 +7,10 @@ Atelier can be taught in five ways, from a sentence of preference to the prompt 
 
 | What | It is | Where it lives | Used in |
 |---|---|---|---|
-| [Instructions](#instructions) | Standing rules in plain Markdown | Settings, and `ATELIER.md`, `AGENTS.md` and `CLAUDE.md` files | Chat (settings only), Cowork, Code |
-| [Skills](#skills) | A folder with a `SKILL.md` that teaches the model one kind of task | `skills` folders | Chat, Cowork, Code |
-| [Commands](#commands) | A saved prompt you start with `/name` | `commands` folders | Chat, Cowork, Code |
-| [Sub-agents](#sub-agents) | A named helper with its own prompt, tools and model | `agents` folders | Cowork, Code |
+| [Instructions](#instructions) | Standing rules in plain Markdown | Settings, and `ATELIER.md`, `AGENTS.md` and `CLAUDE.md` files | Chat (the files only in a folder), Code |
+| [Skills](#skills) | A folder with a `SKILL.md` that teaches the model one kind of task | `skills` folders | Chat, Code |
+| [Commands](#commands) | A saved prompt you start with `/name` | `commands` folders | Chat, Code |
+| [Sub-agents](#sub-agents) | A named helper with its own prompt, tools and model | `agents` folders | Chat, Code |
 | [Prompt overrides](#prompt-overrides) | A replacement for one of Atelier's own prompt files | `~/.atelier/prompts` | Everything |
 
 Tools from other services are [connectors](/connectors/); commands that run at points of a session are
@@ -44,18 +44,18 @@ permission system or an administrator's content safeguards.
 
 | # | Layer | Where you write it | Applies to |
 |---|---|---|---|
-| 1 | **Administrator's instructions** | **Settings › Admin › Capabilities › Instructions for every conversation** (up to 20,000 characters) | Every Chat, Cowork and Code conversation and every sub-agent, for every account |
-| 1 | **System `AGENTS.md`** | **Settings › Admin › Code › Instructions › System AGENTS.md** (up to 60,000 characters). Stored as `AGENTS.md` in the config folder (`~/.atelier` on the desktop, the data directory on a server); an `ATELIER.md` beside it is read too on a server | Code sessions and Cowork tasks, for every account |
+| 1 | **Administrator's instructions** | **Settings › Admin › Capabilities › Instructions for every conversation** (up to 20,000 characters) | Every chat and Code session and every sub-agent, for every account |
+| 1 | **System `AGENTS.md`** | **Settings › Admin › Code › Instructions › System AGENTS.md** (up to 60,000 characters). Stored as `AGENTS.md` in the config folder (`~/.atelier` on the desktop, the data directory on a server); an `ATELIER.md` beside it is read too on a server | Code sessions and chats in a folder, for every account |
 | 2 | **What you say in the conversation** | The message box | That conversation |
-| 3 | **Your own files** | Desktop only: `~/.claude/CLAUDE.md` (with Claude Code compatibility on) and `~/.atelier/ATELIER.md` | Your Code sessions and Cowork tasks |
-| 3 | **Your ATELIER.md** | **Settings › Account › Instructions for Code and Cowork** (up to 60,000 characters; kept with your account, so it works on a server too) | Your Code sessions, Cowork tasks and their sub-agents. Where a project's `ATELIER.md` disagrees, yours wins |
-| 3 | **Your instructions** | **Settings › Account › Instructions** (up to 20,000 characters), next to **What should Atelier call you?** and the response style | Every new conversation of yours, in all three modes |
-| 4 | **The project's files** | `ATELIER.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` in the project folder and above it, and `.claude/rules/**/*.md` | Code sessions and Cowork tasks in that folder |
+| 3 | **Your own files** | Desktop only: `~/.claude/CLAUDE.md` (with Claude Code compatibility on) and `~/.atelier/ATELIER.md` | Your Code sessions and chats in a folder |
+| 3 | **Your ATELIER.md** | **Settings › Account › Your ATELIER.md** (up to 60,000 characters; kept with your account, so it works on a server too) | Your Code sessions, chats in a folder and their sub-agents. Where a project's `ATELIER.md` disagrees, yours wins |
+| 3 | **Your instructions** | **Settings › Account › Instructions** (up to 20,000 characters), next to **What should Atelier call you?** and the response style | Every new conversation of yours, in Chat and Code |
+| 4 | **The project's files** | `ATELIER.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` in the project folder and above it, and `.claude/rules/**/*.md` | Code sessions and chats in that folder |
 
 When two layers disagree, the lower number wins. Within a layer the more specific one wins: a file nearer the folder you
 work in beats one further up, and in one folder `ATELIER.md` beats `AGENTS.md`, which beats `CLAUDE.md`
-(`CLAUDE.local.md` wins over all the others in its folder). Chat gets only the administrator's text and your
-personal **Instructions** from this list: it has no folder. Memory adds your saved Preferences as standing instructions
+(`CLAUDE.local.md` wins over all the others in its folder). A chat without a folder (in its sandbox, or answering a
+quick question) gets only the administrator's text and your personal **Instructions** from this list. Memory adds your saved Preferences as standing instructions
 (see [Memory](/memory/)).
 
 The model is told this order (the header is on [Shared prompts](/prompts/shared/#instruction-files-header)), and each
@@ -63,7 +63,7 @@ file arrives as its own block naming its source.
 
 ### Project files
 
-For a Code session or Cowork task, Atelier reads these names in every folder from the **filesystem root down to the
+For a Code session or a chat in a folder, Atelier reads these names in every folder from the **filesystem root down to the
 folder you opened**, not only up to the repository root: a `CLAUDE.md` in your home folder or `~/Developer` applies to
 every project below it. Outermost folders come first and the nearest last, so the nearest wins. In each folder the order is
 `CLAUDE.md`, `.claude/CLAUDE.md`, `AGENTS.md`, `ATELIER.md`, `CLAUDE.local.md`.
@@ -208,7 +208,7 @@ the first line of the file, cut at 120 characters. File names may use letters, d
 
 ## Sub-agents
 
-In Cowork and Code the model can hand work to a sub-agent through the `Agent` tool. Besides the built-in
+In Chat and Code the model can hand work to a sub-agent through the `Agent` tool. Besides the built-in
 `general-purpose` agent, you can define your own as a Markdown file in an `agents` folder: `.atelier/agents` or
 `.claude/agents` in a project, `~/.atelier/agents` or `~/.claude/agents` on this computer, or a plugin's `agents` folder
 (named `plugin:agent`). The file name or `name` is lowercase letters, digits and hyphens.

@@ -12,8 +12,8 @@ Nobody else's account can open your conversations either way, and admins cannot 
 [Accounts](/accounts/#what-admins-can-and-cannot-see)). It only concerns the sign-ins of **your own account**.
 
 :::caution[Not the Remote Control environment]
-Code and Cowork also have an environment called **Remote Control**, in the menu above the composer next to Local, Cloud
-and SSH. That one chooses *where a session runs*: in a folder on another of your computers, through its desktop app or
+Code also has an environment called **Remote Control**, in the menu above the composer next to Local, Cloud
+and SSH (a chat picks such a folder under **+ › Add folder**). That one chooses *where a session runs*: in a folder on another of your computers, through its desktop app or
 [Atelier CLI](/cli/#the-background-service) (`atelier daemon keep` keeps a computer available with no terminal open). This
 page is about *who can open the conversation*. See
 [Two things called Remote control](#two-things-called-remote-control).
@@ -27,7 +27,7 @@ When remote control is on for a conversation, every browser and desktop app sign
 - watch a reply or a Code session as it streams;
 - continue it: send messages, stop it, answer its permission prompts and questions, rename or delete it.
 
-Conversations include Chat, Cowork and Code, their sub-agents and side chats. A conversation's artifacts follow it: another
+Conversations include chats and Code sessions, their sub-agents and side chats. A conversation's artifacts follow it: another
 sign-in cannot open them when remote control is off (see the limits under [Security model](#security-model)).
 
 When it is off for a conversation, **only the sign-in that created it** can see it. To every other sign-in of yours it is
@@ -48,7 +48,7 @@ all your sign-ins again.
 
 Click the conversation's title in its header to open its menu. The item reads **Remote control: On** or **Remote control:
 Off**; choosing it flips the setting for this conversation only. When the account switch is off, it reads **Remote control
-disabled in account** and cannot be changed. It is in Chat, Cowork and Code conversations on a server, not in temporary
+disabled in account** and cannot be changed. It is in chats and Code sessions on a server, not in temporary
 chats.
 
 New conversations start with remote control on. Sub-agents and side chats follow the conversation they belong to.
@@ -93,7 +93,7 @@ desktop app has its own. Consequences:
 
 ## Two things called Remote control
 
-| | Remote control *(this page)* | Remote Control (environment in Code and Cowork) |
+| | Remote control *(this page)* | Remote Control (environment in Code) |
 |---|---|---|
 | Where | **Settings › Account › Session access**, and a conversation's title menu | The environment menu above the composer: **Local**, **Cloud**, **Remote Control**, **SSH** |
 | What it decides | Who among your sign-ins can open a conversation | Which computer a session works on |

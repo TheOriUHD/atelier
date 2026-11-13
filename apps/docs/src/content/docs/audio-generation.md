@@ -3,7 +3,7 @@ title: Audio generation
 description: Add a sound service such as ElevenLabs, OpenAI, Google Gemini, Kokoro or your own ComfyUI, and any text model can read text aloud, make music and sound effects, and play them in the conversation.
 ---
 
-Add an audio provider, and the assistant can make sounds in Chat, Code and Cowork: **speech** read aloud in a voice,
+Add an audio provider, and the assistant can make sounds in Chat and Code: **speech** read aloud in a voice,
 **music** with or without vocals, and **sound effects**. You ask for it, the text model writes exactly what is said or
 describes the music, and a card holds its place in the conversation while it's made. When it's done it plays right there,
 with its waveform to seek on.
@@ -100,8 +100,8 @@ from 1 to 50), enough for a short conversation made line by line. Admins can als
 day; those limits are separate from the ones for images and video. **Let models make sounds** switches the tool off without
 touching images or video.
 
-In Code and Cowork the assistant can save a sound to your folder with **SaveAudio**. It's a file change like any other: it
-follows your permissions, shows among Cowork's output files, and Rewind undoes it. The file's name must match what it is
+In Code and in a chat with a folder the assistant can save a sound to the folder with **SaveAudio**. It's a file change
+like any other: it follows your permissions, shows among a chat's output files, and Rewind undoes it in Code. The file's name must match what it is
 (`.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac` or `.webm`).
 
 The assistant is told never to imitate a real person's voice or make speech that pretends to come from someone real, and

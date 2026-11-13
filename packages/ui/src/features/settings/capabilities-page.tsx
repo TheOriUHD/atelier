@@ -26,24 +26,11 @@ const ORGANIZATION_MAX = PromptSettings.shape.organizationInstructions.unwrap().
 export function CapabilitiesPage() {
   return (
     <>
-      <ConversationsSection />
       <WebSection />
       <InstructionsSection />
       <MemorySection />
       <SafeguardsSection />
     </>
-  );
-}
-
-/** Chat and Cowork in one (preview): one kind of conversation for everyone on this backend. */
-function ConversationsSection() {
-  const unified = useSetting<boolean>(['capabilities', 'unifiedChat']);
-  return (
-    <SettingsSection title="Conversations">
-      <SettingRow id="capabilities.unifiedChat" setting={unified}>
-        {(label) => <Switch {...label} checked={unified.value} onCheckedChange={(v) => void unified.set(v)} />}
-      </SettingRow>
-    </SettingsSection>
   );
 }
 

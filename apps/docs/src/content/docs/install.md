@@ -193,7 +193,7 @@ git clone https://github.com/TheOriUHD/atelier.git
 cd atelier
 corepack enable
 pnpm install
-pnpm runner:build   # the Go runner; needed to open folders for Code and Cowork
+pnpm runner:build   # the Go runner; needed to open folders for Code and chats
 pnpm dev:desktop    # Electron, with the interface served by Vite (hot reload)
 ```
 

@@ -35,7 +35,7 @@ test('desktop: computer use is turned on in Settings, the person allows apps, an
     await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
 
     // Off until the person turns it on; password managers start on the denied list.
-    await page.evaluate(() => (location.hash = '#/?settings=system'));
+    await page.evaluate(() => (location.hash = '#/?settings=computer'));
     const settings = page.getByRole('dialog', { name: 'Settings' });
     const enable = settings.getByRole('switch', { name: 'Enable computer use' });
     await expect(enable).toHaveAttribute('aria-checked', 'false');
@@ -115,7 +115,7 @@ test('desktop: in Full control the assistant takes the computer as it is, withou
     const page = await app.firstWindow();
     await setUpLocal(page);
     await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
-    await page.evaluate(() => (location.hash = '#/?settings=system'));
+    await page.evaluate(() => (location.hash = '#/?settings=computer'));
     const settings = page.getByRole('dialog', { name: 'Settings' });
     await settings.getByRole('switch', { name: 'Enable computer use' }).click();
     await settings.getByRole('radio', { name: 'Full control' }).click();

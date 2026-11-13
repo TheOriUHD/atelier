@@ -143,8 +143,8 @@ export const SettingsSchema = z.object({
       /** Let WebFetch reach LAN and VPN addresses (homelab docs); loopback and link-local stay blocked. */
       webFetchPrivateNetworks: z.boolean().default(false),
       /**
-       * Chat and Cowork as one conversation (being built; off until it is done): a chat that needs files, commands or the
-       * computer works as a Cowork task does, in its own sandbox or a folder it is given, and old Cowork tasks read as chats.
+       * The preview switch of 0.7.4 for Chat and Cowork in one. Since 0.7.6 they are always one (`AppInfo.unifiedChat`);
+       * kept so settings that hold it still parse, and so an app reads a 0.7.4 server that had it on.
        */
       unifiedChat: z.boolean().default(false),
     })

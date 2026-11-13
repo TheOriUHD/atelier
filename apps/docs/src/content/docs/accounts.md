@@ -117,7 +117,7 @@ Each row other than yours has a menu (**⋯**):
 ## Usage limits
 
 On a server shared by several people, **Settings › Admin › Limits** keeps one person from using all of a model. Every
-limit is off until you set it, and each applies to every person separately, across all of their chats, Cowork tasks and Code
+limit is off until you set it, and each applies to every person separately, across all of their chats and Code
 sessions together (deleted ones too, because the count comes from the usage records, not from the chats).
 
 | Limit | Counts |
@@ -274,7 +274,7 @@ On a server (in a browser or in a desktop app connected to one), top to bottom:
 | **Personality** | A style preset for new conversations, or your own **custom mode** (**Add custom mode**, **Edit mode**, **Delete mode**: up to 20, each with a name and up to 4,000 characters of style instructions). Style only, not a different model. |
 | **Response style** | **Default**, **Concise**, **Explanatory** or **Formal**. |
 | **Content safeguards** | Appears only when an admin switched safeguards on for you: "On, set by your administrator", with what they cover. Read-only. |
-| **Instructions for Code and Cowork › Your ATELIER.md** | Your own conventions for Code sessions and Cowork tasks and their sub-agents, in Markdown (up to 60,000 characters), saved on the server so it works from every device. Where a project's ATELIER.md disagrees, yours wins. |
+| **Instructions for Code and tasks › Your ATELIER.md** | Your own conventions for Code sessions and chats in a folder, and their sub-agents, in Markdown (up to 60,000 characters), saved on the server so it works from every device. Where a project's ATELIER.md disagrees, yours wins. |
 | **Session access › Remote control** | On by default. Whether your other browsers and devices can open this account's conversations. See [Remote control](/remote-control/). |
 | **Account › Username** | What you sign in with. Fixed. |
 | **Password › Change password** | Asks for the current password and a new one (8 characters or more). On an account made through an identity provider it says **Set a password** and asks only for the new one. |
@@ -285,7 +285,7 @@ On a server (in a browser or in a desktop app connected to one), top to bottom:
 | **Devices** | Computers running the Atelier desktop app for your account: **Name**, **Platform**, **Added**, and **Online** or when last seen. **This computer** marks the one you are on; the others can be removed. |
 
 On **Run on this computer** the page is shorter, because there is no sign-in to manage: **Profile**, **Instructions for
-Code and Cowork** and **Screen lock**.
+Code and tasks** and **Screen lock**.
 
 ## Settings › Connection
 
@@ -339,7 +339,7 @@ typing or clicking in any Atelier window. What it does and does not protect is i
 
 When you sign in on a desktop app connected to a server, the app registers its computer as one of your **devices**. A
 device lends the folders you trusted on it to your sessions on that server: in a browser, choose **Remote Control** in the
-environment menu above the Code or Cowork composer, and pick the computer. Devices belong to your account, so a shared
+environment menu above the Code composer (or **+ › Add folder** in a new chat), and pick the computer. Devices belong to your account, so a shared
 computer shows up once per person who signs in on it. A device shows **Online** while its app is open and linked.
 Removing a device from the list forgets it; it registers again the next time its app connects.
 

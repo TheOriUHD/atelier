@@ -215,7 +215,7 @@ describe('Account › Personality', () => {
   });
 });
 
-describe('Account › Instructions for Code and Cowork', () => {
+describe('Account › Instructions for Code and tasks', () => {
   it('edits the person’s own ATELIER.md as a draft and saves it to their preferences', async () => {
     let prefs = defaultUserPrefs();
     resetBackend({
@@ -229,7 +229,7 @@ describe('Account › Instructions for Code and Cowork', () => {
         (prefs = { ...prefs, personalization: { ...prefs.personalization, atelierMd: value } }),
     });
     await renderPage();
-    expect(await screen.findByRole('heading', { name: 'Instructions for Code and Cowork' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Instructions for Code and tasks' })).toBeTruthy();
     const field = screen.getByRole('textbox', { name: 'Your ATELIER.md' });
     fireEvent.change(field, { target: { value: '- Explain a plan before large changes.' } });
     expect(screen.getByText(/· Unsaved changes/)).toBeTruthy();

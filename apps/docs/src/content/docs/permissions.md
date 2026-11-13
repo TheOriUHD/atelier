@@ -1,15 +1,14 @@
 ---
 title: Permissions
-description: How Atelier decides whether a Code session may run a tool call, covering the five modes, rules, Auto mode's reviewer and what always asks.
+description: How Atelier decides whether a Code session or a chat may run a tool call, covering the five modes, rules, Auto mode's reviewer and what always asks.
 ---
 
-Every time the model in a Code session calls a tool (edit a file, run a command, fetch a page, use a connector), Atelier decides what happens: the call runs, you are asked, another model reviews it, or it is refused. [Code](/code/) shows the prompts; [Security](/security/) puts them in context.
+Every time the model in a Code session or a chat calls a tool (edit a file, run a command, fetch a page, use a connector), Atelier decides what happens: the call runs, you are asked, a separate review request decides, or it is refused. [Code](/code/) shows the prompts; [Security](/security/) puts them in context.
 
 What is covered:
 
 - **Code** sessions use everything on this page.
-- **Cowork** tasks have no mode picker. They use the default mode set in **Settings › Admin › Code**, and the same rules.
-- **Chat** has no folder. Only connector tools are gated there, by the rules below. A chat's sandbox for Bash and Read runs under fixed rules of its own (see [Security](/security/)).
+- **Chats** have a permission chip with four of the modes: there is no Plan mode, since a chat has no plan to approve, and an admin default of **Plan** makes a chat ask instead (as **Ask permissions** does). In a folder, the mode and the rules below decide. In a chat's own sandbox, the file and command tools follow fixed rules instead of the mode ([Chat](/chat/#the-sandbox)). Temporary chats have no chip. See [Chat](/chat/#permissions).
 
 :::note
 Permissions decide what Atelier lets a tool call do. They are not an operating-system sandbox. A command the model runs with Bash runs as you, with everything you can reach. Read [What Auto mode is not](#what-auto-mode-is-not) before you rely on any mode for sensitive work.
@@ -17,7 +16,7 @@ Permissions decide what Atelier lets a tool call do. They are not an operating-s
 
 ## The five modes
 
-The mode picker sits under the message box in Code. With the message box empty, **Shift+Tab** cycles Auto, Ask, Accept edits and Plan. Bypass is only chosen from the menu. A mode change applies at once, also in the middle of a run, and the model is told about it.
+The mode picker sits under the message box in Code (in a chat, the chip at the bottom left of the box, without Plan). In Code, with the message box empty, **Shift+Tab** cycles Auto, Ask, Accept edits and Plan. Bypass is only chosen from the menu. A mode change applies at once, also in the middle of a run, and the model is told about it.
 
 <!-- screenshot: the permission mode menu open above the message box, with the five modes and their descriptions -->
 
@@ -170,7 +169,7 @@ A permission prompt is titled **Allow Atelier to run …?** (or to edit, write o
 |---|---|---|
 | **Deny** | `1`, `Esc` | Refuses. The model reads that you declined and is told not to retry the same action unchanged. The reply goes on: it can take another route or ask you. |
 | **Deny with reason…** | `R` | Opens a field. Say why or what to do instead, and **Enter** sends it: the model reads your words as the result of the call and goes on from there. **Esc** puts the field away. |
-| **Always allow** | `2`, `⇧⌘↵` | Allows and remembers it **in this project**. In a chat, for you everywhere. |
+| **Always allow** | `2`, `⇧⌘↵` | Allows and remembers it **in this project**. In a chat without a folder, for you everywhere. |
 | **Allow once** | `3`, `⌘↵` | Allows this call only. With no **Always allow** (a dangerous command), it is `2`. |
 
 The chevron next to **Always allow** offers **Allow for this session**, **Always allow in this project** and **Always allow everywhere**; the last two show the rule they add. Everywhere means your **Always-allowed actions**. On Windows and Linux, `Ctrl` replaces `⌘` and `Shift` replaces `⇧`.

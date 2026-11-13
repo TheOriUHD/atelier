@@ -235,10 +235,10 @@ describe('messages between sessions', () => {
     await vi.waitFor(() => expect(chat.isRunning(parent.id)).toBe(false));
   }, 30_000);
 
-  it("refuses another person's session, its own id, a Chat conversation and an ended sub-agent", async () => {
+  it("refuses another person's session, its own id, a temporary chat and an ended sub-agent", async () => {
     const a = await repo.create({ mode: 'code', userId: 'u1', title: 'Mine' });
     const other = await repo.create({ mode: 'code', userId: 'u2', title: 'Theirs' });
-    const chatSession = await repo.create({ mode: 'chat', userId: 'u1', title: 'A chat' });
+    const chatSession = await repo.create({ mode: 'chat', userId: 'u1', title: 'A chat', temporary: 'fresh' });
     const child = await repo.create({ mode: 'code', userId: 'u1', title: 'Old helper', parentSessionId: a.id });
     const targets = [other.id, a.id, chatSession.id, `agent:${child.id}`, 'parent', 'nope'];
     const { chat, of } = service((_id, _req, n) => (n === 1 ? [...targets.flatMap((to, i) => call(`m${i}`, 'SendMessage', { to, message: 'Hi' }).slice(0, 2)), { type: 'finish', reason: 'tool_use' } as StreamEvent] : say('ok')));
@@ -249,7 +249,7 @@ describe('messages between sessions', () => {
     expect(results.map((r) => r.text)).toEqual([
       `There is no session or sub-agent "${other.id}" you can message. ListSessions lists the person's sessions; a sub-agent is named by the task id the Agent tool returned.`,
       "That is this session's own id: a session can't message itself.",
-      `"A chat" is a Chat conversation, which can't receive messages; Code sessions and Cowork tasks can.`,
+      `"A chat" is a temporary chat, which can't receive messages; other chats and Code sessions can.`,
       `The sub-agent "Old helper" has ended, so it can't receive messages. Its result reached you, or arrives, as a note; start a new sub-agent for more work.`,
       'This session has no parent session: it was started by the person.',
       `There is no session or sub-agent "nope" you can message. ListSessions lists the person's sessions; a sub-agent is named by the task id the Agent tool returned.`,
@@ -286,12 +286,13 @@ describe('messages between sessions', () => {
     await chat.stop(b.id);
   }, 30_000);
 
-  it("lists the person's other Code and Cowork sessions, most recent first, with their folders", async () => {
+  it("lists the person's other chats (old Cowork tasks among them) and Code sessions, most recent first, with their folders", async () => {
     const me = await repo.create({ mode: 'code', userId: 'u1', title: 'Me', workspaceId: 'w1' });
     const work = await repo.create({ mode: 'work', userId: 'u1', title: 'Quarterly report' });
     await new Promise((r) => setTimeout(r, 5));
     const code = await repo.create({ mode: 'code', userId: 'u1', title: 'Fix the login', workspaceId: 'w1' });
-    await repo.create({ mode: 'chat', userId: 'u1', title: 'Just a chat' });
+    await new Promise((r) => setTimeout(r, 5));
+    const quick = await repo.create({ mode: 'chat', userId: 'u1', title: 'Just a chat' });
     await repo.create({ mode: 'code', userId: 'u2', title: 'Not mine' });
     await repo.create({ mode: 'code', userId: 'u1', title: 'A helper', parentSessionId: me.id });
     const { chat, of } = service((_id, _req, n) => (n === 1 ? call('l1', 'ListSessions', {}) : say('ok')), { folders: async () => [{ id: 'w1', name: 'atelier' }] });
@@ -299,6 +300,10 @@ describe('messages between sessions', () => {
     await chat.settle(me.id);
     const listed = resultOf(of(me.id)[1], 'l1')!.text.split('\n');
     expect(listed[0]).toBe("The person's other sessions, most recent first:");
-    expect(listed.slice(1).map((l) => l.replace(/ · updated .*$/, ''))).toEqual([`- ${code.id} · "Fix the login" · Code · idle · folder atelier`, `- ${work.id} · "Quarterly report" · Cowork · idle`]);
+    expect(listed.slice(1).map((l) => l.replace(/ · updated .*$/, ''))).toEqual([
+      `- ${quick.id} · "Just a chat" · Chat · idle`,
+      `- ${code.id} · "Fix the login" · Code · idle · folder atelier`,
+      `- ${work.id} · "Quarterly report" · Chat · idle`,
+    ]);
   }, 30_000);
 });

@@ -67,7 +67,7 @@ sessions; permission rules and hooks are read again within a few seconds.
 
 ## Instruction files
 
-Code and Cowork sessions read these; Chat has no folder and reads none.
+Code sessions and chats in a folder read these; a chat without a folder reads none.
 
 | File | Read from | Notes |
 |---|---|---|
@@ -155,7 +155,7 @@ Markdown files in a `commands` folder, started with `/name`.
 * A command or skill runs when your message is exactly `/name` or `/name arguments`, in a top-level session. It joins
   your message as a hidden part. Sub-agents do not expand slash commands.
 
-Built-in commands are Atelier's own, not Claude Code's: `/compact [focus]` and `/rewind` (Code), `/loop` (Cowork and
+Built-in commands are Atelier's own, not Claude Code's: `/compact [focus]` and `/rewind` (Code), `/loop` (Chat and
 Code), `/clear`, `/model` and `/btw` (every mode with a session). Claude Code's own built-in commands, such as `/init`,
 do not exist here. See [Chat](/chat/), [Code](/code/) and [Shortcuts](/shortcuts/).
 
@@ -361,7 +361,7 @@ matchers that name them are accepted and never match anything.
 Parameter differences that matter in practice: `Bash` takes `timeout` in milliseconds (default 120,000, at most
 600,000); `Read` takes `offset` (a 1-based line) and `limit`; `Grep` has `output_mode`, `-i`, `-n`, `-A`, `-B`, `-C`,
 `glob`, `type`, `multiline` and `head_limit`; `WebFetch` needs only `url` (`prompt` is optional); `WebSearch` has
-`freshness` and `topic`. Which tools a session gets depends on its mode; see [Cowork](/cowork/) and [Code](/code/).
+`freshness` and `topic`. Which tools a session gets depends on its mode; see [Chat](/chat/#what-a-chat-can-use) and [Code](/code/).
 
 ## Model aliases
 

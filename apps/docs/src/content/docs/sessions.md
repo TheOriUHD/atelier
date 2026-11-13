@@ -1,9 +1,9 @@
 ---
 title: Sessions
-description: Find, organize and keep track of your chats, Cowork tasks and Code sessions, including split view, groups, archive and the status dots.
+description: Find, organize and keep track of your chats and Code sessions, including split view, groups, archive and the status dots.
 ---
 
-Every conversation you start is a **session**: a *chat* in Chat, a *task* in Cowork, a *session* in Code. They are listed
+Every conversation you start is a **session**: a *chat* in Chat, a *session* in Code. They are listed
 in the sidebar, searched from the palette, and kept until you delete them (or the retention period you set in **Settings
 › Privacy** does). The keys are in [Keyboard shortcuts](/shortcuts/).
 
@@ -11,18 +11,18 @@ in the sidebar, searched from the palette, and kept until you delete them (or th
 
 | Mode | Where | How it is arranged |
 |---|---|---|
-| Chat | The Chat tab's sidebar | **Pinned**, then by day, with Cowork tasks mixed in. A filter shows chats or tasks only. See [Chat](/chat/#the-sidebar). |
-| Cowork | The **Cowork** page, and by day in the Chat sidebar | By folder, with the view options below. |
+| Chat | The Chat tab's sidebar | **Pinned**, then by day. Tasks you started in Cowork, before it became part of Chat, are listed with the chats. See [Chat](/chat/#the-sidebar). |
 | Code | The Code tab's sidebar | By folder, with the view options below. |
 
-Each list is capped at the 200 most recently active sessions. Older ones are still in your account and the export;
-Chat's search finds older chats but never searches Cowork tasks or Code sessions. On a server, a session whose remote
+Each list is capped at the 200 most recently active sessions (in Chat, 200 chats and 200 former Cowork tasks). Older
+ones are still in your account and the export; Chat's search finds older chats and former Cowork tasks but never Code
+sessions. On a server, a session whose remote
 control is switched off is listed only on the device that made it (see
 [Remote control](/remote-control/)).
 
 ## The session menu
 
-Hover a row and press **⋯**, or right-click it, to open its menu. For Code sessions and Cowork tasks
+Hover a row and press **⋯**, or right-click it, to open its menu. For Code sessions and former Cowork tasks
 it holds the following; with the menu open, the letter beside an item does it:
 
 | Item | Key | What it does |
@@ -45,7 +45,7 @@ in "last activity" order. Pinning, renaming and changing a session's model do co
 
 ## Groups
 
-A **group** is a named folder of sessions that you make yourself, shared by Code and Cowork. **Move to group › New group…**
+A **group** is a named folder of Code sessions that you make yourself. **Move to group › New group…**
 asks for a name (up to 80 characters) and files the session in it. A group's header
 has **+** to start a new session in the group and **⋯** with **Rename
 group** and **Delete group**; click the name to collapse the group. Deleting a group does not delete its sessions: they go back to **Ungrouped**.
@@ -59,8 +59,8 @@ Archiving puts a session away without deleting it. Open the sliders button, choo
 
 ## Sidebar view options
 
-The sliders button on the first group of the Code sidebar and of the Cowork page sets how those two lists look. It is one setting for both, saved with your account, so on a server it follows you to
-other devices.
+The sliders button on the first group of the Code sidebar sets how that list looks. It is saved with your account, so on
+a server it follows you to other devices.
 
 | Option | Choices |
 |---|---|
@@ -87,7 +87,7 @@ other devices.
 
 ## Status dots
 
-Code and Cowork rows in these lists start with a dot that tells you where to look:
+Code rows start with a dot that tells you where to look:
 
 | Dot | Meaning |
 |---|---|
@@ -98,19 +98,20 @@ Code and Cowork rows in these lists start with a dot that tells you where to loo
 
 Opening the session clears the blue dot. A turn you stopped, or one that ended in an
 error, does not turn it blue. The marks are kept by the backend, so they survive a restart and show on every device.
-The Chat sidebar, which mixes chats and tasks, shows a document icon instead when the session made something
-(**Made an artifact** for a chat, **Made files** for a task) and a dot while it runs.
+The Chat sidebar shows a document icon instead when the conversation made something (**Made an artifact**, or **Made
+files** on a former Cowork task) and a dot while it runs.
 
 ## Search
 
 The **Search** box at the top of the sidebar, or ⌘K / Ctrl+K from anywhere, opens the palette.
 
-- **Actions** are filtered by what you type: **New chat** (on the Cowork page **New Cowork task**, in Code **New
-  session**), **New temporary chat**, **Settings**, and **Lock Atelier** when the screen lock is on.
+- **Actions** are filtered by what you type: **New chat** (in Code **New session**), **New temporary chat**,
+  **Settings**, and **Lock Atelier** when the screen lock is on.
 - **Chats**: with an empty box, your 8 most recent chats under **Recent chats**; with text, up to 20 matches under
   **Chats**. A match is a chat whose title contains your text, or any of whose messages contains every word you typed (each
   word matches as a prefix). Temporary chats are never found.
-- It searches chats only, not Cowork tasks or Code sessions. Use the lists and their view options for those.
+- It searches chats, and the tasks you started in Cowork, but not Code sessions. Use the Code list and its view options
+  for those.
 
 ↑ and ↓ move, Enter opens, Esc closes.
 
@@ -118,7 +119,7 @@ The **Search** box at the top of the sidebar, or ⌘K / Ctrl+K from anywhere, op
 
 In Code you can work in up to four sessions side by side. Open the menu of a Code session and choose **Open in ›
 Split view**: the session appears beside the one you are in. Do it again for a third and a fourth (past four it replaces
-the active one). Cowork tasks and chats do not split.
+the active one). Chats do not split.
 
 - **One active session.** A click or focus anywhere in a cell makes it the *active* one. Typing goes to the focused
   cell; ⌘U (add files) and ⌘⇧E (effort) act in the active one only.
@@ -148,10 +149,10 @@ The **Open in ›** submenu is where a session can go besides where it is:
 ## Windows, tabs and drafts
 
 - **The tab you left.** Atelier opens in the tab you were last in: quit in Code and it starts on Code's home, otherwise on
-  Chat (Cowork counts as Chat), remembered per window or browser. A link to a chat, an invite or Settings opens
+  Chat, remembered per window or browser. A link to a chat, an invite or Settings opens
   as it was.
 - **Drafts.** Unsent text stays in its box when you leave and come back, per conversation, for 30 days
-  and at most 50 boxes. The new chat and the new Cowork task share one box. See [Chat](/chat/#drafts).
+  and at most 50 boxes. See [Chat](/chat/#drafts).
 - **Narrow windows** (under 768 px): the sidebar slides in over the page and closes when you pick something, press Esc,
   or swipe left.
 - **Windows (desktop).** Only one copy of Atelier runs: opening it again brings the first window forward. On Windows and Linux, closing the last window quits Atelier; on macOS the app keeps

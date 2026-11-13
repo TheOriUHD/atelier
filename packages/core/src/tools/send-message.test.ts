@@ -31,10 +31,10 @@ describe('ListSessions', () => {
     const list = vi.fn(async () => [{ id: 'a', title: '', mode: 'work' as const, status: 'running' as const, folder: 'notes', updatedAt: Date.UTC(2026, 9, 17, 9, 5) }]);
     const tool = createListSessionsTool(list);
     expect(tool.readOnly).toBe(true);
-    expect(text(await tool.run({ query: ' report ' }, ctx))).toBe("The person's other sessions, most recent first:\n- a · \"Untitled\" · Cowork · running · folder notes · updated 2026-10-17 09:05 UTC");
+    expect(text(await tool.run({ query: ' report ' }, ctx))).toBe("The person's other sessions, most recent first:\n- a · \"Untitled\" · Chat · running · folder notes · updated 2026-10-17 09:05 UTC");
     expect(list).toHaveBeenCalledWith('s1', 'report');
     const none = createListSessionsTool(async () => []);
-    expect(text(await none.run({}, ctx))).toBe('The person has no other Code sessions or Cowork tasks.');
+    expect(text(await none.run({}, ctx))).toBe('The person has no other chats or Code sessions.');
     expect(text(await none.run({ query: 'x' }, ctx))).toBe('No other session of the person\'s matches "x".');
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Settings › System › Computer use (ARCHITECTURE §22; design/components.md › Computer use): on or off, how the
+ * Settings › Computer use, its own page in the desktop app (ARCHITECTURE §22; design/components.md › Computer use): on or off, how the
  * assistant uses the apps the person allows, whether hidden apps come back, the denied apps, the apps allowed for good,
  * and the macOS permissions it needs. Kept by this computer's main process, not the account. On Linux it also says what
  * that system can't do: no Background mode, a Wayland session's limits, and no way yet to tell a password field.

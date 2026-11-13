@@ -27,8 +27,21 @@ see are hidden in the app.
 | **Default speech model** *(only where it works)* | What reads text aloud for you, unless you name another when you ask. Each model has its own voices. |
 | **Default music model** *(only where it works)* | What makes your songs and background music, unless you name another when you ask. |
 | **Default sound effects model** *(only where it works)* | What makes your sound effects and ambience, unless you name another when you ask. |
-| **Notify me when a task finishes** | A system notification when a Cowork task ends while you’re in another window or app. |
-| **Notify me when a task needs me** | A system notification when a Cowork task waits for your answer or permission. |
+| **Notify me when a task finishes** | A system notification when a chat’s task ends while you’re in another window or app. |
+| **Notify me when a task needs me** | A system notification when a chat’s task waits for your answer or permission. |
+
+## Settings › Computer use
+
+| Setting | What it does |
+|---|---|
+| **Enable computer use** *(only where it works)* | Let the assistant in chats and Code see and use the apps you allow on this computer. |
+| **Unhide apps when Atelier finishes** *(only where it works)* | Apps hidden while Atelier had full control of your screen come back when it stops. |
+| **How Atelier uses the apps you allow** *(only where it works)* | Background: works in one app at a time in the background, without your mouse and keyboard, while you keep working. Apps you name yourself are allowed without asking; others ask first. Lists to choose from, right clicks, dragging, or an app that ignores background input need full control, which Atelier asks you for. On Linux this is “Ask per app”: you allow apps one by one and Atelier asks before it takes over your mouse and keyboard. Full control: takes over your computer as it is, any app but your denied ones, without asking. |
+| **Denied apps** *(only where it works)* | Atelier never uses these apps: asking for them is turned down without a question. |
+| **Apps allowed for good** *(only where it works)* | Apps you allowed with “Always allow on this computer”; every session may use them. |
+| **Accessibility** *(only where it works)* | macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission. |
+| **Atelier for Chrome** *(only where it works)* | The browser extension through which Atelier works in web pages, in tabs of its own in an “Atelier” group, in the background: it reads pages instead of looking at them, and never uses your own tabs. Works in Chrome, Brave, Edge and Arc. Chrome shows “started debugging this browser” while it acts in a page. |
+| **Screen recording** *(only where it works)* | macOS lets Atelier take screenshots of the apps you allow with this permission. macOS asks again from time to time. |
 
 ## Settings › Connection
 
@@ -53,7 +66,7 @@ see are hidden in the app.
 | **Full name** | Shown in the sidebar and to admins. |
 | **What should Atelier call you?** | Used in the greeting and shared with the model. Your full name is used when this is empty. |
 | **Instructions** | Preferences the model should keep in mind. They are added to the system prompt of every new chat. |
-| **Your ATELIER.md** | Your own conventions and preferences for Code sessions and Cowork tasks, in Markdown. Every new one and its sub-agents read them; where a project’s ATELIER.md disagrees, yours win. |
+| **Your ATELIER.md** | Your own conventions and preferences for Code sessions and chats working in a folder, in Markdown. Every new one and its sub-agents read them; where a project’s ATELIER.md disagrees, yours win. |
 | **Remote control** | Access your server sessions from other browsers and devices signed in to this account. Turning this off keeps sessions on their originating device, even when that session allows it. |
 | **Personality** | Atelier, Technical, Relaxed or your own custom mode. Style only, not model identity. Applies to new conversations; response style stays independent. |
 | **Response style** | How replies are written unless a chat asks otherwise. |
@@ -77,7 +90,7 @@ see are hidden in the app.
 | **Keep conversations** | Conversations untouched for longer than this are deleted once a day. Pinned ones stay. |
 | **Temporary chats** | Temporary chats never appear in your history and are deleted when you leave them. Starting fresh also keeps your memory, personal instructions and projects away from the model. |
 | **Export your data** | A zip with all your conversations (as JSON and Markdown), projects, artifacts, files and memory. |
-| **Delete all conversations** | Every chat, Cowork task and Code session, with its messages, files and artifacts. Projects stay. This can’t be undone. |
+| **Delete all conversations** | Every chat and Code session, with its messages, files and artifacts. Projects stay. This can’t be undone. |
 
 ## Settings › Memory
 
@@ -93,11 +106,11 @@ see are hidden in the app.
 
 | Setting | What it does |
 |---|---|
-| **Your usage** | Requests, tokens, images and cost of your chats, Cowork tasks and Code sessions. |
+| **Your usage** | Requests, tokens, images and cost of your chats and Code sessions. |
 | **Tokens by day** | A chart of tokens per day, split by Chat, Cowork and Code. |
 | **By model** | Tokens, cost and average output speed of each model. |
 | **Images** *(only where it works)* | Images each model made and what they cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
-| **Your limits** *(only where it works)* | What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats, Cowork tasks and Code sessions, including deleted ones. A cost limit counts only requests to models with a price. |
+| **Your limits** *(only where it works)* | What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats and Code sessions, including deleted ones. A cost limit counts only requests to models with a price. |
 | **Limits by person** *(admins only, only where it works)* | Everyone’s usage against their limits, with who is near or at one. Edit a person’s limits here or under Admin › Limits. |
 | **Videos** *(only where it works)* | Videos each model made, how many seconds of video that is and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
 | **Sounds** *(only where it works)* | Speech, music and sound effects each model made, how long they are in all, the characters read out and what it cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
@@ -107,11 +120,11 @@ see are hidden in the app.
 
 | Setting | What it does |
 |---|---|
-| **Always-allowed actions** | What you approved with “Always allow” in a permission prompt. These rules apply in your Code and Cowork sessions and to connector tools in chats, on top of the rules your admin set. |
+| **Always-allowed actions** | What you approved with “Always allow” in a permission prompt. These rules apply in your Code sessions and chats, on top of the rules your admin set. |
 | **Explain each change** | Before each edit, Atelier says why in one short sentence, and a permission prompt shows it under the title. Every edit uses a few more tokens, whether a prompt shows or not. New sessions pick this up; a running one keeps what it started with. |
 | **Code appearance** | Syntax highlighting for code: one theme for the light app theme, one for the dark. |
 | **Default transcript view** | How Code sessions open: tool calls as usual, with thinking expanded, or with every call’s details expanded. Each session can switch in its header. |
-| **Suggested replies** | After a reply in Code or Cowork, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply. |
+| **Suggested replies** | After a reply in Code or a chat’s task, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply. |
 | **Code font** | A monospace font installed on your computer, for code and diffs. |
 | **Commit author name** | Used for commits you make from the Code view. Empty uses the repository’s git config. |
 | **Commit author email** | Used for commits you make from the Code view. Empty uses the repository’s git config. |
@@ -159,14 +172,6 @@ Desktop app only.
 | **Check for updates automatically** | Atelier asks for the newest version when it starts and every 5 minutes. Off: it only looks when you press Check now. |
 | **Update channel** | Beta gets new versions before they’re released as stable. |
 | **Launch at login** | Open Atelier when you sign in to this computer. |
-| **Enable computer use** *(only where it works)* | Let the assistant in Code and Cowork see and use the apps you allow on this computer. |
-| **Unhide apps when Atelier finishes** *(only where it works)* | Apps hidden while Atelier had full control of your screen come back when it stops. |
-| **How Atelier uses the apps you allow** *(only where it works)* | Background: works in one app at a time in the background, without your mouse and keyboard, while you keep working. Apps you name yourself are allowed without asking; others ask first. Lists to choose from, right clicks, dragging, or an app that ignores background input need full control, which Atelier asks you for. On Linux this is “Ask per app”: you allow apps one by one and Atelier asks before it takes over your mouse and keyboard. Full control: takes over your computer as it is, any app but your denied ones, without asking. |
-| **Denied apps** *(only where it works)* | Atelier never uses these apps: asking for them is turned down without a question. |
-| **Apps allowed for good** *(only where it works)* | Apps you allowed with “Always allow on this computer”; every session may use them. |
-| **Accessibility** *(only where it works)* | macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission. |
-| **Atelier for Chrome** *(only where it works)* | The browser extension through which Atelier works in web pages, in tabs of its own in an “Atelier” group, in the background: it reads pages instead of looking at them, and never uses your own tabs. Works in Chrome, Brave, Edge and Arc. Chrome shows “started debugging this browser” while it acts in a page. |
-| **Screen recording** *(only where it works)* | macOS lets Atelier take screenshots of the apps you allow with this permission. macOS asks again from time to time. |
 | **Folders for sessions without one** *(only where it works)* | The server can make a new, empty folder on this computer for each session you start without a folder. |
 | **SSH hosts reached from here** *(only where it works)* | Hosts the server may connect to from this computer, with its ssh, keys and known hosts. Choosing a host here adds it. |
 | **Connectors that run a program here** *(only where it works)* | Your connectors the server may start on this computer. Adding or importing one here adds it; a changed program asks again. |
@@ -219,7 +224,7 @@ Admins only.
 
 | Setting | What it does |
 |---|---|
-| **Default model for everyone** | New chats, Cowork and Code sessions start with this model unless people choose their own. |
+| **Default model for everyone** | New chats and Code sessions start with this model unless people choose their own. |
 | **Small model** | Writes titles, summaries and memory. “Same as the chat” uses each chat’s own model. |
 | **Available models** | Rename, hide or favorite models, and override what was detected about them. |
 | **opus** | Which of your models answers when an agent file asks for `opus`. See [Models](/models/). |
@@ -239,8 +244,7 @@ Admins only.
 | **SearXNG URL** | Base URL of your instance. JSON output must be enabled in its settings.yml. |
 | **Search API key** | Stored encrypted in the secret store, never in settings files. |
 | **Web fetch** | Let chats read web pages and documents by URL. |
-| **Chat and Cowork in one (preview)** | One kind of conversation: a chat works as a Cowork task when the request needs files, commands or the computer, in its own sandbox or a folder it is given. Cowork tasks open as chats. Still being finished. |
-| **Instructions for every conversation** | What models are told in every Chat, Cowork and Code conversation, for every account, ahead of anything a person or project asks. Applies to new conversations. Code and Cowork also follow the system AGENTS.md (Admin › Code). |
+| **Instructions for every conversation** | What models are told in every chat and Code session, for every account, ahead of anything a person or project asks. Applies to new conversations. Code and chats working in a folder also follow the system AGENTS.md (Admin › Code). |
 | **Let people edit memory by hand** | Adds Edit to every memory entry in Settings › Memory, for changing its title, summary and details directly. Without it, memory changes only through Atelier. |
 | **Extra safeguards for everyone** | Off by default: models then follow only their own and their provider's rules. When on, the categories below apply to every conversation, except for people Users sets otherwise. |
 | **Explicit sexual content** | Erotica and graphic sexual material. Sex education and health questions are still answered. |
@@ -256,16 +260,16 @@ Admins only.
 
 | Setting | What it does |
 |---|---|
-| **Default permission mode** | The mode new Code sessions and Cowork tasks start in. People can switch it in each Code session. |
+| **Default permission mode** | The mode new Code sessions and chats start in (a chat that would start in Plan asks instead). People can switch it in each conversation. |
 | **Allow rules** | Tool calls that match run without asking. |
 | **Ask rules** | Tool calls that match always ask first, in every mode. |
 | **Deny rules** | Tool calls that match are blocked, in every mode. |
 | **Additional directories** | Folders sessions may use besides their workspace. Reaching anywhere else asks first. |
 | **Ultracode** | The last effort level in Code, on every model except ChatGPT Chat, which brings its own stops: the model plans, has up to 24 sub-agents per request investigate and check its work, and uses far more tokens. Off: sessions that chose it run at Extra. |
 | **Claude Code compatibility** | Also read what projects and your home folder keep for Claude Code: CLAUDE.md and rules, .claude/settings.json permission rules and hooks, and the skills, commands, agents and plugins in .claude folders. |
-| **Hooks** | Commands that run at points of every Code session and Cowork task on this computer, in Claude Code’s settings format. Projects bring their own in .atelier or .claude settings; people’s own devices run only those. |
+| **Hooks** | Commands that run at points of every Code session and chat task on this computer, in Claude Code’s settings format. Projects bring their own in .atelier or .claude settings; people’s own devices run only those. |
 | **Keep checkpoints for** | How long file versions are kept for rewinding Code sessions. |
-| **System AGENTS.md** | Instructions every Code session and Cowork task follows, for every account. Projects add their own CLAUDE.md and AGENTS.md. |
+| **System AGENTS.md** | Instructions every Code session and chat working in a folder follows, for every account. Projects add their own CLAUDE.md and AGENTS.md. |
 
 ## Settings › Admin › Connectors
 

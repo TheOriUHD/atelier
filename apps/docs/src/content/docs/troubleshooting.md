@@ -230,11 +230,11 @@ Every prompt says why. Common reasons:
 Refusals read "Blocked by the rule *rule*." (a deny rule), "Plan mode is on, so this can't run yet …", and "Auto mode blocked
 this action: …". See [Permissions](/permissions/).
 
-## Code and Cowork
+## Code, and chats in a folder
 
 - **"Open the desktop app to work in a folder on your computer, or use a codespace."** A browser has no folders of its own. Sign
   in to the server from the desktop app and open a folder there; then choose **Remote Control** in the environment menu
-  above the composer and pick that computer.
+  above the Code composer and pick that computer, or pick its folder under **+ › Add folder** in a new chat.
 - A computer shows **Offline** or "Its computer is offline": its desktop app is closed, asleep or signed out.
 - "*Name* is on a device that isn't connected." / "This folder is on another computer; open folders there in that computer's
   desktop app."

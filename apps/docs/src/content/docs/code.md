@@ -170,7 +170,7 @@ The model can hand a self-contained task to a **sub-agent**, a helper that works
 - A sub-agent takes at most 200 model calls (150 on compact-tier models) and then stops.
 - Under [Ultracode](/effort/#ultracode) one request may start up to 24.
 
-**Messages between sessions.** Ask a session to "tell my other session …" and it can list your sessions and send one a message. The receiving conversation shows **Received a message from another session**, and its model reads it right away if working, or in a turn of its own if idle. Agents only message when you ask or a task needs it, and only your own sessions. After three turns in a row started by messages, the next waits until you write in that conversation. Chat conversations don't take part.
+**Messages between sessions.** Ask a session to "tell my other session …" and it can list your sessions and send one a message. The receiving conversation shows **Received a message from another session**, and its model reads it right away if working, or in a turn of its own if idle. Agents only message when you ask or a task needs it, and only your own sessions. After three turns in a row started by messages, the next waits until you write in that conversation. Chats take part too; temporary chats don't.
 
 ### Steering while it works
 
@@ -185,7 +185,7 @@ If a reply is cut off because Atelier restarted, the end of the conversation say
 
 ### Suggested replies
 
-When a reply ends, the empty message box shows a short guess at what you'll send next in grey, such as "push it and release 0.2.11" when that's what you usually say once the work is done. **Tab** puts it in the box as your own text, to send as it is or change; it steps aside while you type and comes back whenever the box is empty again, until you send a message. The small model writes it from your recent messages and the reply (the conversation's model when no small model is set), at the lowest priority, so it never holds up a reply. Turn it off in **Settings › Code › Suggested replies**. Cowork has it too; Chat and temporary sessions don't.
+When a reply ends, the empty message box shows a short guess at what you'll send next in grey, such as "push it and release 0.2.11" when that's what you usually say once the work is done. **Tab** puts it in the box as your own text, to send as it is or change; it steps aside while you type and comes back whenever the box is empty again, until you send a message. The small model writes it from your recent messages and the reply (the conversation's model when no small model is set), at the lowest priority, so it never holds up a reply. Turn it off in **Settings › Code › Suggested replies**. A chat gets one after it worked through a task, not after a quick answer; temporary chats get none.
 
 ### Reading the transcript
 
@@ -216,7 +216,7 @@ Type `/` in the message box for commands, skills and your own commands. `@` find
 | `/loop [interval] <prompt>` | Sends a prompt on a schedule ([Loops](/loops/)). |
 | `/btw <question>` | Asks a side question without interrupting. |
 
-**Side questions.** `/btw what does this function return?` opens a **Side chat** pane and answers there while the session keeps working. It knows the conversation so far and can read the folder and the web, but changes nothing and doesn't reach the session. It runs at Low effort on the session's model, follows the session's mode and rules, and asks in its own pane. Each side chat is a tab; **+** starts another and **×** closes one. They come back after a reload and are deleted with their session. Chat and Cowork have `/btw` too.
+**Side questions.** `/btw what does this function return?` opens a **Side chat** pane and answers there while the session keeps working. It knows the conversation so far and can read the folder and the web, but changes nothing and doesn't reach the session. It runs at Low effort on the session's model, follows the session's mode and rules, and asks in its own pane. Each side chat is a tab; **+** starts another and **×** closes one. They come back after a reload and are deleted with their session. Chats have `/btw` too.
 
 ## Panes
 
@@ -325,7 +325,7 @@ A turn has no step cap, but it stops when the same action ran 15 times with the 
 
 - **Keep computer awake** (**More**, desktop app) stops the computer from sleeping while this session runs or waits for you; the screen may still turn off. It is per session and per device, and ends when the session finishes, you switch it off, delete the session or quit Atelier.
 - Closing a window doesn't stop a run. On macOS Atelier keeps running with no window; on Windows and Linux closing the last window quits it, which stops runs and [loops](/loops/).
-- **Notifications.** System notifications (**Settings › General › Notify me when a task finishes** and **needs me**) cover Cowork tasks only. In Code, watch the session's dot in the sidebar.
+- **Notifications.** System notifications (**Settings › General › Notify me when a task finishes** and **needs me**) cover chats that work as tasks only. In Code, watch the session's dot in the sidebar.
 
 ## Instructions, skills, hooks and connectors
 

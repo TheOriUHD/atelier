@@ -50,10 +50,9 @@ export interface PromptCase {
   agentsMd?: string;
   /** Started with no folder: a scratch folder without a repository or instruction files. */
   scratch?: boolean;
-  /** Chat: the conversation can have a sandbox (Bash and Read). */
+  /** Chat: the conversation can have a sandbox, where its file and command tools run until it has a folder. */
   sandbox?: boolean;
-  /** Chat and Cowork in one (capabilities.unifiedChat); `folder`: the conversation was given one of the person's folders. */
-  unified?: boolean;
+  /** Chat: the conversation was given one of the person's folders. */
   folder?: boolean;
   project?: boolean;
   personalization?: {
@@ -238,7 +237,6 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
     ];
     settings.capabilities.webSearch.enabled = c.webSearch ?? true;
     settings.capabilities.webFetch = c.webFetch ?? true;
-    settings.capabilities.unifiedChat = c.unified === true;
     settings.safeguards = { ...settings.safeguards, ...c.safeguards?.system };
     settings.prompts.organizationInstructions = c.organization ?? '';
     const prefs = defaultUserPrefs();
@@ -510,8 +508,8 @@ export const CASES: Record<string, PromptCase> = {
     tier: 'compact',
     personalization: { personality: { selected: 'relaxed', customModes: [] } },
   },
-  'work.full.personality-custom': {
-    mode: 'work',
+  'chat.full.personality-custom': {
+    mode: 'chat',
     personalization: {
       style: 'concise',
       personality: {
@@ -530,18 +528,12 @@ export const CASES: Record<string, PromptCase> = {
   'chat.compact.prompted': { mode: 'chat', tier: 'compact', prompted: true, webSearch: false },
   'chat.full.sandbox': { mode: 'chat', sandbox: true },
   'chat.compact.sandbox': { mode: 'chat', tier: 'compact', sandbox: true },
-  'chat.full.unified': { mode: 'chat', sandbox: true, unified: true },
-  'chat.compact.unified': { mode: 'chat', tier: 'compact', sandbox: true, unified: true },
-  'chat.full.unified.folder': { mode: 'chat', sandbox: true, unified: true, folder: true },
+  'chat.full.folder': { mode: 'chat', sandbox: true, folder: true },
   'chat.full.memory': { mode: 'chat', memory: {} },
   'chat.full.memory-explicit': { mode: 'chat', memory: { generate: false, searchChats: false } },
   'chat.compact.memory': { mode: 'chat', tier: 'compact', memory: { entries: 30 } },
-  'work.full': { mode: 'work' },
-  'work.full.no-web': { mode: 'work', webSearch: false, webFetch: false, skills: false },
-  'work.compact': { mode: 'work', tier: 'compact' },
-  'work.full.memory': { mode: 'work', memory: {} },
-  'work.full.computer': { mode: 'work', computer: true },
-  'work.full.browser': { mode: 'work', computer: true, browser: true },
+  'chat.full.computer': { mode: 'chat', sandbox: true, computer: true },
+  'chat.full.browser': { mode: 'chat', sandbox: true, computer: true, browser: true },
   'chat.full.images': { mode: 'chat', images: true },
   'code.full.images': { mode: 'code', images: true },
   'code.compact.images': { mode: 'code', tier: 'compact', images: true },
@@ -582,8 +574,7 @@ export const CASES: Record<string, PromptCase> = {
   'safeguards.chat.compact': { mode: 'chat', tier: 'compact', safeguards: { system: { enabled: true } } },
   'safeguards.code.full.all': { mode: 'code', safeguards: { system: ALL_CATEGORIES } },
   'safeguards.code.compact.all': { mode: 'code', tier: 'compact', safeguards: { system: ALL_CATEGORIES } },
-  'safeguards.work.full.person-on': { mode: 'work', safeguards: { person: 'on' } },
-  'safeguards.work.compact': { mode: 'work', tier: 'compact', safeguards: { system: { enabled: true } } },
+  'safeguards.chat.full.person-on': { mode: 'chat', safeguards: { person: 'on' } },
   'safeguards.code.full.subagent': {
     mode: 'code',
     subagent: 'general-purpose',

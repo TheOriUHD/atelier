@@ -13,7 +13,7 @@ Two tools do the work, and each has its own switch:
 | **WebSearch** | Turns a query into up to 10 results (title, link, snippet, and for the first few the relevant passages of the page itself). | **Web search** |
 | **WebFetch** | Opens one address and returns the page as readable text, or an answer to a question about it. | **Web fetch** |
 
-Both are offered in Chat, Cowork and Code, to sub-agents and in side chats, and keep working in plan mode. They run
+Both are offered in Chat and Code, to sub-agents and in side chats, and keep working in plan mode. They run
 in Atelier's backend (your computer with **Run on this computer**, otherwise the server), not in Chat's sandbox, so the
 sandbox's network access doesn't apply. The switches are under [Settings](#settings).
 
@@ -23,7 +23,7 @@ In Chat the model answers in prose, with its sources as Markdown links and a clo
 are folded into a line such as "Used WebSearch, WebFetch" above the reply; open it to see each query, the raw input and
 the result text.
 
-In Cowork and Code every search is a step of its own: **Searched the web for** the query, with the number of results and
+In Code every search is a step of its own: **Searched the web for** the query, with the number of results and
 the engine that answered ("8 results · DuckDuckGo"). Opened, it lists the results with site, date and snippet, and
 says "from this session’s cache" for a cached answer. A page read with WebFetch shows as **Fetched** and the address.
 A failed search shows its reason with a **Search settings** link (to the admins' settings).
@@ -41,7 +41,7 @@ research engine, and the model decides how many searches to run. Its search inst
 prompts](/prompts/shared/#web-search)) already call for one search for a single fact and ten to twenty, plus page
 fetches, for research and comparisons; Research tells it which you want.
 
-A research answer takes longer, uses more tokens and costs the search engines more requests. Cowork and Code have no Research switch; ask for a thorough, sourced answer in your message.
+A research answer takes longer, uses more tokens and costs the search engines more requests. Code has no Research switch; ask for a thorough, sourced answer in your message.
 
 ## How the built-in search works
 
@@ -184,8 +184,8 @@ metadata service. The private ranges (not this machine or link-local) can be all
 ### Permissions
 
 WebFetch and WebSearch are read-only, so they run without asking in every permission mode, including Auto. To make Code
-or Cowork ask first, add an ask rule such as `WebFetch(domain:example.com)` or a bare `WebFetch` (**Settings › Admin ›
-Code › Ask rules**); a deny rule blocks the tool. Rules cannot gate the web tools in Chat. See
+or a chat in a folder ask first, add an ask rule such as `WebFetch(domain:example.com)` or a bare `WebFetch` (**Settings ›
+Admin › Code › Ask rules**); a deny rule blocks the tool. See
 [Permissions](/permissions/).
 
 :::caution

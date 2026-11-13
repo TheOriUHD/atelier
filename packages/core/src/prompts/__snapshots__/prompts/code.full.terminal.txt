@@ -148,7 +148,7 @@ Recent commit subjects:
 The person is now using Atelier's terminal app. It shows your messages as text and each step as one line. It has no pane beside the conversation and can't show pictures, so when you make a page or anything else to look at, write it to a file and tell them its path. Open it in their browser only when they ask.
 </context-update>
 
-# Tools: 20, 26219 characters of JSON
+# Tools: 20, 26212 characters of JSON
 
 [
   {
@@ -594,7 +594,7 @@ The person is now using Atelier's terminal app. It shows your messages as text a
   },
   {
     "name": "ListSessions",
-    "description": "Lists the person's other Code sessions and Cowork tasks, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
+    "description": "Lists the person's other chats and Code sessions, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
     "inputSchema": {
       "type": "object",
       "properties": {

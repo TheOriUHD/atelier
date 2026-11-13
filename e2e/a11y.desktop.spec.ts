@@ -96,6 +96,9 @@ test('desktop: a Code session, its prompts and panes have no serious accessibili
     await page.evaluate(() => (location.hash = '#/?settings=system'));
     await expect(page.getByRole('switch', { name: 'Launch at login' })).toBeEnabled();
     await check('settings system');
+    await page.evaluate(() => (location.hash = '#/?settings=computer'));
+    await expect(page.getByRole('heading', { name: 'Computer use' }).first()).toBeVisible();
+    await check('settings computer use');
     expect(found).toEqual({});
   } finally {
     await app.close();

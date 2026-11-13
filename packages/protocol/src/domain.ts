@@ -667,6 +667,8 @@ export const AppInfo = z.object({
   deviceLink: z.object({ protocol: z.number(), services: z.array(z.string()) }).optional(),
   /** This backend can generate images (ARCHITECTURE §23); a newer app hides the feature on an older server. */
   imageGeneration: z.boolean().optional(),
+  /** Chat and Cowork are one kind of conversation here; an older server keeps Cowork as it was, and the app shows it so. */
+  unifiedChat: z.boolean().optional(),
   /** This backend keeps the admin activity log (a shared server); absent on the desktop app's own backend and on older servers. */
   auditLog: z.boolean().optional(),
   /** This backend keeps per-person usage limits (ARCHITECTURE §8); a newer app hides them on an older server. */

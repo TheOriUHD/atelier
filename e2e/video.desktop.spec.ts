@@ -1,7 +1,7 @@
 import { readFile, rm, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { launchDesktop, setUpLocal } from './desktop-app.ts';
+import { chatInFolder, launchDesktop, setUpLocal } from './desktop-app.ts';
 import { VIDEO_SETTINGS, call, fakeVideoJobs, sendWhenIdle, tempConfigDir, tempRepo } from './fixtures.ts';
 
 const generate = (input: Record<string, unknown>) => call('GenerateVideo', input);
@@ -126,7 +126,7 @@ test('desktop Code: Ask shows what will be made, the clip plays through the appâ
   }
 });
 
-test('desktop Cowork: a clip shows in its frame, and a saved one is among the Output files', async () => {
+test('desktop, a chat in a folder: a clip shows in its frame, and a saved one is among the Output files', async () => {
   test.setTimeout(180_000);
   const configDir = await tempConfigDir(VIDEO_SETTINGS);
   const folder = await tempRepo();
@@ -137,11 +137,7 @@ test('desktop Cowork: a clip shows in its frame, and a saved one is among the Ou
     }, folder);
     const page = await app.firstWindow();
     await setUpLocal(page);
-    await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Cowork', exact: true }).click();
-    await page.getByRole('button', { name: 'No folder', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Open folderâ€¦' }).click();
-    await page.getByRole('button', { name: 'Trust workspace' }).click();
-    await expect(page.getByRole('button', { name: basename(folder) })).toBeVisible();
+    await chatInFolder(page, folder);
 
     const box = page.getByRole('textbox', { name: 'Message', exact: true });
     await box.fill(generate({ prompt: 'A short intro clip for the quarterly report' }));

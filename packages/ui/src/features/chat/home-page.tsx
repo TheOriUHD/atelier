@@ -140,7 +140,7 @@ export function HomePage() {
             onSubmit={(text) => void send(text)}
             footerStart={
               folder ? (
-                <FolderChip folder={folder} onRemove={() => setWorkspaceId(null)} />
+                <FolderChip folder={folder} unified={unified} onRemove={() => setWorkspaceId(null)} />
               ) : offersProject ? (
                 <ProjectSelect value={projectId} onChange={setProjectId} />
               ) : undefined
@@ -173,12 +173,12 @@ export function HomePage() {
   );
 }
 
-/** The folder a Cowork task will run in, in place of the project picker; × makes it a chat again. */
-function FolderChip({ folder, onRemove }: { folder: WorkspaceSummary; onRemove(): void }) {
+/** The folder the new conversation will work in (a Cowork task on a server from before Chat and Cowork were one). */
+function FolderChip({ folder, unified, onRemove }: { folder: WorkspaceSummary; unified: boolean; onRemove(): void }) {
   return (
     <span className="flex h-6 min-w-0 items-center gap-1.5 rounded-sm pl-2 text-control-sm text-fg-secondary">
-      <Icon icon={BriefcaseBusiness} className="size-3.5 shrink-0" />
-      <span className="truncate">Cowork in {workspaceLabel(folder)}</span>
+      <Icon icon={unified ? FolderClosed : BriefcaseBusiness} className="size-3.5 shrink-0" />
+      <span className="truncate">{unified ? `In ${workspaceLabel(folder)}` : `Cowork in ${workspaceLabel(folder)}`}</span>
       <IconButton icon={X} label="Remove folder" size="xs" className="text-fg-muted" onClick={onRemove} />
     </span>
   );

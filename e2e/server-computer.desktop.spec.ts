@@ -28,7 +28,7 @@ test('desktop on a server: computer use reaches this computer, and its apps are 
     await connectDesktop(page);
 
     // Turned on on this computer, as without a server.
-    await page.evaluate(() => (location.hash = '#/?settings=system'));
+    await page.evaluate(() => (location.hash = '#/?settings=computer'));
     const settings = page.getByRole('dialog', { name: 'Settings' });
     const enable = settings.getByRole('switch', { name: 'Enable computer use' });
     await enable.click();

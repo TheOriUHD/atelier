@@ -7,7 +7,7 @@ description: Short answers about what Atelier is, what it costs, what it sends w
 
 ### What is Atelier?
 
-A workspace for language models with three modes on one backend: **Chat**, **Cowork** and **Code**. It runs as a desktop
+A workspace for language models with two modes on one backend: **Chat** and **Code**. It runs as a desktop
 app (macOS, Windows, Linux) or a web app you host yourself, on models you choose. See [Get started](/getting-started/).
 
 ### Is Atelier made by or affiliated with Anthropic, OpenAI or GitHub?
@@ -19,18 +19,20 @@ Atelier reads Claude Code's files where they already are (see
 [Do my Claude Code skills, plugins and hooks work?](#do-my-claude-code-skills-plugins-and-hooks-work)); that is
 compatibility, not affiliation.
 
-### What are Chat, Cowork and Code, and when do I use which?
+### What are Chat and Code, and when do I use which?
 
 - **Chat** for conversations: questions, writing, research, and anything that ends in an answer or an
-  [artifact](/artifacts/) such as a page, a diagram or a document. A chat can also clone a repository and run commands in a
-  sandbox of its own. See [Chat](/chat/).
-- **Cowork** for a longer task in a folder that should end in files you can open, such as a report or a cleaned-up
-  spreadsheet. See [Cowork](/cowork/).
+  [artifact](/artifacts/) such as a page, a diagram or a document. When a request needs files or commands, the same chat
+  works through it as a task, in a sandbox of its own or in a folder you give it, and ends with files you can open, such
+  as a report or a cleaned-up spreadsheet. See [Chat](/chat/).
 - **Code** for changing a repository: it reads and edits files, runs commands and shows diffs, under a permission mode,
   with a terminal and a way to rewind. See [Code](/code/).
 
-If you are unsure, start in Chat and move to Cowork when the answer should become files; under a reply that used the chat
-sandbox, **Continue in Cowork** carries the conversation over.
+### Where did Cowork go?
+
+It is part of Chat now. Your Cowork tasks are listed with your chats and open as chats in their folder. A chat gets the
+folder with **+ › Add folder**, and the progress list, output files and permission chip come with it. See
+[Tasks](/chat/#tasks).
 
 ### Is Atelier finished?
 
@@ -189,7 +191,7 @@ switch it off. See [Effort](/effort/).
 
 Yes. Pick a model per conversation in the message box. **Settings › General › Default model** sets what your new chats
 start with; **Settings › Admin › Models** sets the **Default model for everyone** and a **Small model** that writes titles,
-summaries and memory. New Cowork tasks and Code sessions follow the default for everyone. Agent files written for Claude
+summaries and memory. New Code sessions follow the default for everyone. Agent files written for Claude
 Code that ask for `opus`, `sonnet`, `haiku` or `fable` use the model you map to that name under **Aliases** on the same
 page.
 
@@ -277,7 +279,7 @@ instructions and memory; **Settings › Privacy › Temporary chats** can make i
 ### How do I delete my data?
 
 **Settings › Privacy** has **Keep conversations** (conversations untouched for longer than the number of days you choose are
-deleted once a day; pinned ones stay), **Delete all conversations** (every chat, Cowork task and Code session with its
+deleted once a day; pinned ones stay), **Delete all conversations** (every chat and Code session with its
 messages, files and artifacts; projects stay; this can't be undone) and **Export your data**. Memory entries can be
 deleted one by one in **Settings › Memory**.
 
@@ -285,7 +287,7 @@ deleted one by one in **Settings › Memory**.
 
 ### Why does Atelier ask me to trust a folder?
 
-Because a Code session or Cowork task can read, write and run commands in it, as you. A folder new to your list asks
+Because a Code session or a chat working in it can read, write and run commands there, as you. A folder new to your list asks
 **Trust this workspace?**; **Trust workspace** adds it. For a folder inside a Git repository, the repository's top level
 is the workspace. See [Security](/security/).
 
@@ -322,7 +324,7 @@ been verified against a real account. In a browser, Code uses a folder lent by o
 Yes, unless you turn it off. **Settings › Memory** shows what Atelier remembers about you and lets you delete entries
 (editing them by hand needs an admin to switch on **Let people edit memory by hand** under **Settings › Admin ›
 Capabilities**). **Generate memory from chats** and **Search and reference chats** are on by default; sensitive topics are
-off by default. Chat and Cowork use memory. Code sessions and sub-agents get none, and a temporary chat reads your memory
+off by default. Chat uses memory. Code sessions and sub-agents get none, and a temporary chat reads your memory
 but writes nothing to it (it reads none when **Settings › Privacy › Temporary chats** is set to start fresh). See
 [Memory](/memory/).
 
@@ -354,8 +356,8 @@ app, for several people on one install, or to reach your conversations from more
 
 ### Does the web server run commands on its own machine?
 
-No. A server never runs your Code or Cowork commands on its own machine. Code in a browser works through a folder lent by a
-desktop app signed in to the same account, or a GitHub codespace. Chats are different: a chat can clone a repository and run
+No. A server never runs your commands on its own machine. Code, and a chat given a folder, work in a browser through a
+folder lent by a desktop app signed in to the same account, or a GitHub codespace. A chat without a folder runs its
 commands in a sandbox, which on a server is a separate container next to it, limited in CPU, memory and processes, that
 holds none of the server's data or secrets. See [Security](/security/).
 
@@ -418,7 +420,7 @@ conversation only. See [Connectors](/connectors/).
 
 ### How do I give Atelier my own instructions?
 
-For every chat: **Settings › Account › Instructions**. For Code sessions and Cowork tasks: **Your ATELIER.md** on the same
+For every chat: **Settings › Account › Instructions**. For Code sessions and chats in a folder: **Your ATELIER.md** on the same
 page, and a project's `ATELIER.md` (or `AGENTS.md` or `CLAUDE.md`). An admin can add **Instructions for every
 conversation** under **Settings › Admin › Capabilities** and a system AGENTS.md under **Settings › Admin › Code**. See
 [Customize](/customize/).

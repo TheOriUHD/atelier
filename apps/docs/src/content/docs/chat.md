@@ -1,38 +1,43 @@
 ---
 title: Chat
-description: How conversations work in Atelier Chat, from the message box, attachments and replies to Research, temporary chats, the sandbox and failure messages.
+description: How conversations work in Atelier Chat, from the message box, attachments and replies to Research, tasks in a sandbox or a folder, permissions, temporary chats and failure messages.
 ---
 
 ![A conversation in Atelier's Chat](/img/chat-2560.webp)
 
-Chat is for conversations: questions, writing, thinking something through, looking at a file or a web page, building a
-small page or diagram. Use [Cowork](/cowork/) for a longer task in a folder and [Code](/code/) for a codebase. All three share the same message box, model picker and effort control.
+Chat is for conversations and the work that comes out of them: questions, writing, thinking something through, looking
+at a file or a web page, building a small page or diagram, and longer pieces of work that end in files, such as sorting a
+folder, reading a stack of PDFs and writing up what is in them, or building a spreadsheet. A quick question gets a quick
+answer. When a request needs files, commands or your computer, the same chat works through it as a [task](#tasks), in
+its own [sandbox](#the-sandbox) or in a [folder](#working-in-a-folder) you give it. Use [Code](/code/) for a codebase.
+Chat and Code share the same message box, model picker and effort control.
 
 ## The sidebar
 
 Chat's sidebar, top to bottom:
 
 - **The header.** A button that hides the sidebar (⌘B or Ctrl+B), the **Atelier** name, and the **Chat** and **Code**
-  tabs. Cowork is a page inside Chat, not a tab.
+  tabs.
 - **Search** opens the [search palette](/sessions/#search) (⌘K or Ctrl+K).
-- **New**, **Projects**, **Artifacts**, **Cowork** and **Customize** open those pages. **More** unfolds to
-  **Settings**, **Usage** and **Keyboard shortcuts**.
+- **New**, **Projects**, **Artifacts** and **Customize** open those pages. **More** unfolds to **Settings**, **Usage**
+  and **Keyboard shortcuts**.
 - **Pinned** lists the projects and conversations you pinned, the most recently pinned first.
-- Below that, your chats and Cowork tasks, newest activity first, under **Today**, **Yesterday**, a date for each earlier
-  day of the past week, **Previous 30 days** and **Older**. The sidebar loads at most 200 chats
-  and 200 Cowork tasks. [Search](/sessions/#search) still finds older chats but does not search Cowork tasks.
-- When you have both chats and Cowork tasks, a **Filter recents** button on the first group shows **All**, **Chats** or
-  **Cowork tasks**.
+- Below that, your chats, newest activity first, under **Today**, **Yesterday**, a date for each earlier day of the past
+  week, **Previous 30 days** and **Older**. Tasks you started in Cowork, before it became part of Chat, are listed with
+  them and open as chats; they keep their folder and carry on with Chat's default model. The sidebar loads at most 200
+  chats and 200 of those former Cowork tasks; [search](/sessions/#search) still finds older ones.
 - At the bottom: update and version notices (see [Updates](/updates/)), then your profile menu with **Settings**, the
   theme and **Log out**, or **Lock Atelier** when Atelier runs on this computer.
 
-Each row shows its title, a document icon when it made something (**Made an artifact** for a chat, **Made files** for a task) and a dot while it runs. Hover a
-row, or right-click it, for its menu: **Pin**, **Rename**, **Add to project ›**, **Remove from project** and **Delete**.
-Cowork tasks get the fuller session menu described in [Sessions](/sessions/). On a phone-sized window the sidebar
-slides in over the page.
+Each row shows its title, a document icon when it made something (**Made an artifact**, or **Made files** on a former
+Cowork task) and a dot while it runs. Hover a row, or right-click it, for its menu: **Pin**, **Rename**, **Add to
+project ›**, **Remove from project** and **Delete**. A former Cowork task keeps the longer menu described in
+[Sessions](/sessions/#the-session-menu). On a phone-sized window the sidebar slides in over the page.
 
 A chat is titled from your first message by the [small model](/models/) (the chat's own model
 when none is set). If neither answers, or with ChatGPT Chat, the title is the first words of your message.
+
+Links to the old Cowork page still work: `/work` leads to the chat home and `/work/<id>` to that conversation.
 
 ## Starting a chat
 
@@ -43,9 +48,9 @@ Below the box, a **Project** menu offers **No project**, one of your [projects](
 project…**, and the [model picker and effort control](#model-and-effort) sit on the right. The ghost button at the top
 right starts a [temporary chat](#temporary-chats).
 
-The first message creates the chat. If you turn the home into a folder task with **+ › Add folder**, the footer reads
-**Cowork in** and the folder, and sending starts a [Cowork](/cowork/)
-task instead.
+The first message creates the chat. To start it in one of your folders, pick the folder with **+ › Add folder** first:
+the footer then reads **In** and the folder's name in place of the project menu, and its **×** (**Remove folder**) takes
+the folder off again. See [Working in a folder](#working-in-a-folder).
 
 ## The conversation header
 
@@ -53,6 +58,9 @@ The title at the top of a chat opens a menu: **Pin** (or **Unpin**), **Rename**,
 **Remote control: On** or **Remote control: Off**, which decides whether other devices signed in to your account can see
 and drive this conversation (see [Remote control](/remote-control/)). If remote control is off for the whole
 account the item reads **Remote control disabled in account**.
+
+A chat that works in one of your folders also shows the folder badge beside the title (see
+[Working in a folder](#working-in-a-folder)).
 
 ## The message box
 
@@ -68,6 +76,8 @@ You can type while the model works. A message you send then waits under the conv
 box) and **Send now**, which cuts the current step short. **Stop** leaves nothing waiting and puts the
 waiting texts back in the box.
 
+The chip at the bottom left of a chat's box is its [permission mode](#permissions).
+
 ### The + menu
 
 The **+** button at the left of the footer (**Add files and more**):
@@ -75,31 +85,27 @@ The **+** button at the left of the footer (**Add files and more**):
 | Item | What it does |
 |---|---|
 | **Upload or add files** (⌘U / Ctrl+U) | Opens the file picker. |
-| **Add folder ›** | New chats only. Recent folders, **Open folder…** (desktop app) or **Use a codespace…**. Turns the chat into a Cowork task in that folder. |
+| **Add folder ›** | New chats only. Your recent folders whose computer is reachable, **Open folder…** (desktop app) and **Use a codespace…**. The chat then works in that folder. |
 | **Skills ›** | Lists the skills you can start; picking one puts `/name ` in the box. See [Customize](/customize/). |
 | **Connectors ›** | Switches [connectors](/connectors/) on or off for this conversation, with a count. A connector that is not connected says **Not connected**; one an admin switched off is greyed out. |
 | **Add plugins** | Admins only. Opens **Customize**. |
 | **Research** | A switch, shown while web search is on. See [Research](#research). |
 
-A connector's tools ask before they run, unless a rule allows them. The prompt has **Deny**, **Deny with reason…**, **Always allow** and **Allow once**; the chevron beside **Always allow** offers **Allow in this
-conversation** and **Always allow everywhere**. What you approve with **Always allow** is listed, and can be removed, in
-**Settings › Code › Always-allowed actions**. Web search and fetch, memory and the other built-in tools do not ask. See
-[Permissions](/permissions/).
-
 ### Slash commands
 
-Typing `/` as the first character opens a list: three built-in commands in a conversation (the new-chat home has only `/model`), then every skill and
-custom command you may start.
+Typing `/` as the first character opens a list: the built-in commands (the new-chat home has only `/model`), then every
+skill and custom command you may start.
 
 | Command | What it does |
 |---|---|
 | `/model` | Opens the model picker. |
 | `/clear` | Starts a new chat (in a project chat, back to the project's page). |
 | `/btw [question]` | Asks a side question. See below. |
+| `/loop [interval] <prompt>` | Sends the prompt now and again every interval while the chat is idle. See [Sub-agents, loops and side questions](#sub-agents-loops-and-side-questions). |
 
 Arrow keys move through the list, Enter or Tab picks, Esc closes it. Names that start with what you typed come first,
-then names that contain it. `/compact`, `/loop` and `/rewind` are not offered in
-Chat; the full list for every mode is in [Keyboard shortcuts](/shortcuts/#slash-commands).
+then names that contain it. `/compact` and `/rewind` are Code's; the full list for every mode is in
+[Keyboard shortcuts](/shortcuts/#slash-commands).
 
 ### Side chats with /btw
 
@@ -108,7 +114,7 @@ conversation carries on. The side chat:
 
 - reads the conversation so far, including the reply in progress, and answers at Low effort;
 - can search the web, fetch pages, use read-only connectors and look at your memory and past chats, but changes nothing
-  and has no Bash or Read;
+  and runs no commands;
 - adds nothing to the main conversation or its context.
 
 Each side chat is a tab with its own message box; **×** closes the tab and deletes that side chat. **+** starts
@@ -117,10 +123,10 @@ artifact panel to make room.
 
 ### Drafts
 
-Text you have typed and not sent stays in its box when you leave, even after a reload. Each conversation keeps its own draft; the new chat and the
-new Cowork task share one. Drafts keep the text and the attachments that have finished uploading, are stored in this browser
-or app for your account only (they do not follow you to another device), and are dropped after 30 days, or when more than
-50 boxes have drafts. A temporary chat keeps none.
+Text you have typed and not sent stays in its box when you leave, even after a reload. Each conversation keeps its own
+draft, and the chat home keeps one for the next new chat. Drafts keep the text and the attachments that have finished
+uploading, are stored in this browser or app for your account only (they do not follow you to another device), and are
+dropped after 30 days, or when more than 50 boxes have drafts. A temporary chat keeps none.
 
 ## Attachments
 
@@ -137,12 +143,12 @@ and a file that failed to upload is left out of the message.
 | **Images** (PNG, JPEG, GIF, WebP) | The image, if the model can see. A model without vision gets only the note "An image was attached, but this model cannot view images.", and the tile shows a warning. |
 | **PDF** | The file itself, for models that take PDFs natively (the Anthropic and OpenAI models Atelier knows, Mistral models that take images, and ChatGPT Chat). For every other model, the PDF's text layer, page by page. A scan with no text layer yields no text. |
 | **Text and code** (`.txt`, `.md`, `.csv`, `.json`, `.html`, `.py`, `.svg` and similar) | The text, inside a document block with the file name. Text beyond 400,000 characters is cut off. |
-| **Anything else** (Word, Excel and PowerPoint files, archives, audio, video) | In a Cowork or Code session, the file in its folder (below), which the agent opens, unpacks or converts with its tools. In a chat, nothing readable: the model is told "Attached file … cannot be read by this model." |
+| **Anything else** (Word, Excel and PowerPoint files, archives, audio, video) | In a chat that has a folder or its sandbox, and in Code, the file in that folder (below), which the model opens, unpacks or converts with its tools. Otherwise nothing readable: the model is told "Attached file … cannot be read by this model." |
 
-In a Cowork or Code session every file you attach also goes into the session's folder, so the agent's tools can work with
-it: in the root of a folder made for a session started with **No folder**, and under `.atelier/attachments/` in a folder
-of your own (with a `.gitignore` there, so git leaves it alone). A file whose name is taken gets ` (2)`; the same file sent
-again keeps its place. The model is told where each one is.
+In a chat that has a folder or its sandbox, and in a Code session, every file you attach also goes into that folder, so
+the tools can work with it: in the root of a sandbox or a scratch folder, and under `.atelier/attachments/` in a folder
+of your own (with a `.gitignore` there, so git leaves it alone). A file whose name is taken gets ` (2)`; the same file
+sent again keeps its place. The model is told where each one is.
 
 Limits:
 
@@ -178,7 +184,7 @@ strongest sources in full, cite the ones it relies on, and say where they disagr
 searches, more tokens and a longer wait.
 
 The switch only appears while an admin has **Settings › Admin › Capabilities › Web search** on, and it exists in Chat and
-in project chats, not in Cowork or Code.
+in project chats, not in Code.
 
 ## What you see while it works
 
@@ -238,8 +244,9 @@ What a reply can contain:
   window; arrow keys step through the others, Esc closes.
 - **Inline visuals and artifacts.** See below.
 
-Tool calls and thinking are folded into one line that opens to the details (for example **Used WebSearch**). Memory and
-past-chat lookups get lines of their own, such as **Saved a memory** and **Searched past chats**.
+Tool calls and thinking are folded into one line that opens to the details (for example **Used WebSearch** or **Used
+Bash, Write**), with each call and its result. Memory and past-chat lookups get lines of their own, such as **Saved a
+memory** and **Searched past chats**.
 
 ## Artifacts and inline visuals
 
@@ -249,13 +256,141 @@ versions. Artifacts are sandboxed: they cannot reach your account, your storage 
 
 An **inline visual** is a smaller explainer or interactive widget drawn in the conversation, for
 understanding rather than keeping. Hover it for **Reset visual**, **Download as HTML** and **Expand visual**.
-The [Artifacts page](/artifacts/) describes both.
+The [Artifacts page](/artifacts/) describes both. Files a chat writes in its sandbox or folder are something else: they
+show as [file cards](#output-files-and-previews).
+
+## Tasks
+
+When a request is a piece of work (writing or revising a document, building a spreadsheet or slide deck, researching a
+subject, sorting files, pulling facts out of a stack of PDFs, running code), the chat works through it as a task: it
+plans the steps, does them with real file and command tools, and leaves the result as files you can open. You see its
+steps while it works, and what it made as cards. A quick question still gets a quick answer, with no tools, no panels
+and no sandbox.
+
+It works in one of two places:
+
+- **Its own sandbox**, until you give it a folder: a private folder that starts empty and keeps its files, made the
+  first time a file or command tool runs. See [The sandbox](#the-sandbox).
+- **One of your folders**, picked with **+ › Add folder** on a new chat, or one the assistant moves it to after asking.
+  Its changes are real files in your folder. See [Working in a folder](#working-in-a-folder).
+
+:::note
+Cowork is part of Chat now. A server older than this version keeps Cowork as it was, and the app shows the **Cowork**
+page there until the server is updated (**Settings › Admin › Server › Update server**).
+:::
+
+### While it works
+
+- **The conversation.** Its tool calls fold into lines such as **Used Bash, Write**; open one to see each call and its
+  result. The [status line](#what-you-see-while-it-works) shows what it is doing, how long, its output tokens and how
+  full the context is. You can keep typing: your message waits for the next step, with **Take back and edit** and
+  **Send now**.
+- **The task panels**, to the right of the conversation (under it in a narrow window). Each appears only once it has
+  something to show:
+  - **Progress**, the model's to-do list with a count ("2 of 5"). The model keeps this list for anything beyond a quick
+    lookup; its last item is a check of the result.
+  - **Background**, sub-agents and loops that are running, each with a **Stop**.
+  - **Output files**, the files the task created or changed.
+- **Questions.** When it needs a decision it asks with a card above the message box: up to four questions, each with
+  two to four choices (a recommended one first) and room for your own answer. **Skip** ignores them. Permission
+  prompts appear in the same place.
+
+After a chat's task (not after every quick answer) the empty message box can show a
+[suggested reply](/code/#suggested-replies), a short guess at your next message: **Tab** puts it in the box. **Settings ›
+Code › Suggested replies** turns it off.
+
+### Output files and previews
+
+**Output files** in the panel lists every file the model wrote or edited with its **Write** and **Edit** tools in the
+sandbox or folder during the task, newest change last. When a request finishes, cards for the files it touched appear
+under the conversation, showing the file name and where it is. The button depends on the file:
+
+| File | Button | What happens |
+|---|---|---|
+| Text, code, Markdown, images (`png`, `jpg`, `gif`, `webp`, `avif`) | **Open** | A preview panel opens: text and code highlighted, Markdown rendered, images shown. Its header can copy the contents, show the file in its folder or download it. |
+| Office files (`docx`, `xlsx`, `pptx` and the like), PDFs, archives, audio, video | **Show in Finder** (**Show in folder** on Windows and Linux) in the desktop app for a folder on this computer; otherwise **Download** | No preview; the file is shown in your file manager or downloaded. |
+
+:::note
+Cards come from the model's Write and Edit calls, which write text. A file produced by a command the model ran (a
+converted PDF, a spreadsheet built by a script) is in the folder but gets no card. The model's closing message lists the
+files it made.
+:::
+
+If the folder's computer is offline the preview says "This folder's computer is offline."
+
+### What a chat can use
+
+| Tools | |
+|---|---|
+| Files and commands | **Read**, **Write**, **Edit**, **Glob**, **Grep**, **Bash**, **BashOutput**, **KillShell** |
+| Planning | **TodoWrite** (the progress list), **AskUser** (the questions) |
+| Delegating | **Agent** (sub-agents, also in the background), **SendMessage** and **ListSessions** (to your other chats and Code sessions), **TaskStop** (one, several or all background tasks) |
+| Clock and limits | **Time** (the date and time), **Usage** (plan limits or API cost, where the provider has them) |
+| Moving | **ChangeDirectory** asks to move the conversation to another folder on this computer or an SSH host; you correct the path or stay |
+| Knowledge | **Skill**, **WebSearch** and **WebFetch** (when an admin has them on), memory and past-chat search, tools of your [connectors](/connectors/), and **AddConnector** for an MCP server you give it |
+| Showing | **artifact** (see [Artifacts](/artifacts/)) and **inline_visual** (a small explainer in the conversation) |
+| Making media | Image, video and audio generation where a model for it is set up: [images](/image-generation/), [video](/video-generation/), [audio](/audio-generation/) |
+| Your computer | **ComputerAccess**, **Screenshot**, **ComputerAction** and the rest of [computer use](/computer-use/), and the **Browser** tool ([Atelier for Chrome](/computer-use/#web-pages-atelier-for-chrome)), in the desktop app where you turned computer use on |
+
+Every tool, with its description and parameters, is in the [tool reference](/reference/tools/).
+
+### Sub-agents, loops and side questions
+
+- The model can start **sub-agents**, including in the background, which keep working while it goes on; they show under
+  **Background** with their status. At most 8 can work in the background at once, and a chat wakes itself for their
+  results at most 5 times in a row before waiting for you.
+- `/loop 10m <prompt>` re-sends a prompt every interval while the chat is idle. `/loop` shows the loops and `/loop stop`
+  ends them. Intervals, limits and lifetimes are on [Loops](/loops/).
+- `/btw <question>` asks a [side question](#side-chats-with-btw) in a panel on the right without interrupting the task.
+
+Chat has no `/compact` (it compacts on its own, see [Long conversations](#long-conversations)), no `/rewind`, and no
+separate Background tasks pane: the Background list in the panel is it.
+
+### Notifications
+
+A system notification tells you when a chat's task finishes (**Task finished**), fails (**Task failed**) or needs you
+(**Task needs your input**: a question or a permission waiting), with the chat's title as the body. It comes for a chat
+that worked as a task (one that has its sandbox or a folder), and only when Atelier's window does not have focus.
+Clicking it opens the chat. Two switches in **Settings › General › Notifications** control it:
+
+- **Notify me when a task finishes** (covers finished and failed)
+- **Notify me when a task needs me**
+
+The desktop app allows notifications itself (your operating system's settings still apply). A browser asks for
+permission the first time you start a chat in a folder, and if you blocked it the setting shows "Notifications are
+blocked for Atelier. Allow them in your browser's site settings or your system settings." Code sessions show a status
+dot in the sidebar instead (see [Sessions](/sessions/#status-dots)).
+
+### Writing a good task
+
+When a request leaves out something that would change the result (audience, purpose, length, format, where the output
+should go), the model asks one round of questions first. Being specific up front saves that round trip:
+
+- **Say what done looks like.** "A one-page summary of each contract in `contracts/`, as a single `.docx`, longest
+  obligation first" beats "summarize my contracts".
+- **Name the format.** Unless you do, a written piece becomes `.docx` or `.md`, slides `.pptx`, a table `.xlsx`, raw data
+  `.csv`.
+- **Point at the material.** Give the chat the folder that holds it, or attach the files. In a folder it looks around
+  first and reuses the folder's structure and naming.
+- **Say what must not change.** By default new output is saved next to the originals with clear names, and files you made
+  are not overwritten or renamed unless you ask. Before deleting or moving files in bulk it asks, and prefers moving them
+  into a holding folder such as `_to_delete/`.
+- **Ask for research as research.** For research it starts by searching and asks afterwards, if the results reveal a real
+  fork. When its answer relies on web pages, connector items or files it ends with a **Sources** list.
+- **Use effort for hard thinking, not for completeness.** The effort setting decides how long it thinks, not how much of
+  the work it does. See [Effort](/effort/).
+
+The instructions a chat is given, its task part included, are published in full: [Chat prompt](/prompts/chat/).
 
 ## The sandbox
 
-Where Atelier can offer it, a chat gets two tools, **Bash** and **Read**, in a folder of its own that starts empty and is
-kept. The model can clone a repository, run a script or a test, or check a file
-without asking you each time. The sandbox is made the first time it is needed. A server whose compose file leaves out the `sandbox` service gives its chats no sandbox. Where it lives:
+Until you give it a folder, a chat runs its file and command tools in a sandbox of its own: a private folder that starts
+empty and keeps its files. The model can clone a repository, run a script or a test, convert a file or build a
+spreadsheet there without asking you each time. The sandbox is made the first time a file or command tool runs, so a
+quick question makes none. The header shows no folder badge for it.
+
+A server whose compose file leaves out the `sandbox` service gives its chats no sandbox: such a chat has no file or
+command tools until you give it a folder. Where the sandbox lives:
 
 - **On a server**, in the separate `sandbox` container that comes with the compose file ([Self-hosting](/self-hosting/)):
   a Debian image with git, Python 3, Node.js, npm, build tools, curl, jq and ripgrep, limited to 2 GB of memory, 2 CPUs
@@ -274,44 +409,81 @@ without asking you each time. The sandbox is made the first time it is needed. A
   On Windows and Linux nothing confines the commands to the folder, so each command goes to the
   [Auto mode](/permissions/#auto-mode) reviewer first, and to you if the reviewer cannot decide.
 
-Apart from that review, the sandbox asks no permission and follows fixed rules:
+Apart from that review, the file and command tools in the sandbox follow fixed rules instead of the
+[permission mode](#permissions), and never ask:
 
-- **Read** works only inside the folder.
+- **Read**, **Write**, **Edit**, **Glob** and **Grep** work only inside the sandbox folder.
 - **Bash** runs anything except commands that run as root (`sudo`), recursively delete or `find -delete` outside the
   folder, pipe a download into a shell, force-push, `git reset --hard`, `git clean -f`, `chmod -R 777`, write to a
   device, shut the machine down, format a filesystem or fork-bomb. The model is told "The
   sandbox doesn't allow this: the command …" and takes another way.
-- A command stops after 2 minutes unless the model sets a longer timeout (10 minutes at most), output is cut at 30,000
-  characters, and there are no background commands.
+- A command stops after 2 minutes unless the model sets a longer timeout (10 minutes at most), and output is cut at
+  30,000 characters. A command can also run in the background; **BashOutput** reads its output and **KillShell** stops
+  it.
 - Nothing in Atelier filters the sandbox's network access, which is how `git clone` and package installs work.
 
-When a reply used the sandbox, **Continue in Cowork** appears under it and copies the conversation into a new Cowork task
-in the same folder. It disappears when you write again, and the **×** hides it for good. Temporary chats do not offer it.
+The sandbox folder stays when the chat is deleted.
 
-## Chat and Cowork in one (preview)
+## Working in a folder
 
-An admin can turn on **Settings › Admin › Capabilities › Conversations › Chat and Cowork in one (preview)**. It is off
-by default and still being finished. While it is on, for everyone on that backend:
+On a new chat, **+ › Add folder** offers your recent folders whose computer is reachable (on this computer, another of
+your computers, an SSH host or a codespace), **Open folder…** in the desktop app, and **Use a codespace…**. The first
+time you use a folder from your computer, Atelier asks **Trust this workspace?** and shows the path; only **Trust
+workspace** records it. [Code](/code/#folders) has the details of folders, codespaces and SSH hosts, which are the same
+here.
 
-- **One kind of conversation.** The **Cowork** entry leaves the sidebar. A chat answers a quick question as before, and
-  works as a [Cowork](/cowork/) task when the request needs files, commands or your computer: it gets Cowork's tools
-  (Read, Write, Edit, Bash, sub-agents, the to-do list, computer use where you turned it on) as well as artifacts.
-- **Where it works.** With no folder, the file and command tools run in the chat's own [sandbox](#the-sandbox), made the
-  first time one of them runs, so a quick question makes none. **+ › Add folder** starts the chat in a folder instead, and
-  the folder badge then shows in the header.
-- **The task panels appear when there is something in them**: **Progress** with the first to-do list, **Output files**
-  with the first file written or changed. A quick question shows neither.
-- **A permission chip** in the message box sets the chat's mode: **Auto**, **Ask**, **Accept edits** or **Bypass** (see
-  [Permissions](/permissions/)). It starts at **Settings › Admin › Code › Default permission mode**; a default of
-  **Plan** asks instead, since a chat has no plan to approve.
-- **Old Cowork tasks** open as chats and carry on with Chat's default model. Links to `/work` lead to the new chat page
-  and links to a task to its conversation. The search palette finds them with your chats.
-- **Notifications** for a task finishing, failing or needing you come for a chat that worked as a task.
-- **Temporary chats** stay plain: no folder, no files, no commands.
-- **Continue in Cowork** is no longer offered.
+In a folder:
 
-Turning it off brings the Cowork tab back. Chats from while it was on stay chats; one that was given a folder can no
-longer run commands or change files there.
+- **Changes are real.** The chat reads and writes the files in your folder and runs commands there, as you.
+- **The header shows the folder badge** (**Offline** if the folder's computer is not reachable). The badge is also a
+  menu that moves the chat to another of your folders on the same computer, as in [Code](/code/#folders).
+- **The assistant can move it too**, with **ChangeDirectory**: it asks first, and you can correct the path or stay.
+- **The [permission mode](#permissions) decides what asks.**
+- **It reads the folder's instruction files** (below).
+
+### Instruction files
+
+A chat in a folder reads the instruction files in that folder and every folder above it, the way Code does: `ATELIER.md`,
+`AGENTS.md` and, while **Settings › Admin › Code › Claude Code compatibility** is on (the default), `CLAUDE.md`,
+`.claude/CLAUDE.md`, `CLAUDE.local.md` and `.claude/rules/*.md`. `@path` imports are followed. It also reads **Settings ›
+Account › Your ATELIER.md** (your own rules for every folder) and the admin's system AGENTS.md. Put the conventions of a
+recurring kind of work (naming, formats, tone) in these files. When you state a lasting preference in a task, the model
+adds it to the folder's `ATELIER.md` and tells you. A chat in its sandbox reads none of them. See
+[Customize](/customize/).
+
+## Permissions
+
+Every chat except a temporary one has a permission chip at the bottom left of its message box:
+
+| Mode | What it does |
+|---|---|
+| **Auto mode** | A separate review request to the chat's own model checks each action that would otherwise ask you, and runs it, asks you, or blocks it. |
+| **Ask permissions** | Asks before editing files or running commands. |
+| **Accept edits** | Edits files without asking; still asks before commands. |
+| **Bypass permissions** | Never asks, not even for risky commands. Deny rules and ask rules still apply. |
+
+There is no Plan mode in a chat, since a chat has no plan to approve. The chip starts at **Settings › Admin › Code ›
+Default permission mode** (Auto unless an admin changed it); when that default is **Plan**, a chat asks instead, as
+**Ask permissions** does.
+
+- **In a folder** the mode decides what asks, with the same rules as Code. In Auto mode edits inside the folder run
+  without review (except files that configure tools, such as `.git` or `.claude`), ask rules and deleting outside the
+  folder still ask you, and deny rules still block.
+- **In the sandbox** the file and command tools follow the sandbox's [fixed rules](#the-sandbox) instead.
+- A connector's tools ask before they run unless a rule or the mode lets them. Web search and fetch, memory, the
+  to-do list and the other built-in tools that only read or plan do not ask.
+
+[Permissions](/permissions/) explains every mode and the rules.
+
+When something does need you, the prompt above the message box offers **Deny**, **Deny with reason…**, **Always
+allow** (the chevron beside it picks how far it reaches, up to everywhere) and **Allow once**; its keys are in
+[Keyboard shortcuts](/shortcuts/#answering-a-question-or-permission-prompt). What you approve with **Always allow** is
+listed, and can be removed, in **Settings › Code › Always-allowed actions**.
+
+:::caution
+The chip starts at the admin's default, so a default of **Bypass permissions** lets every new chat run everything in its
+folder without asking until you change the chip.
+:::
 
 ## Temporary chats
 
@@ -320,7 +492,8 @@ Chat** (⇧⌘N or Ctrl+Shift+N in the desktop app), or **New temporary chat** i
 across the top shows that you are in one.
 
 - It never appears in the sidebar, search, the Artifacts page, a project or an export, and nothing of it is saved to
-  [memory](/memory/). It cannot be continued in Cowork, and it keeps no unsent draft.
+  [memory](/memory/). It keeps no unsent draft.
+- It stays plain: no folder, no files, no commands, none of the task tools and no permission chip.
 - It is deleted, with its files and artifacts, when you leave it: open something else, start a new chat, press **×** in
   the strip, or close its window. A window that closes or drops has a minute to come back (a reload keeps the chat).
   Any temporary chat nobody has open and that has been idle for 24 hours is removed too.
@@ -346,11 +519,11 @@ across the top shows that you are in one.
 Changes apply to new conversations. Your administrator can add instructions for every conversation under **Settings ›
 Admin › Capabilities**. They come first when instructions conflict, then what you say in the conversation, your
 response style, your saved instructions, and last project instructions. The wording is in the
-[Chat prompt](/prompts/chat/).
+[Chat prompt](/prompts/chat/). A chat in a folder also reads that folder's [instruction files](#instruction-files).
 
 ## Memory and past chats
 
-Chat and Cowork can remember lasting things about you across conversations and search your earlier chats when you refer
+Chat can remember lasting things about you across conversations and search your earlier chats when you refer
 to them. See [Memory](/memory/) for what it keeps and how to edit or turn it off. The
 toggles are in **Settings › Memory**: **Search and reference chats**, **Generate memory from chats** and **Include
 sensitive topics in memory**. Chats inside a project also read that project's memory entries.
@@ -369,7 +542,7 @@ line, **Compacted chat · saved 666.2k tokens**, that opens the summary. Everyth
 - The newest messages are kept as they were. The summary carries your current request, task list and changed files.
 - If a single turn needs eight summaries and still does not fit, it stops with "This task keeps filling the model's
   context window… Raise the model's context length (Settings › Admin › Models)".
-- Chat and Cowork have no `/compact`; only Code does.
+- Chat has no `/compact`; only Code does.
 
 The ring at the right of the footer shows how full the window is. It turns amber from 75% and red above 90%. Click it for the figures ("25k / 128k (20%)") and your usage: the plan's own windows for the
 **ChatGPT Plan** provider ("5-hour limit", "Weekly limit") and the monthly allowance for **Mistral Vibe** (both for admins), the session's cost, today's
@@ -384,20 +557,32 @@ A project gives a set of chats the same instructions and files. See [Projects](/
 ## Deleting, exporting and retention
 
 - **Delete** a chat from its row's menu or the title menu. The chat
-  and its artifacts are deleted for good.
-- **Settings › Privacy › Keep conversations** deletes conversations (chats, Cowork tasks and Code sessions) untouched
-  for **30**, **90** or **365 days**. Pinned ones stay. The default is **Keep everything**. The check runs 24 hours after
-  Atelier's backend starts and every 24 hours after that, so a desktop app quit within a day each time never
-  runs it.
+  and its artifacts are deleted for good. Its sandbox folder and the files in a folder of yours stay on disk.
+- **Settings › Privacy › Keep conversations** deletes conversations (chats, former Cowork tasks included, and Code
+  sessions) untouched for **30**, **90** or **365 days**. Pinned ones stay. The default is **Keep everything**. The check
+  runs 24 hours after Atelier's backend starts and every 24 hours after that, so a desktop app quit within a day each
+  time never runs it.
 - **Settings › Privacy › Export your data › Export** builds a zip of your conversations (each as Markdown for its active
   branch, plus all of them with every version as `conversations.json`), your projects' names, descriptions and
   instructions, every artifact version, your uploaded and project files, every picture and document your conversations hold (also those only inside messages, such as screenshots and generated images), and your memory. Temporary chats are not in it.
-- **Delete all…** removes every conversation (chats, Cowork tasks and Code sessions) with its messages, files and
+- **Delete all…** removes every conversation (chats and Code sessions) with its messages, files and
   artifacts after you type `DELETE`. Projects stay, without their chats.
 
 See [Privacy](/privacy/) for what is stored where.
 
 ## Limits and failure modes
+
+What a chat working as a task cannot do:
+
+- **It works in one place at a time**, its sandbox or one folder. Moving elsewhere is a request you approve
+  (ChangeDirectory), not something it does on its own.
+- **It cannot undo.** There is no Rewind in Chat. Anything that leaves the computer or cannot be undone (sending a
+  message, posting, a purchase, permanent deletion) needs your explicit request.
+- **No git panels, terminal or browser pane.** To review a diff, run a terminal or preview a dev server, use
+  [Code](/code/).
+- **It only works as far as the model does.** Small local models may fail on long tasks, and a model without tool
+  calling cannot use the file tools. See [Models](/models/) and [Local models](/local-models/).
+- **Sub-agents** stop after 200 steps.
 
 Provider errors begin with the provider's name as in **Settings › Admin › Providers** (here, Anthropic).
 
@@ -413,7 +598,7 @@ Provider errors begin with the provider's name as in **Settings › Admin › Pr
 | **The model connection ended before the reply was complete.** | The stream broke. Retried automatically. |
 | **The model provider stopped this response.** with **Edit** and **Retry** | The provider declined to continue. Atelier does not retry this; edit your message or try again. |
 | **Atelier restarted and cut off this reply.** | Press **Continue**. |
-| **Stopped: the same action ran 15 times with the same result. Send a message to continue, ideally saying what to do differently.** | The model kept repeating one call. Atelier told it on the 6th repeat and stopped the turn on the 15th. Say what to try instead. |
+| **Stopped: the same action ran 15 times with the same result. Send a message to continue, ideally saying what to do differently.** | The model kept repeating one call. Atelier told it on the 6th repeat and stopped the turn on the 15th. Say what to try instead. There is no other cap on the steps of a turn. |
 | **The sandbox isn't available: …** | The sandbox could not start (for example the server's `sandbox` container is down). |
 | A file tile reading **Larger than 32 MB** | Too big to upload. |
 

@@ -1,13 +1,14 @@
 import { expect, test } from '@playwright/test';
 
-test('an unsent message stays in its box: the new chat and the new Cowork task share one, Code keeps its own', async ({ page }) => {
+test('an unsent message stays in its box: the new chat keeps one, Code keeps its own', async ({ page }) => {
   await page.goto('/');
   const sidebar = page.getByRole('navigation', { name: 'Sidebar' });
   const box = page.getByRole('textbox', { name: 'Message' });
   await box.fill('plan the trip');
 
-  await sidebar.getByRole('link', { name: 'Cowork', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /^What should we get done/ })).toBeVisible();
+  // An old Cowork link leads to the new chat, with the same draft.
+  await page.goto('/#/work');
+  await expect(page).toHaveURL(/#\/$/);
   await expect(box).toHaveValue('plan the trip');
   await box.fill('plan the trip to Rome');
 

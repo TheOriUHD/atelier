@@ -350,8 +350,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const local = platform.surface === 'desktop' && !platform.setupToken;
   // The admin activity log is for shared servers: a backend with one person has nobody to account to, and writes nothing.
   const audit = new AuditLog(db, { enabled: () => !local, onError: (message, error) => platform.logger.error(message, error) });
-  /** Chat and Cowork in one (capabilities.unifiedChat): a chat that isn't temporary, or an old Cowork task, works as a task. */
-  const mergedChat = (session: { mode: string; temporary?: unknown }) => settings.effective.capabilities.unifiedChat === true && (session.mode === 'chat' || session.mode === 'work') && !session.temporary;
+  /** Chat and Cowork are one: every chat but a temporary one, and old Cowork tasks, work as tasks when they need to. */
+  const mergedChat = (session: { mode: string; temporary?: unknown }) => (session.mode === 'chat' || session.mode === 'work') && !session.temporary;
   const accounts = new AccountService(db, () => settings.effective.server.signup, audit);
   // Terminals signing in through the browser (servers only; a desktop's own backend has nobody to approve them).
   const terminalSignIns = new TerminalSignIns(accounts, local ? null : audit);
@@ -2109,6 +2109,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       // A server takes these from desktop devices (ARCHITECTURE §21); their windows offer them only where both ends can.
       ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...SERVER_DEVICE_SERVICES] } } : {}),
       imageGeneration: true,
+      unifiedChat: true,
       auditLog: !local,
       usageLimits: true,
       videoGeneration: true,
@@ -2572,9 +2573,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (model) await refuseHiddenModel(model, userId);
       if (temporary && (mode !== 'chat' || groupId)) throw appError('unsupported', 'Only a chat can be temporary, and it isn’t filed in a group.');
       if (workspaceId && !(await workspaceManager.list(userId)).some((w) => w.id === workspaceId)) throw appError('not_found', 'Workspace not found.');
-      // With Chat and Cowork in one, a new Cowork task (from an app that still offers it) is a chat that works as one.
-      if (mode === 'work' && settings.effective.capabilities.unifiedChat && !temporary) mode = 'chat';
-      if (scratch && ((mode === 'chat' && !settings.effective.capabilities.unifiedChat) || workspaceId)) throw appError('unsupported', 'Only a Code or Cowork session without a folder gets a scratch folder.');
+      // Chat and Cowork are one: a new Cowork task (from an older app that still offers it) is a chat that works as one.
+      if (mode === 'work' && !temporary) mode = 'chat';
+      if (scratch && workspaceId) throw appError('unsupported', 'A session without a folder gets a scratch folder, not one with a folder.');
       const folder = scratch ? await scratchFolder(userId, scratch.sshHost, callerDevice(ctx, scratch.sshHost ? 'ssh' : 'scratch')) : workspaceId;
       const created = await sessions.create({
         mode,

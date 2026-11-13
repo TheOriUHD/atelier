@@ -5,7 +5,7 @@ description: Keep related chats together and give each of them the same instruct
 
 A **project** is a named bundle of instructions, reference files and the chats that use them. Start a chat in a
 project and the model begins it already knowing what the project is for, how you want it to answer there, and what is in
-its documents. Projects are for Chat. Cowork tasks and Code sessions work in folders and do not use them.
+its documents. Projects are for Chat. Code sessions work in folders and do not use them.
 
 ## Creating a project
 
@@ -74,8 +74,7 @@ start a new chat in the project.
 
 - A chat belongs to at most one project. Start it from the project page, choose the project in the **Project** menu
   before the first message, or use **Add to project ›** later.
-- The chat's side chats (`/btw`) read the project too. A chat that you continue in Cowork keeps its project, so the task
-  reads the project's instructions and files as well.
+- The chat's side chats (`/btw`) read the project too.
 - [Memory](/memory/) is aware of projects: a chat in a project also reads that project's memory entries (shown under
   **Projects** in **Settings › Memory**) and saves project-only facts there. Other chats never see them.
 - **Temporary chats.** With **Settings › Privacy › Temporary chats › Don't save (default)** a temporary chat can use a

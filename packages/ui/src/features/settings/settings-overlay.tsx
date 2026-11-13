@@ -33,6 +33,7 @@ import { ShortcutsPage } from './shortcuts-page.tsx';
 import { DeveloperPage } from './developer-page.tsx';
 import { SkillsPage } from './skills-page.tsx';
 import { SystemPage } from './system-page.tsx';
+import { ComputerUseSection } from './computer-use-section.tsx';
 import { ConnectionPage } from './connection-page.tsx';
 import { LimitsPage } from './limits-page.tsx';
 import { UsagePage } from './usage-page.tsx';
@@ -51,6 +52,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   cloud: CloudPage,
   'personal-models': PersonalModelsPage,
   skills: SkillsPage,
+  computer: ComputerUseSection,
   system: SystemPage,
   providers: ProvidersPage,
   'image-providers': ImageProvidersPage,

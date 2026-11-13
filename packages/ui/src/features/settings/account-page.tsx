@@ -273,7 +273,7 @@ function PersonalityDialog({
 function PersonalInstructionsSection() {
   const file = usePref<string>(['personalization', 'atelierMd']);
   return (
-    <SettingsSection title="Instructions for Code and Cowork">
+    <SettingsSection title="Instructions for Code and tasks">
       <SettingRow id="personalization.atelierMd" setting={file} stacked>
         {(label) => (
           <InstructionsField

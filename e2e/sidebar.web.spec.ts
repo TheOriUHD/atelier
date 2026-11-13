@@ -22,13 +22,14 @@ async function newMember(page: Page, browser: Browser, baseURL: string | undefin
   return member;
 }
 
-test('two mode tabs: Chat with Cowork inside it, and Code with its own entries', async ({ page }) => {
+test('two mode tabs: Chat (which took Cowork in) and Code with its own entries', async ({ page }) => {
   await page.goto('/');
   const sidebar = page.getByRole('navigation', { name: 'Sidebar' });
   const tabs = sidebar.getByRole('radiogroup', { name: 'Mode' });
   await expect(tabs.getByRole('radio')).toHaveCount(2);
   await expect(tabs.getByRole('radio', { name: 'Chat' })).toBeChecked();
-  for (const name of ['New', 'Projects', 'Artifacts', 'Cowork', 'Customize']) await expect(sidebar.getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of ['New', 'Projects', 'Artifacts', 'Customize']) await expect(sidebar.getByRole('link', { name, exact: true })).toBeVisible();
+  await expect(sidebar.getByRole('link', { name: 'Cowork', exact: true })).toHaveCount(0);
 
   // More opens in place onto the less used places.
   await sidebar.getByRole('button', { name: 'More', exact: true }).click();
@@ -36,9 +37,10 @@ test('two mode tabs: Chat with Cowork inside it, and Code with its own entries',
   await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  await sidebar.getByRole('link', { name: 'Cowork', exact: true }).click();
-  await expect(page).toHaveURL(/#\/work$/);
-  await expect(page.getByRole('heading', { name: /^What should we get done/ })).toBeVisible();
+  // An old Cowork link leads to the home page.
+  await page.goto('/#/work');
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
   await expect(tabs.getByRole('radio', { name: 'Chat' })).toBeChecked();
   await expect(sidebar.getByText('Atelier', { exact: true })).toBeVisible();
 

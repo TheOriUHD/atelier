@@ -1,12 +1,13 @@
-import { rm } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { launchDesktop, setUpLocal } from './desktop-app.ts';
 import { call, sendWhenIdle, tempConfigDir } from './fixtures.ts';
 
-/** Chat and Cowork in one (capabilities.unifiedChat, being built): one kind of conversation that works as a task. */
-test('desktop, Chat and Cowork in one: a quick question stays a chat; a task writes its file in the chat’s sandbox and shows it', async () => {
+/** Chat and Cowork are one: one kind of conversation that works as a task when it needs to. */
+test('desktop, one kind of conversation: a quick question stays a chat; a task writes its file in the chat’s sandbox and shows it', async () => {
   test.setTimeout(120_000);
-  const configDir = await tempConfigDir({ capabilities: { unifiedChat: true }, permissions: { defaultMode: 'auto' } });
+  const configDir = await tempConfigDir({ permissions: { defaultMode: 'auto' } });
   const app = await launchDesktop(configDir);
   try {
     const page = await app.firstWindow();
@@ -53,6 +54,34 @@ test('desktop, Chat and Cowork in one: a quick question stays a chat; a task wri
     await page.evaluate(() => void (location.hash = '#/work'));
     await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
     expect(page.url()).not.toContain('/work');
+  } finally {
+    await app.close();
+    await rm(configDir, { recursive: true, force: true });
+  }
+});
+
+/** A chat can use the computer as Cowork could: no folder, no sandbox needed. */
+test('desktop: a chat uses the computer once it is turned on', async () => {
+  test.setTimeout(120_000);
+  // The full tier: the fake model counts as compact, which leaves out the app list tools.
+  const configDir = await tempConfigDir({ models: { overrides: { 'fake/fake-chat:8b': { promptTier: 'full' } } } });
+  const log = join(configDir, 'computer.log');
+  const app = await launchDesktop(configDir, { ATELIER_COMPUTER_HELPER: resolve('e2e/fake-computer.mjs'), FAKE_COMPUTER_LOG: log });
+  try {
+    const page = await app.firstWindow();
+    await setUpLocal(page);
+    await page.evaluate(() => (location.hash = '#/?settings=computer'));
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('switch', { name: 'Enable computer use' }).click();
+    await settings.getByRole('button', { name: 'Close' }).click();
+
+    const box = page.getByRole('textbox', { name: 'Message', exact: true });
+    // The person names TextEdit, so it needs no card.
+    await box.fill([call('ComputerAccess', { apps: ['TextEdit'], reason: 'Read the open note.' }), call('Screenshot', { app: 'TextEdit' })].join('\n'));
+    await sendWhenIdle(page);
+    await expect(page.getByRole('button', { name: 'Screenshot image 1 of 1' })).toBeVisible({ timeout: 30_000 });
+    const entries = (await readFile(log, 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l) as { method: string; app?: string });
+    expect(entries.find((e) => e.method === 'window.capture')).toMatchObject({ app: 'com.apple.TextEdit' });
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });

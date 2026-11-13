@@ -92,8 +92,8 @@ The product name, bundle id, config folder name and cookie name all come from on
 
 ## One request's journey
 
-What happens when you press Enter in a Code session, with the function that does each step. Chat and Cowork take the
-same path with fewer tools.
+What happens when you press Enter in a Code session, with the function that does each step. Chat takes the same path
+with fewer tools.
 
 1. **The UI calls `chat.send`** with the message parts and the session id. The handler in `backend.ts` checks that the
    session is yours, then calls `ChatService.send` (`packages/core/src/agent/chat-service.ts`).
@@ -101,7 +101,7 @@ same path with fewer tools.
    editing or retrying makes a sibling instead of overwriting. It is emitted as a `message` run event. A session has
    one run at a time; a message sent while the agent works goes to a waiting queue (`chat.queue`) and is taken at the
    agent's next step.
-3. **The run starts** (`ChatService.run`). The status becomes `running`. For Code and Cowork the `SessionStart` hook
+3. **The run starts** (`ChatService.run`). The status becomes `running`. For Code, and a chat with a folder, the `SessionStart` hook
    (in a session's first run) and the `UserPromptSubmit` [hook](/hooks-and-plugins/) run; the second can block the
    message, and both can add context. A leading `/name` is expanded into the skill or command text as a hidden part of
    your message. The model reference (`provider/model`) is resolved to an adapter. An untitled session gets a title in
@@ -186,9 +186,10 @@ one request and one model at a time; a hosted API as 16 and unlimited. A waiting
 
 ## Tools, workspaces and the runner
 
-Built-in tools are defined in `packages/core/src/tools` and `tools/code`. Chat has artifacts, web tools, memory and
-(where available) a sandbox with Bash and Read; Cowork and Code add the file tools, `Bash`, `TodoWrite`, `AskUser`,
-`Agent`, session messaging and more; Code adds `ExitPlanMode`. Sub-agents get the file tools and `Bash` but cannot ask
+Built-in tools are defined in `packages/core/src/tools` and `tools/code`. Chat has artifacts, web tools and memory,
+plus the file tools, `Bash`, `TodoWrite`, `AskUser`, `Agent`, session messaging and more, which run in the chat's own
+sandbox until it is given a folder (a temporary chat gets none of these). Code has the file and task tools too, and adds
+`ExitPlanMode`. Sub-agents get the file tools and `Bash` but cannot ask
 you questions or start sub-agents of their own. Each tool's description and parameters are in
 [Tools reference](/reference/tools/).
 

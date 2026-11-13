@@ -1,10 +1,10 @@
 import { readFile, rm } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { launchDesktop, setUpLocal } from './desktop-app.ts';
+import { chatInFolder, launchDesktop, setUpLocal } from './desktop-app.ts';
 import { call, tempConfigDir, tempRepo } from './fixtures.ts';
 
-test('desktop Cowork: a task in a folder shows its steps, comes back live after a reload, and ends with its files', async () => {
+test('desktop: a chat working in a folder shows its steps, comes back live after a reload, and ends with its files', async () => {
   test.setTimeout(180_000);
   const configDir = await tempConfigDir();
   const folder = await tempRepo({ 'notes.txt': 'Q3 revenue grew 12%.\n' });
@@ -20,14 +20,9 @@ test('desktop Cowork: a task in a folder shows its steps, comes back live after 
     const page = await app.firstWindow();
     await setUpLocal(page);
 
-    // Cowork is part of Chat: its sidebar entry opens the Cowork page.
-    await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Cowork', exact: true }).click();
-    await expect(page.getByRole('heading', { name: /^What should we get done/ })).toBeVisible();
-    await page.getByRole('button', { name: 'No folder', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Open folder…' }).click();
-    // A folder is asked about once: trust it to work in it.
-    await page.getByRole('button', { name: 'Trust workspace' }).click();
-    await expect(page.getByRole('button', { name: basename(folder) })).toBeVisible();
+    // Chat and Cowork are one: there is no Cowork page, and a chat is given the folder from + › Add folder.
+    await expect(page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Cowork', exact: true })).toHaveCount(0);
+    await chatInFolder(page, folder);
 
     const box = page.getByRole('textbox', { name: 'Message', exact: true });
     const steps = (writing: 'in_progress' | 'completed') => ({
@@ -52,16 +47,13 @@ test('desktop Cowork: a task in a folder shows its steps, comes back live after 
     const progress = panel.getByRole('region', { name: 'Progress' });
     await expect(progress.getByRole('listitem')).toHaveText(['Read the notes', 'Writing the report']);
     await expect(progress.getByRole('heading')).toHaveText('Progress1 of 2');
-    await expect(page.getByRole('navigation', { name: 'Sidebar' }).getByRole('region', { name: 'Today' }).getByRole('img', { name: 'Cowork task' })).toBeVisible();
 
-    // The command is approved; reloading the window while it runs comes back to the live task.
+    // The command is approved; reloading the window while the task waits on the next card comes back to it live.
     await page.getByRole('region', { name: /Allow Atelier to run/ }).getByRole('button', { name: 'Allow once' }).click();
-    const command = page.getByRole('button', { name: /^Count the numbers/ });
-    await expect(command).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Write report.md?' })).toBeVisible({ timeout: 30_000 });
     await page.reload();
     await expect(progress.getByRole('listitem')).toHaveText(['Read the notes', 'Writing the report']);
     await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
-    await expect(command).toHaveAttribute('aria-expanded', 'false');
 
     // Both files are approved, then the steps are all done.
     await page.getByRole('region', { name: 'Write report.md?' }).getByRole('button', { name: 'Allow once' }).click();

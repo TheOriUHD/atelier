@@ -1,9 +1,9 @@
 ---
 title: Computer use
-description: Let the assistant see and use apps on your Mac, Windows PC or Linux desktop in Code and Cowork. Turn it on, allow apps one by one, decide when it may take the mouse and keyboard, and take them back by holding Esc.
+description: Let the assistant see and use apps on your Mac, Windows PC or Linux desktop in Chat and Code. Turn it on, allow apps one by one, decide when it may take the mouse and keyboard, and take them back by holding Esc.
 ---
 
-With computer use, the assistant in a Code session or a Cowork task can look at apps on your computer and use them:
+With computer use, the assistant in a chat or a Code session can look at apps on your computer and use them:
 click, type, press keys and scroll, the way you would. It is for the jobs no other tool reaches, such as a native app with
 no connector, or a setting that only exists in a window. Where a connector, the shell or a web fetch does the job, the
 assistant uses that: working on screen is slower and less reliable.
@@ -19,9 +19,9 @@ can't use your computer. [Linux](#linux) differs in a few ways, which are listed
 
 ## Turn it on
 
-Open **Settings › System › Computer use** and switch on **Enable computer use**.
+Open **Settings › Computer use** (in the desktop app, right below **General**) and switch on **Enable computer use**.
 
-<!-- screenshot: Settings › System › Computer use with the switch on, Background selected and the permission rows -->
+<!-- screenshot: Settings › Computer use with the switch on, Background selected and the permission rows -->
 
 On a Mac, macOS asks for two permissions before Atelier can use apps. Both rows are on the same page, with **Grant…**
 and **Open System Settings**:
@@ -132,8 +132,8 @@ browser itself instead of its pictures:
 - **The same rules.** Your permission mode applies to every step that changes something (reading a page doesn't ask).
   It never types passwords or completes a purchase, and it asks before accepting terms or sending anything.
 
-Until the extension is in the Chrome Web Store, install it from the app: **Settings › System › Computer use › Atelier
-for Chrome** shows the folder; in your browser open `chrome://extensions`, turn on **Developer mode**, choose **Load
+Until the extension is in the Chrome Web Store, install it from the app: **Settings › Computer use › Atelier for
+Chrome** shows the folder; in your browser open `chrome://extensions`, turn on **Developer mode**, choose **Load
 unpacked** and pick that folder. The row says **Connected in …** once it works. Atelier registers the extension's
 helper with the browsers it finds each time it starts.
 
@@ -222,9 +222,9 @@ model with each request; the conversation keeps them all.
 
 ### The live view
 
-While a Cowork task works in an app or a web page, the top of the panel beside it shows what it last saw: the app's
+While a chat works in an app or a web page, the top of the task panel beside it shows what it last saw: the app's
 window or the page, its name, and the step it is on ("Clears the calculator"). Click the picture to see it full size.
-**✕** hides the view for that task while the task goes on; **Show what it sees** brings it back. In the desktop app,
+**✕** hides the view for that chat while the task goes on; **Show what it sees** brings it back. In the desktop app,
 **Pop out** opens it in a small window that stays above your other windows, so you can follow along while you work in
 something else. The view goes away when the task ends; the popped-out window says "Finished" and stays until you close it.
 

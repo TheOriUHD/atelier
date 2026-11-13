@@ -675,7 +675,7 @@ const WorkspaceId = z.string().min(1).max(200);
 const FileAnswer = z.object({ id: z.number().int().positive(), dataBase64: z.string().max(23_000_000).nullable() });
 
 function registerComputerIpc(): void {
-  // Only this computer's windows change what computer use may do here (cards and Settings › System).
+  // Only this computer's windows change what computer use may do here (cards and Settings › Computer use).
   const Backend = z.string().min(1).max(2048);
   const SessionId = z.string().min(1).max(100);
   ipcMain.handle('computer:status', () => computer.status());

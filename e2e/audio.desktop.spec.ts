@@ -1,7 +1,7 @@
 import { readFile, rm, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { launchDesktop, setUpLocal } from './desktop-app.ts';
+import { chatInFolder, launchDesktop, setUpLocal } from './desktop-app.ts';
 import { AUDIO_SETTINGS, call, fakeAudioRequests, sendWhenIdle, tempConfigDir, tempRepo } from './fixtures.ts';
 
 const generate = (input: Record<string, unknown>) => call('GenerateAudio', input);
@@ -106,7 +106,7 @@ test('desktop Code: Ask shows the words, the sound plays through the app’s own
   }
 });
 
-test('desktop Cowork: music shows in its card, and a saved one is among the Output files', async () => {
+test('desktop, a chat in a folder: music shows in its card, and a saved one is among the Output files', async () => {
   test.setTimeout(180_000);
   const configDir = await tempConfigDir(AUDIO_SETTINGS);
   const folder = await tempRepo();
@@ -117,8 +117,7 @@ test('desktop Cowork: music shows in its card, and a saved one is among the Outp
     }, folder);
     const page = await app.firstWindow();
     await setUpLocal(page);
-    await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Cowork', exact: true }).click();
-    await openFolder(page, folder);
+    await chatInFolder(page, folder);
 
     const box = page.getByRole('textbox', { name: 'Message', exact: true });
     await box.fill(generate({ kind: 'music', prompt: 'A short upbeat jingle for the quarterly report', seconds: 15 }));

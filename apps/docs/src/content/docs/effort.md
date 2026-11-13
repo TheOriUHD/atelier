@@ -3,7 +3,7 @@ title: Effort, Thinking and Ultracode
 description: How the effort control works, what each level asks of each kind of model, the Thinking switch, provider-fixed stops, and Ultracode's parallel sub-agents.
 ---
 
-Effort is how hard the model works on a request: how long it thinks, how much it checks, how many steps it takes. You set it next to the model picker in Chat, Cowork and Code. Higher levels give better results on hard problems but take longer and use more tokens. In Code the last stop is **Ultracode**, which adds parallel sub-agents.
+Effort is how hard the model works on a request: how long it thinks, how much it checks, how many steps it takes. You set it next to the model picker in Chat and Code. Higher levels give better results on hard problems but take longer and use more tokens. In Code the last stop is **Ultracode**, which adds parallel sub-agents.
 
 ## The levels
 
@@ -36,7 +36,7 @@ An existing session changes level from your next message; a reply already runnin
 ### How a session gets its level
 
 1. The level the session stores, if you picked one.
-2. Otherwise the model's **Recommended** level for the mode (Chat, Cowork or Code): the model's own recommendation where Atelier knows one, else **Medium**.
+2. Otherwise the model's **Recommended** level for the mode (Chat or Code): the model's own recommendation where Atelier knows one, else **Medium**.
 3. That level is moved onto what the model offers. A stored level the model doesn't have (after you switch models, or an admin switches Ultracode off) becomes the nearest lower one. Ultracode where it isn't offered is Extra in Code and Max elsewhere.
 4. The request carries the stop moved to the next lower level the model's own setting has.
 
@@ -121,7 +121,7 @@ Plan mode and the permission rules apply as usual: sub-agents ask you through th
 - A model without the Agent tool gets the notes without their sub-agent parts: it works in phases and checks its own work.
 - Small models may start few sub-agents or none.
 - ChatGPT Chat doesn't offer Ultracode.
-- Chat and Cowork have no Ultracode; a session that carries it there runs at Max.
+- Chat has no Ultracode; a session that carries it there runs at Max.
 
 **Who switches it off.** An admin can turn Ultracode off with the **Ultracode** switch in **Settings › Admin › Code › Effort** (on by default). The stop disappears, and sessions that had chosen it run at Extra and are told in a short note that Ultracode is off.
 

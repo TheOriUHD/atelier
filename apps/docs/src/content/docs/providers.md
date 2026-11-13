@@ -240,7 +240,7 @@ Atelier doesn't use Vibe's own sign-in: you create the key and paste it.
 - **Past the allowance** requests wait for the next billing period, unless pay-as-you-go is on in Mistral's console; then
   they are charged. A refused request ends the turn with "*Name* usage limit reached: … The plan's Vibe allowance starts
   again at the next billing period, or turn on pay-as-you-go in Mistral's console."
-- **The allowance in the app** (admins only): the context ring's popover in Chat, Cowork and Code shows **Plan usage
+- **The allowance in the app** (admins only): the context ring's popover in Chat and Code shows **Plan usage
   limits · *plan*** with a **Monthly allowance** bar and when it resets, and "Pay-as-you-go is on: use past the allowance
   is charged." when it is. From 90% a line above the message box warns ("You’ve used 93% of your Mistral Vibe monthly
   allowance."); at 100% it reads "You’ve reached your Mistral Vibe monthly allowance.", or with pay-as-you-go "…: more is

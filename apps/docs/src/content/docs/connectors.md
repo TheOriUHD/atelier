@@ -6,7 +6,7 @@ description: Give Atelier tools from other services with MCP servers. Add one, s
 A connector is an [MCP](https://modelcontextprotocol.io) server: a program or web service that offers tools the model can
 call. Cloudflare, GitHub, Notion, Linear, Brave Search and Home Assistant have ready-made entries; anything else that
 speaks MCP can be added by its address or by the command that starts it. Once a connector is on, its tools sit beside
-Atelier's own in Chat, Cowork and Code, and in sub-agents.
+Atelier's own in Chat and Code, and in sub-agents.
 
 Connectors belong to the **backend**, not to each person. An admin adds them, signs them in and sets what their tools may
 do; everyone on the server shares one connection and chooses per conversation which connectors it uses. If you run Atelier on your own computer, you are the admin.
@@ -206,7 +206,7 @@ doesn't change anything (a hint Atelier never trusts for permissions), and two c
 
 | Setting | What happens when the model calls the tool |
 |---|---|
-| **Ask** (the default) | In Chat, a prompt asks you each time. In Cowork and Code it follows the session's permission mode: you are asked in **Ask** and **Accept edits** modes; in **Auto** mode, the reviewing model decides first and hands the decision to you when it is unsure. See [Permissions](/permissions/). |
+| **Ask** (the default) | In a chat that has no sandbox or folder yet, a prompt asks you each time. Otherwise it follows the conversation's permission mode: you are asked in **Ask** and **Accept edits** modes; in **Auto** mode, the reviewing model decides first and hands the decision to you when it is unsure. See [Permissions](/permissions/). |
 | **Always allow** | It runs without asking, in any mode except plan mode. |
 | **Block** | It is refused, and the model is told the person's settings rule it out. |
 

@@ -56,34 +56,22 @@ never reads about a tool it does not have. The conditions and the rest of the as
 [How prompts are built](/prompts/design/).
 `;
 
-function modePage(mode: 'chat' | 'work' | 'code'): string {
+function modePage(mode: 'chat' | 'code'): string {
   const info = {
     chat: {
       title: 'Chat prompts',
       name: 'Chat',
       description: 'The system prompts Atelier gives a model in Chat, verbatim: the full and the compact tier.',
-      what: 'Chat is for conversation, writing, learning and research. Its core prompt covers identity, how to help, honesty, tone, formatting, dates and knowledge, personal settings and projects, and how to treat content from tools and files.',
+      what: 'Chat is for conversation, writing, learning and research, and works as a task when a request needs files, commands or the computer (it took over from Cowork). Its core prompt covers identity, how to help, honesty, tone, formatting, dates and knowledge, personal settings and projects, and how to treat content from tools and files; the task part covers working through a task with the file, command and planning tools.',
       joins: [
         'the search fragment, or the no-search one when an administrator turned web search off ([shared prompts](/prompts/shared/#web-search))',
         'the artifacts fragment ([shared prompts](/prompts/shared/#artifacts))',
         'the memory fragment, for people who have memory ([shared prompts](/prompts/shared/#memory))',
+        'the task part, when the conversation has the file, command and planning tools (in its sandbox or a folder)',
         'the optional safeguards block, only when an administrator or the person turned it on ([shared prompts](/prompts/shared/#optional-safeguards))',
-        'an `<env>` block, the administrator’s instructions, the skill list, the person’s personalization and, in a project, its instructions and files',
+        'an `<env>` block, the administrator’s instructions, the skill list, the person’s personalization and, in a project, its instructions and files; with a folder, the instruction files found in and above it (`ATELIER.md`, `AGENTS.md`, `CLAUDE.md`, rules)',
       ],
-      examples: ['chat.full', 'chat.compact', 'chat.full.memory', 'chat.full.sandbox', 'chat.compact.prompted'],
-    },
-    work: {
-      title: 'Cowork prompts',
-      name: 'Cowork',
-      description: 'The system prompts Atelier gives a model in Cowork, verbatim: the full and the compact tier.',
-      what: 'Cowork works through a longer task in a folder and leaves files behind. The mode’s internal name is `work`, which is why the files are called `work.full.md` and `work.compact.md`.',
-      joins: [
-        'the search fragment, or the no-search one ([shared prompts](/prompts/shared/#web-search))',
-        'the memory fragment, for people who have memory ([shared prompts](/prompts/shared/#memory))',
-        'the optional safeguards block ([shared prompts](/prompts/shared/#optional-safeguards))',
-        'an `<env>` block with the folder, the instruction files found in and above it (`ATELIER.md`, `AGENTS.md`, `CLAUDE.md`, rules), the skill list and the person’s personalization',
-      ],
-      examples: ['work.full', 'work.compact', 'work.full.memory'],
+      examples: ['chat.full', 'chat.compact', 'chat.full.memory', 'chat.full.sandbox', 'chat.full.folder', 'chat.compact.prompted'],
     },
     code: {
       title: 'Code prompts',
@@ -290,26 +278,22 @@ const CASE_INFO: Record<string, string> = {
   'chat.full.organization': 'Chat with an administrator’s instructions for everyone.',
   'chat.full.personality-technical': 'Chat with a built-in personality selected (technical and earnest).',
   'chat.full.personalization': 'Chat with a name, a response style and the person’s own instructions.',
-  'chat.full.sandbox': 'Chat with a conversation sandbox (Bash and Read).',
+  'chat.full.sandbox': 'Chat with a conversation sandbox, where its file and command tools run until it has a folder.',
   'chat.full.memory': 'Chat for a person with memory, with the memory tools and digest.',
   'chat.full.memory-explicit': 'Chat with memory where “Generate memory from chats” and chat search are off.',
   'chat.compact': 'Chat, compact tier.',
   'chat.compact.prompted': 'Chat, compact tier, for a model that calls tools through text (prompted tool calls).',
   'chat.compact.sandbox': 'Chat, compact tier, with a conversation sandbox.',
   'chat.compact.memory': 'Chat, compact tier, with memory.',
-  'work.full': 'Cowork, full tier.',
-  'work.full.no-web': 'Cowork with web access and skills switched off.',
-  'work.full.memory': 'Cowork for a person with memory.',
-  'work.full.computer': 'Cowork in the desktop app with computer use on: the computer use tools.',
-  'work.full.browser': 'Cowork with computer use on and Atelier for Chrome connected: the Browser tool.',
+  'chat.full.computer': 'Chat in the desktop app with computer use on: the computer use tools.',
+  'chat.full.browser': 'Chat with computer use on and Atelier for Chrome connected: the Browser tool.',
   'chat.full.images': 'Chat with an image model: GenerateImage and how to use it.',
   'code.full.images': 'Code with an image model: GenerateImage and SaveImage.',
   'chat.full.videos': 'Chat with a video model: GenerateVideo and how to use it.',
   'code.full.videos': 'Code with a video model: GenerateVideo and SaveVideo.',
   'chat.full.audio': 'Chat with a sound model: GenerateAudio for speech, music and sound effects, and how to use it.',
   'code.full.audio': 'Code with a sound model: GenerateAudio and SaveAudio.',
-  'work.full.personality-custom': 'Cowork with a custom personality and a concise response style.',
-  'work.compact': 'Cowork, compact tier.',
+  'chat.full.personality-custom': 'Chat with a custom personality and a concise response style.',
   'code.full': 'Code, full tier: the baseline.',
   'code.full.plan': 'Code in plan mode.',
   'code.full.scratch': 'Code started with No folder: a scratch folder of its own.',
@@ -321,9 +305,7 @@ const CASE_INFO: Record<string, string> = {
   'code.compact.connectors': 'Code, compact tier, with three connectors of twenty tools each.',
   'code.compact.computer': 'Code, compact tier, with computer use on.',
   'code.compact.browser': 'Code, compact tier, with computer use on and Atelier for Chrome connected.',
-  'chat.full.unified': 'Chat and Cowork in one (being built, off by default): a chat with Cowork’s tools, in its own sandbox until it has a folder.',
-  'chat.compact.unified': 'Chat and Cowork in one, compact tier.',
-  'chat.full.unified.folder': 'Chat and Cowork in one, with a folder of the person’s.',
+  'chat.full.folder': 'Chat given one of the person’s folders: the file and command tools work there.',
   'code.full.desktop': 'Code, full tier, written from the desktop app: Preview opens web pages in its Browser pane.',
   'code.compact.desktop': 'Code, compact tier, written from the desktop app (Preview).',
   'code.full.terminal': 'Code, full tier, written from the terminal app: no artifact pane, and the note saying where the person is.',
@@ -336,8 +318,7 @@ const CASE_INFO: Record<string, string> = {
   'safeguards.chat.compact': 'Chat, compact tier, with safeguards on.',
   'safeguards.code.full.all': 'Code with every safeguard category on.',
   'safeguards.code.compact.all': 'Code, compact tier, with every safeguard category on.',
-  'safeguards.work.full.person-on': 'Cowork where the person turned safeguards on for themselves.',
-  'safeguards.work.compact': 'Cowork, compact tier, with safeguards on.',
+  'safeguards.chat.full.person-on': 'Chat where the person turned safeguards on for themselves.',
   'safeguards.code.full.subagent': 'A sub-agent inheriting the person’s safeguards (some categories on).',
 };
 
@@ -457,7 +438,7 @@ export interface ToolRecord {
 /** Every built-in tool as sessions send it, gathered from the assembled sessions of the snapshot matrix. */
 export async function collectTools(): Promise<ToolRecord[]> {
   const byName = new Map<string, { variants: Map<string, string[]>; modes: Map<string, Set<string>>; tool: ToolDefJson }>();
-  const baseline: Record<string, string> = { chat: 'chat.full', work: 'work.full', code: 'code.full' };
+  const baseline: Record<string, string> = { chat: 'chat.full', code: 'code.full' };
   const baselineTools = new Map<string, Set<string>>();
   for (const [name, c] of Object.entries(CASES) as [string, PromptCase][]) {
     if (name.startsWith('safeguards.') || c.subagent) continue;
@@ -480,14 +461,14 @@ export async function collectTools(): Promise<ToolRecord[]> {
       const rec = byName.get(n)!;
       const always: string[] = [];
       const sometimes: string[] = [];
-      for (const mode of ['chat', 'work', 'code'] as const) {
+      for (const mode of ['chat', 'code'] as const) {
         if (!rec.modes.has(mode)) continue;
         (baselineTools.get(mode)?.has(n) ? always : sometimes).push(MODE_LABEL[mode]);
       }
-      // The primary wording is the Code full-tier one, else the Cowork or Chat full-tier one, else the commonest.
+      // The primary wording is the Code full-tier one, else Chat's full-tier one (with a sandbox, then without), else the commonest.
       const variants = [...rec.variants].map(([description, sessions]) => ({ description, sessions }));
       const rank = (v: { sessions: string[] }) =>
-        v.sessions.includes('code.full') ? 0 : v.sessions.includes('work.full') ? 1 : v.sessions.includes('chat.full') ? 2 : v.sessions.some((s) => s.includes('.full')) ? 3 : 4;
+        v.sessions.includes('code.full') ? 0 : v.sessions.includes('chat.full.sandbox') ? 1 : v.sessions.includes('chat.full') ? 2 : v.sessions.some((s) => s.includes('.full')) ? 3 : 4;
       variants.sort((a, b) => rank(a) - rank(b) || b.sessions.length - a.sessions.length || a.description.localeCompare(b.description));
       return { name: n, variants, modes: { always, sometimes }, schema: schemaOf(rec.tool), tool: rec.tool };
     });
@@ -582,7 +563,6 @@ export async function publishedFiles(): Promise<Map<string, string>> {
   const files = new Map<string, string>();
   const tools = await collectTools();
   files.set(`${DOCS}/prompts/chat.md`, modePage('chat'));
-  files.set(`${DOCS}/prompts/cowork.md`, modePage('work'));
   files.set(`${DOCS}/prompts/code.md`, modePage('code'));
   files.set(`${DOCS}/prompts/shared.md`, sharedPage());
   files.set(`${DOCS}/prompts/side-prompts.md`, sidePage());

@@ -71,7 +71,8 @@ export interface SubagentFacts {
   parentTitle: string;
 }
 
-const MODES = { chat: 'Chat', work: 'Cowork', code: 'Code' } as const;
+// Chat and Cowork are one: an old Cowork task is a chat.
+const MODES = { chat: 'Chat', work: 'Chat', code: 'Code' } as const;
 
 export function envBlock(facts: { mode: keyof typeof MODES; model: ModelFacts; date: string; timeZone: string; workspace?: WorkspaceFacts; subagent?: SubagentFacts }): string {
   const { model, workspace } = facts;

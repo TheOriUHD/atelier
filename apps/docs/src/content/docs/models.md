@@ -10,7 +10,7 @@ to shape it.
 
 ## The model picker
 
-The model name sits in the composer's footer, with the [effort](/effort/) control beside it, in Chat, Cowork and Code. Typing
+The model name sits in the composer's footer, with the [effort](/effort/) control beside it, in Chat and Code. Typing
 `/model` opens the same list.
 
 - **What it lists:** visible models from enabled providers.
@@ -28,14 +28,15 @@ Admins decide what the list contains; other accounts only receive the visible mo
 
 | Where | It starts on |
 |---|---|
-| **Chat** | Your **Default model** in **Settings › General**, if it is still visible. Otherwise the admin's **Default model for everyone**, otherwise the first visible model. |
-| **Cowork** and **Code** | The admin's **Default model for everyone**, otherwise the first visible model. |
+| **Chat** | Your **Default model** in **Settings › General**, if it is still visible. Otherwise the admin's **Default model for everyone**, otherwise the first visible model. A chat in a folder starts the same way. |
+| **Code** | The admin's **Default model for everyone**, otherwise the first visible model. |
 
 The **Default model** in Settings › General is yours alone and applies to new chats (unset: "Server default (*model name*)").
 The admin's **Default model for everyone** (unset: "First available model") is under **Settings › Admin › Models › Defaults**.
 
-A default can also be set for Cowork (`work`) or Code (`code`) alone in the settings file (`models.defaults.work`,
-`models.defaults.code`); that one wins over **Default model for everyone** for its own mode. Settings does not offer it.
+A default can also be set for Code alone in the settings file (`models.defaults.code`); it wins over **Default model
+for everyone** in Code. Settings does not offer it. `models.defaults.work`, Cowork's, is no longer used: former Cowork
+tasks carry on with Chat's default.
 
 A default whose model is gone (provider removed or switched off, or the model hidden) shows a warning, and new conversations
 fall back to the next choice. Settings › General says "This model is no longer available. New chats start with the server
@@ -255,7 +256,7 @@ that means for the effort control:
 - A model that can only switch thinking on or off gets a **Thinking** switch in the effort popover, on by default. It
   disappears from Extra upwards, where thinking is always on.
 - A model's **Recommended** level starts the control. Claude models have their own; every other model starts at Medium, except
-  ChatGPT Chat models, which start at Medium in Chat and at High in Cowork and Code.
+  ChatGPT Chat models, which start at Medium in Chat and at High in Code.
 - Ultracode is offered in Code, for every model except ChatGPT Chat, while the admin allows it. ChatGPT Chat replaces the
   scale with ChatGPT's own stops.
 
@@ -287,4 +288,4 @@ everyone on this installation; your own default model is part of your account's 
 
 ## The model you used last
 
-The model you pick in a conversation is the model the next new conversation starts with, per kind of conversation (Chat, Cowork, Code). Turn it off in **Settings › General › Start with the model I used last** to always start with your default model.
+The model you pick in a conversation is the model the next new conversation starts with, per kind of conversation (Chat, Code). Turn it off in **Settings › General › Start with the model I used last** to always start with your default model.

@@ -33,11 +33,11 @@ const SESSIONS: Partial<Record<Mode, SessionSummary[]>> = {
   work: [session('Quarterly report', 'work', 2_000)],
 };
 
+/** `unified`: the backend says Chat and Cowork are one; without it, a server from before that. */
 function renderPalette(unified: boolean) {
-  const settings = defaultSettings();
-  settings.capabilities.unifiedChat = unified;
   resetBackend({
-    'settings.get': () => snapshot(settings),
+    'app.info': () => ({ name: 'Atelier', version: '0.7.6', surface: 'web', platform: 'linux', dataDir: '', ...(unified ? { unifiedChat: true } : {}) }),
+    'settings.get': () => snapshot(defaultSettings()),
     'prefs.get': () => defaultUserPrefs(),
     'sessions.list': ({ mode }: { mode: Mode }) => SESSIONS[mode] ?? [],
   });
@@ -57,13 +57,13 @@ const recent = async () => within((await screen.findByText('Recent chats')).clos
 beforeEach(() => useUi.setState({ paletteOpen: false }));
 
 describe('the search palette', () => {
-  it('lists chats only, while Chat and Cowork are separate', async () => {
+  it('lists chats only on a server where Chat and Cowork are still separate', async () => {
     renderPalette(false);
     expect((await recent()).join()).toContain('Older chat');
     expect((await recent()).join()).not.toContain('Quarterly report');
   });
 
-  it('with Chat and Cowork in one, finds old Cowork tasks among the chats, newest first', async () => {
+  it('finds old Cowork tasks among the chats, newest first', async () => {
     renderPalette(true);
     await screen.findByText('Quarterly report');
     const rows = await recent();

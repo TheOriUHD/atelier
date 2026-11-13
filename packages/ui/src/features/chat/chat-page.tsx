@@ -4,6 +4,7 @@ import type { PermissionMode } from '@atelier/protocol';
 import { useUnifiedChat } from '../../lib/unified-chat.ts';
 import { keys, useWorkspaces } from '../../lib/queries.ts';
 import { FolderBadge } from '../code/workspace-picker.tsx';
+import { WorkspaceRoot } from '../code/tool-cards.tsx';
 import { CHAT_MODES, chatMode, PermissionModePicker, useEffectiveMode } from '../code/permission-mode.tsx';
 import { OutputFiles } from '../work/file-cards.tsx';
 import { FilePreview } from '../work/file-preview.tsx';
@@ -117,6 +118,8 @@ export function ChatPage() {
 
   return (
     <CoopContext.Provider value={coop}>
+    {/* Cards and steps name files by their path in the conversation's folder or sandbox, as Cowork did. */}
+    <WorkspaceRoot.Provider value={root}>
     <div className="relative flex min-h-0 flex-1">
       {/* The chat column keeps the space left of the artifact panel, with 8px gaps around the panel. */}
       {/* Narrow screens: the panel covers the column instead. */}
@@ -234,6 +237,7 @@ export function ChatPage() {
       {preview && workspace && <FilePreview key={preview.path} workspace={workspace} file={preview} onClose={() => setPreview(null)} />}
       {sidePanel.open && !artifact && !preview && <SideChatPanel chats={sideChats} panel={sidePanel} />}
     </div>
+    </WorkspaceRoot.Provider>
     </CoopContext.Provider>
   );
 }

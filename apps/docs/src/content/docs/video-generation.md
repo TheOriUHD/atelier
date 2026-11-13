@@ -3,7 +3,7 @@ title: Video generation
 description: Add a video service such as OpenRouter, xAI, fal.ai or your own ComfyUI, and any text model can make short clips, start them from a picture, and show them in the conversation.
 ---
 
-Add a video provider, and the assistant can make short video clips in Chat, Code and Cowork. You ask for a clip, the text
+Add a video provider, and the assistant can make short video clips in Chat and Code. You ask for a clip, the text
 model writes the prompt, and a frame in the clip's shape appears at once and says what it is waiting for. When the clip is
 done it plays right there. Ask for a clip that starts from a picture, and the model starts from it.
 
@@ -79,8 +79,8 @@ Plan mode doesn't make videos. Each turn can make at most 2 (an admin can change
 videos and spending per person per day under **Settings › Admin › Media**; those limits are separate from the ones for
 images. **Let models make videos** switches the tool off without touching images.
 
-In Code and Cowork the assistant can save a clip to your folder with **SaveVideo**. It's a file change like any other: it
-follows your permissions, shows among Cowork's output files, and Rewind undoes it. The file's name must match what it is
+In Code and in a chat with a folder the assistant can save a clip to the folder with **SaveVideo**. It's a file change
+like any other: it follows your permissions, shows among a chat's output files, and Rewind undoes it in Code. The file's name must match what it is
 (`.mp4` or `.webm`).
 
 A sub-agent never gets the video tool, because its clip wouldn't show in the conversation it works for.

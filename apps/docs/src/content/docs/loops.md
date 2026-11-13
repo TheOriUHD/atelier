@@ -1,9 +1,9 @@
 ---
 title: Loops and background tasks
-description: Repeat a prompt with /loop, and follow the commands, sub-agents and loops a Code session keeps running beside its turns.
+description: Repeat a prompt with /loop, and follow the commands, sub-agents and loops a Code session or a chat keeps running beside its turns.
 ---
 
-A Code session (or a Cowork task) can keep work going beside the conversation:
+A Code session (or a chat working as a task) can keep work going beside the conversation:
 
 - **Loops** send a prompt of yours again and again, with `/loop`.
 - **Background commands** are servers, watchers and long jobs the model starts with Bash and reads later.
@@ -25,13 +25,13 @@ All three are listed in the **Background tasks** pane. Atelier has no separate s
 | `/loop check the deploy` | No interval: every **10 minutes**. |
 | `/loop 1h30m summarize new issues` | Parts combine in the order days, hours, minutes, seconds: `1d`, `2h`, `30m`, `45s`, `1h30m`. |
 | `/loop 30s …` | Shorter than a minute is rounded up to **1 minute**, and the toast says "(the shortest interval)". |
-| `/loop` or `/loop list` | Opens Background tasks (in Cowork, which has no such pane, a note says how many loops run). |
+| `/loop` or `/loop list` | Opens Background tasks (in a chat, which has no such pane, a note says how many loops run). |
 | `/loop stop` | Stops all of the session's loops. |
 | `/loop stop 2` | Stops the second loop of the session's list. |
 
 The first word is read as an interval only if it looks like one. Otherwise the whole text is the prompt and the interval is 10 minutes. The longest interval is **1 day**. There is no self-pacing: the model doesn't choose when the next send comes.
 
-A started loop shows a toast, **Loop started: every 5m**. `/loop` works in **Code** and **Cowork**, not in Chat or in a sub-agent's session (**Loops run in Code and Cowork sessions.**).
+A started loop shows a toast, **Loop started: every 5m**. `/loop` works in **Code** and in chats, not in a temporary chat or in a sub-agent's session.
 
 ## How a send looks
 
@@ -143,9 +143,10 @@ Limits:
 
 More on sub-agents, including your own agent definitions, is in [Code](/code/#sub-agents) and [Customize](/customize/).
 
-## Cowork
+## In a chat
 
-`/loop` works the same way in Cowork. Loops and sub-agents that run are listed under **Background** beside the task. `/loop` alone says how many loops run in the task.
+`/loop` works the same way in a chat. Loops and sub-agents that run are listed under the [Background](/chat/#while-it-works)
+panel beside the conversation, each with **Stop**. `/loop` alone says how many loops run in the chat.
 
 ## Troubleshooting
 

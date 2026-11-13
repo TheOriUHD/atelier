@@ -306,7 +306,7 @@ export class ComputerController {
 
   async handle<M extends keyof ControllerMethods>(backend: string, sessionId: string, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']> {
     const settings = await readComputerSettings(this.deps.settingsPath);
-    if (!this.deps.hasHelper || !settings.enabled) throw new Error('Computer use is off on this computer: turn it on in Settings › System.');
+    if (!this.deps.hasHelper || !settings.enabled) throw new Error('Computer use is off on this computer: turn it on in Settings › Computer use.');
     // After Esc the computer is the person's until the turn ends: nothing more is looked at or done.
     if (USES_COMPUTER.has(method) && this.session(backend, sessionId).takenBack) {
       if (method === 'control.request') return { granted: false, reason: TAKEN_BACK } as ControllerMethods[M]['result'];
@@ -411,7 +411,7 @@ export class ComputerController {
         if (!policy.full && !policy.grants.length) return { granted: false, reason: 'You may use no apps yet: ask with ComputerAccess first.' };
         if (settings.mode !== 'full' && !state().control) return { granted: false, reason: 'ask' };
         const permissions = await this.permissions();
-        if (!permissions.accessibility) return { granted: false, reason: 'Atelier needs the Accessibility permission to use the mouse and keyboard: the person turns it on in Settings › System › Computer use.' };
+        if (!permissions.accessibility) return { granted: false, reason: 'Atelier needs the Accessibility permission to use the mouse and keyboard: the person turns it on in Settings › Computer use.' };
         await this.begin(backend, sessionId, settings);
         return { granted: true };
       },
@@ -1010,7 +1010,7 @@ function backgroundMessage(e: unknown): string {
 /** What a helper error means for the model. */
 function helperMessage(e: unknown): string {
   if (e instanceof HelperError && e.data?.permission) {
-    return `Atelier needs the ${e.data.permission === 'accessibility' ? 'Accessibility' : 'Screen Recording'} permission: the person turns it on in Settings › System › Computer use.`;
+    return `Atelier needs the ${e.data.permission === 'accessibility' ? 'Accessibility' : 'Screen Recording'} permission: the person turns it on in Settings › Computer use.`;
   }
   if (e instanceof HelperError && e.code === -32031) return 'The person held Esc to stop you. Stop and ask before going on.';
   return e instanceof Error ? e.message : String(e);

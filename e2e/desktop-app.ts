@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 
 export const PASSWORD = 'correct horse battery staple';
@@ -25,4 +25,17 @@ export async function setUpLocal(page: Page, name = 'Tester'): Promise<void> {
   await page.getByRole('button', { name: 'Run on this computer' }).click({ timeout: 90_000 });
   await page.getByLabel('Your name').fill(name);
   await page.getByRole('button', { name: 'Continue' }).click();
+}
+
+/**
+ * A new chat that works in `folder` on this computer: + › Add folder › Open folder… from the home page (the app's folder
+ * dialog must already be stubbed to pick it). Chat and Cowork are one, so this is how a task in a folder starts.
+ */
+export async function chatInFolder(page: Page, folder: string): Promise<void> {
+  await page.getByRole('button', { name: 'Add files and more' }).click();
+  await page.getByRole('menuitem', { name: 'Add folder' }).click();
+  await page.getByRole('menuitem', { name: 'Open folder…' }).click();
+  // A folder is asked about once: trust it to work in it.
+  await page.getByRole('button', { name: 'Trust workspace' }).click();
+  await page.getByText(`In ${basename(folder)}`).waitFor();
 }

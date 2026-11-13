@@ -1,7 +1,7 @@
 import { readFile, rm, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { launchDesktop, setUpLocal } from './desktop-app.ts';
+import { chatInFolder, launchDesktop, setUpLocal } from './desktop-app.ts';
 import { IMAGE_SETTINGS, call, sendWhenIdle, tempConfigDir, tempRepo } from './fixtures.ts';
 
 const generate = (input: Record<string, unknown>) => call('GenerateImage', input);
@@ -101,7 +101,7 @@ test('desktop Code: Ask shows what will be made, the image lands big, SaveImage 
   }
 });
 
-test('desktop Cowork: an image shows big, and a saved one is among the Output files', async () => {
+test('desktop, a chat in a folder: an image shows big, and a saved one is among the Output files', async () => {
   test.setTimeout(180_000);
   const configDir = await tempConfigDir(IMAGE_SETTINGS);
   const folder = await tempRepo();
@@ -112,11 +112,7 @@ test('desktop Cowork: an image shows big, and a saved one is among the Output fi
     }, folder);
     const page = await app.firstWindow();
     await setUpLocal(page);
-    await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('link', { name: 'Cowork', exact: true }).click();
-    await page.getByRole('button', { name: 'No folder', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Open folder…' }).click();
-    await page.getByRole('button', { name: 'Trust workspace' }).click();
-    await expect(page.getByRole('button', { name: basename(folder) })).toBeVisible();
+    await chatInFolder(page, folder);
 
     const box = page.getByRole('textbox', { name: 'Message', exact: true });
     await box.fill(generate({ prompt: 'A cover for the quarterly report' }));

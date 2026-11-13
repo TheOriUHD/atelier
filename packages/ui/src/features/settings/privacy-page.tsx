@@ -113,7 +113,7 @@ function DeleteAllDialog({ open, onOpenChange }: { open: boolean; onOpenChange(o
     <Dialog open={open} onOpenChange={(next) => pending || onOpenChange(next)}>
       <DialogContent
         title="Delete all conversations?"
-        description="Every chat, Cowork task and Code session is deleted with its messages, files and artifacts. Projects stay, without their chats. This can’t be undone."
+        description="Every chat and Code session is deleted with its messages, files and artifacts. Projects stay, without their chats. This can’t be undone."
       >
         <form
           noValidate

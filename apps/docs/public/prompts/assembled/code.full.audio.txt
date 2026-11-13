@@ -164,7 +164,7 @@ Sound models you can use with GenerateAudio, and what each makes:
 - eleven/music_v2_5 (Eleven Music): music; 3 to 600 seconds, usually 30; sings lyrics, or instrumental
 </context-update>
 
-# Tools: 23, 31209 characters of JSON
+# Tools: 23, 31202 characters of JSON
 
 [
   {
@@ -610,7 +610,7 @@ Sound models you can use with GenerateAudio, and what each makes:
   },
   {
     "name": "ListSessions",
-    "description": "Lists the person's other Code sessions and Cowork tasks, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
+    "description": "Lists the person's other chats and Code sessions, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
     "inputSchema": {
       "type": "object",
       "properties": {

@@ -66,7 +66,8 @@ export interface SessionListing {
   updatedAt: number;
 }
 
-const MODE_NAMES: Record<Mode, string> = { chat: 'Chat', work: 'Cowork', code: 'Code' };
+// Chat and Cowork are one: an old Cowork task is a chat now.
+const MODE_NAMES: Record<Mode, string> = { chat: 'Chat', work: 'Chat', code: 'Code' };
 
 export function createListSessionsTool(list: (sessionId: string, query: string | null) => Promise<SessionListing[]>): Tool<{ query?: string }> {
   return {
@@ -76,7 +77,7 @@ export function createListSessionsTool(list: (sessionId: string, query: string |
       tier === 'compact'
         ? "Lists the person's other sessions (id, title, status), newest first."
         : [
-            `Lists the person's other Code sessions and Cowork tasks, most recent first (at most ${LIST_SESSIONS_MAX}): id, title, mode, status, folder and when it last changed.`,
+            `Lists the person's other chats and Code sessions, most recent first (at most ${LIST_SESSIONS_MAX}): id, title, mode, status, folder and when it last changed.`,
             `- Use it to find the session the person means when they ask you to tell or ask another session something${has('SendMessage') ? ' (then SendMessage with its id)' : ''}.`,
             '- `query` keeps the sessions whose title or messages match its words.',
           ].join('\n'),
@@ -87,7 +88,7 @@ export function createListSessionsTool(list: (sessionId: string, query: string |
     },
     async run({ query }, ctx) {
       const sessions = await list(ctx.sessionId, query?.trim() || null);
-      if (!sessions.length) return textOutput(query?.trim() ? `No other session of the person's matches "${query.trim()}".` : 'The person has no other Code sessions or Cowork tasks.');
+      if (!sessions.length) return textOutput(query?.trim() ? `No other session of the person's matches "${query.trim()}".` : 'The person has no other chats or Code sessions.');
       const lines = sessions.map((s) =>
         [
           `- ${s.id}`,

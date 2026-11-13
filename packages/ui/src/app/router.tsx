@@ -1,5 +1,5 @@
 import { createHashHistory, createRootRoute, createRoute, createRouter, Navigate, redirect, useParams } from '@tanstack/react-router';
-import { useSettings } from '../lib/queries.ts';
+import { useUnifiedChatState } from '../lib/unified-chat.ts';
 import { AppError } from './app-error.tsx';
 import { AppShell } from './app-shell.tsx';
 import { recalledTab, startHash } from './last-tab.ts';
@@ -51,20 +51,20 @@ const folderSearch = (search: Record<string, unknown>): FolderSearch => ({
   ...(typeof search.group === 'string' ? { group: search.group } : {}),
 });
 /**
- * With Chat and Cowork in one (`capabilities.unifiedChat`), Cowork's links lead to Chat: its home to the home, a task to
- * the conversation it now is, so bookmarks, notifications and shared links keep working. Until the settings are read,
- * nothing is drawn (no Cowork page flashing first).
+ * Chat and Cowork are one (a server older than that keeps Cowork): Cowork's links lead to Chat, its home to the home, a
+ * task to the conversation it now is, so bookmarks, notifications and shared links keep working. Until the backend says
+ * which it is, nothing is drawn (no Cowork page flashing first).
  */
 function CoworkHomeRoute() {
-  const { settings } = useSettings();
-  if (!settings) return null;
-  return settings.capabilities.unifiedChat ? <Navigate to="/" replace /> : <CoworkHome />;
+  const unified = useUnifiedChatState();
+  if (unified === undefined) return null;
+  return unified ? <Navigate to="/" replace /> : <CoworkHome />;
 }
 function WorkSessionRoute() {
-  const { settings } = useSettings();
+  const unified = useUnifiedChatState();
   const { sessionId } = useParams({ from: '/work/$sessionId' });
-  if (!settings) return null;
-  return settings.capabilities.unifiedChat ? <Navigate to="/chat/$sessionId" params={{ sessionId }} replace /> : <WorkPage />;
+  if (unified === undefined) return null;
+  return unified ? <Navigate to="/chat/$sessionId" params={{ sessionId }} replace /> : <WorkPage />;
 }
 const workRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work', component: CoworkHomeRoute, validateSearch: folderSearch });
 const workSessionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work/$sessionId', component: WorkSessionRoute, remountDeps: ({ params }) => params.sessionId });

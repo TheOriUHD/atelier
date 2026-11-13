@@ -38,6 +38,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.8.0',
+    intro: 'Chat and Cowork are one conversation now.',
+    highlights: [
+      {
+        icon: MessagesSquare,
+        title: 'One chat for questions and tasks',
+        body: 'Ask a quick question and get a quick answer. Ask for real work (a document, a spreadsheet, sorting files, running code) and the same chat does it with files and commands, in its own sandbox or in a folder you add with + › Add folder. Its progress and files appear beside it, and the permission chip in the message box says how much it may do without asking. Your Cowork tasks are among your chats.',
+      },
+      {
+        icon: MousePointerClick,
+        title: 'Computer use is easier to find',
+        body: 'It has its own page in Settings now, right under General, and chats can use your computer the way Cowork could.',
+      },
+    ],
+    also: ['A permission card names a file by its path in the chat’s folder.'],
+  },
+  {
     version: '0.7.5',
     intro: 'Computer use works when your desktop app is signed in to a server.',
     highlights: [

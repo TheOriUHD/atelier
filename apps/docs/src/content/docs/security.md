@@ -8,19 +8,20 @@ protection stops.
 
 ## The short version
 
-- Code and Cowork sessions **run commands as you**, on the machine whose folder they work in. They are not sandboxed. The
-  protection is the [permission system](/permissions/), and in the default mode that is partly a language model's judgment.
+- Code sessions, and chats given a folder, **run commands as you**, on the machine whose folder they work in. They are
+  not sandboxed. The protection is the [permission system](/permissions/), and in the default mode that is partly a
+  language model's judgment.
 - A server **never runs commands on its own machine**. A session runs in a desktop's folder you trusted, in a codespace,
-  or, for Chat, in a separate sandbox container.
+  or, for a chat without a folder, in a separate sandbox container.
 - Secrets (provider keys, tokens) are encrypted at rest and never shown again. Conversations and files are **not**
   encrypted at rest.
 - The web server checks every sign-in and live connection against the address people use, keeps sessions in HttpOnly
   cookies, and sends a strict Content-Security-Policy. Put it behind HTTPS.
 - Updates are verified against a key built into the app before anything is downloaded.
 
-## What Code and Cowork can do
+## What Code and chats in a folder can do
 
-A Code session or Cowork task can read and write files in its folder and run shell commands there. The commands are
+A Code session, or a chat you gave a folder, can read and write files in its folder and run shell commands there. The commands are
 ordinary processes started by the **runner**, a small program (written in Go) that Atelier starts on the machine that has
 the folder: your computer, an SSH host, a codespace. The runner:
 
@@ -172,8 +173,9 @@ anything you copy out of it is untrusted.
 
 ## The chat sandbox
 
-In Chat, the model can get **Bash** and **Read** in a folder of its own, with no permission prompts and fixed rules instead:
-Read works only inside the sandbox folder; dangerous commands are refused with their reason; other commands run.
+Until it is given a folder, a chat runs its file and command tools (Read, Write, Edit, Glob, Grep, Bash, BashOutput,
+KillShell) in a folder of its own, with no permission prompts and fixed rules instead: the file tools work only inside the
+sandbox folder; dangerous commands are refused with their reason; other commands run. See [Chat](/chat/#the-sandbox).
 
 | Where | Confinement |
 |---|---|
@@ -207,9 +209,9 @@ Limits to know:
 
 ## Sessions that message each other
 
-A Code or Cowork session can send a message to another **of the same person's** sessions (`SendMessage`, with
+A chat or Code session can send a message to another **of the same person's** sessions (`SendMessage`, with
 `ListSessions` to find them), and a sub-agent can message its parent. The tool is not read-only, so it asks like any other
-write. It never reaches another account (another person's session reads as unknown), and Chat conversations cannot
+write. It never reaches another account (another person's session reads as unknown), and temporary chats cannot
 receive messages. To stop two sessions from driving each other in circles, a chain of messages that starts turns with
 nobody in between is held after 3 turns, and one conversation may start at most 5 turns by itself in a row; after that the
 message waits for you.

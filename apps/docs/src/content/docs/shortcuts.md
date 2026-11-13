@@ -28,8 +28,8 @@ close windows and tabs) may not reach Atelier. The keys marked *desktop* exist o
 
 | Action | macOS | Windows / Linux | Notes |
 |---|---|---|---|
-| New chat, Cowork task or Code session | ⌘N | Ctrl+N | Starts a new one in the mode you are in. |
-| New temporary chat | ⇧⌘N | Ctrl+Shift+N | Opens a temporary chat from any page (from Cowork or Code it switches to Chat). See [Temporary chats](/chat/#temporary-chats). |
+| New chat or Code session | ⌘N | Ctrl+N | Starts a new one in the mode you are in. |
+| New temporary chat | ⇧⌘N | Ctrl+Shift+N | Opens a temporary chat from any page (from Code it switches to Chat). See [Temporary chats](/chat/#temporary-chats). |
 | Search | ⌘K | Ctrl+K | The [search palette](/sessions/#search). |
 | Settings | ⌘, | Ctrl+, | |
 | Show or hide the sidebar | ⌘B | Ctrl+B | |
@@ -37,7 +37,7 @@ close windows and tabs) may not reach Atelier. The keys marked *desktop* exist o
 
 ## The message box
 
-These work in the message box of Chat, Cowork and Code (and project chats).
+These work in the message box of Chat and Code (and project chats).
 
 | Action | macOS | Windows / Linux | Notes |
 |---|---|---|---|
@@ -48,7 +48,7 @@ These work in the message box of Chat, Cowork and Code (and project chats).
 | Change effort | ⇧⌘E | Ctrl+Shift+E | Opens the effort popover on models that have it. In a split view, the active session. |
 | Switch permission mode | ⇧Tab | Shift+Tab | **Code only**, only while the box is empty. Cycles **Auto → Ask → Accept edits → Plan**; **Bypass** is chosen from the menu only. |
 | Start a slash command or skill | `/` | `/` | As the first character; see below. |
-| Mention a file | `@` | `@` | **Code and Cowork** (a session with a folder). See below. |
+| Mention a file | `@` | `@` | **Code** (a session with a folder). See below. |
 
 Pasting or dropping a file attaches it. Editing a message of yours:
 **Enter** saves it, **Shift+Enter** adds a line, **Esc** cancels.
@@ -64,11 +64,11 @@ puts `/name ` in the box.
 
 | Command | What it does | Offered in |
 |---|---|---|
-| `/model` | Opens the model picker. | Everywhere with a message box: chat home, chats, project chats, Cowork, Code |
-| `/clear` | Starts a new session: in a chat, a new chat (a new temporary chat from a temporary chat, the project's page from a project chat); in Cowork and Code, the home page with the same folder chosen. | Chats, Cowork tasks, Code sessions |
-| `/btw [question]` | Asks a side question in a panel on the right; it reads the conversation, changes nothing and adds nothing to it. `/btw` alone opens an empty one. See [Chat](/chat/#side-chats-with-btw). | Chats, Cowork tasks, Code sessions |
-| `/loop [interval] <prompt>` | Sends the prompt now and again every interval while the session is idle. See below and [Loops](/loops/). | Cowork tasks, Code sessions |
-| `/compact [focus]` | Summarizes the conversation so far to free up context; the optional text says what to keep. The same as the context popover's **Compact session**. | Code only (Chat and Cowork compact by themselves) |
+| `/model` | Opens the model picker. | Everywhere with a message box: chat home, chats, project chats, Code |
+| `/clear` | Starts a new session: in a chat, a new chat (a new temporary chat from a temporary chat, the project's page from a project chat); in Code, the home page with the same folder chosen. | Chats, Code sessions |
+| `/btw [question]` | Asks a side question in a panel on the right; it reads the conversation, changes nothing and adds nothing to it. `/btw` alone opens an empty one. See [Chat](/chat/#side-chats-with-btw). | Chats, Code sessions |
+| `/loop [interval] <prompt>` | Sends the prompt now and again every interval while the session is idle. See below and [Loops](/loops/). | Chats (not temporary ones), Code sessions |
+| `/compact [focus]` | Summarizes the conversation so far to free up context; the optional text says what to keep. The same as the context popover's **Compact session**. | Code only (Chat compacts by itself) |
 | `/rewind` | Restores the code, the conversation or both to an earlier point. | Code only |
 
 `/loop` forms:
@@ -93,7 +93,7 @@ The **+ › Skills** menu offers the same skills. See [Customize](/customize/).
 
 ### Mentioning files
 
-In a Code session or a Cowork task, `@` at the start of a word lists files in the folder (matching as you type);
+In a Code session, `@` at the start of a word lists files in the folder (matching as you type);
 ↑ and ↓ move, Enter or Tab inserts `@path`, Esc closes the list. The model reads the file when it needs it. **Attach as
 context** in the Files pane's right-click menu inserts the same mention.
 
@@ -132,7 +132,7 @@ Digits count only while focus is on the prompt and not in a text field. The prom
 
 ## Session menus
 
-With a Code or Cowork session's menu open (⋯ on its row, or right-click), the letter beside an item does it. No ⌘ or
+With a Code session's menu open, or a former Cowork task's in the Chat sidebar (⋯ on its row, or right-click), the letter beside an item does it. No ⌘ or
 Ctrl is needed.
 
 | Key | Item |

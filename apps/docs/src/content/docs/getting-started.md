@@ -1,15 +1,15 @@
 ---
 title: Get started
-description: Install Atelier, choose where it keeps your chats, connect a first model, and work through your first Chat, Code session and Cowork task.
+description: Install Atelier, choose where it keeps your chats, connect a first model, and work through your first chat, task and Code session.
 ---
 
 ## What Atelier is
 
-Atelier is a workspace for language models. Its three modes share one set of conversations, settings and
+Atelier is a workspace for language models. Its two modes share one set of conversations, settings and
 models:
 
-- **Chat** for conversations, with artifacts, projects, attachments, memory and web search. See [Chat](/chat/).
-- **Cowork** for a longer task in a folder, which ends in files you can open. See [Cowork](/cowork/).
+- **Chat** for conversations, with artifacts, projects, attachments, memory and web search, and for longer tasks that end
+  in files you can open, worked through in a sandbox of the chat's own or in a folder you give it. See [Chat](/chat/).
 - **Code** for an agent that works in a repository: it reads and edits files, runs commands in a terminal and shows its
   changes as diffs, under the permission rules you choose. See [Code](/code/).
 
@@ -39,7 +39,7 @@ The first time the desktop app opens, it asks **Where should Atelier keep your c
 | **Run on this computer** | Atelier runs its own backend here; chats and settings stay on this computer. Pick this to try Atelier or to use it alone. |
 | **Connect to a server** | Use an Atelier server, for example in your home lab, and sign in with your account there. Your chats live on the server, which you can also open from a browser. |
 
-Either way the desktop app can open folders on this computer for Code and Cowork. In a browser there is no such choice:
+Either way the desktop app can open folders on this computer for Code and for chats. In a browser there is no such choice:
 you open your server's address and sign in.
 
 ### Run on this computer
@@ -186,29 +186,31 @@ Hover a message to copy it, retry a reply or edit your own message; the earlier 
 empty folder of its own, a safe way to try Code. In a browser, Code works in a folder lent by one of your desktop apps
 or in a GitHub codespace; the server never runs commands on its own machine. See [Code](/code/).
 
-## Your first Cowork task
+## Your first task
 
-1. In the Chat sidebar choose **Cowork**.
-2. Choose a folder as in Code (or **No folder**), describe the task and press Enter. From a new chat you can also use
-   **+ › Add folder**, which turns it into a Cowork task.
-3. Watch its steps and the task list beside the conversation. It ends with cards for the files it wrote, each with **Open**.
+A chat that is asked for a piece of work (a document, a spreadsheet, sorting files, reading a stack of PDFs) works
+through it as a task.
+
+1. Choose **New** in the Chat sidebar. To work on files you have, pick their folder with **+ › Add folder** before you
+   send; the first time, Atelier asks **Trust this workspace?**. Without a folder, the chat works in a sandbox of its own.
+2. Describe the result you want and press Enter.
+3. Watch its steps. Its to-do list and the files it writes appear beside the conversation once there are some, and it
+   ends with cards for the files it wrote, each with **Open**.
 4. Turn on **Notify me when a task finishes** and **Notify me when a task needs me** in **Settings › General** to get a
    system notification while you are in another window.
 
-![A Cowork task with its progress list and the file it wrote in the folder](/img/cowork-2560.webp)
-
-Cowork has no permission-mode picker; it uses the default mode from **Settings › Admin › Code** (Auto, unless an admin
-changed it). New Cowork tasks and Code sessions start on the **Default model for everyone**; pick another in the message
-box before your first message. See [Cowork](/cowork/).
+The chip at the bottom left of a chat's message box sets what asks you first: **Auto mode**, **Ask permissions**,
+**Accept edits** or **Bypass permissions**. It starts at the default mode from **Settings › Admin › Code** (Auto, unless
+an admin changed it). See [Tasks](/chat/#tasks).
 
 ## A tour of the interface
 
 ### The sidebar
 
-- The header has the sidebar toggle (⌘B) and two tabs, **Chat** and **Code**. Cowork is a page inside Chat.
+- The header has the sidebar toggle (⌘B) and two tabs, **Chat** and **Code**.
 - **Search** (⌘K) finds chat titles and message text, and offers actions such as a new chat.
-- In Chat: **New**, **Projects**, **Artifacts**, **Cowork**, **Customize** (skills, connectors and plugins) and **More**
-  (**Settings**, **Usage**, **Keyboard shortcuts**), then pinned items and your recent chats and Cowork tasks by day. In
+- In Chat: **New**, **Projects**, **Artifacts**, **Customize** (skills, connectors and plugins) and **More**
+  (**Settings**, **Usage**, **Keyboard shortcuts**), then pinned items and your recent chats by day. In
   Code: **New**, **Customize**, **More**, then your sessions by folder.
 - At the bottom: your name with "Admin" or "Member" and a menu (Settings, theme, **Lock Atelier** or **Log out**).
 - A line above the profile shows an update's download progress, then **Restart**. See [Updates](/updates/).
@@ -227,7 +229,7 @@ box before your first message. See [Cowork](/cowork/).
   same popover. See [Effort](/effort/).
 - The **context ring** shows how full the model's context window is. Click it for the figures and your usage: the cost
   on a priced hosted API, for a ChatGPT Plan the plan's own limit windows, for Mistral Vibe its monthly allowance. In Chat
-  and Cowork older messages are summarized automatically before it fills; in Code the popover also shows what fills the
+  older messages are summarized automatically before it fills; in Code the popover also shows what fills the
   window, the session's tokens, and **Compact session**.
 
 ### Settings
@@ -237,13 +239,14 @@ name. The pages in the **Settings** group are for everyone:
 
 | Page | What it is for |
 |---|---|
-| **General** | Theme, chat font, transcript text size and width, motion; your own **Default model** for new chats; Cowork notifications. |
+| **General** | Theme, chat font, transcript text size and width, motion; your own **Default model** for new chats; task notifications. |
+| **Computer use** (desktop app only) | **Enable computer use**, how the assistant uses the apps you allow, the apps allowed for good, and Atelier for Chrome. See [Computer use](/computer-use/). |
 | **Account** | Your photo, name, what Atelier calls you, personal **Instructions**, **Personality**, **Response style** and **Your ATELIER.md**. On this computer also **Screen lock** and **Setup**; on a server your password, passkeys, active sessions, devices, **Remote control** and **Log out**. |
 | **Privacy** | **Keep conversations** (automatic deletion after a number of days), **Temporary chats**, **Export your data**, **Delete all conversations**. |
 | **Memory** | What Atelier remembers across chats, and whether it may. See [Memory](/memory/). |
 | **Usage** | Requests, tokens and cost by day, mode and model. |
 | **Code** | Permission rules you approved with **Always allow**, code appearance and font, the default transcript view, the interface font, and the commit author. |
-| **Folders** | The folders you opened for Code and Cowork, and your SSH connections. |
+| **Folders** | The folders you opened for Code and chats, and your SSH connections. |
 | **Cloud** | Your GitHub connection and the codespaces that become folders. |
 | **Skills** | The skills sessions can use, and installing them from GitHub (admins). |
 | **System** (desktop app only) | The version, updates (**Check now**, **Check for updates automatically** and the update channel), **Launch at login**, and the **Data folder**. |
@@ -289,7 +292,7 @@ Details are in [What leaves your machine](/privacy/), [Web search](/web-search/)
 
 **Start here:** [Install](/install/) · [Providers](/providers/) · [Models](/models/) · [Local models](/local-models/) · [ChatGPT](/chatgpt/)
 
-**Using Atelier:** [Chat](/chat/) · [Artifacts](/artifacts/) · [Projects](/projects/) · [Cowork](/cowork/) ·
+**Using Atelier:** [Chat](/chat/) · [Artifacts](/artifacts/) · [Projects](/projects/) ·
 [Code](/code/) · [Permissions](/permissions/) · [Effort](/effort/) · [Sessions](/sessions/) · [Loops](/loops/) ·
 [Shortcuts](/shortcuts/) · [Web search](/web-search/) · [Memory](/memory/)
 

@@ -149,7 +149,7 @@ Recent commit subjects:
 Plan mode is on. Until the person approves a plan, only investigate: reading and searching work, and so do sub-agents, while edits and shell commands are blocked. When you understand the task, present the plan with ExitPlanMode, and don't ask whether the plan is fine. Settle open questions with AskUser first.
 </context-update>
 
-# Tools: 21, 27075 characters of JSON
+# Tools: 21, 27068 characters of JSON
 
 [
   {
@@ -595,7 +595,7 @@ Plan mode is on. Until the person approves a plan, only investigate: reading and
   },
   {
     "name": "ListSessions",
-    "description": "Lists the person's other Code sessions and Cowork tasks, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
+    "description": "Lists the person's other chats and Code sessions, most recent first (at most 30): id, title, mode, status, folder and when it last changed.\n- Use it to find the session the person means when they ask you to tell or ask another session something (then SendMessage with its id).\n- `query` keeps the sessions whose title or messages match its words.",
     "inputSchema": {
       "type": "object",
       "properties": {
