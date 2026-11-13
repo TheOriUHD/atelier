@@ -76,3 +76,14 @@ it.skipIf(process.platform === 'win32')('on Windows keeps what it saves: a new s
     process.env.PATH = path;
   }
 });
+
+it.runIf(process.platform === 'win32')('on a real Windows: DPAPI seals what it saves, and a new start unseals it', { timeout: 120_000 }, async () => {
+  dir = await mkdtemp(join(tmpdir(), 'atelier-cli-dpapi-real-'));
+  const file = join(dir, 'credentials.json');
+  const store = await credentialStore(file, {}, 'win32');
+  await store.set('local-key', 'ab'.repeat(32));
+  const saved = JSON.parse(await readFile(file, 'utf8')) as Record<string, string>;
+  expect(saved['local-key']).toMatch(/^dpapi:/);
+  forgetStores();
+  expect(await (await credentialStore(file, {}, 'win32')).get('local-key')).toBe('ab'.repeat(32));
+});
