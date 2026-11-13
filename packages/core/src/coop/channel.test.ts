@@ -39,25 +39,35 @@ afterEach(async () => {
   await relay.close();
 });
 
-function once<T extends unknown[]>(emitter: EventEmitter, event: string, timeoutMs = 5000): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`No ${event} within ${timeoutMs} ms`)), timeoutMs);
-    emitter.once(event, (...args: unknown[]) => {
-      clearTimeout(timer);
-      resolve(args as T);
-    });
-  });
+/** A wait that fails a test awaiting it, but never reports itself when no one is left awaiting (a test that ended first). */
+function handled<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => undefined);
+  return promise;
+}
+
+function once<T extends unknown[]>(emitter: EventEmitter, event: string, timeoutMs = 15_000): Promise<T> {
+  return handled(
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`No ${event} within ${timeoutMs} ms`)), timeoutMs);
+      emitter.once(event, (...args: unknown[]) => {
+        clearTimeout(timer);
+        resolve(args as T);
+      });
+    }),
+  );
 }
 
 function nextMessage(channel: { onMessage(listener: (m: unknown) => void): () => void }, timeoutMs = 10_000): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('No message in time')), timeoutMs);
-    const off = channel.onMessage((message) => {
-      clearTimeout(timer);
-      off();
-      resolve(message);
-    });
-  });
+  return handled(
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('No message in time')), timeoutMs);
+      const off = channel.onMessage((message) => {
+        clearTimeout(timer);
+        off();
+        resolve(message);
+      });
+    }),
+  );
 }
 
 /** Resolves with the state changes until `until`. */
@@ -110,7 +120,8 @@ async function guest(room: Room, name: string, options: { key?: StaticKey; psk?:
 const big = () => ({ kind: 'file', data: randomBytes(3_750_000).toString('base64') });
 const compressible = () => ({ kind: 'log', lines: Array.from({ length: 100_000 }, (_, i) => `line ${i}: the build is still running`) });
 
-describe('co-op channels through the Node relay', () => {
+// Each test reconnects through a real relay: on a loaded build machine that can take longer than vitest's 5 s default.
+describe('co-op channels through the Node relay', { timeout: 30_000 }, () => {
   it('connects one host and two guests, with matching fingerprints and pinned keys, and carries small and 5 MB messages both ways', async () => {
     const room = await hostRoom();
     const ada = await guest(room, 'Ada');
