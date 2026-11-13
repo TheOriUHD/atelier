@@ -134,6 +134,8 @@ export function buildSystemPrompt(ctx: PromptContext): SystemBlock[] {
   const prefix = [ctx.agentPrompt ?? fill(ctx.subagent ? 'subagent' : coreTemplate(ctx.mode, ctx.tier, ctx.overrides))];
   if (has('WebSearch')) prefix.push(fill(`fragments/search.${ctx.tier}`));
   else if (ctx.mode !== 'code' && !ctx.subagent) prefix.push(fill('fragments/no-search'));
+  // A chat that works as a Cowork task (capabilities.unifiedChat): how to do one, with the folder or its own sandbox.
+  if (ctx.mode === 'chat' && has('TodoWrite') && !ctx.subagent) prefix.push(fill(`fragments/tasks.${ctx.tier}`));
   // Chat's guidance on when to make an artifact; Code's core says when to show its work in one instead.
   if (has('artifact') && !ctx.subagent && ctx.mode !== 'code') prefix.push(fill(`fragments/artifacts.${ctx.tier}`));
   if (has('GenerateImage') && !ctx.subagent) prefix.push(fill(`fragments/images.${ctx.tier}`));

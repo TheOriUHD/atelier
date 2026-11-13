@@ -52,6 +52,9 @@ export interface PromptCase {
   scratch?: boolean;
   /** Chat: the conversation can have a sandbox (Bash and Read). */
   sandbox?: boolean;
+  /** Chat and Cowork in one (capabilities.unifiedChat); `folder`: the conversation was given one of the person's folders. */
+  unified?: boolean;
+  folder?: boolean;
   project?: boolean;
   personalization?: {
     name?: string;
@@ -235,6 +238,7 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
     ];
     settings.capabilities.webSearch.enabled = c.webSearch ?? true;
     settings.capabilities.webFetch = c.webFetch ?? true;
+    settings.capabilities.unifiedChat = c.unified === true;
     settings.safeguards = { ...settings.safeguards, ...c.safeguards?.system };
     settings.prompts.organizationInstructions = c.organization ?? '';
     const prefs = defaultUserPrefs();
@@ -399,7 +403,7 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
       title: 'Fix the cart totals',
       ...(memory ? { userId: 'u1' } : {}),
       ...(project ? { projectId: project.id } : {}),
-      ...(c.mode === 'chat' ? {} : { workspaceId: workspace.id, permissionMode: c.permissionMode ?? 'default' }),
+      ...(c.mode === 'chat' && !c.folder ? {} : { workspaceId: workspace.id, permissionMode: c.permissionMode ?? 'default' }),
     });
     const target = c.subagent
       ? await repo.create({
@@ -526,6 +530,9 @@ export const CASES: Record<string, PromptCase> = {
   'chat.compact.prompted': { mode: 'chat', tier: 'compact', prompted: true, webSearch: false },
   'chat.full.sandbox': { mode: 'chat', sandbox: true },
   'chat.compact.sandbox': { mode: 'chat', tier: 'compact', sandbox: true },
+  'chat.full.unified': { mode: 'chat', sandbox: true, unified: true },
+  'chat.compact.unified': { mode: 'chat', tier: 'compact', sandbox: true, unified: true },
+  'chat.full.unified.folder': { mode: 'chat', sandbox: true, unified: true, folder: true },
   'chat.full.memory': { mode: 'chat', memory: {} },
   'chat.full.memory-explicit': { mode: 'chat', memory: { generate: false, searchChats: false } },
   'chat.compact.memory': { mode: 'chat', tier: 'compact', memory: { entries: 30 } },

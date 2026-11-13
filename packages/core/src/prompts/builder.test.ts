@@ -528,6 +528,14 @@ describe('compact budget', () => {
     expect(cuts(a)).toEqual({ skills: false, connectors: false, instructions: false });
   });
 
+  it('fits a merged chat (Chat and Cowork in one) into a compact prompt without cutting anything', async () => {
+    const a = await assemble({ mode: 'chat', tier: 'compact', sandbox: true, unified: true });
+    expect(a.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['Bash', 'Write', 'Edit', 'TodoWrite', 'AskUser']));
+    expect(a.system.map((b) => b.text).join('')).toContain('Tasks: when the person asks for a piece of work');
+    expect(size(a)).toBeLessThanOrEqual(COMPACT_BUDGET_CHARS);
+    expect(cuts(a)).toEqual({ skills: false, connectors: false, instructions: false });
+  });
+
   it('fits a chat with its sandbox into a compact prompt without cutting anything', async () => {
     const a = await assemble({ mode: 'chat', tier: 'compact', sandbox: true });
     expect(a.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['Bash', 'Read']));

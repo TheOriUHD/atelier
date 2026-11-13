@@ -535,6 +535,16 @@ describe('a chat sandbox', () => {
   const bash = (command: string, s = sandbox) => sandboxDecide({ name: 'Bash', input: { command } }, s);
   const read = (file_path: string) => sandboxDecide({ name: 'Read', input: { file_path } }, sandbox);
 
+  it('keeps a merged chat’s file tools inside its sandbox, and lets its background commands be read and stopped', () => {
+    const tool = (name: string, input: Record<string, unknown>) => sandboxDecide({ name, input }, sandbox).behavior;
+    expect(tool('Write', { file_path: `${sandbox.root}/report.md`, content: 'x' })).toBe('allow');
+    expect(tool('Edit', { file_path: 'notes/plan.md', old_string: 'a', new_string: 'b' })).toBe('allow');
+    expect(tool('Write', { file_path: '/etc/hosts', content: 'x' })).toBe('deny');
+    expect(tool('Glob', { pattern: '*.md', path: '/home' })).toBe('deny');
+    expect(tool('BashOutput', { bash_id: 'b1' })).toBe('allow');
+    expect(tool('KillShell', { shell_id: 'b1' })).toBe('allow');
+  });
+
   it('runs ordinary commands without asking, clones and cleanup included', () => {
     for (const command of ['git clone https://github.com/acme/app.git', 'npm install && npm test', 'rm -rf node_modules build', 'python3 -m venv .venv']) {
       expect(bash(command).behavior).toBe('allow');

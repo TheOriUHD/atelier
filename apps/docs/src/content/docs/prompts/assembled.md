@@ -8,7 +8,7 @@ editUrl: false
 
 What a model really receives is more than the templates: the builder joins a core prompt, fragments, optional
 safeguards, an `<env>` block, instruction files, skills and personalization, and the request also carries the tool
-definitions. The files below are the complete assembled text of 52 typical sessions: every system block in
+definitions. The files below are the complete assembled text of 55 typical sessions: every system block in
 order (with the cache breakpoints marked), the notes on the first message, and the tools as JSON.
 
 They are produced by the project’s test suite with fixed inputs (the date 2026-01-15 in Europe/Berlin, fake model
@@ -34,6 +34,9 @@ prompts or replies.
 | [`chat.compact.prompted`](/prompts/assembled/chat.compact.prompted.txt) | Chat, compact tier, for a model that calls tools through text (prompted tool calls). | 7 KB |
 | [`chat.full.sandbox`](/prompts/assembled/chat.full.sandbox.txt) | Chat with a conversation sandbox (Bash and Read). | 27 KB |
 | [`chat.compact.sandbox`](/prompts/assembled/chat.compact.sandbox.txt) | Chat, compact tier, with a conversation sandbox. | 11 KB |
+| [`chat.full.unified`](/prompts/assembled/chat.full.unified.txt) | Chat and Cowork in one (being built, off by default): a chat with Cowork’s tools, in its own sandbox until it has a folder. | 50 KB |
+| [`chat.compact.unified`](/prompts/assembled/chat.compact.unified.txt) | Chat and Cowork in one, compact tier. | 21 KB |
+| [`chat.full.unified.folder`](/prompts/assembled/chat.full.unified.folder.txt) | Chat and Cowork in one, with a folder of the person’s. | 51 KB |
 | [`chat.full.memory`](/prompts/assembled/chat.full.memory.txt) | Chat for a person with memory, with the memory tools and digest. | 32 KB |
 | [`chat.full.memory-explicit`](/prompts/assembled/chat.full.memory-explicit.txt) | Chat with memory where “Generate memory from chats” and chat search are off. | 29 KB |
 | [`chat.compact.memory`](/prompts/assembled/chat.compact.memory.txt) | Chat, compact tier, with memory. | 15 KB |

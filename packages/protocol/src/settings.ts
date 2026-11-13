@@ -142,8 +142,13 @@ export const SettingsSchema = z.object({
       webFetch: z.boolean().default(true),
       /** Let WebFetch reach LAN and VPN addresses (homelab docs); loopback and link-local stay blocked. */
       webFetchPrivateNetworks: z.boolean().default(false),
+      /**
+       * Chat and Cowork as one conversation (being built; off until it is done): a chat that needs files, commands or the
+       * computer works as a Cowork task does, in its own sandbox or a folder it is given, and old Cowork tasks read as chats.
+       */
+      unifiedChat: z.boolean().default(false),
     })
-    .default({ webSearch: { enabled: true, provider: 'auto' }, webFetch: true, webFetchPrivateNetworks: false }),
+    .default({ webSearch: { enabled: true, provider: 'auto' }, webFetch: true, webFetchPrivateNetworks: false, unifiedChat: false }),
   pricing: z.record(z.string(), Price).default({}),
   /** Image providers are separate from text providers (ARCHITECTURE §23): a bad entry here can't drop `providers`. */
   imageProviders: z.array(ImageProviderConfig).default([]),

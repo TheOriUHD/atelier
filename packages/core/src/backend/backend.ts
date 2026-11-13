@@ -343,6 +343,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const local = platform.surface === 'desktop' && !platform.setupToken;
   // The admin activity log is for shared servers: a backend with one person has nobody to account to, and writes nothing.
   const audit = new AuditLog(db, { enabled: () => !local, onError: (message, error) => platform.logger.error(message, error) });
+  /** Chat and Cowork in one (capabilities.unifiedChat): a chat that isn't temporary, or an old Cowork task, works as a task. */
+  const mergedChat = (session: { mode: string; temporary?: unknown }) => settings.effective.capabilities.unifiedChat === true && (session.mode === 'chat' || session.mode === 'work') && !session.temporary;
   const accounts = new AccountService(db, () => settings.effective.server.signup, audit);
   // Terminals signing in through the browser (servers only; a desktop's own backend has nobody to approve them).
   const terminalSignIns = new TerminalSignIns(accounts, local ? null : audit);
@@ -1188,8 +1190,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { prefs: await prefs.get(userId), name: user.name, safeguards: user.safeguards };
     },
     permissionContext: async (session) => {
-      // Chat sessions have no workspace: only connector tools are gated there.
-      if (session.mode === 'chat' || !session.workspaceId || !session.userId) {
+      // Chat sessions have no workspace: only connector tools are gated there. A merged chat with a folder (or its sandbox)
+      // goes by the permission mode, as Cowork does.
+      if ((session.mode === 'chat' && !mergedChat(session)) || !session.workspaceId || !session.userId) {
         const { allow, ask, deny } = settings.effective.permissions;
         const mine = session.userId ? (await prefs.get(session.userId)).permissions.allow : [];
         return connectorContext({ allow: [...allow, ...mine], ask, deny }, homedir());
@@ -1218,7 +1221,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     workspace: async (session) => (session.workspaceId && session.userId ? workspaceManager.open(session.userId, session.workspaceId) : null),
     attachmentFolder: async (session) => {
-      if (!session.workspaceId || !session.userId || session.mode === 'chat') return null;
+      if (!session.workspaceId || !session.userId || (session.mode === 'chat' && !mergedChat(session))) return null;
       const workspace = await workspaceManager.open(session.userId, session.workspaceId);
       const summary = (await workspaceManager.list(session.userId)).find((w) => w.id === session.workspaceId);
       return { workspace, scratch: summary?.scratch ?? false };
@@ -1281,7 +1284,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return target;
     },
     hooks: async (session) => {
-      if (session.mode === 'chat' || !session.workspaceId || !session.userId) return null;
+      if ((session.mode === 'chat' && !mergedChat(session)) || !session.workspaceId || !session.userId) return null;
       const workspace = await workspaceManager.open(session.userId, session.workspaceId);
       const home = await homeFor(session.userId, workspace);
       const plugins = await installedPlugins(session.userId, home);
@@ -1296,7 +1299,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       ].filter((c) => Object.keys(c).length);
       return configs.length ? { workspace, configs } : null;
     },
-    extensions: (session) => extensionsFor(session.userId, session.mode === 'chat' ? null : session.workspaceId),
+    extensions: (session) => extensionsFor(session.userId, session.mode === 'chat' && !mergedChat(session) ? null : session.workspaceId),
     // A sub-agent uses the connectors its parent session has on.
     mcpTools: async (session, connectorUser) => {
       const off = connectorsOff((session.parentSessionId && (await sessions.getRow(session.parentSessionId))) || session);
@@ -2524,7 +2527,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (model) await refuseHiddenModel(model, userId);
       if (temporary && (mode !== 'chat' || groupId)) throw appError('unsupported', 'Only a chat can be temporary, and it isn’t filed in a group.');
       if (workspaceId && !(await workspaceManager.list(userId)).some((w) => w.id === workspaceId)) throw appError('not_found', 'Workspace not found.');
-      if (scratch && (mode === 'chat' || workspaceId)) throw appError('unsupported', 'Only a Code or Cowork session without a folder gets a scratch folder.');
+      // With Chat and Cowork in one, a new Cowork task (from an app that still offers it) is a chat that works as one.
+      if (mode === 'work' && settings.effective.capabilities.unifiedChat && !temporary) mode = 'chat';
+      if (scratch && ((mode === 'chat' && !settings.effective.capabilities.unifiedChat) || workspaceId)) throw appError('unsupported', 'Only a Code or Cowork session without a folder gets a scratch folder.');
       const folder = scratch ? await scratchFolder(userId, scratch.sshHost, callerDevice(ctx, scratch.sshHost ? 'ssh' : 'scratch')) : workspaceId;
       const created = await sessions.create({
         mode,
@@ -2810,7 +2815,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'loops.start': async ({ sessionId, prompt, intervalMs }, ctx) => {
       const session = await sessionOrThrow(sessionId, ctx);
       // A sub-agent's session runs once, for its parent.
-      if (session.mode === 'chat' || (await sessions.getRow(sessionId))?.parentSessionId) throw appError('unsupported', 'Loops run in Code and Cowork sessions.');
+      if ((session.mode === 'chat' && !mergedChat({ mode: session.mode, temporary: session.temporary ?? null })) || (await sessions.getRow(sessionId))?.parentSessionId) throw appError('unsupported', 'Loops run in Code and Cowork sessions.');
       try {
         // At most LOOP_MAX_PER_SESSION in the session and LOOP_MAX_PER_USER of the person's.
         return chat.startLoop(sessionId, prompt, intervalMs, me(ctx).id);

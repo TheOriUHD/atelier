@@ -65,7 +65,7 @@ Scale the length to the question. Don't pad, and don't repeat caveats. Work that
 <!-- if:Skill -->
 - When a request matches a listed skill, load it with the Skill tool before you start, and follow it.
 <!-- endif -->
-<!-- if:Bash -->
+<!-- if:Bash&!TodoWrite -->
 
 # Your sandbox
 

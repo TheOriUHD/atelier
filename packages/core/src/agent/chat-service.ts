@@ -60,7 +60,7 @@ import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
 import { BLOCKS_IN_A_ROW, BLOCKS_TOTAL, parseVerdict, reviewInput, reviewLeniency } from '../permissions/auto-mode.ts';
-import { decide, outsideRoots, SANDBOX_TOOLS, sandboxDecide, suggestRule, type Decision, type PermissionContext } from '../permissions/engine.ts';
+import { decide, outsideRoots, SANDBOX_CODE_TOOLS, SANDBOX_TOOLS, sandboxDecide, suggestRule, type Decision, type PermissionContext } from '../permissions/engine.ts';
 import { InteractionBroker } from './interactions.ts';
 import type { FileRepo } from '../files/file-repo.ts';
 import { canExtractText, extractText } from '../files/text-extract.ts';
@@ -1524,7 +1524,7 @@ export class ChatService {
       if (!actor.shared && !this.titling.has(sessionId) && !(await this.deps.repo.getRow(sessionId))?.title) void this.generateTitle(sessionId, resolved);
       if (!session.parentSessionId && !signal.aborted && !actor.shared) this.deps.memory?.turnEnded(session);
       // A guess at the next message is one person's composer aid: not in co-op.
-      if (!session.parentSessionId && !signal.aborted && !actor.shared && result.stopReason === 'end' && (session.mode === 'code' || session.mode === 'work') && !session.temporary) {
+      if (!session.parentSessionId && !signal.aborted && !actor.shared && result.stopReason === 'end' && (session.mode === 'code' || this.asTask(session)) && !session.temporary) {
         void this.suggestReply(sessionId, resolved);
       }
     } catch (error) {
@@ -1846,7 +1846,10 @@ export class ChatService {
     const standing = guest ? [] : ctx.rules.allow;
     const rules = { ...ctx.rules, allow: [...standing, ...(this.sessionRules.get(key(asker)) ?? []), ...(main ? (this.sessionRules.get(key(main.id)) ?? []) : []), ...folders] };
     const judge: PermissionContext = { ...ctx, ...(guest ? { mode: guestMode(ctx.mode), guest: true } : {}), rules, isReadOnly: (name) => (name === tool.name && tool.readOnly) || ctx.isReadOnly(name), offers: (name) => offered.has(name) };
-    const decision = current.mode === 'chat' && SANDBOX_TOOLS.has(call.name) ? await this.sandboxDecision(current, subject) : decide(subject, judge);
+    // A chat's sandbox runs under its fixed rules: Bash and Read in a plain chat, every code tool in a merged one that has no
+    // folder of its own (yet). A merged chat given a folder goes through the permission mode, as Cowork does.
+    const sandboxed = current.mode === 'chat' && (this.unified(current) ? SANDBOX_CODE_TOOLS.has(call.name) && (await this.inSandbox(current)) : SANDBOX_TOOLS.has(call.name));
+    const decision = sandboxed ? await this.sandboxDecision(current, subject) : decide(subject, judge);
     if (decision.behavior === 'deny') return { allow: false, message: refusal(decision) };
 
     const hooks = await this.deps.hooks?.(current);
@@ -2070,7 +2073,7 @@ export class ChatService {
    */
   private async nestedInstructions(session: SessionRow, call: ToolCallPart): Promise<string | null> {
     const path = (call.input as { file_path?: unknown } | null)?.file_path;
-    if (session.mode === 'chat' || !FILE_TOOLS.has(call.name) || typeof path !== 'string') return null;
+    if ((session.mode === 'chat' && !this.unified(session)) || !FILE_TOOLS.has(call.name) || typeof path !== 'string') return null;
     const workspace = await this.deps.workspace?.(session);
     // A workspace the person hasn't trusted brings no instruction files of its own.
     if (!workspace || !isTrusted(workspace)) return null;
@@ -2108,7 +2111,7 @@ export class ChatService {
 
   /** Code and Cowork: after ten tool calls without a TodoWrite, a reminder of the open items on the list. */
   private async todoNudge(session: SessionRow, call: ToolCallPart): Promise<string | null> {
-    if (session.mode === 'chat' || session.parentSessionId) return null;
+    if ((session.mode === 'chat' && !this.unified(session)) || session.parentSessionId) return null;
     const since = call.name === 'TodoWrite' ? 0 : (this.sinceTodo.get(session.id) ?? 0) + 1;
     this.sinceTodo.set(session.id, since % TODO_NUDGE_CALLS);
     if (since < TODO_NUDGE_CALLS) return null;
@@ -2218,7 +2221,7 @@ export class ChatService {
     }
     if (!target) return fail(unknown);
     const title = (row: SessionRow) => row.title || 'Untitled';
-    if (target.mode === 'chat') return fail(`"${title(target)}" is a Chat conversation, which can't receive messages; Code sessions and Cowork tasks can.`);
+    if (target.mode === 'chat' && !this.unified(target)) return fail(`"${title(target)}" is a Chat conversation, which can't receive messages; Code sessions and Cowork tasks can.`);
     const sent =
       relation === 'session' ? `Sent to the session "${title(target)}" (id ${target.id}).` : relation === 'parent' ? `Sent to the sub-agent "${title(target)}" (task agent:${target.id}).` : `Sent to your parent session "${title(target)}" (id ${target.id}).`;
     if (this.closing || this.discarding.has(target.id)) return fail(`"${title(target)}" can't receive messages right now: it is closing.`);
@@ -2285,7 +2288,7 @@ export class ChatService {
     const out: SessionListing[] = [];
     for (const s of [...found].sort((a, b) => b.updatedAt - a.updatedAt)) {
       if (out.length >= LIST_SESSIONS_MAX) break;
-      if (s.id === from.id || s.mode === 'chat') continue;
+      if (s.id === from.id || (s.mode === 'chat' && !this.unified({ mode: s.mode, temporary: null }))) continue;
       // Without an owner the list isn't filtered by one: check each row's.
       if (!from.userId && (await this.deps.repo.getRow(s.id))?.userId !== null) continue;
       out.push({ id: s.id, title: s.title, mode: s.mode, status: s.status, folder: (s.workspaceId && folders.get(s.workspaceId)) || null, updatedAt: s.updatedAt });
@@ -2418,9 +2421,9 @@ export class ChatService {
     // Adding a connector asks the person, which a sub-agent can't.
     const connect = this.deps.addConnector && !session.parentSessionId && !shared ? [this.addConnector] : [];
     // Computer use: top-level Code and Cowork sessions only (a sub-agent can't ask for apps, and several would fight over one mouse).
-    const computer = (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && !shared && (await this.deps.computer?.available(session)) ? this.computerTools : [];
+    const computer = (session.mode === 'code' || this.asTask(session)) && !session.parentSessionId && !shared && (await this.deps.computer?.available(session)) ? this.computerTools : [];
     // Web pages through the extension, where it is connected: top-level Code and Cowork sessions, as computer use.
-    const browser = this.browserTool && (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && !shared && (await browserConnected(this.deps.browser!.call)).connected ? [this.browserTool] : [];
+    const browser = this.browserTool && (session.mode === 'code' || this.asTask(session)) && !session.parentSessionId && !shared && (await browserConnected(this.deps.browser!.call)).connected ? [this.browserTool] : [];
     const memory = shared ? [] : (this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? []);
     // What only an app window shows: nothing for a person in the terminal app.
     const terminal = this.apps.get(session.id) === 'cli';
@@ -2431,9 +2434,12 @@ export class ChatService {
     const images = (await this.imagesFor(session)) ? [createGenerateImageTool({ generate: (input, ctx) => this.deps.images!.generate(input, ctx) })] : [];
     const videos = (await this.videosFor(session)) ? [createGenerateVideoTool({ generate: (input, ctx) => this.deps.videos!.generate(input, ctx) })] : [];
     const sounds = (await this.audioFor(session)) ? [createGenerateAudioTool({ generate: (input, ctx) => this.deps.audio!.generate(input, ctx) })] : [];
-    if (session.mode === 'chat') return [...(terminal ? [] : [createArtifactTool(this.deps.artifacts)]), ...inlineVisual, ...images, ...videos, ...sounds, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
+    const merged = this.unified(session);
+    if (session.mode === 'chat' && !merged) return [...(terminal ? [] : [createArtifactTool(this.deps.artifacts)]), ...inlineVisual, ...images, ...videos, ...sounds, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
+    // A merged chat with no folder yet: Cowork's file and command tools, on a sandbox made the first time one runs.
+    if (!workspace && merged) code = this.lazyCodeTools(session);
     if (workspace) {
       const checkpoints = this.deps.checkpoints;
       // A sub-agent's background commands are listed with its parent's.
@@ -2455,11 +2461,12 @@ export class ChatService {
       return def ? tools.filter((t) => (!def.tools || def.tools.includes(t.name)) && !def.disallowedTools.includes(t.name)) : tools;
     }
     const agent = createAgentTool((parentId, call, task, signal) => this.delegate(parentId, call, task, signal), catalog?.agents ?? []);
-    // Code shows a file it wrote in the Artifact pane, read through the same workspace.
-    const artifact = session.mode === 'code' && workspace && !terminal ? [createArtifactTool(this.deps.artifacts, workspace)] : [];
+    // Code shows a file it wrote in the Artifact pane, read through the same workspace; a merged chat makes them as Chat does.
+    const artifact = terminal ? [] : session.mode === 'code' && workspace ? [createArtifactTool(this.deps.artifacts, workspace)] : merged ? [createArtifactTool(this.deps.artifacts)] : [];
     // Web pages as a browser shows them, in the desktop app's Browser pane (not a co-op session's: the pane is the host's).
     const preview = session.mode === 'code' && workspace && !shared && this.apps.get(session.id) === 'desktop' ? [createPreviewTool(workspace)] : [];
-    const stopTasks = workspace ? [this.taskStop] : [];
+    // Background commands and sub-agents can be stopped wherever commands run: a folder, or a merged chat's sandbox.
+    const stopTasks = workspace || code.length ? [this.taskStop] : [];
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));
     const moveSession = movable && !shared ? [this.changeDirectory] : [];
@@ -2481,6 +2488,52 @@ export class ChatService {
   }
 
   /** The chat sandbox's fixed rules for one call (permissions/engine.ts `sandboxDecide`), against its folder. */
+  /**
+   * Chat and Cowork in one (capabilities.unifiedChat): a conversation that isn't temporary, and an old Cowork task read as
+   * one, works as a Cowork task when its request needs it: in its own sandbox until it is given a folder.
+   */
+  private unified(session: Pick<SessionRow, 'mode' | 'temporary'>): boolean {
+    return this.deps.settings().capabilities.unifiedChat === true && (session.mode === 'chat' || session.mode === 'work') && !session.temporary;
+  }
+
+  /** Works as a Cowork task: Cowork itself, or a merged chat. */
+  private asTask(session: Pick<SessionRow, 'mode' | 'temporary'>): boolean {
+    return session.mode === 'work' || this.unified(session);
+  }
+
+  /** A merged chat working in its own sandbox: none made yet, or the one made for it (not a folder of the person's). */
+  private async inSandbox(session: SessionRow): Promise<boolean> {
+    if (!session.workspaceId) return true;
+    return !!(await this.deps.workspace?.(session).catch(() => null))?.sandbox;
+  }
+
+  /**
+   * A merged chat's code tools before it has a folder: Cowork's whole set, described as usual, each running on the chat's
+   * sandbox, which the first call makes (a quick question never makes one).
+   */
+  private lazyCodeTools(session: SessionRow): Tool[] {
+    const { chatSandbox } = this.deps;
+    if (!chatSandbox || !this.deps.chatSandboxAvailable?.(session)) return [];
+    const templates = createCodeTools({ id: '', deviceId: null, host: null, root: '', pathSep: '/' } as unknown as Workspace);
+    return templates.map((template) => ({
+      ...template,
+      run: async (input, ctx) => {
+        const workspace = await chatSandbox(await this.requireSession(session.id));
+        let tools = this.codeTools.get(workspace);
+        if (!tools) {
+          const background: BackgroundCommands = {
+            started: (c, command) => void this.topLevel(c.sessionId).then((id) => this.tasks.addCommand(id, workspace, command)),
+            killed: (c, execId) => void this.topLevel(c.sessionId).then((id) => this.tasks.commandKilled(id, execId)),
+          };
+          const checkpoints = this.deps.checkpoints;
+          this.codeTools.set(workspace, (tools = createCodeTools(workspace, { blobs: this.deps.blobs, background, ...(checkpoints ? { checkpoint: (c, path) => checkpoints.capture(workspace, c.sessionId, path) } : {}) })));
+        }
+        const real = tools.find((t) => t.name === template.name)!;
+        return real.run(input as never, ctx);
+      },
+    }));
+  }
+
   private async sandboxDecision(session: SessionRow, call: { name: string; input: Record<string, unknown> }): Promise<Decision> {
     try {
       const workspace = await this.deps.chatSandbox!(session);
@@ -2885,13 +2938,14 @@ export class ChatService {
     const skills = ((await this.deps.extensions?.(row))?.skills ?? []).filter((s) => !s.disableModelInvocation);
     // About 1% of the context window, at four characters a token, but room for a few skills at least.
     const skillBudget = Math.max(2000, info.contextLength * 0.04);
-    const code = row.mode === 'chat' ? null : await this.deps.codeContext?.(row);
+    // A merged chat describes its folder once it has one; its own sandbox isn't the person's folder, and isn't named.
+    const code = row.mode === 'chat' && !(this.unified(row) && !(await this.inSandbox(row))) ? null : await this.deps.codeContext?.(row);
     const date = this.date();
     // A fresh temporary chat knows nothing about the person, as on a new install; admin text and safeguards stay. Nor does
     // a co-op session: what it knows is shared with everyone in it.
     const personal = usesPersonalContext(row) && !shared;
     const context: PromptContext = {
-      mode: row.mode,
+      mode: this.unified(row) ? 'chat' : row.mode,
       tier: info.tier,
       model: modelFacts(info, this.deps.settings().providers.find((p) => p.id === info.providerId)),
       date: date.long,
@@ -3015,7 +3069,8 @@ export class ChatService {
     // Compact-tier models (small, local) keep to the core tools: a leaner prompt, and they rarely start background work.
     const side = isSideChat(session);
     const all = side ? sideChatTools(session.mode, await this.toolsFor(session)) : await this.toolsFor(session);
-    const offered = info.capabilities.tools === 'none' ? [] : orderTools(all.filter((t) => !(info.tier === 'compact' && COMPACT_SKIPS.has(t.name))));
+    const skips = this.unified(session) ? COMPACT_MERGED_SKIPS : COMPACT_SKIPS;
+    const offered = info.capabilities.tools === 'none' ? [] : orderTools(all.filter((t) => !(info.tier === 'compact' && skips.has(t.name))));
     const names = new Set(offered.map((t) => t.name));
     const described = offered.map((t) => compactConnector(describeTool(t, { tier: info.tier, mode: session.mode, has: (name) => names.has(name) }), info.tier));
     const previous = await this.storedSnapshot(session.id);
@@ -3388,7 +3443,7 @@ export class ChatService {
     if (!waiting) await this.browserTool?.closeTabs(sessionId).catch(() => undefined);
     if (!this.deps.computer) return;
     const session = await this.deps.repo.getRow(sessionId);
-    if (!session || (session.mode !== 'code' && session.mode !== 'work') || session.parentSessionId) return;
+    if (!session || (session.mode !== 'code' && !this.asTask(session)) || session.parentSessionId) return;
     const done = waiting ? this.deps.computer.call(session, 'turn.wait', { kind: waiting }) : this.deps.computer.call(session, 'turn.end', {});
     await done.catch(() => undefined);
   }
@@ -3468,6 +3523,8 @@ const LOOKS = new Set(['Read', 'Glob', 'Grep']);
 const REACH_TOOLS = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep', 'SaveImage', 'SaveVideo', 'SaveAudio']);
 /** Tools compact-tier models don't get: their prompt and tools have to fit COMPACT_BUDGET_CHARS, and small models rarely need them. */
 const COMPACT_SKIPS = new Set(['TaskStop', 'ChangeDirectory', 'ComputerApps', 'OpenApp', 'SendMessage', 'ListSessions', 'MemoryView', 'ChatRead', 'Time', 'Usage']);
+/** A merged chat (Chat and Cowork in one) has artifacts as well: its pictures go there, and commands run in the foreground. */
+const COMPACT_MERGED_SKIPS = new Set([...COMPACT_SKIPS, 'inline_visual', 'BashOutput', 'KillShell']);
 /** One instruction file of a folder the session moved to, at most this long in the tool's result. */
 const MOVED_INSTRUCTION_CHARS = 8_000;
 

@@ -15,19 +15,19 @@ without asking are on [Permissions](/permissions/), and how descriptions are kep
 | Tool | Available in | What it does |
 |---|---|---|
 | [`Read`](#read) | Chat (some setups), Cowork, Code | Reads a file from the workspace: text, an image or a PDF. |
-| [`Write`](#write) | Cowork, Code | Creates a file or replaces its entire contents. |
-| [`Edit`](#edit) | Cowork, Code | Replaces an exact piece of text in a file. |
-| [`Glob`](#glob) | Cowork, Code | Finds files by path pattern, such as `**/*.ts` or `src/components/**/*.tsx`. |
-| [`Grep`](#grep) | Cowork, Code | Searches file contents with a regular expression in ripgrep syntax. |
+| [`Write`](#write) | Chat (some setups), Cowork, Code | Creates a file or replaces its entire contents. |
+| [`Edit`](#edit) | Chat (some setups), Cowork, Code | Replaces an exact piece of text in a file. |
+| [`Glob`](#glob) | Chat (some setups), Cowork, Code | Finds files by path pattern, such as `**/*.ts` or `src/components/**/*.tsx`. |
+| [`Grep`](#grep) | Chat (some setups), Cowork, Code | Searches file contents with a regular expression in ripgrep syntax. |
 | [`Bash`](#bash) | Chat (some setups), Cowork, Code | Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code. |
-| [`BashOutput`](#bashoutput) | Cowork, Code | Reads new output from a command started with Bash `run_in_background`: what it printed since the last call, and whether it is still running or its exit code. |
-| [`KillShell`](#killshell) | Cowork, Code | Stops a command started with Bash `run_in_background`, along with the processes it started. |
-| [`TaskStop`](#taskstop) | Cowork, Code | Stops background tasks of this conversation: commands started with Bash `run_in_background`, sub-agents started with the Agent tool's `run_in_background`, and loops. |
-| [`TodoWrite`](#todowrite) | Cowork, Code | Keeps the task list for this session, which the person watches while you work. |
-| [`AskUser`](#askuser) | Cowork, Code | Puts up to four questions with fixed choices to the person and waits for their answers. |
-| [`Agent`](#agent) | Cowork, Code | Hands a self-contained task to a sub-agent that works in its own context and returns one report. |
-| [`SendMessage`](#sendmessage) | Cowork, Code | Sends a message to another of the person's sessions, or to one of your sub-agents while it runs. |
-| [`ListSessions`](#listsessions) | Cowork, Code | Lists the person's other Code sessions and Cowork tasks, most recent first (at most 30): id, title, mode, status, folder and when it last changed. |
+| [`BashOutput`](#bashoutput) | Chat (some setups), Cowork, Code | Reads new output from a command started with Bash `run_in_background`: what it printed since the last call, and whether it is still running or its exit code. |
+| [`KillShell`](#killshell) | Chat (some setups), Cowork, Code | Stops a command started with Bash `run_in_background`, along with the processes it started. |
+| [`TaskStop`](#taskstop) | Chat (some setups), Cowork, Code | Stops background tasks of this conversation: commands started with Bash `run_in_background`, sub-agents started with the Agent tool's `run_in_background`, and loops. |
+| [`TodoWrite`](#todowrite) | Chat (some setups), Cowork, Code | Keeps the task list for this session, which the person watches while you work. |
+| [`AskUser`](#askuser) | Chat (some setups), Cowork, Code | Puts up to four questions with fixed choices to the person and waits for their answers. |
+| [`Agent`](#agent) | Chat (some setups), Cowork, Code | Hands a self-contained task to a sub-agent that works in its own context and returns one report. |
+| [`SendMessage`](#sendmessage) | Chat (some setups), Cowork, Code | Sends a message to another of the person's sessions, or to one of your sub-agents while it runs. |
+| [`ListSessions`](#listsessions) | Chat (some setups), Cowork, Code | Lists the person's other Code sessions and Cowork tasks, most recent first (at most 30): id, title, mode, status, folder and when it last changed. |
 | [`Time`](#time) | Chat, Cowork, Code | Returns the current date, time and time zone. |
 | [`Usage`](#usage) | Chat, Cowork, Code | Shows how much of the person's plan limits or API spend is used on the provider this session runs on: a subscription's windows (5-hour, weekly) with the share used and the time until each resets, or what a priced API has cost this session, today and over the last 7 days. |
 | [`Skill`](#skill) | Chat, Cowork, Code | Loads the instructions of an installed skill. |
@@ -89,7 +89,7 @@ Reads a file from the workspace: text, an image or a PDF. Given a directory, it 
 - When you will probably need several files, read them all in one message.
 ````
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Reads a file. Each line comes back with its line number in front.
@@ -118,7 +118,7 @@ Reads a file. Each line comes back with its line number in front.
 
 ## Write
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -134,7 +134,7 @@ Creates a file or replaces its entire contents. Missing parent folders are creat
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Creates a file or replaces all of its content.
@@ -153,7 +153,7 @@ Creates a file or replaces all of its content.
 
 ## Edit
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -172,7 +172,7 @@ Replaces an exact piece of text in a file.
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Replaces exact text in a file.
@@ -194,7 +194,7 @@ Replaces exact text in a file.
 
 ## Glob
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -210,7 +210,7 @@ Finds files by path pattern, such as `**/*.ts` or `src/components/**/*.tsx`. It 
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Finds files by name pattern.
@@ -229,7 +229,7 @@ Finds files by name pattern.
 
 ## Grep
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -246,7 +246,7 @@ Searches file contents with a regular expression in ripgrep syntax. Files ignore
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Searches file contents with a regular expression.
@@ -308,11 +308,11 @@ Pull requests (only when the person asks):
 ````
 
 <details>
-<summary>The description reads differently in 4 other setups</summary>
+<summary>The description reads differently in 5 other setups</summary>
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
-**Cowork, full tier**
+**Cowork, full tier; Chat, full tier**
 
 ````text wrap
 Runs a shell command in the workspace and returns its output (stdout and stderr together) and exit code.
@@ -356,6 +356,15 @@ Runs a command in the shell and returns what it printed.
 - Commit only when asked. Never force-push or throw away uncommitted changes unless asked.
 ````
 
+**Chat, compact tier**
+
+````text wrap
+Runs a command in the shell and returns what it printed.
+- The current folder persists between calls and relative paths follow it: prefer `(cd dir && cmd)` to a bare `cd`.
+- Don't use it to read or edit files, or to search the whole disk (`find /`).
+- Commit only when asked. Never force-push or throw away uncommitted changes unless asked.
+````
+
 </details>
 
 ### Parameters
@@ -369,7 +378,7 @@ Runs a command in the shell and returns what it printed.
 
 ## BashOutput
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -401,7 +410,7 @@ Reads new output from a command started with Bash `run_in_background`: what it p
 
 ## KillShell
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -431,7 +440,7 @@ Stops a command started with Bash `run_in_background`, along with the processes 
 
 ## TaskStop
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -451,7 +460,7 @@ Stops background tasks of this conversation: commands started with Bash `run_in_
 
 ## TodoWrite
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -483,7 +492,7 @@ Keeps the task list for this session, which the person watches while you work.
 - Make the last item a check of the deliverable.
 ````
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Sets the task list the person sees: only your own work, none of theirs. Send it whole each time.
@@ -500,7 +509,7 @@ Sets the task list the person sees: only your own work, none of theirs. Send it 
 
 ## AskUser
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -517,7 +526,7 @@ Puts up to four questions with fixed choices to the person and waits for their a
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
-**Cowork, full tier**
+**Cowork, full tier; Chat, full tier**
 
 ````text wrap
 Puts up to four questions with fixed choices to the person and waits for their answers.
@@ -527,7 +536,7 @@ Puts up to four questions with fixed choices to the person and waits for their a
 - Set `multiSelect` when the choices aren't exclusive.
 ````
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Asks the person up to four questions, each with 2 to 4 options, and waits for the answers.
@@ -545,7 +554,7 @@ Asks the person up to four questions, each with 2 to 4 options, and waits for th
 
 ## Agent
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -568,7 +577,7 @@ Sub-agent types:
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
-**Code, compact tier; Cowork, compact tier**
+**Code, compact tier; Chat, compact tier; Cowork, compact tier**
 
 ````text wrap
 Starts a sub-agent for a big, self-contained task, such as a search across many files.
@@ -592,7 +601,7 @@ Sub-agent types:
 
 ## SendMessage
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 
@@ -613,7 +622,7 @@ Sends a message to another of the person's sessions, or to one of your sub-agent
 
 ## ListSessions
 
-**Available in:** Cowork, Code
+**Available in:** Chat (some setups), Cowork, Code
 
 ### Description
 

@@ -234,6 +234,11 @@ export function outsideRoots(call: ToolCall, ctx: Pick<PermissionContext, 'cwd' 
 /** The tools a chat gets in its sandbox. */
 export const SANDBOX_TOOLS = new Set(['Bash', 'Read']);
 
+/** A merged chat's (capabilities.unifiedChat) code tools, which run under the sandbox's rules while it has no folder. */
+export const SANDBOX_CODE_TOOLS = new Set(['Bash', 'BashOutput', 'KillShell', 'Read', 'Write', 'Edit', 'Glob', 'Grep']);
+/** The file tools among them: they stay inside the sandbox folder. */
+const SANDBOX_FILE_TOOLS = new Set(['Read', 'Write', 'Edit', 'Glob', 'Grep']);
+
 /**
  * A chat's sandbox runs under fixed rules, never a prompt: reads stay in its folder, dangerous commands are refused
  * with their reason, and other commands run. Where nothing confines commands to the folder (no OS sandbox), the
@@ -241,12 +246,14 @@ export const SANDBOX_TOOLS = new Set(['Bash', 'Read']);
  */
 export function sandboxDecide(call: ToolCall, sandbox: { root: string; home: string; confined: boolean; flavor?: PathFlavor }): Decision {
   const ctx = { cwd: sandbox.root, home: sandbox.home, roots: [sandbox.root], ...(sandbox.flavor ? { flavor: sandbox.flavor } : {}) };
-  if (call.name === 'Read') {
+  if (SANDBOX_FILE_TOOLS.has(call.name)) {
     const outside = outsideRoots(call, ctx);
     return outside
-      ? { behavior: 'deny', reason: `Read works only inside this chat's sandbox folder (${sandbox.root}); ${outside} is outside it.` }
+      ? { behavior: 'deny', reason: `${call.name} works only inside this chat's sandbox folder (${sandbox.root}); ${outside} is outside it.` }
       : { behavior: 'allow', reason: 'Inside the sandbox.' };
   }
+  // A background command's output, or stopping it: the sandbox's own commands.
+  if (call.name === 'BashOutput' || call.name === 'KillShell') return { behavior: 'allow', reason: 'Inside the sandbox.' };
   const command = typeof call.input.command === 'string' ? call.input.command : '';
   const danger = dangerousReason(command, ctx);
   if (danger) return { behavior: 'deny', reason: `The sandbox doesn't allow this: the command ${danger}.` };

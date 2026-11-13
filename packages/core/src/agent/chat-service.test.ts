@@ -574,6 +574,42 @@ describe('ChatService', () => {
     expect(terminal).not.toContain('artifact');
   });
 
+  it('with Chat and Cowork in one, gives a chat Cowork’s tools on a sandbox made only when one runs; temporary chats stay plain', async () => {
+    let made = 0;
+    const sandbox = { id: 'sb', root: '/sandbox', home: '/home/ada', pathSep: '/', sandbox: { confined: true } } as unknown as Workspace;
+    const chat = service(undefined, undefined, { chatSandboxAvailable: () => true, chatSandbox: async () => (made++, sandbox) });
+    const turn = async (mode: 'chat' | 'work', temporary: 'fresh' | null = null) => {
+      seen.length = 0;
+      const s = await repo.create({ mode, ...(temporary ? { temporary } : {}) });
+      await chat.send(s.id, [{ type: 'text', text: 'What is 2 + 2?' }]);
+      await chat.settle(s.id);
+      const request = seen.find((r) => !r.system.some((b) => b.text.includes('short title')))!;
+      return { tools: request.tools!.map((t) => t.name), system: request.system.map((b) => b.text).join('\n') };
+    };
+    // Off (the default): a chat as before.
+    const plain = await turn('chat');
+    expect(plain.tools).not.toContain('Write');
+    expect(plain.tools).not.toContain('TodoWrite');
+    settings.capabilities.unifiedChat = true;
+    try {
+      const merged = await turn('chat');
+      expect(merged.tools).toEqual(expect.arrayContaining(['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'AskUser', 'Agent', 'artifact']));
+      expect(merged.system).toContain('# Working on tasks');
+      // A quick question made no sandbox: it is made when a file or command tool first runs.
+      expect(made).toBe(0);
+      // An old Cowork task reads as a merged chat: Chat's prompt with the task part, not Cowork's own.
+      const old = await turn('work');
+      expect(old.system).toContain('# Working on tasks');
+      expect(old.system).not.toContain('You are the task agent in Cowork');
+      // A temporary chat keeps to Chat's tools.
+      const temporary = await turn('chat', 'fresh');
+      expect(temporary.tools).not.toContain('TodoWrite');
+      expect(temporary.system).not.toContain('# Working on tasks');
+    } finally {
+      settings.capabilities.unifiedChat = false;
+    }
+  });
+
   it('offers the clock everywhere and the usage figures only where the model\'s provider has some', async () => {
     const toolsOf = async (usage?: ChatServiceDeps['usage']) => {
       seen.length = 0;
