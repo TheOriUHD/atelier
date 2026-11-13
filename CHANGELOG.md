@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-11-13
+
 - **Co-op guests can pick their own model.** A guest who chose one of their own models saw "Choose a model" again right after: the host keeps that model as the guest's (`peer-…/model`), told the guest's app so, and the app found no model by that name. The guest's own choice now reads as they chose it. "Ada is typing…" sits just above the message box, lined up with it, instead of at the conversation's left edge.
 - **No empty thinking steps.** A thought with nothing in it, or only a heading such as "**Preparing backup access**" (some providers send that as a step's whole summary), no longer gets a row in the steps, the transcript or the terminal app. A thought that is still coming in stays, and a heading inside a longer one shows in bold instead of with its stars.
 - **The terminal app on Windows keeps its sign-in and its keys.** Windows' store for them wrote each value and then deleted it again at once. Its file served as both the system store and the fallback, and a successful write removed the fallback's copy, which was the same entry. So a server sign-in was gone at the next start (setup asked again and again), and on "this computer" the key that seals saved API keys was new at every start of the background service. Saved keys then failed with "Unsupported state or unable to authenticate data". The tests never saw it because they all used the plain file store. A key that is already lost reads "The saved Mistral API key can't be read … Enter it again (/provider)", and a new key is never written over one that can't be read right now (a slow PowerShell, a locked keychain).

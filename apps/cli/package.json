@@ -1,6 +1,6 @@
 {
   "name": "@atelier/cli",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Atelier in the terminal: a coding agent on your own models, standalone or with an Atelier server.",
   "private": true,
