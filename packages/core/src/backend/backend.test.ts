@@ -964,7 +964,7 @@ describe('a desktop lending itself to a server', () => {
       const { token } = await desktop.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'desktop' });
       const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
       await desktop.call('devices.register', device);
-      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat'] });
+      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat', 'computer'] });
 
       const scratchBase = join(home, 'laptop-scratch');
       let link: { receive(text: string): void } | null = null;

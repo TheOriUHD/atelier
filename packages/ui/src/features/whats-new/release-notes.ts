@@ -38,6 +38,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.7.5',
+    intro: 'Computer use works when your desktop app is signed in to a server.',
+    highlights: [
+      {
+        icon: Monitor,
+        title: 'Computer use on a server',
+        body: 'Signed in to a server, the assistant now gets computer use on the computer you write from: turn it on in Settings › System there and allow apps on its cards. The server needs Update server for this.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.7.4',
     intro: 'A first look at Chat and Cowork in one conversation, for admins to try.',
     highlights: [

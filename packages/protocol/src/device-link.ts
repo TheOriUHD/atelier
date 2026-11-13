@@ -33,9 +33,10 @@ export const DEVICE_LINK_PROTOCOL = 2;
  * one), `ssh` (SSH hosts reached with the device's own ssh, keys and runner builds), `http` (addresses on the device or
  * its network: personal model servers and connectors), `ws` (WebSockets to those same addresses, for an image server's
  * progress), `mcp` (personal connectors that run a program there), `home` (the person's own instructions, skills and
- * Claude Code settings in its home folder), `chatgptChat` (the ChatGPT window of the desktop app there).
+ * Claude Code settings in its home folder), `chatgptChat` (the ChatGPT window of the desktop app there), `computer`
+ * (computer use there: the person turns it on and allows each app on that computer, never the server).
  */
-export const DeviceService = z.enum(['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', 'chatgptChat']);
+export const DeviceService = z.enum(['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', 'chatgptChat', 'computer']);
 export type DeviceService = z.infer<typeof DeviceService>;
 
 /** A personal connector the person allowed to run here, by what runs: see `connectorFingerprintInput`. */
@@ -200,6 +201,11 @@ export const DeviceRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('home.read'), path: z.string().min(1).max(4096) }),
   /** Claude Code's connectors there (`~/.claude.json` and the folders trusted there), converted: `McpImportEntry[]`. */
   z.object({ op: z.literal('mcp.import') }),
+  /**
+   * One computer-use call for a session there (`ControllerMethods`; `available` with no session asks whether it is on).
+   * The desktop's own controller decides what each session may do: apps are allowed only on its cards, never by the server.
+   */
+  z.object({ op: z.literal('computer'), sessionId: z.string().max(100), method: z.string().min(1).max(64), params: z.unknown() }),
 ]);
 export type DeviceRequest = z.infer<typeof DeviceRequest>;
 
@@ -216,6 +222,7 @@ export const REQUEST_SERVICE: Record<DeviceRequest['op'], DeviceService> = {
   'home.scan': 'home',
   'home.read': 'home',
   'mcp.import': 'mcp',
+  computer: 'computer',
 };
 
 /** `mcp.import`'s answer. */

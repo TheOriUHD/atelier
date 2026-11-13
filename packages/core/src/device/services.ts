@@ -58,6 +58,8 @@ export interface DeviceServicesOptions {
   sshDir: string;
   /** One call to the app's ChatGPT window (main's ChatGptChatBrowser); absent where there is none. */
   chatgptChat?: (operation: Extract<DeviceRequest, { op: 'chatgptChat' }>['operation'], value: string) => Promise<string>;
+  /** One computer-use call to main's controller here (absent where there is none); main decides what each session may do. */
+  computer?: (sessionId: string, method: string, params: unknown) => Promise<unknown>;
   /** The folders trusted here, whose `.mcp.json` an import from Claude Code reads. */
   trustedFolders?(): Promise<string[]>;
   /** This computer's home folder (the person's config, and where connectors' programs run). */
@@ -234,7 +236,7 @@ export function deviceServices(o: DeviceServicesOptions) {
   const sockets = new Map<string, Set<{ recheck(): Promise<void> }>>();
 
   return {
-    services: ['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', ...(o.chatgptChat ? ['chatgptChat'] : [])],
+    services: ['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', ...(o.chatgptChat ? ['chatgptChat'] : []), ...(o.computer ? ['computer'] : [])],
 
     async hello(): Promise<DeviceHello> {
       return { protocol: DEVICE_LINK_PROTOCOL, app: APP.version, services: this.services, lending: await o.lending(), home, sep, os: process.platform, arch: process.arch };
@@ -298,6 +300,9 @@ export function deviceServices(o: DeviceServicesOptions) {
           if (!o.chatgptChat) throw new Refusal('unsupported', `${o.deviceName}'s desktop app has no ChatGPT window.`);
           if (!(await o.lending()).chatgptChat) throw new Refusal('refused', `ChatGPT Chat isn't allowed on ${o.deviceName}: add it in the desktop app there.`);
           return o.chatgptChat(request.operation, request.value ?? '');
+        case 'computer':
+          if (!o.computer) throw new Refusal('unsupported', `${o.deviceName}'s desktop app can't use the computer.`);
+          return o.computer(request.sessionId, request.method, request.params);
         case 'home.scan':
           await allowHome();
           return scanHome(home);

@@ -578,3 +578,28 @@ describe('what `http` lets a server send to a lent address', () => {
     expect(lentHeaders({ Host: 'other.lan', Forwarded: 'x', 'X-Forwarded-Host': 'y', 'x-real-ip': '1.1.1.1', 'Proxy-Authorization': 'z', authorization: 'Bearer k', 'content-type': 'application/json' })).toEqual({ authorization: 'Bearer k', 'content-type': 'application/json' });
   });
 });
+
+describe('computer use lent to a server', () => {
+  it('passes each call to main’s controller here, and is refused by a desktop that can’t use the computer', async () => {
+    const calls: unknown[][] = [];
+    const lent = deviceServices({
+      deviceName: 'Laptop',
+      lending: async () => lending,
+      scratchDir: join(dir, 'scratch'),
+      runnerDir: null,
+      ssh: 'ssh',
+      sshDir: join(dir, 'ssh'),
+      computer: async (sessionId, method, params) => (calls.push([sessionId, method, params]), method === 'available' ? true : { ok: 1 }),
+    });
+    expect(lent.services).toContain('computer');
+    expect(await lent.request({ op: 'computer', sessionId: '', method: 'available', params: {} })).toBe(true);
+    expect(await lent.request({ op: 'computer', sessionId: 's1', method: 'screenshot', params: { app: 'Notes' } })).toEqual({ ok: 1 });
+    expect(calls).toEqual([
+      ['', 'available', {}],
+      ['s1', 'screenshot', { app: 'Notes' }],
+    ]);
+    const without = services();
+    expect(without.services).not.toContain('computer');
+    await expect(without.request({ op: 'computer', sessionId: 's1', method: 'screenshot', params: {} })).rejects.toMatchObject({ code: 'unsupported' });
+  });
+});

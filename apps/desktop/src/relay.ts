@@ -6,7 +6,7 @@
  * renderer's messages. Once an open socket drops, the relay closes the port, and the renderer asks
  * for a new one; requests in flight fail instead of hanging.
  */
-import { APP } from '@atelier/protocol';
+import { DEVICE_HEADERS, APP } from '@atelier/protocol';
 import { backoff } from '@atelier/core/device';
 
 export { backoff };
@@ -26,7 +26,7 @@ export interface RelayHooks {
   failed(failures: number): void;
 }
 
-export function createRelay(serverUrl: string, openSocket: OpenSocket = (url, headers) => new NodeWebSocket(url, { headers }), hooks?: RelayHooks) {
+export function createRelay(serverUrl: string, openSocket: OpenSocket = (url, headers) => new NodeWebSocket(url, { headers }), hooks?: RelayHooks, deviceId?: string) {
   const socketUrl = `${serverUrl.replace(/^http/, 'ws')}/api/ws`;
   // Shared by all ports, so a server that accepts and then drops connections isn't hammered either.
   let failures = 0;
@@ -35,7 +35,8 @@ export function createRelay(serverUrl: string, openSocket: OpenSocket = (url, he
     /** Connects one renderer port, signed in with the stored token when there is one. */
     link(port: Port, token?: string): void {
       // The server's device list names a client by its user agent ("Atelier Desktop on macOS").
-      const headers: Record<string, string> = { 'User-Agent': DESKTOP_USER_AGENT, ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      // The device id says which computer a message came from, so the server's computer use reaches that one.
+      const headers: Record<string, string> = { 'User-Agent': DESKTOP_USER_AGENT, ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(deviceId ? { [DEVICE_HEADERS.id]: deviceId } : {}) };
       const outbox: string[] = [];
       let socket: WebSocket | null = null;
       let open = false;

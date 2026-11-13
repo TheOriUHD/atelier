@@ -11,9 +11,10 @@ assistant uses that: working on screen is slower and less reliable.
 It is off until you turn it on, it only uses apps you allow, and you can stop it at any moment.
 
 :::note
-Computer use works on **macOS**, **Windows** and **Linux** (X11), in the desktop app with **Run on this computer**. A
-desktop app signed in to a server comes later. A session in the browser can't use your computer. [Linux](#linux) differs
-in a few ways, which are listed there.
+Computer use works on **macOS**, **Windows** and **Linux** (X11), in the desktop app, both with **Run on this computer**
+and signed in to a server. On a server, the session uses the computer you last wrote from: turn computer use on in that
+computer's desktop app, and allow apps on the cards in its window (the server can't allow any). A session in the browser
+can't use your computer. [Linux](#linux) differs in a few ways, which are listed there.
 :::
 
 ## Turn it on

@@ -345,10 +345,12 @@ function startBackend(): void {
       // Only the built-in backend's own folders (a server's sessions never add to this computer's list this way).
       if (connection?.mode === 'local') void trustFolder(m.root).catch((e: unknown) => console.warn('Could not trust a folder:', e));
     } else if (m.kind === 'req' && m.op === 'computer') {
-      // The desktop's own backend only: a server's sessions reach this computer through the device link.
+      // The desktop's own backend, or the server it is signed in to (its sessions reach this computer through the device
+      // link): each under a key of its own, so one's allowed apps never count for the other.
       try {
-        if (connection?.mode !== 'local') throw new Error('Computer use is for this computer’s own sessions.');
-        const value = m.method === 'available' ? await computer.available() : await computer.handle('local', m.sessionId, m.method as keyof ControllerMethods, m.params as never);
+        const key = connection?.mode === 'local' ? 'local' : connection?.mode === 'server' ? connection.serverUrl : null;
+        if (!key) throw new Error('Computer use is for this computer’s own sessions.');
+        const value = m.method === 'available' ? await computer.available() : await computer.handle(key, m.sessionId, m.method as keyof ControllerMethods, m.params as never);
         child.postMessage({ kind: 'res', id: m.id, ok: true, value: JSON.stringify(value) } satisfies MainToBackend);
       } catch (error) {
         child.postMessage({ kind: 'res', id: m.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies MainToBackend);

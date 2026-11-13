@@ -23,6 +23,7 @@ const report = (problem: LinkProblem | null) => {
   said = key;
   process.parentPort.postMessage({ kind: 'link', problem } satisfies BackendToMain);
 };
+const device = DeviceInfo.parse(JSON.parse(process.argv[3]!));
 const relay = createRelay(serverUrl, undefined, {
   up: () => report(null),
   failed: (failures) => {
@@ -37,7 +38,7 @@ const relay = createRelay(serverUrl, undefined, {
         diagnosedAt = Date.now();
       });
   },
-});
+}, device.id);
 // Calls to main's ChatGPT window, for a personal ChatGPT Chat on the server (main answers them as for the local backend).
 let nextId = 1;
 const pending = new Map<number, { resolve: (v: string) => void; reject: (e: Error) => void }>();
@@ -48,9 +49,16 @@ const chatgptChat = (operation: Extract<BackendRequest, { op: 'chatgptChat' }>['
     process.parentPort.postMessage({ kind: 'req', id, op: 'chatgptChat', operation, value } satisfies BackendToMain);
   });
 
+/** Computer use for the server's sessions: main's controller, which keeps this server's grants apart from other backends'. */
+const computer = (sessionId: string, method: string, params: unknown) =>
+  new Promise<string>((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    process.parentPort.postMessage({ kind: 'req', id, op: 'computer', sessionId, method, params } satisfies BackendToMain);
+  }).then((json) => JSON.parse(json) as unknown);
+
 const runnerDir = process.env.ATELIER_RUNNER_DIR;
 const runnerBinary = runnerDir ? join(runnerDir, runnerBinaryName(process.platform, process.arch)) : null;
-const device = DeviceInfo.parse(JSON.parse(process.argv[3]!));
 const trustedFolders = () => readTrustedFolders(process.env.ATELIER_TRUSTED_FOLDERS!);
 const services = deviceServices({
   deviceName: device.name,
@@ -61,6 +69,7 @@ const services = deviceServices({
   sshDir: process.env.ATELIER_SSH_DIR!,
   trustedFolders,
   chatgptChat,
+  computer,
 });
 const deviceLink = createDeviceLink({
   serverUrl,

@@ -19,12 +19,15 @@ export function useComputerStatus(): ComputerStatus | undefined {
 }
 
 /**
- * Where this window can answer a session's computer use cards: in the desktop app running the session on its own
- * backend (`local`). A browser or a desktop signed in to a server can't allow anything on this computer yet.
+ * Where this window can answer a session's computer use cards, as main's controller keys them: the desktop app's own
+ * backend (`local`), or the server it is signed in to (its address), whose sessions use this computer through the
+ * device link. A browser can't allow anything on a computer.
  */
 export function useComputerHere(): string | null {
   const { data: connection } = useConnection();
-  return desktop?.computer && connection?.mode === 'local' ? 'local' : null;
+  if (!desktop?.computer) return null;
+  if (connection?.mode === 'local') return 'local';
+  return connection?.mode === 'server' && connection.serverUrl ? connection.serverUrl : null;
 }
 
 export async function refreshComputer(qc: ReturnType<typeof useQueryClient>, run: () => Promise<unknown>): Promise<void> {

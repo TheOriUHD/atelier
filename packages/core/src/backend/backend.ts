@@ -318,8 +318,11 @@ const NOT_OVER_NETWORK: ReadonlySet<keyof AppContract['procedures']> = new Set<k
 ]);
 
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
-const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat'];
+const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat', 'computer'];
 
+
+/** How long one computer-use call through a person's desktop may take: a batch of steps waits on apps there. */
+const COMPUTER_CALL_MS = 5 * 60_000;
 
 /** A merged chat has no plan to approve (ExitPlanMode is Code's): Plan, an admin's default made for Code, asks instead. */
 export const workingMode = (mode: PermissionMode, mergedChat: boolean): PermissionMode => (mergedChat && mode === 'plan' ? 'default' : mode);
@@ -374,7 +377,26 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       emitToUser(userId, 'extensions.changed', {});
     },
   );
-  /** A device's name, for what its person reads ("offline on MacBook", "from MacBook"). */
+  /** Which of a person's computers a session's computer use reaches on a server: the one they last wrote from (in it, else anywhere), else the one connected longest. */
+  const lastDevice = new Map<string, string>();
+  const lastDeviceOf = new Map<string, string>();
+  const computerDevice = (session: { id: string; userId: string | null }): string | null => {
+    const userId = session.userId;
+    if (!userId) return null;
+    const lends = (id: string | undefined): id is string => !!id && !!links.info(userId, id)?.services.includes('computer');
+    const last = lastDevice.get(session.id);
+    if (lends(last)) return last;
+    const mine = lastDeviceOf.get(userId);
+    if (lends(mine)) return mine;
+    return links.devices(userId).find((d) => lends(d)) ?? null;
+  };
+  /** A message or action from a window: which app it came from, and on a server which of the person's computers. */
+  const heard = (sessionId: string, client: ClientInfo) => {
+    chat.heardFrom(sessionId, client.clientKind);
+    if (platform.surface !== 'web' || client.clientKind !== 'desktop' || !client.deviceId) return;
+    lastDevice.set(sessionId, client.deviceId);
+    void sessions.getRow(sessionId).then((row) => row?.userId && lastDeviceOf.set(row.userId, client.deviceId!));
+  };  /** A device's name, for what its person reads ("offline on MacBook", "from MacBook"). */
   const deviceName = async (userId: string, deviceId: string) => (await devices.list(userId, null, () => false)).find((d) => d.id === deviceId)?.name ?? 'your computer';
   const deviceHomes = new DeviceHomes(links, deviceName);
   /** Waits up to three seconds for one of the person's desktops to allow the address it lends as `id`. */
@@ -1315,7 +1337,26 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     ...(platform.computer
       ? { computer: { available: () => platform.computer!.available(), call: (session, method, params) => platform.computer!.call(session.id, method, params) } }
-      : {}),
+      : platform.surface === 'web'
+        ? {
+            // On a server: the person's own computer, lent over the device link by its desktop app, where computer use is
+            // turned on and every app is allowed on that computer's cards.
+            computer: {
+              available: async (session) => {
+                const device = computerDevice(session);
+                if (!device || !session.userId) return false;
+                return (await links.request(session.userId, device, { op: 'computer', sessionId: '', method: 'available', params: {} }, 5_000).catch(() => false)) === true;
+              },
+              call: async (session, method, params) => {
+                const device = computerDevice(session);
+                if (!device || !session.userId) throw new Error('No computer of yours is connected: open the Atelier desktop app with computer use turned on.');
+                return (await links.request(session.userId, device, { op: 'computer', sessionId: session.id, method, params }, COMPUTER_CALL_MS).catch((e: unknown) => {
+                  throw e instanceof Error ? new Error(e.message, { cause: e }) : new Error(String(e));
+                })) as never;
+              },
+            },
+          }
+        : {}),
     ...(platform.browser ? { browser: { call: platform.browser.call } } : {}),
     // AddConnector, once the person agreed: one of their own connectors on a server, Settings › Connectors on a desktop.
     addConnector: async (session, c) => {
@@ -2690,7 +2731,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
     'chat.send': async ({ sessionId, parentId, parts, answerWith }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.send');
-      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
+      heard(sessionId, ctx.connection().client);
       await ownBlobsOnly(parts, ctx);
       return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, answerWith ? { answerWith } : {})) };
     },
@@ -2732,7 +2773,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.queue': async ({ sessionId, parts, joinTurn, answerWith }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.queue');
-      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
+      heard(sessionId, ctx.connection().client);
       await ownBlobsOnly(parts, ctx);
       return coopAction(() => chat.queue(sessionId, parts, as, { ...(joinTurn ? { joinTurn } : {}), ...(answerWith ? { answerWith } : {}) }));
     },
@@ -2742,25 +2783,25 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.sendNow': async ({ sessionId, id }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.sendNow');
-      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
+      heard(sessionId, ctx.connection().client);
       await coopAction(() => chat.sendNow(sessionId, id, as));
       return { ok: true as const };
     },
     'chat.retry': async ({ sessionId, messageId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.retry');
-      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
+      heard(sessionId, ctx.connection().client);
       await chat.retry(sessionId, messageId, as);
       return { ok: true as const };
     },
     'chat.continue': async ({ sessionId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.continue');
-      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
+      heard(sessionId, ctx.connection().client);
       await chat.continue(sessionId, as);
       return { ok: true as const };
     },
     'chat.edit': async ({ sessionId, messageId, parts }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.edit');
-      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
+      heard(sessionId, ctx.connection().client);
       await ownBlobsOnly(parts, ctx);
       return { userMessageId: await coopAction(() => chat.edit(sessionId, messageId, parts, as)) };
     },
