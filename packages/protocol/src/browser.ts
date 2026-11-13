@@ -8,11 +8,10 @@
 export const BROWSER_HOST_NAME = 'dev.atelier.browser';
 
 /**
- * The extension ids allowed to reach the host. The unpacked build carries a public key in its manifest (apps/
- * browser-extension/manifest.json), so its id is the same on every computer; the Chrome Web Store id joins it once the
- * extension is published there.
+ * The extension ids allowed to reach the host: the unpacked build's (its manifest carries a public key, so the id is the
+ * same on every computer) and the Chrome Web Store's (apps/browser-extension/store/listing.md).
  */
-export const BROWSER_EXTENSION_IDS = ['ehblmofeglpkfcaejllehbbhhddchefk'] as const;
+export const BROWSER_EXTENSION_IDS = ['ehblmofeglpkfcaejllehbbhhddchefk', 'efpchbhecdgeeadmefahpgidnfplajln'] as const;
 
 /** Protocol version, sent in the extension's hello; a mismatch is reported in Settings, not guessed around. */
 export const BROWSER_PROTOCOL_VERSION = 1;

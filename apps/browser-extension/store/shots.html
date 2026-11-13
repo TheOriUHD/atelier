@@ -1,0 +1,300 @@
+<!doctype html>
+<!-- The Chrome Web Store's screenshots and promo tiles for Atelier for Chrome. `node store/render.mjs` renders each
+     section at its exact size into store/images/. The pages shown are made up (an invented shop), no real brand. -->
+<meta charset="utf-8">
+<style>
+@font-face { font-family: Inter; src: url('../../site/public/fonts/inter-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; }
+@font-face { font-family: 'Source Serif 4'; src: url('../../site/public/fonts/source-serif-4-latin-opsz-normal.woff2') format('woff2'); font-weight: 200 900; }
+:root {
+  --clay: #C6613F; --clay-2: #DE8463; --clay-ink: #8A3E21; --cream: #FBF8F2; --paper: #F6F1EA;
+  --ink: #0B0B0B; --ink-2: #52514E; --muted: #686762; --line: rgba(11,11,11,.10); --line-2: rgba(11,11,11,.06);
+  --surface: #FFFFFF; --sunken: #F9F9F7; --blue: #2A78D6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #ddd; font-family: Inter, system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.shot { position: relative; overflow: hidden; margin: 0 0 40px; }
+.s1280 { width: 1280px; height: 800px; }
+.serif { font-family: 'Source Serif 4', Georgia, serif; }
+
+/* the brand row */
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 17px; letter-spacing: -.01em; }
+.brand svg { width: 34px; height: 34px; }
+
+/* page backgrounds */
+.paper { background: radial-gradient(1200px 700px at 85% 110%, #F3E3D8 0%, rgba(243,227,216,0) 60%), var(--paper); }
+
+/* left copy column */
+.copy { position: absolute; left: 64px; top: 0; bottom: 0; width: 380px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.copy h1 { font-family: 'Source Serif 4', Georgia, serif; font-weight: 600; font-size: 46px; line-height: 1.06; letter-spacing: -.02em; margin: 0; }
+.copy p { font-size: 18px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+.points { display: flex; flex-direction: column; gap: 18px; margin-top: 4px; }
+.point { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+.point i { width: 28px; height: 28px; border-radius: 8px; background: rgba(198,97,63,.13); display: grid; place-items: center; }
+.point i svg { width: 16px; height: 16px; stroke: var(--clay); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.point b { display: block; font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+.point span { font-size: 14.5px; line-height: 1.45; color: var(--ink-2); }
+
+/* a browser window */
+.browser { position: absolute; color: var(--ink); background: var(--surface); border-radius: 14px; box-shadow: 0 30px 80px rgba(60,30,15,.18), 0 2px 8px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.07); overflow: hidden; display: flex; flex-direction: column; }
+.tabstrip { height: 42px; background: #E9E6E2; display: flex; align-items: flex-end; gap: 2px; padding: 0 10px 0 78px; position: relative; flex-shrink: 0; }
+.lights { position: absolute; left: 16px; top: 15px; display: flex; gap: 8px; }
+.lights b { width: 12px; height: 12px; border-radius: 50%; background: #F25F58; } .lights b:nth-child(2) { background: #FBBE2E; } .lights b:nth-child(3) { background: #3BC93F; }
+.tab { height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #3d3b38; border-radius: 9px 9px 0 0; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; }
+.tab .fav { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+.tab.on { background: var(--surface); }
+.tab.grouped { border-bottom: 2px solid #F08B4C; border-radius: 9px 9px 0 0; }
+.tab.grouped.on { border-bottom-color: #F08B4C; }
+.group { align-self: center; margin: 0 2px 4px 8px; height: 22px; padding: 0 10px; border-radius: 7px; background: #F08B4C; color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.group.collapsed::after { content: ''; width: 0; }
+.toolbar { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.toolbar .nav { display: flex; gap: 14px; color: #8a8782; font-size: 15px; }
+.url { flex: 1; height: 30px; border-radius: 15px; background: #F1EFEC; display: flex; align-items: center; padding: 0 14px; font-size: 13px; color: #3d3b38; gap: 8px; }
+.url .lock { width: 11px; height: 11px; border: 1.6px solid #77736e; border-radius: 2px; }
+.infobar { height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #EEF3FB; border-bottom: 1px solid #D9E3F2; font-size: 13px; color: #2b3442; flex-shrink: 0; }
+.infobar .ib { width: 16px; height: 16px; border-radius: 50%; border: 1.6px solid #4a6fa5; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #4a6fa5; }
+.infobar .cancel { margin-left: auto; padding: 4px 12px; border: 1px solid #B9C8DE; border-radius: 6px; background: #fff; font-size: 12.5px; color: #1d4f91; }
+.viewport { flex: 1; position: relative; overflow: hidden; background: #fff; }
+
+/* the made-up shop */
+.shop { padding: 22px 28px; display: flex; flex-direction: column; gap: 16px; }
+.shophead { display: flex; align-items: center; justify-content: space-between; }
+.logo { font-family: 'Source Serif 4', Georgia, serif; font-weight: 700; font-size: 21px; letter-spacing: .02em; color: #24412F; display: flex; align-items: center; gap: 8px; }
+.logo i { width: 22px; height: 22px; background: #2F5B40; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.shopnav { display: flex; gap: 18px; font-size: 13px; color: #555; }
+.crumbs { font-size: 12px; color: #8a8782; }
+.shop h2 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.filters { display: flex; gap: 8px; }
+.chip { height: 30px; padding: 0 13px; border-radius: 15px; border: 1px solid #d8d4cf; font-size: 13px; display: flex; align-items: center; color: #333; background: #fff; }
+.chip.sel { background: #24412F; border-color: #24412F; color: #fff; }
+.products { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.product { border: 1px solid #ebe7e2; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.pimg { height: 132px; display: grid; place-items: center; }
+.pack { width: 70px; height: 96px; border-radius: 22px 22px 14px 14px; position: relative; box-shadow: inset -8px -6px 0 rgba(0,0,0,.12); }
+.pack::before { content: ''; position: absolute; left: 14px; right: 14px; top: 26px; height: 30px; border-radius: 8px; background: rgba(255,255,255,.18); }
+.pack::after { content: ''; position: absolute; left: 24px; right: 24px; top: -10px; height: 16px; border: 4px solid rgba(0,0,0,.35); border-bottom: none; border-radius: 10px 10px 0 0; }
+.pinfo { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.pinfo b { font-size: 14px; }
+.pinfo .meta { color: #77736e; font-size: 12px; }
+.pinfo .price { font-weight: 700; font-size: 15px; margin-top: 4px; }
+.stars { color: #E2A03F; font-size: 12px; letter-spacing: 1px; }
+
+/* the software cursor */
+.cursor { position: absolute; width: 30px; height: 36px; filter: drop-shadow(0 0 6px rgba(198,97,63,.6)); }
+.ripple { position: absolute; width: 44px; height: 44px; border-radius: 50%; background: rgba(198,97,63,.22); border: 2px solid rgba(198,97,63,.45); transform: translate(-50%, -50%); }
+
+/* the Atelier app */
+.app { position: absolute; inset: 0; background: #FCFCFB; display: grid; grid-template-columns: 238px 1fr 300px; }
+.side { background: #FAFAF8; border-right: 1px solid var(--line-2); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+.side .lightsrow { display: flex; gap: 8px; padding: 0 6px 14px; }
+.side .lightsrow b { width: 12px; height: 12px; border-radius: 50%; background: #F25F58; } .side .lightsrow b:nth-child(2) { background: #FBBE2E; } .side .lightsrow b:nth-child(3) { background: #3BC93F; }
+.side .wordmark { font-family: 'Source Serif 4', Georgia, serif; font-weight: 600; font-size: 20px; padding: 0 8px 12px; }
+.navi { height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 8px; border-radius: 8px; color: #2c2b29; }
+.navi svg { width: 16px; height: 16px; stroke: #55534f; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.navi.on { background: rgba(11,11,11,.06); }
+.side h6 { margin: 16px 8px 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.navi .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--clay); }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.mainhead { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 28px; font-size: 14px; font-weight: 500; border-bottom: 1px solid var(--line-2); }
+.chipf { font-size: 12.5px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; font-weight: 400; }
+.thread { flex: 1; padding: 26px 40px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+.bubble { align-self: flex-end; max-width: 520px; background: #F1EFEC; border-radius: 16px; padding: 12px 16px; font-size: 14.5px; line-height: 1.5; }
+.steps { display: flex; flex-direction: column; gap: 7px; font-size: 13.5px; color: var(--ink-2); }
+.step { display: flex; align-items: center; gap: 9px; }
+.step svg { width: 15px; height: 15px; stroke: #8b8883; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.step em { font-style: normal; color: var(--ink); }
+.answer { font-size: 14.5px; line-height: 1.55; display: flex; flex-direction: column; gap: 10px; }
+.answer p { margin: 0; }
+table.cmp { border-collapse: collapse; font-size: 13.5px; width: 100%; max-width: 560px; }
+table.cmp th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: 12.5px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+table.cmp td { padding: 7px 10px; border-bottom: 1px solid var(--line-2); font-variant-numeric: tabular-nums; }
+.composer { margin: 0 40px 22px; height: 52px; border: 1px solid var(--line); border-radius: 14px; background: #fff; display: flex; align-items: center; padding: 0 10px 0 16px; color: #9a9792; font-size: 14px; }
+.composer .stop { margin-left: auto; width: 32px; height: 32px; border-radius: 9px; background: var(--clay); display: grid; place-items: center; }
+.composer .stop b { width: 10px; height: 10px; background: #fff; border-radius: 2px; }
+.panel { border-left: 1px solid var(--line-2); padding: 22px 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.livehead { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
+.livehead .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--clay); box-shadow: 0 0 0 4px rgba(198,97,63,.18); }
+.livehead .tools { margin-left: auto; display: flex; gap: 10px; color: #9a9792; }
+.thumb { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; height: 168px; position: relative; background: #fff; }
+.thumb .mini { transform: scale(.36); transform-origin: 0 0; width: 720px; position: absolute; left: 0; top: 0; }
+.doing { color: var(--ink-2); }
+.panel h5 { margin: 14px 0 2px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.todo { display: flex; gap: 8px; align-items: center; color: var(--ink-2); }
+.todo b { width: 14px; height: 14px; border-radius: 50%; border: 1.6px solid #b5b2ad; flex-shrink: 0; }
+.todo.done b { background: var(--clay); border-color: var(--clay); }
+.todo.now b { border-color: var(--clay); }
+
+/* a document page for the person's own tab */
+.doc { padding: 34px 56px; display: flex; flex-direction: column; gap: 14px; }
+.doc h3 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.doc .line { height: 11px; border-radius: 6px; background: #ECEAE6; }
+.doc .line.short { width: 60%; }
+.doc .line.mid { width: 82%; }
+
+/* tiles */
+.tile { background: linear-gradient(135deg, #DE8463 0%, #C6613F 55%, #A9502F 100%); color: var(--cream); }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="clay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DE8463"/><stop offset="1" stop-color="#C6613F"/></linearGradient>
+    <symbol id="mark" viewBox="100 100 824 824">
+      <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#clay)"/>
+      <g transform="translate(232 232) scale(23.33)"><path fill="#FBF8F2" fill-rule="evenodd" d="M12 2.5a9.5 9.5 0 1 0 0 19c1.2 0 1.9-.85 1.9-1.8 0-.5-.2-.95-.55-1.3-.33-.33-.55-.78-.55-1.3 0-1 .8-1.8 1.8-1.8h1.9a5 5 0 0 0 5-5c0-4.3-4.1-7.8-9.5-7.8ZM7.5 12.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Zm3.3-4.2a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Zm4.6.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z"/></g>
+    </symbol>
+    <symbol id="palette" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M12 2.5a9.5 9.5 0 1 0 0 19c1.2 0 1.9-.85 1.9-1.8 0-.5-.2-.95-.55-1.3-.33-.33-.55-.78-.55-1.3 0-1 .8-1.8 1.8-1.8h1.9a5 5 0 0 0 5-5c0-4.3-4.1-7.8-9.5-7.8ZM7.5 12.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Zm3.3-4.2a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Zm4.6.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z"/></symbol>
+    <symbol id="arrow" viewBox="-2 -2 22 28"><path d="M0 0 L0 21 L5.2 16.2 L8.8 24.4 L12.2 22.9 L8.7 14.9 L15.6 14.9 Z" fill="#C6613F" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<template id="shop">
+  <div class="shop">
+    <div class="shophead"><div class="logo"><i></i>Northfield</div><div class="shopnav"><span>Packs</span><span>Tents</span><span>Clothing</span><span>Sale</span></div></div>
+    <div class="crumbs">Packs › Hiking › Trail backpacks</div>
+    <h2>Trail backpacks</h2>
+    <div class="filters"><span class="chip">30 L and more</span><span class="chip sel">Under €150</span><span class="chip">Rain cover</span><span class="chip">Hip belt</span></div>
+    <div class="products">
+      <div class="product"><div class="pimg" style="background:#EEF2EC"><div class="pack" style="background:#3E6B4E"></div></div><div class="pinfo"><b>Ridge 32</b><span class="meta">32 L · 1.1 kg · rain cover</span><span class="stars">★★★★★</span><span class="price">€129</span></div></div>
+      <div class="product"><div class="pimg" style="background:#F4EEE6"><div class="pack" style="background:#B5652F"></div></div><div class="pinfo"><b>Tarn 35</b><span class="meta">35 L · 1.3 kg · hip belt</span><span class="stars">★★★★☆</span><span class="price">€145</span></div></div>
+      <div class="product"><div class="pimg" style="background:#ECEFF4"><div class="pack" style="background:#3F5677"></div></div><div class="pinfo"><b>Fell 30</b><span class="meta">30 L · 0.9 kg · rain cover</span><span class="stars">★★★★☆</span><span class="price">€119</span></div></div>
+    </div>
+  </div>
+</template>
+
+<!-- 1: it works in web pages, in tabs of its own -->
+<section class="shot s1280 paper" id="screenshot-1">
+  <div class="copy">
+    <div class="brand"><svg><use href="#mark"/></svg>Atelier for Chrome</div>
+    <h1>Atelier works in web pages for you</h1>
+    <p>In tabs of its own, in the background. It reads the page, clicks, types and scrolls by name, while you keep using your browser.</p>
+  </div>
+  <div class="browser" style="left:480px; top:70px; width:760px; height:660px">
+    <div class="tabstrip"><div class="lights"><b></b><b></b><b></b></div>
+      <div class="tab"><span class="fav" style="background:#4C8BF5"></span>Inbox</div>
+      <div class="tab"><span class="fav" style="background:#3AA757"></span>Trip plan</div>
+      <div class="group">Atelier</div>
+      <div class="tab grouped on"><span class="fav" style="background:#2F5B40"></span>Trail backpacks · Northfield</div>
+    </div>
+    <div class="infobar"><span class="ib">i</span>“Atelier for Chrome” started debugging this browser<span class="cancel">Cancel</span></div>
+    <div class="toolbar"><div class="nav">‹ › ↻</div><div class="url"><span class="lock"></span>northfield.example/packs/trail</div></div>
+    <div class="viewport" data-fill="shop"></div>
+  </div>
+  <div class="ripple" style="left:572px; top:356px"></div>
+  <svg class="cursor" style="left:570px; top:354px"><use href="#arrow"/></svg>
+</section>
+
+<!-- 2: what you see in Atelier while it works -->
+<section class="shot s1280" id="screenshot-2">
+  <div class="app">
+    <aside class="side">
+      <div class="lightsrow"><b></b><b></b><b></b></div>
+      <div class="wordmark">Atelier</div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M3 7h18v12H3zM8 7V5h8v2"/></svg>Cowork</div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg>Projects</div>
+      <h6>Today</h6>
+      <div class="navi on">Trail backpacks under €150<span class="dot"></span></div>
+      <div class="navi">Train times to Hamburg</div>
+      <div class="navi">Recipe for six people</div>
+      <h6>Yesterday</h6>
+      <div class="navi">Compare phone plans</div>
+      <div class="navi">Book club notes</div>
+    </aside>
+    <main class="main">
+      <div class="mainhead">Trail backpacks under €150<span class="chipf">No folder</span></div>
+      <div class="thread">
+        <div class="bubble">Find three trail backpacks of at least 30 litres under €150 on Northfield, and compare them for a weekend hike.</div>
+        <div class="steps">
+          <div class="step"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>Opened <em>northfield.example/packs/trail</em></div>
+          <div class="step"><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg>Chose <em>Under €150</em> and <em>30 L and more</em></div>
+          <div class="step"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 10h16M4 15h10"/></svg>Read the page and three product pages</div>
+        </div>
+        <div class="answer">
+          <p>Three that fit, all under €150:</p>
+          <table class="cmp">
+            <tr><th>Pack</th><th>Volume</th><th>Weight</th><th>Price</th><th>Good for</th></tr>
+            <tr><td>Ridge 32</td><td>32 L</td><td>1.1 kg</td><td>€129</td><td>Rain cover included</td></tr>
+            <tr><td>Tarn 35</td><td>35 L</td><td>1.3 kg</td><td>€145</td><td>Padded hip belt</td></tr>
+            <tr><td>Fell 30</td><td>30 L</td><td>0.9 kg</td><td>€119</td><td>Lightest</td></tr>
+          </table>
+          <p>For a wet weekend I'd take the Ridge 32: the rain cover is included and it has the best reviews.</p>
+        </div>
+      </div>
+      <div class="composer">Reply<span class="stop"><b></b></span></div>
+    </main>
+    <aside class="panel">
+      <div class="livehead"><span class="pulse"></span>Trail backpacks · Northfield<span class="tools">⧉ ✕</span></div>
+      <div class="thumb"><div class="mini" data-fill="shop"></div></div>
+      <div class="doing">Reading the product pages</div>
+      <h5>Progress</h5>
+      <div class="todo done"><b></b>Open the shop's trail backpacks</div>
+      <div class="todo done"><b></b>Filter to 30 L and under €150</div>
+      <div class="todo now"><b></b>Compare three packs</div>
+    </aside>
+  </div>
+</section>
+
+<!-- 3: your tabs stay yours -->
+<section class="shot s1280 paper" id="screenshot-3">
+  <div class="copy">
+    <div class="brand"><svg><use href="#mark"/></svg>Atelier for Chrome</div>
+    <h1>Your tabs stay yours</h1>
+    <div class="points">
+      <div class="point"><i><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg></i><div><b>Only its own tabs</b><span>An orange “Atelier” group, closed when the task is done. It never reads your other tabs.</span></div></div>
+      <div class="point"><i><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M9 20h6M12 16v4"/></svg></i><div><b>Stays on your computer</b><span>What it reads goes to the Atelier app on this computer, and from there only to the model you chose.</span></div></div>
+      <div class="point"><i><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/></svg></i><div><b>You decide</b><span>Your permission mode applies to every step. It asks before it sends anything or accepts terms.</span></div></div>
+    </div>
+  </div>
+  <div class="browser" style="left:480px; top:110px; width:760px; height:580px">
+    <div class="tabstrip"><div class="lights"><b></b><b></b><b></b></div>
+      <div class="tab"><span class="fav" style="background:#4C8BF5"></span>Inbox</div>
+      <div class="tab on"><span class="fav" style="background:#3AA757"></span>Trip plan</div>
+      <div class="tab"><span class="fav" style="background:#7B61FF"></span>Calendar</div>
+      <div class="group">Atelier · 2</div>
+    </div>
+    <div class="toolbar"><div class="nav">‹ › ↻</div><div class="url"><span class="lock"></span>docs.example/trip-plan</div></div>
+    <div class="viewport">
+      <div class="doc">
+        <h3>Trip plan: Harz, 14–16 June</h3>
+        <div class="line"></div><div class="line mid"></div><div class="line"></div><div class="line short"></div>
+        <div style="height:8px"></div>
+        <div class="line mid"></div><div class="line"></div><div class="line short"></div>
+        <div style="height:8px"></div>
+        <div class="line"></div><div class="line mid"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- small promo tile -->
+<section class="shot tile" id="promo-small" style="width:440px; height:280px">
+  <div style="position:absolute; inset:0; padding:34px 36px; display:flex; flex-direction:column; justify-content:space-between">
+    <svg style="width:54px; height:54px; color:var(--cream)"><use href="#palette"/></svg>
+    <div>
+      <div class="serif" style="font-size:34px; font-weight:600; letter-spacing:-.02em; line-height:1.05">Atelier for Chrome</div>
+      <div style="font-size:16px; margin-top:10px; opacity:.92; line-height:1.4">Web pages, done for you in the background.</div>
+    </div>
+  </div>
+</section>
+
+<!-- large promo tile -->
+<section class="shot tile" id="promo-large" style="width:1400px; height:560px">
+  <div style="position:absolute; left:90px; top:0; bottom:0; width:520px; display:flex; flex-direction:column; justify-content:center; gap:22px">
+    <svg style="width:72px; height:72px; color:var(--cream)"><use href="#palette"/></svg>
+    <div class="serif" style="font-size:58px; font-weight:600; letter-spacing:-.02em; line-height:1.03">Atelier for Chrome</div>
+    <div style="font-size:21px; opacity:.92; line-height:1.45">Atelier works in web pages for you, in tabs of its own, while you keep using your browser.</div>
+  </div>
+  <div class="browser" style="left:700px; top:70px; width:640px; height:560px">
+    <div class="tabstrip"><div class="lights"><b></b><b></b><b></b></div>
+      <div class="tab"><span class="fav" style="background:#3AA757"></span>Trip plan</div>
+      <div class="group">Atelier</div>
+      <div class="tab grouped on"><span class="fav" style="background:#2F5B40"></span>Trail backpacks</div>
+    </div>
+    <div class="toolbar"><div class="nav">‹ › ↻</div><div class="url"><span class="lock"></span>northfield.example/packs/trail</div></div>
+    <div class="viewport" data-fill="shop"></div>
+  </div>
+</section>
+
+<script>
+const shop = document.getElementById('shop');
+for (const el of document.querySelectorAll('[data-fill="shop"]')) el.append(shop.content.cloneNode(true));
+</script>

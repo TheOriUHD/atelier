@@ -2,7 +2,7 @@
 
 What goes into the Chrome Web Store's developer dashboard for Atelier for Chrome. Build the upload with
 `pnpm --filter @atelier/browser-extension build:store` (`out/atelier-for-chrome-<version>.zip`, the manifest without its
-`key`). Screenshots and the promo tile are in `store/images/` (`node store/render.mjs` makes them).
+`key`). Screenshots, the promo tiles and the icon are in `store/images/` (`node apps/browser-extension/store/render.mjs` draws them from `store/shots.html`).
 
 ## Store listing
 
@@ -58,9 +58,10 @@ them, for tasks the person gives Atelier.
 
 **Remote code:** No. All code is in the package.
 
-**Data usage** (what to tick): **Website content** only, because it reads pages in its own tabs. Nothing else (no
-personally identifiable, health, financial, authentication or location data collected by the extension, no web history,
-no user activity outside its tabs).
+**Data usage** (what was ticked): **Website content**, **Personally identifiable information**, **Financial and payment
+information** and **Personal communications**: it reads the pages it works in, and a page the person is signed in to can
+show their name and address, orders or messages, which go on to their model. Not ticked: health, authentication (it
+never reads or types passwords), location, web history and user activity (it never watches the person's own browsing).
 
 **Certifications:** all three: not sold or transferred to third parties outside the approved use cases (the page content
 goes to the desktop app, and from there to the model provider the person chose, which is the extension's purpose); not
@@ -72,8 +73,10 @@ used for purposes unrelated to the single purpose; not used to determine creditw
 
 Public, all regions. Free.
 
-## After the first upload
+## In the store
 
-The dashboard gives the extension its store id (Package › View public key shows its key). Add the id to
-`BROWSER_EXTENSION_IDS` in `packages/protocol/src/browser.ts`, so the desktop app's native host lets the store build
-connect too; the unpacked build keeps its own id.
+Item `efpchbhecdgeeadmefahpgidnfplajln` (publisher dashboard, account theoriuhd), submitted for review on 2026-11-13 as
+0.1.0, non-trader, contact contact@atelierhq.dev. Its id is in `BROWSER_EXTENSION_IDS` in
+`packages/protocol/src/browser.ts`, so the desktop app's native host lets the store build connect; the unpacked build
+keeps its own id. Google reviews every update; keep the permissions as they are so updates stay on the quick review
+(broad host access already means an in-depth review for the first one).

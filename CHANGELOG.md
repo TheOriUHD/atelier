@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Atelier for Chrome from the Chrome Web Store connects too.** The app's helper lets the store's copy of the extension in as well as the one loaded from the app's folder. The store listing is waiting for Google's review.
+
 ## [0.7.0] — 2026-11-13
 
 - **"Asking…" only while it asks.** Computer use read "Asking to use apps" and "Asking for the mouse and keyboard" even when no card came (apps you named, control already allowed). It now reads **Using your computer** unless a card is open for that step, and a finished step says **Got access to** the apps instead of "Asked to use".
