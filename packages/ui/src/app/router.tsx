@@ -1,4 +1,5 @@
-import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router';
+import { createHashHistory, createRootRoute, createRoute, createRouter, Navigate, redirect, useParams } from '@tanstack/react-router';
+import { useSettings } from '../lib/queries.ts';
 import { AppError } from './app-error.tsx';
 import { AppShell } from './app-shell.tsx';
 import { recalledTab, startHash } from './last-tab.ts';
@@ -49,8 +50,24 @@ const folderSearch = (search: Record<string, unknown>): FolderSearch => ({
   ...(typeof search.host === 'string' ? { host: search.host } : {}),
   ...(typeof search.group === 'string' ? { group: search.group } : {}),
 });
-const workRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work', component: CoworkHome, validateSearch: folderSearch });
-const workSessionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work/$sessionId', component: WorkPage, remountDeps: ({ params }) => params.sessionId });
+/**
+ * With Chat and Cowork in one (`capabilities.unifiedChat`), Cowork's links lead to Chat: its home to the home, a task to
+ * the conversation it now is, so bookmarks, notifications and shared links keep working. Until the settings are read,
+ * nothing is drawn (no Cowork page flashing first).
+ */
+function CoworkHomeRoute() {
+  const { settings } = useSettings();
+  if (!settings) return null;
+  return settings.capabilities.unifiedChat ? <Navigate to="/" replace /> : <CoworkHome />;
+}
+function WorkSessionRoute() {
+  const { settings } = useSettings();
+  const { sessionId } = useParams({ from: '/work/$sessionId' });
+  if (!settings) return null;
+  return settings.capabilities.unifiedChat ? <Navigate to="/chat/$sessionId" params={{ sessionId }} replace /> : <WorkPage />;
+}
+const workRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work', component: CoworkHomeRoute, validateSearch: folderSearch });
+const workSessionRoute = createRoute({ getParentRoute: () => rootRoute, path: '/work/$sessionId', component: WorkSessionRoute, remountDeps: ({ params }) => params.sessionId });
 /** A task's live view, popped out into a small window of its own (desktop: `openLiveView`). */
 const liveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/live/$sessionId', component: LiveViewPage, remountDeps: ({ params }) => params.sessionId });
 const codeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/code', component: () => <FolderHome mode="code" />, validateSearch: folderSearch });

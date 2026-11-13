@@ -1,4 +1,14 @@
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import type { PermissionMode } from '@atelier/protocol';
+import { useUnifiedChat } from '../../lib/unified-chat.ts';
+import { keys, useWorkspaces } from '../../lib/queries.ts';
+import { FolderBadge } from '../code/workspace-picker.tsx';
+import { PermissionModePicker, useEffectiveMode } from '../code/permission-mode.tsx';
+import { OutputFiles } from '../work/file-cards.tsx';
+import { FilePreview } from '../work/file-preview.tsx';
+import { latestRun, openAction, outputFiles, saveFile, type OutputFile } from '../work/output-files.ts';
+import { TaskPanel } from '../work/work-page.tsx';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { isCoopMirror } from '@atelier/protocol';
 import { Spinner, cn, toast } from '../../components/ui/index.ts';
@@ -57,6 +67,39 @@ export function ChatPage() {
   const guest = coop.shared && !coop.isHost;
   const guestModel = useGuestModel(coop);
   const answerModels = useAnswerModels(coop).flatMap((g) => g.models);
+  // Chat and Cowork in one: a chat that works as a task shows its progress and its files, once there are some.
+  const unified = useUnifiedChat() && !temporary;
+  const qc = useQueryClient();
+  const { data: workspaces } = useWorkspaces();
+  const workspace = unified ? workspaces?.find((w) => w.id === session?.workspaceId) : undefined;
+  const root = workspace?.root ?? null;
+  const files = useMemo(() => (root ? outputFiles(live.messages, root) : []), [live.messages, root]);
+  const latestFiles = useMemo(() => (root && !streaming ? outputFiles(latestRun(live.messages), root) : []), [live.messages, root, streaming]);
+  const [preview, setPreview] = useState<OutputFile | null>(null);
+  const [pickedMode, setPickedMode] = useState<PermissionMode | null>(null);
+  const mode = useEffectiveMode(pickedMode ?? session?.permissionMode ?? null);
+  const working = live.todos.length > 0 || live.tasks.some((t) => t.status === 'running') || files.length > 0;
+  // Tools change files: previews and the folder's list follow each round of results.
+  const toolRounds = live.messages.filter((m) => m.role === 'tool').length;
+  useEffect(() => {
+    if (workspace) void qc.invalidateQueries({ queryKey: keys.workspace(workspace.id) });
+  }, [qc, workspace, toolRounds, streaming]);
+  const openFile = (file: OutputFile) => {
+    if (!workspace) return;
+    if (openAction(file, workspace) === 'preview') {
+      useUi.getState().closeArtifact();
+      setPreview(file);
+    } else void saveFile(workspace, file);
+  };
+  const setMode = (next: PermissionMode) => {
+    setPickedMode(next);
+    void rpc()
+      .call('sessions.update', { id: sessionId, permissionMode: next })
+      .catch((e: unknown) => toast.error(describeError(e).message))
+      .finally(() => setPickedMode((m) => (m === next ? null : m)));
+  };
+  const panel = (className: string) =>
+    unified && workspace && working && <TaskPanel className={className} sessionId={sessionId} messages={live.messages} todos={live.todos} tasks={live.tasks} running={streaming} files={files} workspace={workspace} onOpen={openFile} quietProgress />;
 
   const fail = (e: unknown) => toast.error(describeError(e).message);
   const update = (patch: { model?: string }) => void rpc().call('sessions.update', { id: sessionId, ...patch }).catch(fail);
@@ -77,10 +120,18 @@ export function ChatPage() {
     <div className="relative flex min-h-0 flex-1">
       {/* The chat column keeps the space left of the artifact panel, with 8px gaps around the panel. */}
       {/* Narrow screens: the panel covers the column instead. */}
-      <div className={cn('flex min-w-0 flex-1 flex-col', artifact && 'mr-[calc(62%+16px)] max-md:invisible max-md:mr-0')}>
+      <div className={cn('flex min-w-0 flex-1 flex-col', artifact && !preview && 'mr-[calc(62%+16px)] max-md:invisible max-md:mr-0', preview && 'mr-[calc(50%+16px)] max-md:invisible max-md:mr-0')}>
         <FileDropZone onFiles={(files) => void attachments.add(files)}>
           {/* Leaving is all it takes: the page's subscription ends with `sessions.leave`, which deletes it. */}
-          {temporary ? <TemporaryBar onLeave={() => void navigate({ to: '/' })} /> : <SessionHeader session={session} />}
+          {temporary ? (
+            <TemporaryBar onLeave={() => void navigate({ to: '/' })} />
+          ) : (
+            // A folder the person gave it shows; its own sandbox doesn't (it isn't one of theirs).
+            <SessionHeader session={session}>{workspace && !workspace.scratch && <FolderBadge workspace={workspace} {...(session ? { session } : {})} />}</SessionHeader>
+          )}
+          {/* The conversation and its composer, and beside them (wide windows) a task's progress and files. */}
+          <div className="@container flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
             <div
               ref={scroller}
@@ -99,10 +150,18 @@ export function ChatPage() {
                     live={live}
                     status={<LiveStatus sessionId={sessionId} withActivity />}
                     outbox={sending.actions}
-                    footer={temporary || guest ? undefined : <CoworkOffer sessionId={sessionId} messages={live.messages} running={streaming || live.outbox.length > 0} />}
+                    footer={
+                      unified
+                        ? !live.pending && workspace && latestFiles.length > 0 && <OutputFiles files={latestFiles} workspace={workspace} onOpen={openFile} />
+                        : temporary || guest
+                          ? undefined
+                          : <CoworkOffer sessionId={sessionId} messages={live.messages} running={streaming || live.outbox.length > 0} />
+                    }
                   />
                 </ComposerImages.Provider>
               )}
+              {/* Narrow windows: the progress goes under the conversation instead of beside it. */}
+              {!preview && panel('mx-auto max-w-[calc(var(--at-transcript-max)+48px)] px-6 pb-10 @4xl:hidden max-md:px-4')}
             </div>
             {!atBottom && <ScrollToBottom onClick={followSmooth} working={live.session?.status === 'running'} />}
             <SelectionReply container={scroller} onReply={(text) => {
@@ -146,6 +205,7 @@ export function ChatPage() {
               onSubmit={sending.send}
               onStop={sending.stop}
               footerCenter={temporary ? 'Deleted when you leave · AI can make mistakes.' : 'AI can make mistakes.'}
+              footerStart={unified && !guest ? <PermissionModePicker value={mode} onChange={setMode} /> : undefined}
               footerEnd={
                 <>
                   <ContextButton sessionId={sessionId} busy={streaming} provider={providerType} providerId={model?.providerId} simple note={coopContextNote(coop, guestModel, live.context?.used)} />
@@ -165,10 +225,14 @@ export function ChatPage() {
               }
             />
           </div>
+          </div>
+          {!preview && live.status === 'ready' && panel('hidden w-[280px] shrink-0 overflow-y-auto border-l border-line-subtle px-4 pt-4 pb-6 @4xl:flex')}
+          </div>
         </FileDropZone>
       </div>
-      {artifact && <ArtifactPanel state={artifact} summary={live.artifacts[artifact.artifactId]} />}
-      {sidePanel.open && !artifact && <SideChatPanel chats={sideChats} panel={sidePanel} />}
+      {artifact && !preview && <ArtifactPanel state={artifact} summary={live.artifacts[artifact.artifactId]} />}
+      {preview && workspace && <FilePreview key={preview.path} workspace={workspace} file={preview} onClose={() => setPreview(null)} />}
+      {sidePanel.open && !artifact && !preview && <SideChatPanel chats={sideChats} panel={sidePanel} />}
     </div>
     </CoopContext.Provider>
   );

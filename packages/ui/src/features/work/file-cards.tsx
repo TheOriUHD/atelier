@@ -37,8 +37,10 @@ export function FileCard({
   onOpen(file: OutputFile): void;
 }) {
   const action = ACTION_LABEL[openAction(file, workspace)];
-  // Where it is in the folder; the name is already the title.
-  const where = `in ${workspace.name}${file.path.includes('/') ? `/${file.path.slice(0, file.path.lastIndexOf('/'))}` : ''}`;
+  // Where it is in the folder; the name is already the title. A folder Atelier made (no folder, a chat's sandbox) isn't
+  // named: its made-up name means nothing to the person.
+  const sub = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
+  const where = workspace.scratch ? (sub ? `in ${sub}` : '') : `in ${workspace.name}${sub ? `/${sub}` : ''}`;
   if (compact)
     return (
       <button
@@ -52,7 +54,7 @@ export function FileCard({
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-body text-fg">{file.name}</span>
-          <span className="truncate text-caption text-fg-muted">{where}</span>
+          {where && <span className="truncate text-caption text-fg-muted">{where}</span>}
         </span>
       </button>
     );
@@ -70,7 +72,7 @@ export function FileCard({
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-[15px]/5 text-fg">{file.name}</span>
-        <span className="truncate text-caption text-fg-muted">{where}</span>
+        {where && <span className="truncate text-caption text-fg-muted">{where}</span>}
       </span>
       <span className="flex h-8 shrink-0 items-center rounded-lg bg-fill-secondary px-3 text-body text-fg inset-ring inset-ring-fill-secondary-ring">{action}</span>
     </button>

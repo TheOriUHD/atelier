@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Files from a session with no folder don't name its made-up folder.** A file card read "in scratch-2026-…" or "in chat-2026-…"; it now names only the subfolder, if any.
 ## [0.7.3] — 2026-11-13
 
 - **A task goes on when the runner of its folder drops.** On a server working in a folder lent by your desktop, a runner whose link blinked, or that missed its heartbeat while the link was busy (a large copy), stayed dead for the rest of the turn: every later step failed with "Runner is not running", so long tasks couldn't finish. Each step now goes to the runner that serves the folder at that moment, and starts a new one when the old one is gone. It waits up to 20 seconds for a desktop whose link dropped to come back, and a busy link keeps its runner for about 45 seconds of silence instead of 25.

@@ -249,7 +249,7 @@ function listLoops(tasks: BackgroundTask[]) {
  * Beside the transcript: what computer use sees while it works in an app or a page, the steps, what runs in the
  * background, then every file the task created or changed.
  */
-function TaskPanel({
+export function TaskPanel({
   className,
   sessionId,
   messages,
@@ -259,6 +259,7 @@ function TaskPanel({
   files,
   workspace,
   onOpen,
+  quietProgress = false,
 }: {
   className: string;
   sessionId: string;
@@ -269,12 +270,14 @@ function TaskPanel({
   files: OutputFile[];
   workspace: WorkspaceSummary;
   onOpen(file: OutputFile): void;
+  /** A chat that works as a task (Chat and Cowork in one) shows its progress only once it has a list. */
+  quietProgress?: boolean;
 }) {
   const background = tasks.filter((t) => t.status === 'running');
   return (
     <aside aria-label="Task progress" className={cn('flex flex-col gap-6', className)}>
       <LiveView sessionId={sessionId} messages={messages} running={running} />
-      <TaskProgressList todos={todos} running={running} />
+      {!(quietProgress && todos.length === 0) && <TaskProgressList todos={todos} running={running} />}
       {background.length > 0 && (
         <section aria-label="Background" className="flex flex-col gap-1.5">
           <h2 className="flex h-5 items-center text-footnote text-fg-muted">Background</h2>

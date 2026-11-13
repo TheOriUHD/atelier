@@ -1,3 +1,4 @@
+import { useUnifiedChat } from '../../lib/unified-chat.ts';
 import { useRef, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { BriefcaseBusiness, ChevronDown, FolderClosed, Plus, X } from 'lucide-react';
@@ -63,7 +64,10 @@ export function HomePage() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   // A temporary chat is Chat only: a folder picked before switching waits until it is off again.
   const folder = temporary ? undefined : workspaces?.find((w) => w.id === workspaceId);
-  const defaultModel = useDefaultModel(folder ? 'work' : 'chat');
+  // Chat and Cowork in one: a conversation given a folder is still a chat, with Chat's model.
+  const unified = useUnifiedChat();
+  const kind = folder && !unified ? 'work' : 'chat';
+  const defaultModel = useDefaultModel(kind);
   const [modelRef, setModelRef] = useState<string | null>(null);
   const [effort, setEffort] = useState<Effort | null>(null);
   const [pickingModel, setPickingModel] = useState(false);
@@ -93,7 +97,7 @@ export function HomePage() {
     if (!folder) return start({ mode: 'chat', ...choices, ...(projectId && offersProject ? { projectId } : {}), ...(temporary ? { temporary: true } : {}) }, text);
     // Sending is the gesture browsers want before they ask; Cowork tells the person when a task is done.
     if (prefs) askToNotify(prefs);
-    return start({ mode: 'work', workspaceId: folder.id, ...choices }, text);
+    return start({ mode: kind, workspaceId: folder.id, ...(projectId && offersProject && unified ? { projectId } : {}), ...choices }, text);
   };
 
   return (
@@ -148,7 +152,7 @@ export function HomePage() {
                   open={pickingModel}
                   onOpenChange={setPickingModel}
                   model={model}
-                  mode={folder ? 'work' : 'chat'}
+                  mode={kind}
                   effort={effort}
                   onModelChange={setModelRef}
                   onEffortChange={setEffort}

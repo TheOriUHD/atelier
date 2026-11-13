@@ -1,3 +1,4 @@
+import { useUnifiedChat } from '../lib/unified-chat.ts';
 import { useEffect, useId, useState, type MouseEvent } from 'react';
 import { Link, useNavigate, useRouter } from '@tanstack/react-router';
 import { Drawer } from '@base-ui/react/drawer';
@@ -75,6 +76,7 @@ const tabOf = (mode: Mode): Tab => (mode === 'code' ? 'code' : 'chat');
  * rows and lists; the profile sits at the bottom.
  */
 export function Sidebar({ className }: { className?: string }) {
+  const unified = useUnifiedChat();
   const tab = tabOf(useMode());
   const split = useCodeSplit();
   const images = useImagesOffered();
@@ -120,9 +122,12 @@ export function Sidebar({ className }: { className?: string }) {
                 Images
               </NavLink>
             )}
-            <NavLink to="/work" icon={BriefcaseBusiness} exact>
-              Cowork
-            </NavLink>
+            {/* With Chat and Cowork in one, a conversation works as a task when it needs to: no Cowork of its own. */}
+            {!unified && (
+              <NavLink to="/work" icon={BriefcaseBusiness} exact>
+                Cowork
+              </NavLink>
+            )}
             <NavLink to="/customize" icon={Blocks}>
               Customize
             </NavLink>
@@ -314,8 +319,9 @@ function ChatList() {
   const { data: tasks } = useSessions({ mode: 'work' });
   const { data: projects } = useProjects();
   const [chosen, setChosen] = useState<Show>('all');
-  // The filter only means something with both kinds of conversation.
-  const both = !!chats?.length && !!tasks?.length;
+  const unified = useUnifiedChat();
+  // The filter only means something with both kinds of conversation (one kind, with Chat and Cowork in one).
+  const both = !unified && !!chats?.length && !!tasks?.length;
   const show = both ? chosen : 'all';
   const sessions = [...(show !== 'work' ? (chats ?? []) : []), ...(show !== 'chat' ? (tasks ?? []) : [])];
 
@@ -382,13 +388,14 @@ function ChatList() {
 }
 
 function ChatListRow({ session }: { session: SessionSummary }) {
+  const unified = useUnifiedChat();
   return (
     <SessionRow
       session={session}
       lead={
         <Icon
-          icon={session.mode === 'work' ? BriefcaseBusiness : MessageCircle}
-          label={session.mode === 'work' ? 'Cowork task' : undefined}
+          icon={session.mode === 'work' && !unified ? BriefcaseBusiness : MessageCircle}
+          label={session.mode === 'work' && !unified ? 'Cowork task' : undefined}
         />
       }
     />
