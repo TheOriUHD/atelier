@@ -2,7 +2,7 @@ import { compareVersions } from '@atelier/protocol';
 // Clips are recorded from the real apps on throwaway data: apps/cli/scripts/record-clip.ts (see media/README.md).
 import cliClip from './media/atelier-cli.mp4';
 import cliPoster from './media/atelier-cli.jpg';
-import { AppWindow, Blocks, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /**
  * A clip or picture that shows a larger feature off: it takes the dialog's full width above the feature's title. Clips are
@@ -38,19 +38,36 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
-    version: '0.6.1',
-    intro: 'Computer use in the background, fixed: it works, asks less, and stays off your screen.',
+    version: '0.7.0',
+    intro: 'Atelier works in your browser and your apps in the background, about twice as fast, and shows you what it sees.',
     highlights: [
+      {
+        icon: Globe,
+        title: 'Atelier for Chrome',
+        body: 'A browser extension for Chrome, Brave, Edge and Arc lets Atelier work in web pages in tabs of its own (an orange “Atelier” group, never your tabs): it reads them and clicks, types and scrolls in them while your browser stays behind your work. Settings › System › Computer use › Atelier for Chrome shows how to add it.',
+      },
+      {
+        icon: Eye,
+        title: 'See what it sees',
+        body: 'While a Cowork task works in an app or a web page, the panel beside it shows that window as it last looked and the step it is on. Pop out puts it in a small window that stays on top; ✕ hides it while the task goes on. On a Mac a clay cursor shows where it clicks, and your own pointer doesn’t move.',
+      },
       {
         icon: MousePointerClick,
         title: 'Background computer use that works',
-        body: 'Atelier now works in your apps the way Claude and ChatGPT do: real clicks, typing and scrolling in Chrome, Slack, VS Code and native apps while they stay behind your work, and a covered window is drawn for its screenshot. Apps you name yourself, like “keep browsing in Chrome”, are allowed without a card.',
+        body: 'Atelier works in your apps while they stay behind yours: real clicks, typing and scrolling in Chrome, Slack, VS Code and native apps, and a covered window is drawn for its screenshot. Apps you name yourself, like “keep browsing in Chrome”, are allowed without a card.',
+      },
+      {
+        icon: Gauge,
+        title: 'About twice as fast',
+        body: 'Opening an app takes one step instead of three, buttons in native apps are pressed directly, and each screenshot lists the window’s controls to aim at. Five sums in Calculator take about 45 seconds instead of 90.',
       },
     ],
     also: [
+      'Atelier asks before it accepts terms, a license or a cookie prompt for you.',
       'After you held Esc to stop Full control, background work goes on again once that reply ends.',
-      'Lists to choose from and right clicks still need Full control: Atelier asks you for it. In a browser it uses the tab you have, since a new tab would come to the front.',
+      'Lists to choose from and right clicks still need Full control: Atelier asks you for it.',
       'In Bypass, using an app doesn’t ask; taking over the mouse and keyboard still does.',
+      'Connectors with many tools load when they’re needed, so each step starts sooner.',
       'What’s new now shows every version since the one you had, with clips of the larger features.',
     ],
   },

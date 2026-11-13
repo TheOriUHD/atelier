@@ -70,6 +70,8 @@ export interface PromptCase {
   memory?: { entries?: number; searchChats?: boolean; generate?: boolean };
   /** Computer use is on in the desktop app running the session. */
   computer?: boolean;
+  /** Atelier for Chrome is connected: the Browser tool. */
+  browser?: boolean;
   /** The session has an image model. */
   images?: boolean;
   /** A video model: GenerateVideo and SaveVideo. */
@@ -330,6 +332,16 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
             },
           }
         : {}),
+      ...(c.browser
+        ? {
+            browser: {
+              call: (async (method: string) => {
+                if (method === 'status') return { connected: true, browser: 'Google Chrome 157', extensionVersion: '0.1.0' };
+                throw new Error('Not in a prompt snapshot.');
+              }) as never,
+            },
+          }
+        : {}),
       chatSandbox: async () => workspace,
       codeContext: async () =>
         c.scratch
@@ -519,6 +531,7 @@ export const CASES: Record<string, PromptCase> = {
   'work.compact': { mode: 'work', tier: 'compact' },
   'work.full.memory': { mode: 'work', memory: {} },
   'work.full.computer': { mode: 'work', computer: true },
+  'work.full.browser': { mode: 'work', computer: true, browser: true },
   'chat.full.images': { mode: 'chat', images: true },
   'code.full.images': { mode: 'code', images: true },
   'code.compact.images': { mode: 'code', tier: 'compact', images: true },
@@ -529,6 +542,7 @@ export const CASES: Record<string, PromptCase> = {
   'code.full.audio': { mode: 'code', audio: true },
   'code.compact.audio': { mode: 'code', tier: 'compact', audio: true },
   'code.compact.computer': { mode: 'code', tier: 'compact', computer: true },
+  'code.compact.browser': { mode: 'code', tier: 'compact', computer: true, browser: true },
   'code.full': { mode: 'code' },
   'code.full.plan': { mode: 'code', permissionMode: 'plan' },
   'code.full.scratch': { mode: 'code', scratch: true },

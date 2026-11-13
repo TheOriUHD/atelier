@@ -84,8 +84,7 @@ passwords. In the background its screenshots show only the window of the app it 
 
 ### How the background works (macOS)
 
-On a Mac, Atelier works in an app's window the way Claude's and ChatGPT's computer use do, through private parts of
-macOS's window server (SkyLight): the window takes clicks, typing and scrolling as if it were the focused one, while its
+On a Mac, Atelier works in an app's window through private parts of macOS's window server (SkyLight): the window takes clicks, typing and scrolling as if it were the focused one, while its
 app stays behind yours and your pointer and keyboard stay with you. This works in Chrome and the other Chromium
 browsers, in apps built on them (Slack, VS Code, Discord, Notion and other Electron apps) and in native apps. A few
 things behave differently from the real mouse and keyboard:
