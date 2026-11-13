@@ -30,9 +30,9 @@ import { LiveHeader, StillHeader, type HeaderInfo } from './header.tsx';
 import { appendHistory, readHistory } from './history.ts';
 import { ListPicker, when, type PickItem } from './pickers.tsx';
 import { PendingPrompt } from './prompts.tsx';
-import type { Wheel } from './mouse.ts';
+import type { Mouse } from './mouse.ts';
 import { buildRows, finalCount, type LocalRow, type Row } from './rows.ts';
-import { Scroller } from './scroller.tsx';
+import { Clickable, Scroller } from './scroller.tsx';
 import { clearScreen } from './screen.ts';
 import { EFFORT_WORDS, MODE_CYCLE, MODE_WORDS } from './session.ts';
 import { StatusLine } from './status.tsx';
@@ -55,8 +55,8 @@ export interface AppProps {
   notice?: Promise<string | null>;
   /** The fullscreen view: the conversation scrolls in the window, the message box stays at the bottom. */
   fullscreen?: boolean;
-  /** The mouse wheel, in the fullscreen view. */
-  wheel?: Wheel | null;
+  /** The mouse (the wheel scrolls, a click opens a step or a thought), in the fullscreen view. */
+  mouse?: Mouse | null;
   onExit(next: AppExit): void;
 }
 
@@ -91,6 +91,9 @@ export function App(props: AppProps) {
   const [started, setStarted] = useState(!!props.initialSessionId);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [view, setView] = useState<TranscriptView>(config.transcriptView);
+  /** Rows a click opened in the fullscreen view (a thought, a whole diff, all of a command's output). */
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = useCallback((key: string) => setOpened((o) => (o.has(key) ? new Set([...o].filter((k) => k !== key)) : new Set([...o, key]))), []);
   const [showTodos, setShowTodos] = useState(true);
   const [attachments, setAttachments] = useState<{ name: string; part: Part }[]>([]);
   const [inject, setInject] = useState<{ text: string } | null>(null);
@@ -121,7 +124,7 @@ export function App(props: AppProps) {
   const mode: PermissionMode = session?.permissionMode ?? chosen.mode ?? 'auto';
   const effort = shownEffort(session?.effort ?? chosen.effort ?? null, model, 'code');
   const running = session?.status === 'running' || session?.status === 'waiting';
-  const ctx: ViewContext = { paint, columns, root: folder.root, view };
+  const ctx: ViewContext = { paint, columns, root: folder.root, view, reveal: fullscreen && props.mouse ? 'click' : 'keys' };
 
   const print = useCallback((lines: string | string[]) => {
     const list = Array.isArray(lines) ? lines : [lines];
@@ -352,9 +355,9 @@ export function App(props: AppProps) {
     const editor = config.editor || process.env.VISUAL || process.env.EDITOR || (process.platform === 'win32' ? 'notepad' : 'vi');
     // The wheel reports go off while the editor has the terminal.
     await suspendTerminal(async () => {
-      if (props.wheel) process.stdout.write(MOUSE_OFF);
+      if (props.mouse) process.stdout.write(MOUSE_OFF);
       spawnSync(editor, [file], { stdio: 'inherit', shell: true });
-      if (props.wheel) process.stdout.write(MOUSE_ON);
+      if (props.mouse) process.stdout.write(MOUSE_ON);
     });
     const text = readFileSync(file, 'utf8').replace(/\n+$/, '');
     unlinkSync(file);
@@ -543,9 +546,13 @@ export function App(props: AppProps) {
       row.kind === 'text' ? (
         <TextRow key={row.key} text={row.text} ctx={ctx} />
       ) : row.kind === 'thinking' ? (
-        <ThinkingRow key={row.key} text={row.text} seconds={null} ctx={ctx} live />
+        <Clickable key={row.key} id={row.key}>
+          <ThinkingRow text={row.text} seconds={null} ctx={ctx} live open={opened.has(row.key)} />
+        </Clickable>
       ) : row.kind === 'tool' ? (
-        <ToolRow key={row.key} call={row.call} result={row.result} ctx={ctx} running={running && !row.result} {...(state.toolOutput[row.call.id] !== undefined ? { output: state.toolOutput[row.call.id] } : {})} />
+        <Clickable key={row.key} id={row.key}>
+          <ToolRow call={row.call} result={row.result} ctx={ctx} running={running && !row.result} open={opened.has(row.key)} {...(state.toolOutput[row.call.id] !== undefined ? { output: state.toolOutput[row.call.id] } : {})} />
+        </Clickable>
       ) : (
         <RowView key={row.key} row={row} ctx={ctx} />
       ),
@@ -614,12 +621,18 @@ export function App(props: AppProps) {
     const shown = rows.slice(Math.max(0, done - 400), done);
     return (
       <Box flexDirection="column" width={columns} height={screenRows}>
-        <Scroller paint={paint} wheel={props.wheel ?? null} active={!state.pending && !overlay} follow={sent}>
+        <Scroller paint={paint} mouse={props.mouse ?? null} active={!state.pending && !overlay} follow={sent} onClick={toggle}>
           {top}
           {done > shown.length && <Text>{paint.fg('faint', `${done - shown.length} earlier steps aren’t shown here; /export writes the whole session to a file.`)}</Text>}
-          {shown.map((row) => (
-            <RowView key={row.key} row={row} ctx={ctx} />
-          ))}
+          {shown.map((row) =>
+            row.kind === 'thinking' || row.kind === 'tool' ? (
+              <Clickable key={row.key} id={row.key}>
+                <RowView row={row} ctx={ctx} open={opened.has(row.key)} />
+              </Clickable>
+            ) : (
+              <RowView key={row.key} row={row} ctx={ctx} />
+            ),
+          )}
           {going}
         </Scroller>
         <Box flexDirection="column" flexShrink={0}>

@@ -186,6 +186,8 @@ ${verbatim('web-fetch', 'Web page questions', 'WebFetch fetches a page and a hel
 export const NOTE_WHEN: Record<string, { group: string; when: string }> = {
   date: { group: 'Session', when: 'The first turn on a new local date.' },
   model: { group: 'Session', when: 'The session’s model changed (the system prompt is rebuilt).' },
+  'terminal-on': { group: 'Session', when: 'The person wrote from the terminal app: its first turn there, and the first after the app window. The session goes without `artifact` and inline visuals while they are there.' },
+  'terminal-off': { group: 'Session', when: 'The person wrote from the app window again after the terminal app.' },
   'git-snapshot': {
     group: 'Session',
     when: 'Code: the first turn in a git repository, with the branch, default branch, changed files and the last five commit subjects, labelled as repository data that does not update.',

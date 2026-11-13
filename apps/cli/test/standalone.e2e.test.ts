@@ -116,6 +116,29 @@ it.skipIf(!canRun())('sets up on this computer, asks about the folder, and answe
     await s.waitFor(/Created .*notes\.md/, 30_000);
     show('written', s);
     expect(readFileSync(join(project, 'notes.md'), 'utf8')).toBe('waves: slower\n');
+    // A click on the step opens it: the new file's lines, numbered (the message above has them unnumbered).
+    const row = s.text().split('\n').findIndex((l) => l.includes('1 line · click to show'));
+    expect(row).toBeGreaterThan(-1);
+    await s.type(`\x1b[<0;6;${row + 1}M\x1b[<0;6;${row + 1}m`);
+    await s.waitFor(/1 \+ waves: slower/, 10_000);
+    show('opened', s);
+    // A model that thinks: its thought is one line, and a click shows it.
+    await s.type('/model');
+    await s.press('enter');
+    // The first Enter may only take the command from the list of completions.
+    await s.waitFor(/fake-think|❯ \/model/, 10_000);
+    if (!/fake-think/.test(s.text())) await s.press('enter');
+    await s.waitFor(/fake-think/, 10_000);
+    await s.select(/fake-think/);
+    await s.press('enter');
+    await s.waitFor('Model: fake-think', 10_000);
+    await s.type('think about it');
+    await s.press('enter');
+    await s.waitFor(/∴ Thought.* · click to show/, 30_000);
+    const thought = s.text().split('\n').findIndex((l) => /∴ Thought/.test(l));
+    await s.type(`\x1b[<0;4;${thought + 1}M\x1b[<0;4;${thought + 1}m`);
+    await s.waitFor('The user wants to see reasoning', 10_000);
+    show('thought opened', s);
     // /fullscreen switches to the classic view: the same session goes on.
     await s.type('/fullscreen');
     await s.press('enter');

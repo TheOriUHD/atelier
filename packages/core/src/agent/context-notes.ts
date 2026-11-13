@@ -9,7 +9,7 @@ import { escapeAttr, escapeTags } from '../prompts/escape.ts';
 import { renderNote, type Overrides } from '../prompts/templates.ts';
 import { approvedMode, PERMISSION_MODE_LABELS } from '../tools/exit-plan-mode.ts';
 
-/** Announced facts by key: `date`, `model`, `permissionMode`, `skills`, `connectors`, `safeguards`, `git`, `refresher`, `ultracode`, `effort`. */
+/** Announced facts by key: `date`, `model`, `permissionMode`, `skills`, `connectors`, `safeguards`, `git`, `refresher`, `ultracode`, `effort`, `surface`. */
 export type NoteState = Record<string, string>;
 
 /** One turn's notes: the text for the model (empty when nothing changed that it needs to hear) and the facts it records. */
@@ -82,6 +82,8 @@ export interface TurnFacts {
   ultracode?: UltracodeFacts;
   /** What the effort level asks of the model that its own setting can't (protocol `effortGuidance`); null when nothing. */
   effort?: EffortGuidance | null;
+  /** The person sent this turn from the terminal app, which has no pane beside the conversation and shows no pictures. */
+  terminal?: boolean;
 }
 
 /** The person turns that need a reminder of the conversation's style in Chat and Cowork. */
@@ -149,6 +151,14 @@ export async function turnNote(facts: TurnFacts, prior: NoteState, history: read
   set('safeguards', facts.safeguards);
 
   if (facts.research) note('research');
+  // Where the person is: said when they come to the terminal app and when they leave it, so the app window needs no state.
+  if (facts.terminal && prior.surface !== 'terminal') {
+    note('terminal-on');
+    state.surface = 'terminal';
+  } else if (!facts.terminal && prior.surface === 'terminal') {
+    note('terminal-off');
+    state.surface = 'app';
+  }
   // Co-op: the people, on the first shared turn and when someone came or went.
   if (facts.coop && prior.coop !== facts.coop.roster) note('coop', { people: facts.coop.people, host: facts.coop.host });
   if (facts.coop) set('coop', facts.coop.roster);

@@ -56,6 +56,8 @@ Every note Atelier can send is below, verbatim. `{{name}}` is filled in when the
 | [`session-message`](#session-message) | Code and Cowork: another of the person’s sessions, the parent or a sub-agent sent a message. |
 | [`side-chat`](#side-chat) | Every request of a side chat (/btw): it was asked beside the main session, answers briefly and only reads. |
 | [`skills-added`](#skills-added) | Skills were installed since the prompt was built or since the last announcement. |
+| [`terminal-off`](#terminal-off) | The person wrote from the app window again after the terminal app. |
+| [`terminal-on`](#terminal-on) | The person wrote from the terminal app: its first turn there, and the first after the app window. The session goes without `artifact` and inline visuals while they are there. |
 | [`todo-nudge`](#todo-nudge) | Code and Cowork: ten tool calls without a TodoWrite while the task list has unfinished items. Rides on a tool result. |
 | [`ultracode-off`](#ultracode-off) | Code: the first turn after Ultracode was switched off or clamped away. |
 | [`ultracode-on`](#ultracode-on) | Code: Ultracode started, on the first turn of a branch that runs at Ultracode, and on the first turn after a compaction. |
@@ -335,6 +337,26 @@ Source: [`packages/core/prompts/notes/model.md`](https://github.com/TheOriUHD/at
 
 ````text wrap
 This conversation now uses {{model}} ({{ref}}). Earlier replies may have been written by {{previous}}; treat them as context, not as statements about yourself.
+````
+
+### `terminal-off`
+
+The person wrote from the app window again after the terminal app.
+
+Source: [`packages/core/prompts/notes/terminal-off.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/notes/terminal-off.md)
+
+````text wrap
+The person is now using Atelier's app window again<!-- if:artifact -->: `artifact` shows a file you wrote in a pane beside the conversation<!-- endif -->.
+````
+
+### `terminal-on`
+
+The person wrote from the terminal app: its first turn there, and the first after the app window. The session goes without `artifact` and inline visuals while they are there.
+
+Source: [`packages/core/prompts/notes/terminal-on.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/notes/terminal-on.md)
+
+````text wrap
+The person is now using Atelier's terminal app. It shows your messages as text and each step as one line. It has no pane beside the conversation and can't show pictures, so when you make a page or anything else to look at, write it to a file and tell them its path. Open it in their browser only when they ask.
 ````
 
 ## Effort

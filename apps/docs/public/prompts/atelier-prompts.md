@@ -60,6 +60,8 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - notes/session-message
 - notes/side-chat
 - notes/skills-added
+- notes/terminal-off
+- notes/terminal-on
 - notes/todo-nudge
 - notes/ultracode-off
 - notes/ultracode-on
@@ -1044,6 +1046,26 @@ File: packages/core/prompts/notes/skills-added.md
 ````text
 New skills are available:
 {{list}}
+````
+
+---
+
+## notes/terminal-off
+
+File: packages/core/prompts/notes/terminal-off.md
+
+````text
+The person is now using Atelier's app window again<!-- if:artifact -->: `artifact` shows a file you wrote in a pane beside the conversation<!-- endif -->.
+````
+
+---
+
+## notes/terminal-on
+
+File: packages/core/prompts/notes/terminal-on.md
+
+````text
+The person is now using Atelier's terminal app. It shows your messages as text and each step as one line. It has no pane beside the conversation and can't show pictures, so when you make a page or anything else to look at, write it to a file and tell them its path. Open it in their browser only when they ask.
 ````
 
 ---

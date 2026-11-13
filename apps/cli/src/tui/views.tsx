@@ -21,6 +21,14 @@ export interface ViewContext {
   columns: number;
   root: string | null;
   view: TranscriptView;
+  /** How the person sees the rest of a step or a thought: a click (the fullscreen view with the mouse), or Ctrl+O. */
+  reveal: 'click' | 'keys';
+}
+
+/** The hint after something cut short: "click to show", or the Ctrl+O presses that get there from this view. */
+export function revealHint(ctx: ViewContext, what: 'thinking' | 'step'): string {
+  if (ctx.reveal === 'click') return 'click to show';
+  return what === 'thinking' || ctx.view === 'thinking' ? 'ctrl+o to show' : 'ctrl+o twice to show';
 }
 
 /** A gutter of fixed width with the body beside it, wrapping under itself. */
@@ -41,8 +49,8 @@ const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'ob
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const tail = (text: string, n: number) => text.replace(/\n+$/, '').split('\n').slice(-n);
 
-/** Diff rows as coloured, numbered lines; at most `limit`, then how many more. */
-export function diffLines(rows: DiffRow[], paint: Paint, limit: number, language = ''): string[] {
+/** Diff rows as coloured, numbered lines; at most `limit`, then how many more (and how to see them, given `hint`). */
+export function diffLines(rows: DiffRow[], paint: Paint, limit: number, language = '', hint = ''): string[] {
   const lang = langOf(language);
   const shown = rows.slice(0, limit);
   const numberWidth = Math.max(2, ...shown.map((r) => String(r.line ?? '').length));
@@ -54,7 +62,7 @@ export function diffLines(rows: DiffRow[], paint: Paint, limit: number, language
     const body = `${n} ${sign} ${code}`;
     return r.kind === 'add' ? paint.bg(paint.p.addedBg, paint.fg('added', `${n} ${sign} `) + code) : r.kind === 'remove' ? paint.bg(paint.p.removedBg, paint.fg('removed', `${n} ${sign} `) + code) : paint.fg('muted', body.slice(0, n.length + 3)) + code;
   });
-  if (rows.length > limit) out.push(paint.fg('muted', `… ${rows.length - limit} more ${rows.length - limit === 1 ? 'line' : 'lines'}`));
+  if (rows.length > limit) out.push(paint.fg('muted', `… ${rows.length - limit} more ${rows.length - limit === 1 ? 'line' : 'lines'}${hint ? ` · ${hint}` : ''}`));
   return out;
 }
 
@@ -66,28 +74,36 @@ export function todoLines(todos: Todo[], paint: Paint): string[] {
 
 const languageOf = (path: string) => path.slice(path.lastIndexOf('.') + 1);
 
-/** What a tool step shows under its line: changed lines, output, the plan, the task list. */
-function toolDetail(call: ToolCallPart, result: ToolResultPart | undefined, ctx: ViewContext, output?: string): string[] {
-  const { paint, view } = ctx;
+/**
+ * What a tool step shows under its line: changed lines, output, the plan, the task list. In full (the verbose view, or
+ * the step opened with a click) the whole of it; otherwise a short part and how to see the rest.
+ */
+function toolDetail(call: ToolCallPart, result: ToolResultPart | undefined, ctx: ViewContext, output?: string, open = false): string[] {
+  const { paint } = ctx;
+  const full = ctx.view === 'verbose' || open;
+  const hint = full ? '' : revealHint(ctx, 'step');
   const input = asRecord(call.input);
   const text = result ? resultText(result) : '';
   if (result?.isError) {
     const lines = text.split('\n').filter(Boolean);
-    return [paint.fg('bad', lines[0] ?? 'Failed'), ...(view === 'verbose' ? lines.slice(1, 20).map((l) => paint.fg('muted', l)) : [])];
+    return [paint.fg('bad', lines[0] ?? 'Failed'), ...(full ? lines.slice(1, 200).map((l) => paint.fg('muted', l)) : [])];
   }
   switch (call.name) {
     case 'Edit':
-      return diffLines(placedEditRows(str(input.old_string), str(input.new_string), result?.edit), paint, view === 'verbose' ? 400 : 40, languageOf(str(input.file_path)));
+      return diffLines(placedEditRows(str(input.old_string), str(input.new_string), result?.edit), paint, full ? 2000 : 40, languageOf(str(input.file_path)), hint);
     case 'Write': {
       const rows = writeRows(str(input.content));
-      return view === 'verbose' ? diffLines(rows, paint, 400, languageOf(str(input.file_path))) : [paint.fg('muted', `${rows.length} ${rows.length === 1 ? 'line' : 'lines'}`)];
+      return full ? diffLines(rows, paint, 2000, languageOf(str(input.file_path))) : [paint.fg('muted', `${rows.length} ${rows.length === 1 ? 'line' : 'lines'} · ${hint}`)];
     }
     case 'Bash': {
       const running = !result;
       const shown = running ? (output ?? '') : bashResult(text).output;
       const { exitCode, note } = running ? { exitCode: null, note: null } : bashResult(text);
-      const lines = view === 'verbose' ? shown.replace(/\n+$/, '').split('\n').slice(-200) : tail(shown, running ? 5 : exitCode ? 6 : 3);
+      const all = shown.replace(/\n+$/, '').split('\n');
+      const lines = full ? all.slice(-2000) : tail(shown, running ? 5 : exitCode ? 6 : 3);
       const body = shown.trim() ? lines.map((l) => paint.fg('muted', l)) : [];
+      // The lines above the last few, when there are any and the step is done.
+      if (!full && !running && shown.trim() && all.length > lines.length) body.unshift(paint.fg('faint', `… ${all.length - lines.length} more ${all.length - lines.length === 1 ? 'line' : 'lines'} above · ${hint}`));
       if (exitCode) body.push(paint.fg('bad', `Exit code ${exitCode}`));
       if (note) body.push(paint.fg('warn', note));
       return body;
@@ -100,15 +116,14 @@ function toolDetail(call: ToolCallPart, result: ToolResultPart | undefined, ctx:
         .map((l) => `${paint.fg('faint', '│')} ${l}`);
     case 'Agent':
     case 'AskUser':
-      return text ? tail(text, view === 'verbose' ? 40 : 2).map((l) => paint.fg('muted', l)) : [];
-    case 'Read':
-    case 'Glob':
-    case 'Grep':
-    case 'WebSearch':
-    case 'WebFetch':
-      return view === 'verbose' && text ? text.split('\n').slice(0, 30).map((l) => paint.fg('muted', l)) : [];
-    default:
-      return view === 'verbose' && text ? text.split('\n').slice(0, 30).map((l) => paint.fg('muted', l)) : [];
+      return text ? tail(text, full ? 200 : 2).map((l) => paint.fg('muted', l)) : [];
+    default: {
+      // Read, Glob, Grep, the web and the rest: what came back, only in full.
+      if (!full || !text) return [];
+      const lines = text.split('\n');
+      const limit = open ? 400 : 30;
+      return [...lines.slice(0, limit).map((l) => paint.fg('muted', l)), ...(lines.length > limit ? [paint.fg('faint', `… ${lines.length - limit} more lines`)] : [])];
+    }
   }
 }
 
@@ -135,11 +150,11 @@ export function toolLine(call: ToolCallPart, result: ToolResultPart | undefined,
   return `${paint.bold(verb)}${target}${meta ? paint.fg('muted', ` · `) + (strip(meta) === meta ? paint.fg('muted', meta) : meta) : ''}`;
 }
 
-export function ToolRow({ call, result, ctx, running, output, dab }: { call: ToolCallPart; result: ToolResultPart | undefined; ctx: ViewContext; running?: boolean; output?: string; dab?: string }) {
+export function ToolRow({ call, result, ctx, running, output, dab, open }: { call: ToolCallPart; result: ToolResultPart | undefined; ctx: ViewContext; running?: boolean; output?: string; dab?: string; open?: boolean }) {
   const { paint } = ctx;
   const denied = !!result?.isError && /denied|didn’t allow|did not allow|declined/i.test(resultText(result).slice(0, 200));
   const mark = running ? paint.fg('accent', dab ?? '●') : !result ? paint.fg('muted', '○') : denied ? paint.fg('warn', '●') : result.isError ? paint.fg('bad', '●') : paint.fg('good', '●');
-  const detail = toolDetail(call, result, ctx, output);
+  const detail = toolDetail(call, result, ctx, output, open);
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Gutter mark={mark}>
@@ -164,14 +179,17 @@ export function TextRow({ text, ctx }: { text: string; ctx: ViewContext }) {
   );
 }
 
-export function ThinkingRow({ text, seconds, ctx, live }: { text: string; seconds: number | null; ctx: ViewContext; live?: boolean }) {
+/** A thought: one line in the short view ("∴ Thought for 4s · click to show"), its text with thinking shown or opened. */
+export function ThinkingRow({ text, seconds, ctx, live, open }: { text: string; seconds: number | null; ctx: ViewContext; live?: boolean; open?: boolean }) {
   const { paint, view } = ctx;
   const head = live ? 'Thinking…' : seconds ? `Thought for ${seconds}s` : 'Thought';
-  if (view === 'normal') return live ? null : <Text>{paint.fg('muted', paint.italic(`∴ ${head}`))}</Text>;
+  const body = text.trim();
+  if (view === 'normal' && !open) return live ? null : <Text>{paint.fg('muted', paint.italic(`∴ ${head}`)) + (body ? paint.fg('faint', ` · ${revealHint(ctx, 'thinking')}`) : '')}</Text>;
+  const hide = view === 'normal' && ctx.reveal === 'click' ? paint.fg('faint', ' · click to hide') : '';
   return (
     <Box marginBottom={1}>
       <Gutter mark={paint.fg('muted', '∴')}>
-        <Text>{paint.fg('muted', paint.italic(`${head}\n${text.trim()}`))}</Text>
+        <Text>{paint.fg('muted', paint.italic(head)) + hide + (body ? `\n${paint.fg('muted', paint.italic(body))}` : '')}</Text>
       </Gutter>
     </Box>
   );
@@ -189,8 +207,8 @@ export function UserRow({ text, attachments, ctx }: { text: string; attachments:
   );
 }
 
-/** Any row that is done. */
-export function RowView({ row, ctx }: { row: Row; ctx: ViewContext }) {
+/** Any row that is done; `open` when a click opened it. */
+export function RowView({ row, ctx, open }: { row: Row; ctx: ViewContext; open?: boolean }) {
   const { paint } = ctx;
   switch (row.kind) {
     case 'user':
@@ -198,9 +216,9 @@ export function RowView({ row, ctx }: { row: Row; ctx: ViewContext }) {
     case 'text':
       return <TextRow text={row.text} ctx={ctx} />;
     case 'thinking':
-      return <ThinkingRow text={row.text} seconds={row.seconds} ctx={ctx} />;
+      return <ThinkingRow text={row.text} seconds={row.seconds} ctx={ctx} open={open} />;
     case 'tool':
-      return <ToolRow call={row.call} result={row.result} ctx={ctx} />;
+      return <ToolRow call={row.call} result={row.result} ctx={ctx} open={open} />;
     case 'notice':
       return (
         <Box marginBottom={1}>

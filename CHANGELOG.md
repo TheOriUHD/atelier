@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Click to open a step or a thought in the terminal app.** In the fullscreen view a click on a step shows all of it in place: the whole diff, a new file's lines, all of a command's output, what a search or read brought back. A click on "∴ Thought" shows the thinking, and a second click closes either. The view holds still while a row opens. Cut-short rows say how to see the rest ("… 21 more lines · click to show"; Ctrl+O in the classic view).
+- **No pane talk in the terminal.** A message sent from the terminal app no longer offers the assistant `artifact` (it opens a pane only the app window has) or inline visuals. The assistant hears that the person is in a terminal, so it gives the path of a page it made rather than saying it is "open in the pane". It hears again when the person goes back to the app window.
 - **Atelier for Chrome from the Chrome Web Store connects too.** The app's helper lets the store's copy of the extension in as well as the one loaded from the app's folder. The store listing is waiting for Google's review.
 
 ## [0.7.0] — 2026-11-13

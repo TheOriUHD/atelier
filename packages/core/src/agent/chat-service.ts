@@ -55,7 +55,7 @@ import {
   type Usage,
   type UserPrefs,
 } from '@atelier/protocol';
-import { imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLentToolName, REACTIONS, type CoopSettings, type ImageProgress } from '@atelier/protocol';
+import { imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLentToolName, REACTIONS, type ClientKind, type CoopSettings, type ImageProgress } from '@atelier/protocol';
 import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
@@ -491,6 +491,8 @@ export class ChatService {
   private runs = new Map<string, ActiveRun>();
   /** Co-op: for whom each running turn is (coop-turns.ts), and the turn a Retry or Continue asked to run as someone. */
   private actors = new Map<string, TurnActor>();
+  /** Sessions whose person last wrote from the terminal app: no pane for `artifact`, no inline visuals (`heardFrom`). */
+  private inTerminal = new Set<string>();
   private forcedActors = new Map<string, TurnParticipant>();
   /** Co-op: sessions whose running turn took in a guest's message from someone else's turn (its permissions are a guest's). */
   private guestJoined = new Set<string>();
@@ -787,6 +789,15 @@ export class ChatService {
         ...(reactions ? { reactions } : {}),
       };
     }
+  }
+
+  /**
+   * Which app the person's latest message came from. The terminal app has no pane beside the conversation, so its turns
+   * go without `artifact` and inline visuals, and the model hears where the person is (notes/terminal-on.md).
+   */
+  heardFrom(sessionId: string, app: ClientKind): void {
+    if (app === 'cli') this.inTerminal.add(sessionId);
+    else this.inTerminal.delete(sessionId);
   }
 
   async send(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null, opts: { answerWith?: string } = {}): Promise<string> {
@@ -1574,6 +1585,7 @@ export class ChatService {
         ultracode: { on: run.ultracode, limits: ULTRACODE_LIMITS },
         // What a level asks of a model whose own setting can't express it (no thinking switch above High, no levels).
         effort: effortGuidance(session.effort as Effort | null, run.model.info, session.mode, this.effortOptions(session)),
+        ...(!session.parentSessionId ? { terminal: this.inTerminal.has(session.id) } : {}),
       },
       prior,
       history,
@@ -2409,14 +2421,16 @@ export class ChatService {
     // Web pages through the extension, where it is connected: top-level Code and Cowork sessions, as computer use.
     const browser = this.browserTool && (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && !shared && (await browserConnected(this.deps.browser!.call)).connected ? [this.browserTool] : [];
     const memory = shared ? [] : (this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? []);
-    const inlineVisual = !session.parentSessionId && (session.mode === 'chat' || session.mode === 'work') ? [createInlineVisualTool()] : [];
+    // What only an app window shows: nothing for a person in the terminal app.
+    const terminal = this.inTerminal.has(session.id);
+    const inlineVisual = !session.parentSessionId && !terminal && (session.mode === 'chat' || session.mode === 'work') ? [createInlineVisualTool()] : [];
     // The clock for everyone; the usage figures only where the model's provider has limits or a cost, and not for sub-agents.
     const modelRef = session.parentSessionId || shared ? undefined : await this.modelRef(session);
     const usage = modelRef && this.deps.usage?.offered(modelRef) ? [this.usage] : [];
     const images = (await this.imagesFor(session)) ? [createGenerateImageTool({ generate: (input, ctx) => this.deps.images!.generate(input, ctx) })] : [];
     const videos = (await this.videosFor(session)) ? [createGenerateVideoTool({ generate: (input, ctx) => this.deps.videos!.generate(input, ctx) })] : [];
     const sounds = (await this.audioFor(session)) ? [createGenerateAudioTool({ generate: (input, ctx) => this.deps.audio!.generate(input, ctx) })] : [];
-    if (session.mode === 'chat') return [createArtifactTool(this.deps.artifacts), ...inlineVisual, ...images, ...videos, ...sounds, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
+    if (session.mode === 'chat') return [...(terminal ? [] : [createArtifactTool(this.deps.artifacts)]), ...inlineVisual, ...images, ...videos, ...sounds, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
     if (workspace) {
@@ -2441,7 +2455,7 @@ export class ChatService {
     }
     const agent = createAgentTool((parentId, call, task, signal) => this.delegate(parentId, call, task, signal), catalog?.agents ?? []);
     // Code shows a file it wrote in the Artifact pane, read through the same workspace.
-    const artifact = session.mode === 'code' && workspace ? [createArtifactTool(this.deps.artifacts, workspace)] : [];
+    const artifact = session.mode === 'code' && workspace && !terminal ? [createArtifactTool(this.deps.artifacts, workspace)] : [];
     const stopTasks = workspace ? [this.taskStop] : [];
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));

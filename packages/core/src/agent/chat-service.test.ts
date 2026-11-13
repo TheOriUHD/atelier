@@ -531,6 +531,31 @@ describe('ChatService', () => {
     expect(first.parts.at(-1)).toEqual({ type: 'context', text: '<skill name="greet">\nBase directory for this skill: /skills/greet\n\nSay hello to Ada.\n</skill>' });
   });
 
+  it('leaves out the pane-only tools while the person writes from the terminal app, and says where they are', async () => {
+    const chat = service();
+    const s = await repo.create({ mode: 'chat' });
+    const turn = async (from: 'desktop' | 'cli', text: string) => {
+      seen.length = 0;
+      chat.heardFrom(s.id, from);
+      await chat.send(s.id, [{ type: 'text', text }]);
+      await chat.settle(s.id);
+      const tools = seen.find((r) => !r.system.some((b) => b.text.includes('short title')))!.tools!.map((t) => t.name);
+      const note = (await chat.snapshot(s.id)).messages.filter((m) => m.role === 'user').at(-1)!.parts.find((p) => p.type === 'context');
+      return { tools, note: note?.type === 'context' ? note.text : '' };
+    };
+    const app = await turn('desktop', 'Hi');
+    expect(app.tools).toEqual(expect.arrayContaining(['artifact', 'inline_visual']));
+    expect(app.note).not.toContain('terminal');
+    const terminal = await turn('cli', 'Make me a page');
+    expect(terminal.tools).not.toContain('artifact');
+    expect(terminal.tools).not.toContain('inline_visual');
+    expect(terminal.note).toContain("using Atelier's terminal app");
+    expect((await turn('cli', 'And another')).note).not.toContain('terminal');
+    const back = await turn('desktop', 'Show it');
+    expect(back.tools).toContain('artifact');
+    expect(back.note).toContain("Atelier's app window again");
+  });
+
   it('offers the clock everywhere and the usage figures only where the model\'s provider has some', async () => {
     const toolsOf = async (usage?: ChatServiceDeps['usage']) => {
       seen.length = 0;

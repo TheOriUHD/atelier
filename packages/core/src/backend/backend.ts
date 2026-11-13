@@ -2681,6 +2681,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
     'chat.send': async ({ sessionId, parentId, parts, answerWith }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.send');
+      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
       await ownBlobsOnly(parts, ctx);
       return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, answerWith ? { answerWith } : {})) };
     },
@@ -2722,6 +2723,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.queue': async ({ sessionId, parts, joinTurn, answerWith }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.queue');
+      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
       await ownBlobsOnly(parts, ctx);
       return coopAction(() => chat.queue(sessionId, parts, as, { ...(joinTurn ? { joinTurn } : {}), ...(answerWith ? { answerWith } : {}) }));
     },
@@ -2731,21 +2733,25 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.sendNow': async ({ sessionId, id }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.sendNow');
+      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
       await coopAction(() => chat.sendNow(sessionId, id, as));
       return { ok: true as const };
     },
     'chat.retry': async ({ sessionId, messageId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.retry');
+      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
       await chat.retry(sessionId, messageId, as);
       return { ok: true as const };
     },
     'chat.continue': async ({ sessionId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.continue');
+      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
       await chat.continue(sessionId, as);
       return { ok: true as const };
     },
     'chat.edit': async ({ sessionId, messageId, parts }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.edit');
+      chat.heardFrom(sessionId, ctx.connection().client.clientKind);
       await ownBlobsOnly(parts, ctx);
       return { userMessageId: await coopAction(() => chat.edit(sessionId, messageId, parts, as)) };
     },

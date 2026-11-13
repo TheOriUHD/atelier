@@ -5,7 +5,7 @@ import { Paint, palette } from '../style.ts';
 import { PendingPrompt } from './prompts.tsx';
 import type { ViewContext } from './views.tsx';
 
-const ctx: ViewContext = { paint: new Paint(palette('dark', 0)), columns: 100, root: '/repo', view: 'normal' };
+const ctx: ViewContext = { paint: new Paint(palette('dark', 0)), columns: 100, root: '/repo', view: 'normal', reveal: 'keys' };
 const wait = () => new Promise((r) => setTimeout(r, 30));
 
 function ask(pending: PendingInteraction) {

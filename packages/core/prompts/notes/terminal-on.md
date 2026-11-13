@@ -1,0 +1,1 @@
+The person is now using Atelier's terminal app. It shows your messages as text and each step as one line. It has no pane beside the conversation and can't show pictures, so when you make a page or anything else to look at, write it to a file and tell them its path. Open it in their browser only when they ask.

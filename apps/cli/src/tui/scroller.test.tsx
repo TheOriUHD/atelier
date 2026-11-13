@@ -2,7 +2,7 @@ import { Box, Text } from 'ink';
 import { render } from 'ink-testing-library';
 import { describe, expect, it } from 'vitest';
 import { Paint, palette } from '../style.ts';
-import type { WheelListener } from './mouse.ts';
+import type { ClickListener, WheelListener } from './mouse.ts';
 import { Scroller } from './scroller.tsx';
 
 const paint = new Paint(palette('dark', 0));
@@ -15,10 +15,10 @@ const lines = (n: number) => Array.from({ length: n }, (_, i) => <Text key={i}>{
 
 function setup(count: number, follow = 0) {
   const listeners = new Set<WheelListener>();
-  const wheel = { on: (fn: WheelListener) => (listeners.add(fn), () => void listeners.delete(fn)) };
+  const mouse = { onWheel: (fn: WheelListener) => (listeners.add(fn), () => void listeners.delete(fn)), onClick: (_fn: ClickListener) => () => undefined };
   const view = (f: number, n: number) => (
     <Box flexDirection="column" height={8}>
-      <Scroller paint={paint} wheel={wheel} active follow={f}>
+      <Scroller paint={paint} mouse={mouse} active follow={f}>
         {lines(n)}
       </Scroller>
       <Box flexShrink={0}>
@@ -75,5 +75,47 @@ describe('the fullscreen conversation', () => {
     rerender(1, 31);
     await until(f, (x) => x.includes('line 31'));
     expect(f()).toContain('line 31');
+  });
+});
+
+describe('clicks in the fullscreen conversation', () => {
+  it('tells which row was clicked, through the scrolling', async () => {
+    const { Clickable } = await import('./scroller.tsx');
+    const wheels = new Set<WheelListener>();
+    const clicks = new Set<ClickListener>();
+    const mouse = { onWheel: (fn: WheelListener) => (wheels.add(fn), () => void wheels.delete(fn)), onClick: (fn: ClickListener) => (clicks.add(fn), () => void clicks.delete(fn)) };
+    const hit: string[] = [];
+    const ui = render(
+      <Box flexDirection="column" height={8}>
+        <Scroller paint={paint} mouse={mouse} active follow={0} onClick={(id) => hit.push(id)}>
+          <Text>header</Text>
+          {Array.from({ length: 10 }, (_, i) => (
+            <Clickable key={i} id={`row ${i + 1}`}>
+              <Text>{`row ${i + 1}\nits second line`}</Text>
+            </Clickable>
+          ))}
+        </Scroller>
+        <Box flexShrink={0}>
+          <Text>› message box</Text>
+        </Box>
+      </Box>,
+    );
+    const f = () => ui.lastFrame()!;
+    // What is drawn, and a moment for the rows to be registered after it.
+    const settled = async (check: (x: string) => boolean) => (await until(f, check), await new Promise((r) => setTimeout(r, 50)), f());
+    await settled((x) => x.includes('row 10'));
+    const click = (y: number) => clicks.forEach((fn) => fn({ x: 1, y }));
+    // Following the bottom: the window's six rows are rows 8 to 10, two lines each.
+    const screen = f().split('\n');
+    click(screen.indexOf('row 9'));
+    click(screen.indexOf('row 9') + 1);
+    expect(hit).toEqual(['row 9', 'row 9']);
+    // Scrolled to the top: the header, then row 1.
+    wheels.forEach((fn) => fn(-30));
+    click((await settled((x) => x.includes('header'))).split('\n').indexOf('row 1'));
+    // The message box and the line below the window are not the conversation.
+    click(7);
+    click(6);
+    expect(hit).toEqual(['row 9', 'row 9', 'row 1']);
   });
 });

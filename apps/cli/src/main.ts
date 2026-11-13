@@ -241,7 +241,7 @@ async function main(argv: string[]): Promise<number> {
           mode,
           notice,
           fullscreen,
-          wheel: mouse?.wheel ?? null,
+          mouse: mouse?.mouse ?? null,
           onExit: (next: AppExit) => (exit = next),
         }),
         { exitOnCtrlC: false, interactive: interactive(), kittyKeyboard: { mode: 'auto' }, incrementalRendering: true, maxFps: 30, isScreenReaderEnabled: screenReader, alternateScreen: fullscreen, ...(mouse ? { stdin: mouse.stdin } : {}) },

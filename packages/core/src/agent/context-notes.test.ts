@@ -33,6 +33,17 @@ describe('turn notes', () => {
     expect(await note(facts({ mode: 'chat', permissionMode: null }))).toBeNull();
   });
 
+  it('say when the person comes to the terminal app and when they go back to the app window, once each', async () => {
+    const there = (await note(facts({ terminal: true })))!;
+    expect(there.text).toMatch(/^The person is now using Atelier's terminal app\. .*no pane beside the conversation/);
+    expect(there.state.surface).toBe('terminal');
+    expect(await note(facts({ terminal: true }), { ...prompt, permissionMode: 'default', surface: 'terminal' })).toBeNull();
+    const back = (await note(facts({ terminal: false, tools: [...facts().tools, 'artifact'] }), { ...prompt, permissionMode: 'default', surface: 'terminal' }))!;
+    expect(back).toEqual({ text: "The person is now using Atelier's app window again: `artifact` shows a file you wrote in a pane beside the conversation.", state: { surface: 'app' } });
+    // The app window from the start: nothing said, nothing recorded.
+    expect(await note(facts({ terminal: false }))).toEqual({ text: '', state: { permissionMode: 'default' } });
+  });
+
   it('announce plan mode on, still on and off, but not again after an approved plan', async () => {
     expect((await note(facts({ permissionMode: 'plan' })))!.text).toMatch(/^Plan mode is on\. Until the person approves a plan/);
     expect((await note(facts({ permissionMode: 'plan' }), { ...prompt, permissionMode: 'plan' }))!.text).toBe('Plan mode is still on: investigate, then present the plan with ExitPlanMode.');
