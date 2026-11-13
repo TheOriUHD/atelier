@@ -38,6 +38,31 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.7.1',
+    intro: 'Web pages the assistant makes open as they are, and the terminal app lets you click to see more.',
+    highlights: [
+      {
+        icon: Globe,
+        title: 'Sites open as they are',
+        body: 'In Code, the assistant opens a site it made, with its own stylesheets, scripts and images, or a dev server it started, in the Browser pane, as a browser shows it. It no longer squeezes a site into one file, and after a change the page reloads in its tab.',
+      },
+      {
+        icon: SquareTerminal,
+        title: 'Click to open in the terminal app',
+        body: 'In the fullscreen view, a click on a step shows all of it: the whole diff, a new file, all of a command’s output. A click on “Thought” shows the thinking. In the terminal app the assistant no longer talks about a pane it can’t show you.',
+      },
+      {
+        icon: Server,
+        title: 'Server updates with a real progress bar',
+        body: 'Update server shows how much of the new version is down, as a bar and in megabytes, then the restart. The server’s updater needs pulling once on its host to show it.',
+      },
+    ],
+    also: [
+      'What’s new no longer comes back after “Got it” when the app is connected to an older server.',
+      'A page in a pane that scrolls itself by script can no longer push the whole app up inside its window.',
+    ],
+  },
+  {
     version: '0.7.0',
     intro: 'Atelier works in your browser and your apps in the background, about twice as fast, and shows you what it sees.',
     highlights: [
