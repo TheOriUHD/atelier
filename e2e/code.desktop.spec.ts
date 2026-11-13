@@ -179,7 +179,8 @@ test('desktop Code: with no folder each session works in a new scratch folder of
     // /clear goes on in the same scratch folder, so what the session made there stays at hand.
     await box.fill('/clear');
     await box.press('Enter');
-    await expect(page.getByRole('button', { name: second, exact: true })).toBeVisible();
+    // The folder chip reads No folder, never the scratch folder's name; pwd below shows it's the same folder.
+    await expect(page.getByRole('button', { name: 'No folder', exact: true })).toBeVisible();
     await box.fill(call('Bash', { command: 'pwd', description: 'Still here?' }));
     await box.press('Enter');
     await page.getByRole('region', { name: /Allow Atelier to run/ }).getByRole('button', { name: 'Allow once' }).click();
