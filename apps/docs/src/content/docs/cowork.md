@@ -12,7 +12,7 @@ what it made as cards you can open.
 
 :::note
 With **Chat and Cowork in one (preview)** turned on by an admin, there is no separate Cowork tab: a chat works as a task
-when the request needs it. See [Chat](/chat/#chat-and-cowork-in-one-preview-next-release).
+when the request needs it. See [Chat](/chat/#chat-and-cowork-in-one-preview).
 :::
 
 ## Chat, Cowork and Code

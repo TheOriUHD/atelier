@@ -288,7 +288,7 @@ Apart from that review, the sandbox asks no permission and follows fixed rules:
 When a reply used the sandbox, **Continue in Cowork** appears under it and copies the conversation into a new Cowork task
 in the same folder. It disappears when you write again, and the **×** hides it for good. Temporary chats do not offer it.
 
-## Chat and Cowork in one (preview) *(next release)*
+## Chat and Cowork in one (preview)
 
 An admin can turn on **Settings › Admin › Capabilities › Conversations › Chat and Cowork in one (preview)**. It is off
 by default and still being finished. While it is on, for everyone on that backend:

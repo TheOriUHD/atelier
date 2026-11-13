@@ -38,6 +38,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.7.4',
+    intro: 'A first look at Chat and Cowork in one conversation, for admins to try.',
+    highlights: [
+      {
+        icon: MessagesSquare,
+        title: 'Chat and Cowork in one (preview)',
+        body: 'Turned on in Settings › Admin › Capabilities, a chat answers quick questions as before and works as a Cowork task when a request needs files, commands or your computer: in its own sandbox, or in a folder from + › Add folder. Its progress and files appear beside it once there are some, and a permission chip sits in the message box. Old Cowork tasks open as chats. It is off unless an admin turns it on.',
+      },
+    ],
+    also: ['Files from a session without a folder no longer show the made-up folder’s name.'],
+  },
+  {
     version: '0.7.3',
     intro: 'Long tasks in a folder your desktop lends a server finish, even when the connection blinks.',
     highlights: [
