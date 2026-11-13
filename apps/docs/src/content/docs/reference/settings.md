@@ -239,6 +239,7 @@ Admins only.
 | **SearXNG URL** | Base URL of your instance. JSON output must be enabled in its settings.yml. |
 | **Search API key** | Stored encrypted in the secret store, never in settings files. |
 | **Web fetch** | Let chats read web pages and documents by URL. |
+| **Chat and Cowork in one (preview)** | One kind of conversation: a chat works as a Cowork task when the request needs files, commands or the computer, in its own sandbox or a folder it is given. Cowork tasks open as chats. Still being finished. |
 | **Instructions for every conversation** | What models are told in every Chat, Cowork and Code conversation, for every account, ahead of anything a person or project asks. Applies to new conversations. Code and Cowork also follow the system AGENTS.md (Admin › Code). |
 | **Let people edit memory by hand** | Adds Edit to every memory entry in Settings › Memory, for changing its title, summary and details directly. Without it, memory changes only through Atelier. |
 | **Extra safeguards for everyone** | Off by default: models then follow only their own and their provider's rules. When on, the categories below apply to every conversation, except for people Users sets otherwise. |

@@ -1012,6 +1012,14 @@ export const SETTINGS_INDEX = [
     keywords: ['url', 'browse', 'read page', 'internet'],
   },
   {
+    id: 'capabilities.unifiedChat',
+    page: 'capabilities',
+    label: 'Chat and Cowork in one (preview)',
+    description:
+      'One kind of conversation: a chat works as a Cowork task when the request needs files, commands or the computer, in its own sandbox or a folder it is given. Cowork tasks open as chats. Still being finished.',
+    keywords: ['cowork', 'merge', 'unified', 'tasks', 'preview'],
+  },
+  {
     id: 'prompts.organizationInstructions',
     page: 'capabilities',
     label: 'Instructions for every conversation',

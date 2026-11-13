@@ -127,3 +127,15 @@ describe('askToNotify', () => {
     expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('with Chat and Cowork in one', () => {
+  it('tells a chat’s task ending, and never a quick question’s answer', () => {
+    const notifier = createTaskNotifier(true);
+    const open = vi.fn();
+    // A chat that worked as a task: it has its sandbox (or a folder).
+    for (const status of ['running', 'idle'] as SessionStatus[]) notifier.update(task(status, { id: 'c1', mode: 'chat', workspaceId: 'sandbox-1' }), prefs(), open);
+    // A quick question: no sandbox was ever made.
+    for (const status of ['running', 'idle'] as SessionStatus[]) notifier.update(task(status, { id: 'c2', mode: 'chat', workspaceId: null }), prefs(), open);
+    expect(FakeNotification.shown.map((n) => n.title)).toEqual(['Task finished']);
+  });
+});
