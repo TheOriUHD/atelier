@@ -128,7 +128,48 @@ describe('the host', () => {
     expect(await screen.findByRole('dialog', { name: /What’s new in Atelier/ })).toBeTruthy();
     expect(releaseNotesSince).toHaveBeenCalledWith('0.0.1', APP.version);
     fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
-    await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['whatsNew'], value: { seen: APP.version, from: '0.0.1' } }]));
+    await waitFor(() =>
+      expect(callsTo('prefs.set')).toEqual([
+        { path: ['whatsNew', 'seen'], value: APP.version },
+        { path: ['whatsNew', 'from'], value: '0.0.1' },
+      ]),
+    );
+  });
+
+  it('stays closed on a server from before 0.7, which keeps the version but refuses where the person came from', async () => {
+    let stored = prefsWith('0.0.1');
+    resetBackend({
+      'prefs.get': () => stored,
+      'prefs.set': ({ path, value }: { path: string[]; value: string }) => {
+        if (path.join('.') !== 'whatsNew.seen') throw new Error(`${path.join('.')}: not a preference`);
+        stored = prefsWith(value);
+        return stored;
+      },
+    });
+    mount();
+    await later();
+    fireEvent.click(await screen.findByRole('button', { name: 'Got it' }));
+    await waitFor(() => expect(callsTo('prefs.set')).toHaveLength(2));
+    await later();
+    await later();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(stored.whatsNew.seen).toBe(APP.version);
+  });
+
+  it('stays closed in this window when the server can remember nothing', async () => {
+    resetBackend({
+      'prefs.get': () => prefsWith('0.0.1'),
+      'prefs.set': () => {
+        throw new Error('not a preference');
+      },
+    });
+    mount();
+    await later();
+    fireEvent.click(await screen.findByRole('button', { name: 'Got it' }));
+    await waitFor(() => expect(callsTo('prefs.set')).toHaveLength(1));
+    await later();
+    await later();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('says nothing for a version already seen', async () => {
@@ -144,7 +185,12 @@ describe('the host', () => {
     mount();
     await later();
     expect(screen.queryByRole('dialog')).toBeNull();
-    await waitFor(() => expect(callsTo('prefs.set')).toEqual([{ path: ['whatsNew'], value: { seen: APP.version, from: null } }]));
+    await waitFor(() =>
+      expect(callsTo('prefs.set')).toEqual([
+        { path: ['whatsNew', 'seen'], value: APP.version },
+        { path: ['whatsNew', 'from'], value: null },
+      ]),
+    );
   });
 
   it('shows the notes to someone who already uses Atelier and has not seen any yet', async () => {

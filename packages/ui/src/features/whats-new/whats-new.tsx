@@ -170,6 +170,8 @@ export function WhatsNewHost() {
   const { prefs } = usePrefs();
   const setPref = useSetPref();
   const [open, setOpen] = useState(false);
+  /** Closed in this window: not shown again until the next version, even if remembering it failed. */
+  const [closed, setClosed] = useState(false);
   // An older server's preferences have no such part: nothing to remember the answer in, so nothing is shown.
   const seen = prefs?.whatsNew?.seen;
   const notes = releaseNotesSince(seen, APP.version);
@@ -181,11 +183,16 @@ export function WhatsNewHost() {
     enabled: has && !solo && seen === null,
     staleTime: Infinity,
   });
-  // `from` keeps the version they came from, so the sidebar can show this update's notes again.
-  const record = () => setPref.mutate({ path: ['whatsNew'], value: { seen: APP.version, from: seen ?? null } });
+  // The version, then the one they came from (`from`), so the sidebar can show this update's notes again. Apart: a server
+  // from before 0.7 refuses `from` as no preference of its own, and would refuse the version along with it, so the notes
+  // came back every time the app read the preferences again.
+  const record = () => {
+    const from = seen ?? null;
+    setPref.mutate({ path: ['whatsNew', 'seen'], value: APP.version }, { onSuccess: () => setPref.mutate({ path: ['whatsNew', 'from'], value: from }) });
+  };
 
   useEffect(() => {
-    if (!has || solo || settled) return;
+    if (!has || solo || settled || closed) return;
     if (seen === null) {
       if (used.data === undefined) return;
       if (!used.data) return void record();
@@ -193,7 +200,7 @@ export function WhatsNewHost() {
     const timer = setTimeout(() => setOpen(true), 700);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `record` only wraps the stable mutation
-  }, [has, settled, seen, used.data]);
+  }, [has, settled, closed, seen, used.data]);
 
   if (!has) return null;
   return (
@@ -202,7 +209,9 @@ export function WhatsNewHost() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next && !settled) record();
+        if (next || settled) return;
+        setClosed(true);
+        record();
       }}
     />
   );

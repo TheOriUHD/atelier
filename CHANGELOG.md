@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **What's new stays closed on an older server.** The app connected to a server from before 0.7 showed What's new again a moment after every "Got it": the app saved the version it showed together with a newer field that the server refused, so nothing was saved and the dialog came back each time the app read the server again. The version is now saved on its own, and a dialog closed in a window stays closed there even if a server can't remember it.
 - **Click to open a step or a thought in the terminal app.** In the fullscreen view a click on a step shows all of it in place: the whole diff, a new file's lines, all of a command's output, what a search or read brought back. A click on "∴ Thought" shows the thinking, and a second click closes either. The view holds still while a row opens. Cut-short rows say how to see the rest ("… 21 more lines · click to show"; Ctrl+O in the classic view).
 - **No pane talk in the terminal.** A message sent from the terminal app no longer offers the assistant `artifact` (it opens a pane only the app window has) or inline visuals. The assistant hears that the person is in a terminal, so it gives the path of a page it made rather than saying it is "open in the pane". It hears again when the person goes back to the app window.
 - **Atelier for Chrome from the Chrome Web Store connects too.** The app's helper lets the store's copy of the extension in as well as the one loaded from the app's folder. The store listing is waiting for Google's review.
