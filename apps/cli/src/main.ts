@@ -164,6 +164,14 @@ async function main(argv: string[]): Promise<number> {
 
   try {
     const root = await folderRoot(process.cwd());
+    // A desktop app shared on its network works only in the folders opened in that app: a terminal can't lend it its own.
+    if (conn.mode === 'server' && (await conn.rpc.call('app.info', {}).catch(() => null))?.sharedComputer) {
+      process.stderr.write(
+        `${new URL(conn.serverUrl!).host} is the Atelier desktop app, shared on its network. It works only in folders opened in that app, so it can't work in ${root} from here.\n` +
+          `To work here from the terminal: atelier connect --local (Atelier on this computer, with its own models), or connect to an Atelier server.\n`,
+      );
+      return 1;
+    }
     let folder = await knownFolder(conn, root);
     const trusted = conn.mode === 'local' || (folder && (await trustedHere(p, root)));
     if (!folder || !trusted) {

@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **The terminal app tells a desktop app from a server.** A desktop app shared on its network ("Share on your network") works only in the folders opened in that app, so a terminal connected to one stopped with "Only Atelier on the computer you're connected to can do this." Setup's network search now leaves such desktop apps out. Typing one's address explains what it is and offers "Only this computer", and a terminal already connected to one says how to switch (`atelier connect --local`).
 ## [0.7.2] — 2026-11-13
 
 - **Co-op guests can pick their own model.** A guest who chose one of their own models saw "Choose a model" again right after: the host keeps that model as the guest's (`peer-…/model`), told the guest's app so, and the app found no model by that name. The guest's own choice now reads as they chose it. "Ada is typing…" sits just above the message box, lined up with it, instead of at the conversation's left edge.

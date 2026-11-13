@@ -45,6 +45,8 @@ type Step =
   | { s: 'address' }
   | { s: 'checking'; typed: string }
   | { s: 'blocked'; typed: string }
+  /** The address is a desktop app shared on its network: no use for a terminal's own folders. */
+  | { s: 'shared'; host: string }
   | { s: 'first-admin'; serverUrl: string; error?: string }
   | { s: 'browser'; start: TerminalSignInStart | null; opened: boolean }
   | { s: 'password'; error?: string }
@@ -80,7 +82,7 @@ export function timedClient(client: RpcClient<AppContract>, who: string, limits:
 }
 
 /** Which breadcrumb each step is (the last one's length: all done). */
-const SERVER_AT: Partial<Record<Step['s'], number>> = { address: 0, checking: 0, blocked: 0, 'first-admin': 1, browser: 1, password: 1, 'new-password': 1, invite: 1, device: 2, model: 3, done: 4 };
+const SERVER_AT: Partial<Record<Step['s'], number>> = { address: 0, checking: 0, blocked: 0, shared: 0, 'first-admin': 1, browser: 1, password: 1, 'new-password': 1, invite: 1, device: 2, model: 3, done: 4 };
 const LOCAL_AT: Partial<Record<Step['s'], number>> = { 'local-account': 1, providers: 2, 'provider-key': 2, 'provider-code': 2, model: 3, done: 4 };
 
 const MODE_HINTS: Partial<Record<PermissionMode, string>> = {
@@ -223,7 +225,9 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
   // Look for servers on the network while the person reads the first screen.
   // Scanning starts as true; a scan again (after the person allowed the network) sets it first.
   const scan = () =>
-    void scanNetwork({ interfaces: networkInterfaces(), fetch, onFound: (s) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s])) })
+    // A desktop app shared on its network answers with its computer's name; it works only in its own folders, so it is
+    // no place for a terminal's (picking one ended in "Only Atelier on the computer you're connected to can do this").
+    void scanNetwork({ interfaces: networkInterfaces(), fetch, onFound: (s) => !s.name && setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s])) })
       .then((all) => (all.length ? setBlocked(false) : localNetworkBlocked().then(setBlocked)))
       .finally(() => setScanning(false));
   const rescan = () => {
@@ -312,6 +316,10 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
       const url = resolved.serverUrl;
       openServer(url);
       const info = await rpc().call('app.info', {});
+      if (info.sharedComputer) {
+        rpcRef.current?.transport.close();
+        return setStep({ s: 'shared', host: hostOf(url) });
+      }
       setServer({ url, info });
       const status = await rpc().call('auth.status', {});
       setMode('server');
@@ -328,7 +336,10 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
     }
   };
   useEffect(() => {
-    if (step.s === 'checking') void checkServer(step.typed);
+    if (step.s !== 'checking') return;
+    const typed = step.typed;
+    const timer = setTimeout(() => void checkServer(typed), 0);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.s === 'checking' ? step.typed : null]);
   // While macOS asks (or until the person switches it on), try the server every 2 seconds and go on once it answers.
@@ -491,6 +502,35 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
               <Text>The address you open it at in the browser:</Text>
               <TextLine paint={paint} placeholder="atelier.example.com" initial={initial.connection?.mode === 'server' ? initial.connection.serverUrl : ''} onSubmit={(v) => v.trim() && (setNote(null), setStep({ s: 'checking', typed: v.trim() }))} onCancel={() => setStep({ s: 'start' })} />
               <Text>{paint.fg('muted', 'https:// is tried first; http:// only for addresses on your own network.')}</Text>
+            </Box>
+          ),
+        };
+      case 'shared':
+        return {
+          title: 'That’s a desktop app, not a server',
+          keys: keys('enter pick'),
+          content: (
+            <Box flexDirection="column">
+              <Text>{`${step.host} is the Atelier desktop app, shared on its network. It works only in the folders opened in that app, so a terminal can’t work in its own folders through it.`}</Text>
+              <Box marginTop={1}>
+                <Choices
+                  paint={paint}
+                  active={!startingLocal}
+                  choices={[
+                    { value: 'local', label: 'Only this computer', aside: 'your own models and keys, kept here' },
+                    { value: 'back', label: 'Another address…', aside: 'an Atelier server' },
+                  ]}
+                  onPick={(v) => {
+                    if (v === 'back') return setStep({ s: 'address' });
+                    setStartingLocal(true);
+                    void toLocal()
+                      .catch((e: unknown) => (setStep({ s: 'start' }), setNote(`Atelier couldn’t start on this computer: ${describe(e)}`)))
+                      .finally(() => setStartingLocal(false));
+                  }}
+                  onCancel={() => setStep({ s: 'address' })}
+                />
+              </Box>
+              {startingLocal && <Text>{`${spinner} ${paint.fg('muted', 'Starting Atelier on this computer…')}`}</Text>}
             </Box>
           ),
         };
