@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-11-13
+
 - **Web pages open as they are, in the Browser pane.** A new **Preview** tool lets the assistant in Code show a site it made in the folder, with its own stylesheets, scripts and images, or a dev server's address, in the desktop app's Browser pane, as a browser shows it. It no longer has to squeeze a site into one HTML file for the Artifact pane. After a change it opens the page again and the tab reloads. It is offered while you write from the desktop app, which has the pane. Checked in the desktop app with a page made of HTML, CSS, a script and an SVG.
 - **A page in a pane can't push the app up.** A page in the Artifact pane that brought part of itself into view by script (as landing pages do with smooth scrolling) scrolled the whole app up inside its window, leaving an empty band at the bottom. The app's frame and the panes now clip instead of hiding their overflow, which can't be scrolled at all.
 - **A real progress bar for Update server.** Settings › Admin › Server shows how much of the new version is down, as a bar and as "40% · 120 MB of 300 MB", then "Unpacking" and the restart, instead of Docker's last line. The updater reads each layer's size from the registry before the pull, so the bar is right from the start (checked against a real pull: even steps from 0 to 100%). Its errors read as Docker's message, not JSON. The updater doesn't update itself: an existing server gets the bar once its `updater` service is pulled again on the host.
