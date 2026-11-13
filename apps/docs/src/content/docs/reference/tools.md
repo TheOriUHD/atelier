@@ -47,6 +47,7 @@ without asking are on [Permissions](/permissions/), and how descriptions are kep
 | [`ChatSearch`](#chatsearch) | Chat (some setups), Cowork (some setups) | Searches the person's past conversations (not this one) by the words in them and in their titles. |
 | [`ChatRead`](#chatread) | Chat (some setups), Cowork (some setups) | Reads part of one of the person's past conversations: at most 6 messages, each cut to a few thousand characters. |
 | [`artifact`](#artifact) | Chat, Code | Shows a file from the workspace in the Artifact pane beside the conversation, so the person can look at what you made without leaving Atelier. |
+| [`Preview`](#preview) | Code (some setups) | Opens a web page in the browser pane beside the conversation, where the person sees it as a browser shows it. |
 | [`inline_visual`](#inline_visual) | Chat, Cowork | Shows a self-contained inline explainer or mini app in the conversation when seeing or interacting helps understanding; not for every answer. |
 | [`GenerateImage`](#generateimage) | Chat (some setups), Code (some setups) | Makes images from a text description and shows them in the conversation. |
 | [`SaveImage`](#saveimage) | Code (some setups) | Saves an image from this conversation (generated or attached, by its `img_…` id) as a file in the folder. |
@@ -1208,7 +1209,7 @@ Shows a file from the workspace in the Artifact pane beside the conversation, so
 ````
 
 <details>
-<summary>The description reads differently in 6 other setups</summary>
+<summary>The description reads differently in 8 other setups</summary>
 
 A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
 
@@ -1246,6 +1247,16 @@ Shows a file from the workspace in the Artifact pane beside the conversation, so
 - `file_path` is relative to the workspace root, or absolute. The extension decides how the file is shown: `.html` as a page, `.svg` as an image, `.md` as a document, `.mmd` as a Mermaid diagram, anything else as code.
 - Write the file first. Calling it again for the same path after a change adds a new version; the pane follows the latest.
 - Pages run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission. Keep a page you mean to show self-contained.
+- A web page with its own stylesheets, scripts or images, or one that loads from the web, opens with Preview instead, as a browser shows it; so does a dev server.
+````
+
+**Code, full tier**
+
+````text wrap
+Shows a file from the workspace in the Artifact pane beside the conversation, so the person can look at what you made without leaving Atelier.
+- `file_path` is relative to the workspace root, or absolute. The extension decides how the file is shown: `.html` as a page, `.svg` as an image, `.md` as a document, `.mmd` as a Mermaid diagram, anything else as code.
+- Write the file first. Calling it again for the same path after a change adds a new version; the pane follows the latest.
+- Pages run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission. Keep a page you mean to show self-contained.
 - To show an image you made with GenerateImage, write its id in full as the source, like `<img src="atelier-image:img_ab12cd34">` (also in CSS `url()` and Markdown): Atelier puts the picture in. Only images of this conversation work, and never build the id in code. A page opened outside Atelier has no such pictures.
 ````
 
@@ -1262,6 +1273,12 @@ Creates or changes a standalone piece of content shown in a panel next to the ch
 - `create` needs identifier, type, title and the complete content; `rewrite` replaces the content.
 - `type` is html, react, svg, mermaid, markdown or code.
 - Artifacts run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission (use click and change handlers). A `react` artifact is one default-exported component without required props, styled with Tailwind utility classes, importing only React, lucide-react and recharts.
+````
+
+**Code, compact tier**
+
+````text wrap
+Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs. A web page with its own files, or a dev server: use Preview.
 ````
 
 **Code, compact tier**
@@ -1284,6 +1301,39 @@ Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the
 | `content` | string | no | The complete content, for create and rewrite. |
 | `old` | string | no | For update: text that occurs exactly once in the latest version. |
 | `new` | string | no | For update: the text that replaces `old`. |
+
+## Preview
+
+**Available in:** Code (some setups)
+
+### Description
+
+````text wrap
+Opens a web page in the browser pane beside the conversation, where the person sees it as a browser shows it.
+- `page`: an `.html` file in the workspace (relative to the root, or absolute; a folder opens its index.html), or an address such as `http://localhost:5173` for a dev server you started or a page on the web.
+- A workspace page loads the files beside it by their relative links (stylesheets, scripts, images, fonts, other pages) as they are on disk, and may load from the web. Build a site as separate files as usual; there is no need to put it in one file.
+- It shows what is saved: after a change, call it again and the page reloads in its tab.
+- Pages run without storage or cookies. Plain `<script src>` works; ES modules (`type="module"`) and `fetch()` of the page’s own files don’t, so for a site built with them start its dev server and open the address.
+````
+
+<details>
+<summary>The description reads differently in 1 other setup</summary>
+
+A description depends on the prompt tier, the mode and which other tools the session has, so it only names tools that exist.
+
+**Code, compact tier**
+
+````text wrap
+Opens a web page in the browser pane beside the chat: an .html file in the workspace (its styles, scripts and images load from beside it, no bundling) or an address such as http://localhost:5173. Call it again after a change to reload.
+````
+
+</details>
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `page` | string | yes | An .html file in the workspace, or an address such as http://localhost:5173. |
 
 ## inline_visual
 

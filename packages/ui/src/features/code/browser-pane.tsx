@@ -117,10 +117,20 @@ export function BrowserPane({ frame, pages }: { frame: PaneFrameState; pages?: B
     if (active === id) setActive(rest[Math.max(0, at - 1)]!.id);
   };
 
-  // Pages asked for from elsewhere: the first in the tab shown if it is empty, the rest in new tabs.
+  // Pages asked for from elsewhere: a tab that has the page already shows it again, loaded afresh (the assistant opens
+  // a page again after changing it); otherwise the first goes in the tab shown if it is empty, the rest in new tabs.
   const openPages = (urls: string[]) => {
     for (const [i, url] of urls.entries()) {
-      if (i === 0 && !current.page) update(current.id, { url, page: url, title: url, error: null, loading: true });
+      const open = tabs.find((t) => t.page === url || t.url === url);
+      if (open) {
+        setActive(open.id);
+        update(open.id, { url, error: null, loading: true });
+        try {
+          void views.current.get(open.id)?.loadURL(url).catch(() => {});
+        } catch {
+          // Not attached yet: it is loading that page anyway.
+        }
+      } else if (i === 0 && !current.page) update(current.id, { url, page: url, title: url, error: null, loading: true });
       else openTab(url);
     }
   };

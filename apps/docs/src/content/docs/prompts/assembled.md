@@ -8,7 +8,7 @@ editUrl: false
 
 What a model really receives is more than the templates: the builder joins a core prompt, fragments, optional
 safeguards, an `<env>` block, instruction files, skills and personalization, and the request also carries the tool
-definitions. The files below are the complete assembled text of 49 typical sessions: every system block in
+definitions. The files below are the complete assembled text of 52 typical sessions: every system block in
 order (with the cache breakpoints marked), the notes on the first message, and the tools as JSON.
 
 They are produced by the project’s test suite with fixed inputs (the date 2026-01-15 in Europe/Berlin, fake model
@@ -54,6 +54,9 @@ prompts or replies.
 | [`code.compact.audio`](/prompts/assembled/code.compact.audio.txt) | Code, compact tier, with a sound model: the shorter GenerateAudio schema. | 23 KB |
 | [`code.compact.computer`](/prompts/assembled/code.compact.computer.txt) | Code, compact tier, with computer use on. | 26 KB |
 | [`code.compact.browser`](/prompts/assembled/code.compact.browser.txt) | Code, compact tier, with computer use on and Atelier for Chrome connected. | 29 KB |
+| [`code.full.desktop`](/prompts/assembled/code.full.desktop.txt) | Code, full tier, written from the desktop app: Preview opens web pages in its Browser pane. | 53 KB |
+| [`code.compact.desktop`](/prompts/assembled/code.compact.desktop.txt) | Code, compact tier, written from the desktop app (Preview). | 22 KB |
+| [`code.full.terminal`](/prompts/assembled/code.full.terminal.txt) | Code, full tier, written from the terminal app: no artifact pane, and the note saying where the person is. | 50 KB |
 | [`code.full`](/prompts/assembled/code.full.txt) | Code, full tier: the baseline. | 51 KB |
 | [`code.full.plan`](/prompts/assembled/code.full.plan.txt) | Code in plan mode. | 52 KB |
 | [`code.full.scratch`](/prompts/assembled/code.full.scratch.txt) | Code started with No folder: a scratch folder of its own. | 51 KB |

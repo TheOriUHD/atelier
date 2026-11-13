@@ -72,6 +72,8 @@ export interface PromptCase {
   computer?: boolean;
   /** Atelier for Chrome is connected: the Browser tool. */
   browser?: boolean;
+  /** The person writes from this app (the desktop app's Browser pane brings Preview; the terminal app drops the panes). */
+  app?: 'desktop' | 'cli';
   /** The session has an image model. */
   images?: boolean;
   /** A video model: GenerateVideo and SaveVideo. */
@@ -410,6 +412,7 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
           ...(c.subagent === 'defined' ? { overrides: { agent: 'reviewer' } } : {}),
         })
       : session;
+    if (c.app) chat.heardFrom(target.id, c.app);
     await chat.send(target.id, [{ type: 'text', text: 'Hello' }]);
     await chat.settle(target.id);
     const request = seen[0]!;
@@ -543,6 +546,9 @@ export const CASES: Record<string, PromptCase> = {
   'code.compact.audio': { mode: 'code', tier: 'compact', audio: true },
   'code.compact.computer': { mode: 'code', tier: 'compact', computer: true },
   'code.compact.browser': { mode: 'code', tier: 'compact', computer: true, browser: true },
+  'code.full.desktop': { mode: 'code', app: 'desktop' },
+  'code.compact.desktop': { mode: 'code', tier: 'compact', app: 'desktop' },
+  'code.full.terminal': { mode: 'code', app: 'cli' },
   'code.full': { mode: 'code' },
   'code.full.plan': { mode: 'code', permissionMode: 'plan' },
   'code.full.scratch': { mode: 'code', scratch: true },

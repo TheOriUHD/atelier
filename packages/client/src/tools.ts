@@ -2,7 +2,7 @@
  * What a tool call did, in words: "Read src/app.ts · 40 lines", "Ran 3 commands, read app.ts", how a Bash command
  * ended. The app's tool cards and the terminal's transcript say the same things.
  */
-import type { BackgroundTask, Todo, ToolCallPart, ToolResultPart } from '@atelier/protocol';
+import { pageAddress, type BackgroundTask, type Todo, type ToolCallPart, type ToolResultPart } from '@atelier/protocol';
 import { messageTargetKind } from './activity.ts';
 import { editRows, writeRows } from './diff.ts';
 import { displayPath } from './paths.ts';
@@ -150,6 +150,8 @@ export function activitySummary(calls: readonly Pick<ToolCallPart, 'name' | 'inp
         return 'updated the task list';
       case 'artifact':
         return plural(n, 'made an artifact', 'made # artifacts');
+      case 'Preview':
+        return plural(n, 'opened a page', 'opened # pages');
       default:
         return `used ${name}`;
     }
@@ -272,6 +274,11 @@ export function summarize(call: Pick<ToolCallPart, 'name' | 'input'>, result: st
       return str(input.file_path)
         ? { verb: 'Showed', target: displayPath(str(input.file_path), root), meta: 'as an artifact' }
         : { verb: str(input.command) === 'create' || !str(input.command) ? 'Made' : 'Updated', target: str(input.title) || str(input.identifier), meta: 'artifact' };
+    // A web page in the desktop app's Browser pane: a workspace file, or an address.
+    case 'Preview': {
+      const page = str(input.page);
+      return { verb: result === null ? 'Opening' : 'Opened', target: pageAddress(page) ?? displayPath(page, root), meta: 'in the Browser pane' };
+    }
     case 'BashOutput':
       return { verb: 'Checked the output of', target: str(input.bash_id) };
     case 'KillShell':

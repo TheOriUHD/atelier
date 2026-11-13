@@ -556,6 +556,24 @@ describe('ChatService', () => {
     expect(back.note).toContain("Atelier's app window again");
   });
 
+  it('offers Preview in Code only while the person writes from the desktop app, which has the Browser pane', async () => {
+    const workspace = { id: 'w', deviceId: null, host: null, root: '/repo', home: '/home/ada', os: 'linux', shell: 'bash', pathSep: '/', runner: {}, shellFor: async () => 'bash' } as unknown as Workspace;
+    const chat = service(undefined, undefined, { workspace: async () => workspace });
+    const s = await repo.create({ mode: 'code' });
+    const tools = async (from: 'desktop' | 'web' | 'cli') => {
+      seen.length = 0;
+      chat.heardFrom(s.id, from);
+      await chat.send(s.id, [{ type: 'text', text: 'Show me the site' }]);
+      await chat.settle(s.id);
+      return seen.find((r) => !r.system.some((b) => b.text.includes('short title')))!.tools!.map((t) => t.name);
+    };
+    expect(await tools('desktop')).toEqual(expect.arrayContaining(['Preview', 'artifact']));
+    expect(await tools('web')).not.toContain('Preview');
+    const terminal = await tools('cli');
+    expect(terminal).not.toContain('Preview');
+    expect(terminal).not.toContain('artifact');
+  });
+
   it('offers the clock everywhere and the usage figures only where the model\'s provider has some', async () => {
     const toolsOf = async (usage?: ChatServiceDeps['usage']) => {
       seen.length = 0;

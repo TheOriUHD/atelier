@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { File, FileCode, FileImage, FileJson, FileLock, FileText } from 'lucide-react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +9,7 @@ import { callsTo, resetBackend } from '../settings/test-backend.ts';
 import { ArtifactCard, ArtifactPaneContext } from '../chat/artifact-card.tsx';
 import { Markdown, OpenFilePath, looksLikePath } from '../chat/markdown.tsx';
 import { ArtifactPane, shownArtifact, useShownArtifacts } from './artifact-pane.tsx';
-import { BrowserPane, addressUrl } from './browser-pane.tsx';
+import { BrowserPages, BrowserPane, addressUrl } from './browser-pane.tsx';
 import { DiffView, compareOptions } from './diff-review.tsx';
 import { FilesPane, fileIcon, parseFilter, type OpenFiles } from './file-tree.tsx';
 import { PaneButtons } from './pane-buttons.tsx';
@@ -209,6 +209,18 @@ describe('the Browser pane’s tabs', () => {
     for (let i = 0; i < 25; i++) fireEvent.click(tabs.getAllByRole('button', { name: 'New tab' }).at(-1)!);
     // Every blank tab is called "New tab", as is the + after them.
     expect(tabs.getAllByRole('button', { name: 'New tab' })).toHaveLength(20 + 1);
+  });
+});
+
+describe('pages opened in the Browser pane from elsewhere', () => {
+  it('go in tabs of their own, and a page asked for again shows in the tab that has it', () => {
+    const pages = new BrowserPages();
+    render(wrap(<BrowserPane frame={frame('browser')} pages={pages} />));
+    act(() => pages.push('atelier-files://grant/site/index.html'));
+    act(() => pages.push('http://localhost:5173/'));
+    act(() => pages.push('atelier-files://grant/site/index.html'));
+    expect(screen.getAllByTitle('atelier-files://grant/site/index.html')).toHaveLength(1);
+    expect(screen.getAllByTitle('http://localhost:5173/')).toHaveLength(1);
   });
 });
 

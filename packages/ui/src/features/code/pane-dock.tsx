@@ -279,7 +279,8 @@ export function PaneFrame({
       onFocusCapture={() => dispatch({ type: 'activate', pane })}
       onPointerDownCapture={() => dispatch({ type: 'activate', pane })}
       className={cn(
-        'absolute flex flex-col overflow-hidden rounded-xl border border-line bg-bg',
+        // Clip, not hidden: a page in the pane calling scrollIntoView can't scroll the pane's frame (app-shell.tsx).
+        'absolute flex flex-col overflow-clip rounded-xl border border-line bg-bg',
         'transition-[opacity,scale] duration-(--at-duration-base) ease-out starting:scale-[.98] starting:opacity-0',
         // A sheet is the session's whole body, not a card over the transcript.
         frame.sheet && 'rounded-none border-0',

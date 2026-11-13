@@ -37,8 +37,10 @@ export function AppShell() {
   const joinCoopOpen = useUi((s) => s.joinCoopOpen);
   const setJoinCoopOpen = useUi((s) => s.setJoinCoopOpen);
 
+  // Clip, not hidden: a hidden box can still be scrolled by script, and a page in a pane calling scrollIntoView scrolled
+  // the whole app up inside its window.
   return (
-    <div className="flex h-full overflow-hidden bg-bg text-fg">
+    <div className="flex h-full overflow-clip bg-bg text-fg">
       {!solo && (narrow ? <SidebarDrawer /> : !sidebarHidden && <Sidebar />)}
       <main className="relative flex min-w-0 flex-1 flex-col">
         {sidebarHidden && !solo && <SidebarToggle className={trafficLightInset ? 'absolute top-3 left-[78px] z-10' : 'absolute top-3 left-3 z-10'} />}

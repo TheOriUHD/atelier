@@ -61,12 +61,13 @@ function describe({ tier, has }: DescribeContext): string {
 }
 
 function describeFile({ tier, has }: DescribeContext): string {
-  if (tier === 'compact') return `Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs.${has('GenerateImage') ? ` ${IMAGES}` : ''}`;
+  if (tier === 'compact') return `Shows a file you wrote (page, SVG, Markdown, Mermaid, code) in a pane beside the chat; call it again after a change. Pages run offline: no CDN scripts or external URLs.${has('Preview') ? ' A web page with its own files, or a dev server: use Preview.' : ''}${has('GenerateImage') ? ` ${IMAGES}` : ''}`;
   return [
     'Shows a file from the workspace in the Artifact pane beside the conversation, so the person can look at what you made without leaving Atelier.',
     '- `file_path` is relative to the workspace root, or absolute. The extension decides how the file is shown: `.html` as a page, `.svg` as an image, `.md` as a document, `.mmd` as a Mermaid diagram, anything else as code.',
     '- Write the file first. Calling it again for the same path after a change adds a new version; the pane follows the latest.',
     '- Pages run in a sandbox without network access: no external URLs or CDN scripts, no `localStorage`, `sessionStorage` or IndexedDB, and no form submission. Keep a page you mean to show self-contained.',
+    ...(has('Preview') ? ['- A web page with its own stylesheets, scripts or images, or one that loads from the web, opens with Preview instead, as a browser shows it; so does a dev server.'] : []),
     ...(has('GenerateImage') ? [`- ${IMAGES} A page opened outside Atelier has no such pictures.`] : []),
   ].join('\n');
 }

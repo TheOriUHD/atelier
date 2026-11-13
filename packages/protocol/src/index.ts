@@ -28,3 +28,4 @@ export * from './personal-providers.ts';
 export * from './computer.ts';
 export * from './computer-apps.ts';
 export * from './browser.ts';
+export * from './preview.ts';

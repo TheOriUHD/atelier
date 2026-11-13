@@ -85,6 +85,7 @@ import { createSaveVideoTool } from '../tools/save-video.ts';
 import { createSaveAudioTool } from '../tools/save-audio.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { createArtifactTool } from '../tools/artifact.ts';
+import { createPreviewTool } from '../tools/preview.ts';
 import { createInlineVisualTool } from '../tools/inline-visual.ts';
 import { createAgentTool, type Delegation } from '../tools/agent.ts';
 import { createAskUserTool } from '../tools/ask-user.ts';
@@ -491,8 +492,8 @@ export class ChatService {
   private runs = new Map<string, ActiveRun>();
   /** Co-op: for whom each running turn is (coop-turns.ts), and the turn a Retry or Continue asked to run as someone. */
   private actors = new Map<string, TurnActor>();
-  /** Sessions whose person last wrote from the terminal app: no pane for `artifact`, no inline visuals (`heardFrom`). */
-  private inTerminal = new Set<string>();
+  /** The app each session's person last wrote from (`heardFrom`): the panes and visuals its tools may count on. */
+  private apps = new Map<string, ClientKind>();
   private forcedActors = new Map<string, TurnParticipant>();
   /** Co-op: sessions whose running turn took in a guest's message from someone else's turn (its permissions are a guest's). */
   private guestJoined = new Set<string>();
@@ -793,11 +794,11 @@ export class ChatService {
 
   /**
    * Which app the person's latest message came from. The terminal app has no pane beside the conversation, so its turns
-   * go without `artifact` and inline visuals, and the model hears where the person is (notes/terminal-on.md).
+   * go without `artifact` and inline visuals, and the model hears where the person is (notes/terminal-on.md); only the
+   * desktop app has the Browser pane that `Preview` opens pages in.
    */
   heardFrom(sessionId: string, app: ClientKind): void {
-    if (app === 'cli') this.inTerminal.add(sessionId);
-    else this.inTerminal.delete(sessionId);
+    this.apps.set(sessionId, app);
   }
 
   async send(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null, opts: { answerWith?: string } = {}): Promise<string> {
@@ -1585,7 +1586,7 @@ export class ChatService {
         ultracode: { on: run.ultracode, limits: ULTRACODE_LIMITS },
         // What a level asks of a model whose own setting can't express it (no thinking switch above High, no levels).
         effort: effortGuidance(session.effort as Effort | null, run.model.info, session.mode, this.effortOptions(session)),
-        ...(!session.parentSessionId ? { terminal: this.inTerminal.has(session.id) } : {}),
+        ...(!session.parentSessionId ? { terminal: this.apps.get(session.id) === 'cli' } : {}),
       },
       prior,
       history,
@@ -2422,7 +2423,7 @@ export class ChatService {
     const browser = this.browserTool && (session.mode === 'code' || session.mode === 'work') && !session.parentSessionId && !shared && (await browserConnected(this.deps.browser!.call)).connected ? [this.browserTool] : [];
     const memory = shared ? [] : (this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? []);
     // What only an app window shows: nothing for a person in the terminal app.
-    const terminal = this.inTerminal.has(session.id);
+    const terminal = this.apps.get(session.id) === 'cli';
     const inlineVisual = !session.parentSessionId && !terminal && (session.mode === 'chat' || session.mode === 'work') ? [createInlineVisualTool()] : [];
     // The clock for everyone; the usage figures only where the model's provider has limits or a cost, and not for sub-agents.
     const modelRef = session.parentSessionId || shared ? undefined : await this.modelRef(session);
@@ -2456,6 +2457,8 @@ export class ChatService {
     const agent = createAgentTool((parentId, call, task, signal) => this.delegate(parentId, call, task, signal), catalog?.agents ?? []);
     // Code shows a file it wrote in the Artifact pane, read through the same workspace.
     const artifact = session.mode === 'code' && workspace && !terminal ? [createArtifactTool(this.deps.artifacts, workspace)] : [];
+    // Web pages as a browser shows them, in the desktop app's Browser pane (not a co-op session's: the pane is the host's).
+    const preview = session.mode === 'code' && workspace && !shared && this.apps.get(session.id) === 'desktop' ? [createPreviewTool(workspace)] : [];
     const stopTasks = workspace ? [this.taskStop] : [];
     // Folders on this computer or an SSH host only: a codespace is one repository, a lent folder belongs to its computer.
     const movable = workspace && this.deps.moveWorkspace && (workspace.kind === undefined || workspace.kind === 'ssh' || (workspace.kind === 'local' && !workspace.deviceId));
@@ -2469,7 +2472,7 @@ export class ChatService {
     const saveVideo = workspace && videos.length ? [createSaveVideoTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
     // And with sound: SaveAudio exists only where a session can make one.
     const saveAudio = workspace && sounds.length ? [createSaveAudioTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
-    return [...code, this.todoWrite, this.askUser, agent, ...between, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...browser, ...memory, ...mcp];
+    return [...code, this.todoWrite, this.askUser, agent, ...between, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...preview, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...browser, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */

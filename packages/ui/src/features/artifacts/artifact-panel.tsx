@@ -26,7 +26,8 @@ export function SidePanel({ label, className, children }: { label: string; class
     <aside
       aria-label={label}
       className={cn(
-        'absolute top-2 right-2 bottom-2 z-10 flex flex-col overflow-hidden rounded-xl bg-surface shadow-panel',
+        // Clip, not hidden: the artifact calling scrollIntoView can't scroll the panel (app-shell.tsx).
+        'absolute top-2 right-2 bottom-2 z-10 flex flex-col overflow-clip rounded-xl bg-surface shadow-panel',
         'transition-[translate] duration-(--at-duration-sheet) ease-out starting:translate-x-[calc(100%+8px)]',
         className,
         'max-md:inset-0 max-md:w-auto max-md:rounded-none'

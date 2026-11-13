@@ -35,6 +35,7 @@ import { useAttachments } from '../chat/use-attachments.ts';
 import { ArtifactPaneContext } from '../chat/artifact-card.tsx';
 import { ComposerImages, useImageReference } from '../chat/generated-images.tsx';
 import { ArtifactPane, INITIAL_ARTIFACT_PANE, shownArtifact, useShownArtifacts, type ArtifactPaneState } from './artifact-pane.tsx';
+import { useShownPages } from './shown-pages.ts';
 import { BrowserPages, BrowserPane } from './browser-pane.tsx';
 import { DiffPane } from './diff-review.tsx';
 import { FilesPane, type OpenFiles } from './file-tree.tsx';
@@ -248,6 +249,15 @@ function CodeSession({ sessionId }: { sessionId: string }) {
             })
             .catch((e: unknown) => toast.error(describeError(e).message))
       : undefined;
+  // Pages the assistant opened with Preview: in the Browser pane, where they reload if a tab already has them.
+  useShownPages(live.messages, live.status === 'ready', (target) => {
+    if (!AVAILABLE.includes('browser')) return;
+    if (target.kind === 'url') {
+      browserPages.push(target.url);
+      return openPane('browser');
+    }
+    openInBrowser?.(target.path);
+  });
   const openFile = useCallback(
     (path: string) => {
       const relative = displayPath(path, workspace?.root ?? null);

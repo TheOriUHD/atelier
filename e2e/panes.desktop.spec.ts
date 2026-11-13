@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { rm } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { launchDesktop, setUpLocal } from './desktop-app.ts';
@@ -286,5 +286,50 @@ test('desktop Code: a page the model wrote opens in the Artifact pane, stays clo
   } finally {
     await app.close();
     await rm(configDir, { recursive: true, force: true });
+  }
+});
+
+test('desktop Code: a site the model made in separate files opens with Preview in the Browser pane, and again after a change in the same tab', async () => {
+  test.setTimeout(150_000);
+  const configDir = await tempConfigDir();
+  // A page with its own stylesheet, script and picture, as a model writes a site without bundling it.
+  const repo = await tempRepo({
+    'site/index.html': '<!doctype html><title>Clay</title><link rel="stylesheet" href="style.css"><h1>Clay studio</h1><img alt="logo" src="logo.svg"><p id="out"></p><script src="app.js"></script>',
+    'site/style.css': 'h1 { color: rgb(255, 99, 71); }\n',
+    'site/app.js': "document.getElementById('out').textContent = 'Script ran';\n",
+    'site/logo.svg': '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="teal"/></svg>',
+  });
+  const app = await launchDesktop(configDir);
+  try {
+    await app.evaluate(({ dialog }, path) => {
+      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [path] })) as typeof dialog.showOpenDialog;
+    }, repo);
+    const page = await app.firstWindow();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setUpLocal(page);
+    await openFolder(page, repo);
+    const composer = page.getByRole('textbox', { name: 'Message', exact: true });
+    await composer.fill(call('Preview', { page: 'site' }));
+    await composer.press('Enter');
+
+    // No approval: it only shows a page. The Browser pane opens with the folder's index.html, its files loaded beside it.
+    await expect(page.getByText(/^Tool result: Opened site\/index\.html in the browser pane/)).toBeVisible();
+    const browser = page.getByRole('region', { name: 'Browser', exact: true });
+    await expect(browser).toBeVisible();
+    const inPage = (script: string) =>
+      app.evaluate(({ webContents }, code) => webContents.getAllWebContents().find((w) => w.getType() === 'webview' && w.getURL().includes('/site/index.html'))?.executeJavaScript(code, true), script);
+    const look = "JSON.stringify({ color: getComputedStyle(document.querySelector('h1')).color, out: document.getElementById('out').textContent, img: document.querySelector('img').naturalWidth })";
+    await expect.poll(() => inPage(look), { timeout: 20_000 }).toBe(JSON.stringify({ color: 'rgb(255, 99, 71)', out: 'Script ran', img: 40 }));
+
+    // A change, then Preview again: the same tab shows it anew.
+    await writeFile(join(repo, 'site', 'style.css'), 'h1 { color: rgb(0, 128, 0); }\n');
+    await composer.fill(call('Preview', { page: 'site/index.html' }));
+    await sendWhenIdle(page);
+    await expect.poll(() => inPage("getComputedStyle(document.querySelector('h1')).color"), { timeout: 20_000 }).toBe('rgb(0, 128, 0)');
+    await expect(browser.getByRole('group', { name: 'Browser tabs' }).getByTitle(/Clay|site\/index\.html/)).toHaveCount(1);
+  } finally {
+    await app.close();
+    await rm(configDir, { recursive: true, force: true });
+    await rm(repo, { recursive: true, force: true });
   }
 });
