@@ -4,7 +4,7 @@ import type { PermissionMode } from '@atelier/protocol';
 import { useUnifiedChat } from '../../lib/unified-chat.ts';
 import { keys, useWorkspaces } from '../../lib/queries.ts';
 import { FolderBadge } from '../code/workspace-picker.tsx';
-import { PermissionModePicker, useEffectiveMode } from '../code/permission-mode.tsx';
+import { CHAT_MODES, chatMode, PermissionModePicker, useEffectiveMode } from '../code/permission-mode.tsx';
 import { OutputFiles } from '../work/file-cards.tsx';
 import { FilePreview } from '../work/file-preview.tsx';
 import { latestRun, openAction, outputFiles, saveFile, type OutputFile } from '../work/output-files.ts';
@@ -205,7 +205,7 @@ export function ChatPage() {
               onSubmit={sending.send}
               onStop={sending.stop}
               footerCenter={temporary ? 'Deleted when you leave · AI can make mistakes.' : 'AI can make mistakes.'}
-              footerStart={unified && !guest ? <PermissionModePicker value={mode} onChange={setMode} /> : undefined}
+              footerStart={unified && !guest ? <PermissionModePicker value={chatMode(mode)} onChange={setMode} modes={CHAT_MODES} hint={false} /> : undefined}
               footerEnd={
                 <>
                   <ContextButton sessionId={sessionId} busy={streaming} provider={providerType} providerId={model?.providerId} simple note={coopContextNote(coop, guestModel, live.context?.used)} />

@@ -610,6 +610,23 @@ describe('ChatService', () => {
     }
   });
 
+  it('keeps a chat’s sandbox tools to its sandbox: a chat left in a folder by Chat and Cowork in one gets none there', async () => {
+    const toolsIn = async (workspace: Workspace) => {
+      seen.length = 0;
+      const chat = service(undefined, undefined, { chatSandboxAvailable: () => true, chatSandbox: async () => workspace, workspace: async () => workspace });
+      const s = await repo.create({ mode: 'chat', workspaceId: workspace.id });
+      await chat.send(s.id, [{ type: 'text', text: 'Hi' }]);
+      await chat.settle(s.id);
+      return seen.find((r) => !r.system.some((b) => b.text.includes('short title')))!.tools!.map((t) => t.name);
+    };
+    const sandbox = { id: 'sb', root: '/sandbox', home: '/home/ada', pathSep: '/', sandbox: { confined: true } } as unknown as Workspace;
+    const folder = { id: 'f', root: '/home/ada/project', home: '/home/ada', pathSep: '/' } as unknown as Workspace;
+    expect(await toolsIn(sandbox)).toEqual(expect.arrayContaining(['Bash', 'Read']));
+    const inFolder = await toolsIn(folder);
+    expect(inFolder).not.toContain('Bash');
+    expect(inFolder).not.toContain('Read');
+  });
+
   it('offers the clock everywhere and the usage figures only where the model\'s provider has some', async () => {
     const toolsOf = async (usage?: ChatServiceDeps['usage']) => {
       seen.length = 0;
@@ -846,6 +863,28 @@ describe('ChatService', () => {
     await chat.send(s.id, [{ type: 'text', text: 'Hi again' }]);
     await chat.settle(s.id);
     expect(asked).toContain('fake/code');
+  });
+
+  it('with Chat and Cowork in one, carries an old Cowork task on with Chat’s default model, not Cowork’s', async () => {
+    const asked: string[] = [];
+    const chat = service({
+      resolve: async (ref) => {
+        asked.push(ref);
+        return { adapter: echoAdapter(seen), info };
+      },
+    });
+    settings.models.defaults.chat = 'fake/chat';
+    settings.models.defaults.work = 'fake/cowork';
+    const old = await repo.create({ mode: 'work' });
+    settings.capabilities.unifiedChat = true;
+    try {
+      await chat.send(old.id, [{ type: 'text', text: 'Hi' }]);
+      await chat.settle(old.id);
+      expect(asked).toContain('fake/chat');
+      expect(asked).not.toContain('fake/cowork');
+    } finally {
+      settings.capabilities.unifiedChat = false;
+    }
   });
 
   it('sanitizes titles', () => {

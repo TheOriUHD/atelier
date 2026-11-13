@@ -22,8 +22,13 @@ test('desktop, Chat and Cowork in one: a quick question stays a chat; a task wri
     await box.press('Enter');
     await expect(page.getByText('You said: what is a shader?')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('complementary', { name: 'Task progress' })).toHaveCount(0);
-    // Its permission chip, as every conversation now has.
-    await expect(page.getByRole('button', { name: /Auto/ }).first()).toBeVisible();
+    // Its permission chip, as every conversation now has: no Plan, which a chat has no plan to approve for.
+    const chip = page.getByRole('button', { name: 'Permission mode: Auto mode' });
+    await expect(chip).toBeVisible();
+    await chip.click();
+    await expect(page.getByRole('menuitemradio')).toHaveCount(4);
+    await expect(page.getByRole('menuitemradio', { name: /^Plan mode/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
 
     // A task: the same conversation writes a file, in its own sandbox; the file shows beside it and under the reply.
     await box.fill(call('Write', { file_path: 'notes.md', content: '# Waves\n\nSlower, calmer.\n' }));
@@ -34,6 +39,12 @@ test('desktop, Chat and Cowork in one: a quick question stays a chat; a task wri
     // No folder chip: the sandbox isn't one of the person's folders.
     await expect(page.getByRole('button', { name: /^Folder:/ })).toHaveCount(0);
     if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+
+    // The search palette finds the conversation by what was said in it.
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByPlaceholder('Search chats and actions').fill('shader');
+    await expect(page.getByRole('group', { name: 'Chats' }).getByRole('option')).toHaveCount(1, { timeout: 15_000 });
+    await page.keyboard.press('Escape');
 
     // An old Cowork link opens the conversation.
     const id = page.url().split('/chat/')[1]!;

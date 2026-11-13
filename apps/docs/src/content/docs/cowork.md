@@ -10,6 +10,11 @@ is in them, building a spreadsheet, drafting a document. You describe the result
 steps, does them in the folder with real file tools, and leaves the files there. You see its steps while it works, and
 what it made as cards you can open.
 
+:::note
+With **Chat and Cowork in one (preview)** turned on by an admin, there is no separate Cowork tab: a chat works as a task
+when the request needs it. See [Chat](/chat/#chat-and-cowork-in-one-preview-next-release).
+:::
+
 ## Chat, Cowork and Code
 
 | | Chat | Cowork | Code |

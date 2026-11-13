@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { defaultSettings } from '@atelier/protocol';
 import { resetBackend, snapshot } from '../settings/test-backend.ts';
-import { PermissionModePicker, nextMode, useEffectiveMode } from './permission-mode.tsx';
+import { CHAT_MODES, chatMode, PermissionModePicker, nextMode, useEffectiveMode } from './permission-mode.tsx';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
@@ -40,5 +40,16 @@ describe('permission modes', () => {
     fireEvent.click(trigger);
     fireEvent.click(await screen.findByRole('menuitemradio', { name: /^Bypass permissions/ }));
     expect(onChange).toHaveBeenCalledWith('bypassPermissions');
+  });
+
+  it('offers a chat no Plan, which it has no plan to approve, and shows Plan from the system default as Ask', async () => {
+    expect(chatMode('plan')).toBe('default');
+    expect(chatMode('auto')).toBe('auto');
+    render(<PermissionModePicker value={chatMode('plan')} onChange={vi.fn()} modes={CHAT_MODES} hint={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Permission mode: Ask permissions' }));
+    const items = await screen.findAllByRole('menuitemradio');
+    expect(items.some((i) => /^Plan mode/.test(i.textContent ?? ''))).toBe(false);
+    expect(items).toHaveLength(4);
+    expect(screen.queryByText(/Shift\+Tab/)).toBeNull();
   });
 });

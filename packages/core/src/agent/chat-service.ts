@@ -122,7 +122,7 @@ import { toolSpecPrompt } from '../providers/prompted-tools.ts';
 import { createWebFetchTool } from '../tools/web-fetch.ts';
 import { createWebSearchTool } from '../tools/web-search.ts';
 import { resolveSearchConfig, SearchService } from '../search/service.ts';
-import { describeTool, orderTools, type DescribedTool, type Tool, type ToolOutput } from '../tools/types.ts';
+import { describeTool, orderTools, textOutput, type DescribedTool, type Tool, type ToolOutput } from '../tools/types.ts';
 import { newId } from '../util/ids.ts';
 import type { CodeContext } from '../workspaces/code-context.ts';
 import { isTrusted, type Workspace } from '../workspaces/workspace.ts';
@@ -1630,7 +1630,7 @@ export class ChatService {
       return await this.deps.models.resolve(ref, userId);
     } catch (error) {
       if (!(error instanceof ModelHiddenError)) throw error;
-      const fallback = await firstUsableModel(this.deps.models, [defaultModelFor(this.deps.settings(), session.mode), await this.deps.models.firstAvailable()], session.userId);
+      const fallback = await firstUsableModel(this.deps.models, [this.defaultModel(session), await this.deps.models.firstAvailable()], session.userId);
       if (!fallback) throw error;
       this.deps.sessionChanged(await this.deps.repo.update(session.id, { model: fallback.info.ref }));
       const note = `The model "${ref}" is no longer available to you, so this conversation continues on ${fallback.info.displayName} (${fallback.info.ref}). Choose another model in the model menu if you prefer.`;
@@ -1724,7 +1724,7 @@ export class ChatService {
     // A side chat answers with the main session's model as it is now.
     const main = isSideChat(session) ? await this.deps.repo.getRow(session.parentSessionId!) : undefined;
     if (main) return this.modelRef(main);
-    return session.model ?? defaultModelFor(this.deps.settings(), session.mode) ?? (await this.deps.models.firstAvailable());
+    return session.model ?? this.defaultModel(session) ?? (await this.deps.models.firstAvailable());
   }
 
   /**
@@ -2435,7 +2435,9 @@ export class ChatService {
     const videos = (await this.videosFor(session)) ? [createGenerateVideoTool({ generate: (input, ctx) => this.deps.videos!.generate(input, ctx) })] : [];
     const sounds = (await this.audioFor(session)) ? [createGenerateAudioTool({ generate: (input, ctx) => this.deps.audio!.generate(input, ctx) })] : [];
     const merged = this.unified(session);
-    if (session.mode === 'chat' && !merged) return [...(terminal ? [] : [createArtifactTool(this.deps.artifacts)]), ...inlineVisual, ...images, ...videos, ...sounds, ...this.sandboxTools(session), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
+    // A chat given a folder while Chat and Cowork were one (and since turned off) gets no sandbox tools there: they would
+    // run in that folder without asking.
+    if (session.mode === 'chat' && !merged) return [...(terminal ? [] : [createArtifactTool(this.deps.artifacts)]), ...inlineVisual, ...images, ...videos, ...sounds, ...((await this.inSandbox(session)) ? this.sandboxTools(session) : []), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
     // A merged chat with no folder yet: Cowork's file and command tools, on a sandbox made the first time one runs.
@@ -2494,6 +2496,11 @@ export class ChatService {
    */
   private unified(session: Pick<SessionRow, 'mode' | 'temporary'>): boolean {
     return this.deps.settings().capabilities.unifiedChat === true && (session.mode === 'chat' || session.mode === 'work') && !session.temporary;
+  }
+
+  /** The model a session starts with before a choice of its own; with Chat and Cowork in one, an old Cowork task takes Chat's. */
+  private defaultModel(session: Pick<SessionRow, 'mode'> & { temporary?: SessionRow['temporary'] }): string | undefined {
+    return defaultModelFor(this.deps.settings(), session.mode === 'work' && this.unified({ mode: session.mode, temporary: session.temporary ?? null }) ? 'chat' : session.mode);
   }
 
   /** Works as a Cowork task: Cowork itself, or a merged chat. */
@@ -2559,6 +2566,7 @@ export class ChatService {
       inputSchema: withoutProperty(template.inputSchema, 'run_in_background'),
       run: async (input, ctx) => {
         const workspace = await chatSandbox(await this.requireSession(session.id));
+        if (!workspace.sandbox) return textOutput('This chat works in a folder, not a sandbox; its commands and files need Chat and Cowork in one turned on.', true);
         let tools = this.codeTools.get(workspace);
         if (!tools) this.codeTools.set(workspace, (tools = createCodeTools(workspace, { blobs: this.deps.blobs })));
         return tools.find((t) => t.name === template.name)!.run(input, ctx);
@@ -2783,7 +2791,7 @@ export class ChatService {
     };
     // As many sub-agents work at once as their model's server answers requests; the rest wait their turn here,
     // so a one-slot server finishes one sub-agent (with its prompt cache warm) before the next (providers/scheduler.ts).
-    const ref = child.model ?? defaultModelFor(this.deps.settings(), child.mode);
+    const ref = child.model ?? this.defaultModel(child);
     let release = () => {};
     try {
       if (ref && this.deps.models.agentTurn) release = await this.deps.models.agentTurn(ref, signal, (ahead) => this.emit(child.id, { type: 'queued', ahead }), (await this.deps.repo.getRow(child.id))?.userId);
@@ -3242,7 +3250,7 @@ export class ChatService {
   /** The context window as the next request would fill it, for Code's context popover; null without a usable model. */
   async contextUsage(sessionId: string): Promise<ContextUsage | null> {
     const session = await this.requireSession(sessionId);
-    const ref = session.model ?? defaultModelFor(this.deps.settings(), session.mode);
+    const ref = session.model ?? this.defaultModel(session);
     const model = ref ? await this.deps.models.resolve(ref, session.userId).catch(() => null) : null;
     if (!model) return null;
     const run = await this.requestContext(session, model, AbortSignal.timeout(10_000), false);

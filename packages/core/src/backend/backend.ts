@@ -320,6 +320,10 @@ const NOT_OVER_NETWORK: ReadonlySet<keyof AppContract['procedures']> = new Set<k
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
 const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat'];
 
+
+/** A merged chat has no plan to approve (ExitPlanMode is Code's): Plan, an admin's default made for Code, asks instead. */
+export const workingMode = (mode: PermissionMode, mergedChat: boolean): PermissionMode => (mergedChat && mode === 'plan' ? 'default' : mode);
+
 export async function createBackend(platform: Platform): Promise<Backend> {
   const db = openDatabase(join(platform.dataDir, 'atelier.db'));
   const blobs = new BlobStore(db, join(platform.dataDir, 'blobs'));
@@ -1203,7 +1207,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const claude = (await ownerClaudeSettings(await homeFor(session.userId, workspace))).rules;
       const person = (await prefs.get(session.userId)).permissions;
       return {
-        mode: (session.permissionMode as PermissionMode | null) ?? system.defaultMode,
+        mode: workingMode((session.permissionMode as PermissionMode | null) ?? system.defaultMode, mergedChat(session)),
         rules: {
           allow: [...claude.allow, ...system.allow, ...project.allow, ...person.allow],
           ask: [...claude.ask, ...system.ask, ...project.ask],

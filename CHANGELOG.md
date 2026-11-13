@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Chat and Cowork in one, as a preview (off by default).** An admin can turn on Settings › Admin › Capabilities › Conversations › "Chat and Cowork in one (preview)". The Cowork tab then goes, and a chat works as a Cowork task when a request needs files, commands or the computer: with Cowork's tools in its own sandbox (made only when one runs, so a quick question costs what it did) or in a folder from + › Add folder. Progress and Output files appear once there is something in them, and a permission chip in the message box sets Auto, Ask, Accept edits or Bypass (an admin default of Plan asks instead: a chat has no plan to approve). Old Cowork tasks open as chats with Chat's default model, `/work` links lead to them, the search palette finds them, and a chat that worked as a task notifies when it finishes, fails or needs you. Temporary chats stay plain. Turned off again, a chat that was given a folder can no longer run commands or change files there. See the Chat docs.
 - **Files from a session with no folder don't name its made-up folder.** A file card read "in scratch-2026-…" or "in chat-2026-…"; it now names only the subfolder, if any.
 ## [0.7.3] — 2026-11-13
 

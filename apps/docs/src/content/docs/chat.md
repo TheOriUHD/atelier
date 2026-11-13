@@ -288,6 +288,31 @@ Apart from that review, the sandbox asks no permission and follows fixed rules:
 When a reply used the sandbox, **Continue in Cowork** appears under it and copies the conversation into a new Cowork task
 in the same folder. It disappears when you write again, and the **×** hides it for good. Temporary chats do not offer it.
 
+## Chat and Cowork in one (preview) *(next release)*
+
+An admin can turn on **Settings › Admin › Capabilities › Conversations › Chat and Cowork in one (preview)**. It is off
+by default and still being finished. While it is on, for everyone on that backend:
+
+- **One kind of conversation.** The **Cowork** entry leaves the sidebar. A chat answers a quick question as before, and
+  works as a [Cowork](/cowork/) task when the request needs files, commands or your computer: it gets Cowork's tools
+  (Read, Write, Edit, Bash, sub-agents, the to-do list, computer use where you turned it on) as well as artifacts.
+- **Where it works.** With no folder, the file and command tools run in the chat's own [sandbox](#the-sandbox), made the
+  first time one of them runs, so a quick question makes none. **+ › Add folder** starts the chat in a folder instead, and
+  the folder badge then shows in the header.
+- **The task panels appear when there is something in them**: **Progress** with the first to-do list, **Output files**
+  with the first file written or changed. A quick question shows neither.
+- **A permission chip** in the message box sets the chat's mode: **Auto**, **Ask**, **Accept edits** or **Bypass** (see
+  [Permissions](/permissions/)). It starts at **Settings › Admin › Code › Default permission mode**; a default of
+  **Plan** asks instead, since a chat has no plan to approve.
+- **Old Cowork tasks** open as chats and carry on with Chat's default model. Links to `/work` lead to the new chat page
+  and links to a task to its conversation. The search palette finds them with your chats.
+- **Notifications** for a task finishing, failing or needing you come for a chat that worked as a task.
+- **Temporary chats** stay plain: no folder, no files, no commands.
+- **Continue in Cowork** is no longer offered.
+
+Turning it off brings the Cowork tab back. Chats from while it was on stay chats; one that was given a folder can no
+longer run commands or change files there.
+
 ## Temporary chats
 
 A temporary chat leaves no trace. Start one with the ghost button at the top right of a new chat, **File › New Temporary

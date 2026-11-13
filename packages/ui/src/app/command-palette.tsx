@@ -7,6 +7,7 @@ import { Icon, Kbd, cn } from '../components/ui/index.ts';
 import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { relativeTime } from '../lib/dates.ts';
 import { useSessions } from '../lib/queries.ts';
+import { useUnifiedChat } from '../lib/unified-chat.ts';
 import { useUi } from '../lib/ui-store.ts';
 import { useMode, useNewChat, useNewTemporaryChat, useOpenSettings } from './navigation.ts';
 import { useLockNow, useScreenLock } from '../features/auth/screen-lock.ts';
@@ -20,13 +21,15 @@ interface Action {
   run(): void;
 }
 
-/** Cmd/Ctrl+K: app actions plus full-text search over chats (titles and message text). */
+/** Cmd/Ctrl+K: app actions plus full-text search over chats (titles and message text), and old Cowork tasks with Chat and Cowork in one. */
 export function CommandPalette() {
   const open = useUi((s) => s.paletteOpen);
   const setOpen = useUi((s) => s.setPaletteOpen);
   const [query, setQuery] = useState('');
   const search = useDeferredValue(query.trim());
+  const unified = useUnifiedChat();
   const { data: sessions } = useSessions({ mode: 'chat', ...(search ? { query: search } : {}) });
+  const { data: tasks } = useSessions({ mode: 'work', ...(search ? { query: search } : {}) }, { enabled: unified });
   const navigate = useNavigate();
   const newChat = useNewChat();
   const newTemporaryChat = useNewTemporaryChat();
@@ -47,7 +50,7 @@ export function CommandPalette() {
     { id: 'settings', label: 'Settings', icon: SettingsIcon, run: () => openSettings() },
     ...(lock?.enabled ? [{ id: 'lock', label: 'Lock Atelier', icon: Lock, run: lockNow }] : []),
   ].filter((a) => a.label.toLowerCase().includes(search.toLowerCase()));
-  const chats = (sessions ?? []).slice(0, search ? 20 : 8);
+  const chats = [...(sessions ?? []), ...(unified ? (tasks ?? []) : [])].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, search ? 20 : 8);
 
   return (
     <>

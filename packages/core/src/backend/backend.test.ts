@@ -15,7 +15,7 @@ import { openDatabase } from '../store/db.ts';
 import { jsonResponse, sse, streamResponse } from '../providers/__fixtures__/harness.ts';
 import { hostRunnerBinary, spawnRunner, type RunnerChannel } from '../workspaces/runner-client.ts';
 import { ServerUpdates } from '../server-updates/server-updates.ts';
-import { createBackend, type Backend } from './backend.ts';
+import { createBackend, workingMode, type Backend } from './backend.ts';
 
 let dir: string;
 let backend: Backend;
@@ -1896,5 +1896,13 @@ describe('who reads a blob', () => {
     const exported = await client.call('privacy.export', {});
     expect(await backend.readBlobFor(adaId, exported.sha256)).toBeDefined();
     expect(await backend.readBlobFor(bobId, exported.sha256)).toBeUndefined();
+  });
+});
+
+describe('a merged chat’s permission mode', () => {
+  it('asks where Plan would leave it unable to change anything, and keeps every other mode', () => {
+    expect(workingMode('plan', true)).toBe('default');
+    expect(workingMode('plan', false)).toBe('plan');
+    for (const mode of ['auto', 'default', 'acceptEdits', 'bypassPermissions'] as const) expect(workingMode(mode, true)).toBe(mode);
   });
 });

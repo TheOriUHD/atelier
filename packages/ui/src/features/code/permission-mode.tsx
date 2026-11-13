@@ -39,7 +39,13 @@ export function useEffectiveMode(mode: PermissionMode | null): PermissionMode {
   return mode ?? settings?.permissions.defaultMode ?? 'auto';
 }
 
-export function PermissionModePicker({ value, onChange }: { value: PermissionMode; onChange(mode: PermissionMode): void }) {
+/** The modes a conversation outside Code offers: it has no plan to approve, so Plan would keep it from ever changing anything. */
+export const CHAT_MODES: readonly PermissionMode[] = ['auto', 'default', 'acceptEdits', 'bypassPermissions'];
+
+/** A chat's mode as it works: Plan (an admin's default for Code) asks instead, as the backend does. */
+export const chatMode = (mode: PermissionMode): PermissionMode => (mode === 'plan' ? 'default' : mode);
+
+export function PermissionModePicker({ value, onChange, modes = Object.keys(PERMISSION_MODES) as PermissionMode[], hint = true }: { value: PermissionMode; onChange(mode: PermissionMode): void; modes?: readonly PermissionMode[]; hint?: boolean }) {
   const current = PERMISSION_MODES[value];
   // Says a change out loud, since Shift+Tab makes it without moving focus here.
   const [said, setSaid] = useState('');
@@ -66,9 +72,9 @@ export function PermissionModePicker({ value, onChange }: { value: PermissionMod
       </MenuTrigger>
       <MenuContent side="top" className="w-80">
         <MenuGroup>
-          <MenuLabel>Permission mode · Shift+Tab to switch</MenuLabel>
+          <MenuLabel>{hint ? 'Permission mode · Shift+Tab to switch' : 'Permission mode'}</MenuLabel>
           <MenuRadioGroup value={value} onValueChange={(mode: PermissionMode) => onChange(mode)}>
-            {(Object.keys(PERMISSION_MODES) as PermissionMode[]).map((mode) => (
+            {modes.map((mode) => (
               <MenuRadioItem key={mode} value={mode} icon={PERMISSION_MODES[mode].icon} description={PERMISSION_MODES[mode].description}>
                 {PERMISSION_MODES[mode].label}
               </MenuRadioItem>

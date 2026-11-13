@@ -230,8 +230,9 @@ export function useAccount() {
   return { ...q, account: q.data };
 }
 
-export function useSessions(filter: { mode?: Mode; projectId?: string; query?: string; archived?: 'active' | 'archived' | 'all' } = {}) {
+export function useSessions(filter: { mode?: Mode; projectId?: string; query?: string; archived?: 'active' | 'archived' | 'all' } = {}, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
+    enabled,
     queryKey: keys.sessions(filter.mode, filter.projectId, filter.query, filter.archived),
     // The backend never lists temporary chats; this keeps one out should an event or a stale page carry it.
     queryFn: async () => (await rpc().call('sessions.list', { ...filter, limit: 200 })).filter((s) => !s.temporary),
