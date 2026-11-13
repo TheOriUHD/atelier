@@ -1,49 +1,49 @@
 {
-  "version": "0.7.3",
-  "tag": "v0.7.3",
+  "version": "0.7.4",
+  "tag": "v0.7.4",
   "prerelease": false,
-  "publishedAt": "2026-11-13T20:02:05Z",
-  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.7.3",
+  "publishedAt": "2026-11-13T20:43:35Z",
+  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.7.4",
   "assets": {
     "macos-arm64": {
-      "name": "Atelier-0.7.3-arm64.dmg",
-      "size": 147407512,
-      "url": "https://github.com/TheOriUHD/atelier/releases/download/v0.7.3/Atelier-0.7.3-arm64.dmg"
+      "name": "Atelier-0.7.4-arm64.dmg",
+      "size": 147410797,
+      "url": "https://github.com/TheOriUHD/atelier/releases/download/v0.7.4/Atelier-0.7.4-arm64.dmg"
     },
     "macos-x64": {
-      "name": "Atelier-0.7.3.dmg",
-      "size": 154051362,
-      "url": "https://github.com/TheOriUHD/atelier/releases/download/v0.7.3/Atelier-0.7.3.dmg"
+      "name": "Atelier-0.7.4.dmg",
+      "size": 154059687,
+      "url": "https://github.com/TheOriUHD/atelier/releases/download/v0.7.4/Atelier-0.7.4.dmg"
     },
     "windows-x64": {
-      "name": "Atelier-Setup-0.7.3-x64.exe",
-      "size": 130414040,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.7.3-x64.exe"
+      "name": "Atelier-Setup-0.7.4-x64.exe",
+      "size": 130415572,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.7.4-x64.exe"
     },
     "windows-arm64": {
-      "name": "Atelier-Setup-0.7.3-arm64.exe",
-      "size": 124362803,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.7.3-arm64.exe"
+      "name": "Atelier-Setup-0.7.4-arm64.exe",
+      "size": 124364425,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.7.4-arm64.exe"
     },
     "linux-deb-x64": {
-      "name": "Atelier-0.7.3-amd64.deb",
-      "size": 116614772,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.3-amd64.deb"
+      "name": "Atelier-0.7.4-amd64.deb",
+      "size": 116615696,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.4-amd64.deb"
     },
     "linux-deb-arm64": {
-      "name": "Atelier-0.7.3-arm64.deb",
-      "size": 111821884,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.3-arm64.deb"
+      "name": "Atelier-0.7.4-arm64.deb",
+      "size": 111822868,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.4-arm64.deb"
     },
     "linux-appimage-x64": {
-      "name": "Atelier-0.7.3.AppImage",
-      "size": 146249171,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.3.AppImage"
+      "name": "Atelier-0.7.4.AppImage",
+      "size": 146249168,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.4.AppImage"
     },
     "linux-appimage-arm64": {
-      "name": "Atelier-0.7.3-arm64.AppImage",
-      "size": 147612287,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.3-arm64.AppImage"
+      "name": "Atelier-0.7.4-arm64.AppImage",
+      "size": 147616397,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.7.4-arm64.AppImage"
     }
   }
 }
