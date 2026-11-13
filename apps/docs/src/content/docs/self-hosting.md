@@ -422,7 +422,7 @@ What the page offers depends on how the server was installed:
 
 | Install | What **Settings › Admin › Server** does |
 |---|---|
-| The Compose file with the `updater` service | **Update server** pulls the new `atelier` and `sandbox` images and recreates those two containers. Everyone is disconnected for a minute or so and reconnects by themselves; replies being written stop. Your volumes are kept. |
+| The Compose file with the `updater` service | **Update server** pulls the new `atelier` and `sandbox` images and recreates those two containers. A bar shows how much of the new version is down ("40% · 120 MB of 300 MB"), then the restart. Everyone is disconnected for a minute or so and reconnects by themselves; replies being written stop. Your volumes are kept. |
 | Compose without the updater | Shows the command to run on the host, in the folder with `compose.yaml`: `docker compose pull && docker compose up -d`. |
 | An image built from source (no registry name) | "This server was built from source; update it by rebuilding its image." |
 
@@ -442,7 +442,9 @@ which is **root on the host**, so it is deliberately limited:
   read-only). It is never in an environment variable or a committed file.
 - An update runs `docker compose pull` and `docker compose up -d --no-deps` for the `atelier` and `sandbox` services of the
   updater's own Compose project, using the Compose file and `.env` from the folder mounted read-only at `/project`.
-  Nothing in a request names another command, image, service or project.
+  Nothing in a request names another command, image, service or project. For the progress bar it first reads the images'
+  layer sizes from the registry (`docker manifest inspect`); when that fails or takes over 20 seconds, the bar estimates
+  the layers that haven't started.
 - The server itself never gets the socket.
 
 If that trade is not for you, delete the `updater` service and `ATELIER_UPDATER_URL` from the Compose file; everything
@@ -450,7 +452,8 @@ else works, and the Server page shows the manual command. Things to know:
 
 - It updates the images the Compose file names. With `:latest` that means the newest; with a pinned tag (`:v<version>`) it
   pulls the same tag again and nothing changes. To move a pinned server, edit the tag and run `docker compose up -d`.
-- It does not update itself. `docker compose pull && docker compose up -d` on the host updates it with the rest.
+- It does not update itself. `docker compose pull && docker compose up -d` on the host updates it with the rest. An
+  updater from before 0.7.1 shows no progress bar, only the last line Docker printed, until it is updated this way.
 - With private images, the updater needs a registry login: mount the host's `~/.docker/config.json` at
   `/root/.docker/config.json:ro`.
 - A server on host networking cannot reach `http://updater:7341`. Publish the updater on loopback only

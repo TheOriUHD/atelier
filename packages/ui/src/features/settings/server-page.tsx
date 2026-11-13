@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { compareVersions, type ServerUpdateStatus, type SignupPolicy } from '@atelier/protocol';
-import { Button, ConfirmDialog, Select, type SelectOption } from '../../components/ui/index.ts';
+import { Button, ConfirmDialog, ProgressBar, Select, type SelectOption } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
@@ -60,7 +60,7 @@ function VersionSection() {
       <SettingRow id="server.version" detail={versionDetail}>
         <span className="text-body text-fg-secondary tabular-nums">{status.version}</span>
       </SettingRow>
-      <SettingRow id="server.update" detail={updateDetail(status, newer)} error={error ?? failure(status)}>
+      <SettingRow id="server.update" detail={<UpdateDetail status={status} newer={newer} />} error={error ?? failure(status)}>
         {status.install === 'updater' &&
           (running(status) ? (
             <Button loading disabled>
@@ -87,10 +87,30 @@ function VersionSection() {
   );
 }
 
-function updateDetail(status: ServerUpdateStatus, newer: string | null): ReactNode {
+const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(bytes < 10_000_000 ? 1 : 0)} MB`;
+
+/** While an update runs: what it does, over a bar of how much of the new version is down (full while restarting). */
+function UpdateProgress({ job }: { job: NonNullable<ServerUpdateStatus['job']> }) {
+  const progress = job.progress;
+  const restarting = job.state === 'restarting';
+  let text: string;
+  if (restarting) text = 'Restarting the server. This page reconnects when it is back.';
+  else if (progress?.unpacking) text = 'Unpacking the new version…';
+  else if (progress) text = `Downloading the new version… ${progress.percent}% · ${megabytes(progress.done)} of ${megabytes(progress.total)}`;
+  // An updater from before 0.7.1 says only the last line it printed.
+  else text = `Downloading the new version…${job.message ? ` ${job.message}` : ''}`;
+  const percent = restarting ? 100 : (progress?.percent ?? 0);
+  return (
+    <span className="flex flex-col gap-2">
+      <span className="tabular-nums">{text}</span>
+      {(progress || restarting) && <ProgressBar value={percent / 100} aria-label="Server update" aria-valuetext={restarting ? 'Restarting' : `${percent}%`} className="max-w-80" />}
+    </span>
+  );
+}
+
+function UpdateDetail({ status, newer }: { status: ServerUpdateStatus; newer: string | null }): ReactNode {
   const job = status.job;
-  if (job?.state === 'pulling') return `Downloading the new version…${job.message ? ` ${job.message}` : ''}`;
-  if (job?.state === 'restarting') return 'Restarting the server. This page reconnects when it is back.';
+  if (job && (job.state === 'pulling' || job.state === 'restarting')) return <UpdateProgress job={job} />;
   if (status.install === 'source') return 'This server was built from source; update it by rebuilding its image.';
   if (status.install === 'manual') {
     return (

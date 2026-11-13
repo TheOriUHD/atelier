@@ -35,6 +35,8 @@ export const ServerUpdateJob = z.object({
   message: z.string().nullable(),
   startedAt: z.number().nullable(),
   finishedAt: z.number().nullable(),
+  /** While pulling: bytes down of the bytes to fetch, a whole percent that never goes back, and whether it is unpacking. An updater before 0.7.1 has none. */
+  progress: z.object({ done: z.number(), total: z.number(), percent: z.number(), unpacking: z.boolean() }).nullable().default(null),
 });
 export type ServerUpdateJob = z.infer<typeof ServerUpdateJob>;
 

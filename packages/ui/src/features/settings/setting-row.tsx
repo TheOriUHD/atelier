@@ -71,7 +71,8 @@ export function SettingRow({ id, setting, error, detail, stacked = false, childr
           {setting?.origin && <OriginBadge origin={setting.origin} onReset={() => void setting.reset()} />}
         </div>
         {entry.description && <p className="mt-1 text-body text-fg-muted">{entry.description}</p>}
-        {detail != null && <p className="mt-1 text-body text-fg-muted">{detail}</p>}
+        {/* A div: a detail may hold a block, such as an update's progress bar. */}
+        {detail != null && <div className="mt-1 text-body text-fg-muted">{detail}</div>}
         {message && (
           <p role="alert" className="mt-1 text-body text-danger-text">
             {message}

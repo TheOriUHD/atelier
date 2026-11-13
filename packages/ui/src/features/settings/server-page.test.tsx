@@ -11,7 +11,7 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
 
-const IDLE: ServerUpdateJob = { state: 'idle', message: null, startedAt: null, finishedAt: null };
+const IDLE: ServerUpdateJob = { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null };
 const status = (extra: Partial<ServerUpdateStatus> = {}): ServerUpdateStatus => ({
   version: '0.1.8',
   latest: { version: '0.1.9', checkedAt: Date.now() },
@@ -71,8 +71,21 @@ describe('Server page', () => {
     expect((update.getByRole('button', { name: /Updating/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('shows how much of the new version is down on a bar, then the restart', async () => {
+    current = status({ job: { ...IDLE, state: 'pulling', startedAt: Date.now(), progress: { done: 120_000_000, total: 300_000_000, percent: 40, unpacking: false } } });
+    renderPage();
+    const update = await row('server.update');
+    expect(await update.findByText('Downloading the new version… 40% · 120 MB of 300 MB')).toBeTruthy();
+    expect(update.getByRole('progressbar', { name: 'Server update' }).getAttribute('aria-valuenow')).toBe('40');
+    current = status({ job: { ...IDLE, state: 'pulling', startedAt: Date.now(), progress: { done: 300_000_000, total: 300_000_000, percent: 99, unpacking: true } } });
+    expect(await update.findByText('Unpacking the new version…', undefined, { timeout: 4000 })).toBeTruthy();
+    current = status({ job: { ...IDLE, state: 'restarting', startedAt: Date.now(), progress: { done: 300_000_000, total: 300_000_000, percent: 100, unpacking: false } } });
+    expect(await update.findByText(/^Restarting the server\./, undefined, { timeout: 4000 })).toBeTruthy();
+    expect(update.getByRole('progressbar', { name: 'Server update' }).getAttribute('aria-valuenow')).toBe('100');
+  });
+
   it('says when the server came back on the new version', async () => {
-    current = status({ version: '0.1.9', job: { state: 'done', message: null, startedAt: Date.now() - 60_000, finishedAt: Date.now() - 1000 } });
+    current = status({ version: '0.1.9', job: { state: 'done', message: null, startedAt: Date.now() - 60_000, finishedAt: Date.now() - 1000, progress: null } });
     renderPage();
     const version = await row('server.version');
     expect(await version.findByText(/^Up to date\./)).toBeTruthy();
