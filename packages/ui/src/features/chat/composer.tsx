@@ -72,6 +72,8 @@ export interface ComposerProps {
   suggestion?: string | null;
   /** Co-op: called as the person types (the page tells the others, at most every 2 s). */
   onTyping?(): void;
+  /** A line just above the box, aligned with it, that takes no room (co-op's "Ada is typing…"). */
+  above?: React.ReactNode;
   /** Co-op: the box can't send (co-op ended, or the person watches); this says why, in its place. */
   readOnly?: string | null;
   /** Co-op guests: the host's backend picks the model, so sending doesn't wait for one here. */
@@ -116,6 +118,7 @@ export function Composer({
   temporary,
   suggestion,
   onTyping,
+  above,
   readOnly,
   anyModel = false,
   answerModels,
@@ -235,6 +238,7 @@ export function Composer({
   if (readOnly)
     return (
       <div className="relative mx-auto flex w-full max-w-(--at-layout-composer-width-chat) flex-col gap-2">
+        {above && <div className="pointer-events-none absolute inset-x-0 bottom-full px-3 pb-1.5">{above}</div>}
         {/* What the run waits on stays in sight for someone who watches: whose it is to answer. */}
         {dock && <div className="max-h-[60vh] overflow-y-auto rounded-composer bg-raised shadow-composer">{dock}</div>}
         <div role="status" className="flex min-h-12 items-center justify-center rounded-composer bg-fill-ghost-hover px-4 py-3 text-center text-body text-fg-secondary">
@@ -245,6 +249,7 @@ export function Composer({
 
   return (
     <div className={cn('relative mx-auto w-full', variant === 'new' ? 'max-w-(--at-layout-composer-width-new-chat)' : 'max-w-(--at-layout-composer-width-chat)')}>
+      {above && <div className="pointer-events-none absolute inset-x-0 bottom-full px-3 pb-1.5">{above}</div>}
       {menu.menu}
       <div
         data-temporary={temporary || undefined}

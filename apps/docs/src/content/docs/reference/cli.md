@@ -26,6 +26,7 @@ How to install and set it up: [Atelier CLI](/cli/).
 | `atelier token` | Print this terminal’s sign-in, for ATELIER_TOKEN in CI |
 | `atelier update [--beta]` | Update to the newest version |
 | `atelier daemon status\|stop\|keep\|unkeep` | The background service (keep: start it at login) |
+| `atelier reset-keys` | Start the key store for saved API keys over (they are added again) |
 | `atelier completion <bash\|zsh\|fish\|pwsh>` | Shell completion |
 | `atelier licenses` | The licenses of the code inside |
 
@@ -87,6 +88,8 @@ Skills and commands of the folder and your account are listed in the same menu a
 | `/login` | Sign in again (or as someone else) |
 | `/logout` | Sign this terminal out |
 | `/connect` | Connect to another server, or work on this computer only |
+| `/update` | Get the newest version now (it starts next time) |
+| `/provider` (`/providers`) | Add a model provider, or its key again |
 | `/setup` | Go through the setup again |
 | `/doctor` | Check that everything works |
 | `/bug` | Copy what helps with a problem report |

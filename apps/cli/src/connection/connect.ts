@@ -38,7 +38,13 @@ export const errorCode = (e: unknown): string | undefined => (e instanceof RpcEr
 
 /** A plain sentence for a failed call. */
 export function describe(e: unknown): string {
-  if (e instanceof RpcError) return e.message;
+  if (e instanceof RpcError) {
+    // A request the server's checks refused: what was wrong, as the web app says it ("2–32 characters: …"), not "Invalid params".
+    const issues = (e.data as { issues?: { message?: unknown; path?: unknown[] }[] } | undefined)?.issues;
+    const said = Array.isArray(issues) ? issues.map((i) => (typeof i.message === 'string' ? i.message : '')).filter(Boolean) : [];
+    if (said.length) return [...new Set(said)].join(' ');
+    return e.message;
+  }
   if (e instanceof Error) return e.message;
   return String(e);
 }
@@ -93,7 +99,12 @@ export async function connect(p: CliPaths, config: CliConfig, options: { service
   } catch (e) {
     answered = true;
     transport.close();
-    if (errorCode(e) === 'unauthenticated') throw new NeedsSetup('signed-out', `Your sign-in to ${new URL(serverUrl).host} ended. Sign in again: atelier login`);
+    if (errorCode(e) === 'unauthenticated') {
+      // A token from ATELIER_TOKEN is the script's to fix: signing in again here would only save a token it then ignores.
+      if (process.env.ATELIER_TOKEN) throw new Error(`The server refused ATELIER_TOKEN. Make a new one with atelier token (signed in), or unset ATELIER_TOKEN to use this terminal's sign-in.`, { cause: e });
+      throw new NeedsSetup('signed-out', `Your sign-in to ${new URL(serverUrl).host} ended. Sign in again: atelier login`);
+    }
+    if (errorCode(e) === 'password_change_required') throw new NeedsSetup('signed-out', `Your admin reset your password: sign in again to choose a new one (atelier login).`);
     throw e;
   }
   const device = await cliDevice(p);

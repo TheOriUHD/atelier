@@ -17,14 +17,7 @@ export function CoopTyping({ live, coop, className }: { live: Pick<LiveSessionSt
   const names = useTypingNames(live.typing, coop);
   const line = typingLine(names);
   return (
-    <div
-      aria-live="polite"
-      className={cn(
-        'pointer-events-none absolute inset-x-0 bottom-1 mx-auto w-full max-w-[calc(var(--at-transcript-max)+48px)] truncate px-6 text-footnote text-fg-muted transition-opacity duration-(--at-duration-base) ease-standard max-md:px-4',
-        !line && 'opacity-0',
-        className,
-      )}
-    >
+    <div aria-live="polite" className={cn('truncate text-footnote text-fg-muted transition-opacity duration-(--at-duration-base) ease-standard', !line && 'opacity-0', className)}>
       {line}
     </div>
   );

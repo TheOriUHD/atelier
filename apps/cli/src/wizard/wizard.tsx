@@ -35,16 +35,21 @@ import { shortPath } from '../tui/views.tsx';
 import { setupTerminal, terminalName } from '../commands/terminal-setup.ts';
 import { Frame, LOCAL_CRUMBS, SERVER_CRUMBS } from './frame.tsx';
 
-export type SetupStart = 'all' | 'login' | 'connect';
+/** Where setup starts: the whole of it, signing in again, another server, or (`/provider`) this computer's providers. */
+export type SetupStart = 'all' | 'login' | 'connect' | 'providers';
 
 type Step =
   | { s: 'start' }
+  /** `/provider`: reaching this computer's background service on the way to the providers. */
+  | { s: 'opening'; error?: string }
   | { s: 'address' }
   | { s: 'checking'; typed: string }
   | { s: 'blocked'; typed: string }
   | { s: 'first-admin'; serverUrl: string; error?: string }
   | { s: 'browser'; start: TerminalSignInStart | null; opened: boolean }
   | { s: 'password'; error?: string }
+  /** Signed in with a password an admin made: the server wants a new one before anything else. */
+  | { s: 'new-password'; current: string; signed: { token: string; user: UserSummary }; error?: string; busy?: boolean }
   | { s: 'invite'; error?: string }
   | { s: 'device' }
   | { s: 'local-account'; error?: string }
@@ -54,8 +59,28 @@ type Step =
   | { s: 'model'; models: ModelInfo[] }
   | { s: 'done'; note?: string };
 
+/** How long a call may take before setup says so (calls that reach other services wait longer). */
+const CALL_MS: Partial<Record<string, number>> = { 'providers.test': 45_000, 'providers.detect': 20_000, 'models.list': 45_000, 'providers.status': 30_000 };
+
+/**
+ * The client with a time limit on every call. A call made while the connection can't open (a proxy that doesn't pass
+ * WebSockets, a network that changed) otherwise waits for ever, and setup showed its spinner with nothing happening.
+ */
+export function timedClient(client: RpcClient<AppContract>, who: string, limits: Partial<Record<string, number>> = CALL_MS, fallbackMs = 20_000): RpcClient<AppContract> {
+  return {
+    call: ((method: string, input: never, options?: { signal?: AbortSignal }) => {
+      const ms = limits[method] ?? fallbackMs;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`${who} didn’t answer within ${Math.round(ms / 1000)} seconds.`)), ms)));
+      return Promise.race([client.call(method as never, input, options), late]).finally(() => clearTimeout(timer));
+    }) as RpcClient<AppContract>['call'],
+    on: client.on,
+    close: client.close,
+  };
+}
+
 /** Which breadcrumb each step is (the last one's length: all done). */
-const SERVER_AT: Partial<Record<Step['s'], number>> = { address: 0, checking: 0, blocked: 0, 'first-admin': 1, browser: 1, password: 1, invite: 1, device: 2, model: 3, done: 4 };
+const SERVER_AT: Partial<Record<Step['s'], number>> = { address: 0, checking: 0, blocked: 0, 'first-admin': 1, browser: 1, password: 1, 'new-password': 1, invite: 1, device: 2, model: 3, done: 4 };
 const LOCAL_AT: Partial<Record<Step['s'], number>> = { 'local-account': 1, providers: 2, 'provider-key': 2, 'provider-code': 2, model: 3, done: 4 };
 
 const MODE_HINTS: Partial<Record<PermissionMode, string>> = {
@@ -160,7 +185,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
   const [config, setConfig] = useState(initial);
   const depth = initial.theme === 'plain' ? 0 : colorDepth();
   const paint = new Paint(palette(initial.theme === 'light' ? 'light' : initial.theme === 'dark' ? 'dark' : shade, depth));
-  const [step, setStep] = useState<Step>(start === 'login' && initial.connection?.mode === 'server' ? { s: 'checking', typed: initial.connection.serverUrl } : { s: 'start' });
+  const [step, setStep] = useState<Step>(start === 'login' && initial.connection?.mode === 'server' ? { s: 'checking', typed: initial.connection.serverUrl } : start === 'providers' ? { s: 'opening' } : { s: 'start' });
   const [found, setFound] = useState<FoundServer[]>([]);
   const [scanning, setScanning] = useState(true);
   const [known, setKnown] = useState<KnownServer[]>([]);
@@ -168,6 +193,14 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
   const [blocked, setBlocked] = useState<boolean | null>(null);
   const [server, setServer] = useState<{ url: string; info: AppInfo | null } | null>(null);
   const [user, setUser] = useState<UserSummary | null>(null);
+  /** Starting this computer's background service (the first start can take a while): a second pick doesn't start another. */
+  const [startingLocal, setStartingLocal] = useState(false);
+  /** Failed tries so far: each failure draws its form anew and empty (the same error twice kept the old password, and typing added to it). */
+  const [tries, setTries] = useState(0);
+  const failed = (next: Step) => {
+    setTries((n) => n + 1);
+    setStep(next);
+  };
   const [mode, setMode] = useState<'server' | 'local' | null>(initial.connection?.mode ?? null);
   const rpcRef = useRef<{ rpc: RpcClient<AppContract>; transport: ReconnectingTransport } | null>(null);
   /** The same client for what is drawn (a ref isn't read while rendering). */
@@ -222,6 +255,13 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') finish(null);
+    // `/provider` couldn't reach this computer's service: Esc goes back to the session.
+    if (key.escape && step.s === 'opening') finish(config);
+    // Checking a server can take a while (it waits up to 20 seconds for an answer): Esc gives up and asks again.
+    if (key.escape && step.s === 'checking') {
+      rpcRef.current?.transport.close();
+      setStep({ s: 'address' });
+    }
   });
 
   const rpc = () => rpcRef.current!.rpc;
@@ -232,7 +272,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
   const openServer = (url: string) => {
     rpcRef.current?.transport.close();
     const transport = wsTransport({ serverUrl: url, headers: () => ({ 'User-Agent': USER_AGENT }) });
-    rpcRef.current = { rpc: createRpcClient(contract, transport), transport };
+    rpcRef.current = { rpc: timedClient(createRpcClient(contract, transport), 'The server'), transport };
     setClient(rpcRef.current.rpc);
   };
 
@@ -344,7 +384,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
     await save((c) => ({ ...c, connection: { mode: 'local' } }));
     const link = await connectService(paths, { mode: 'local' });
     const transport = serviceTransport(paths, link, { mode: 'local' });
-    rpcRef.current = { rpc: createRpcClient(contract, transport), transport };
+    rpcRef.current = { rpc: timedClient(createRpcClient(contract, transport), 'This computer’s background service'), transport };
     setClient(rpcRef.current.rpc);
     const status = await rpc().call('auth.status', {});
     if (status.setupRequired) return setStep({ s: 'local-account' });
@@ -352,6 +392,14 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
     else setUser(status.user);
     setStep({ s: 'providers' });
   };
+
+  // `/provider`: straight to this computer's providers (after the first draw, as an event would).
+  useEffect(() => {
+    if (start !== 'providers') return;
+    const timer = setTimeout(() => void toLocal().catch((e: unknown) => setStep({ s: 'opening', error: describe(e) })), 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when setup opens
+  }, []);
 
   const toModel = async () => {
     const models = await rpc()
@@ -385,6 +433,12 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
 
   const body = ((): { title: string; keys: string; content: React.ReactNode } => {
     switch (step.s) {
+      case 'opening':
+        return {
+          title: 'Providers',
+          keys: 'esc back to the session · ctrl+c quit',
+          content: step.error ? <Text>{paint.fg('bad', step.error)}</Text> : <Text>{`${spinner} ${paint.fg('muted', 'Opening this computer’s providers…')}`}</Text>,
+        };
       case 'start': {
         const status = scanning
           ? `${spinner} ${paint.fg('muted', 'Looking for Atelier servers on your network…')}`
@@ -407,9 +461,21 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
                     { value: 'other', label: servers.length ? 'Another server…' : 'An Atelier server…', aside: 'type its address' },
                     { value: 'local', label: 'Only this computer', aside: 'your own models and keys, kept here' },
                   ]}
-                  onPick={(v) => (v === 'other' ? (setNote(null), setStep({ s: 'address' })) : v === 'local' ? void toLocal().catch((e: unknown) => setNote(describe(e))) : (setNote(null), setStep({ s: 'checking', typed: v })))}
+                  active={!startingLocal}
+                  onPick={(v) => {
+                    if (v === 'other') return (setNote(null), setStep({ s: 'address' }));
+                    if (v !== 'local') return (setNote(null), setStep({ s: 'checking', typed: v }));
+                    if (startingLocal) return;
+                    setNote(null);
+                    setStartingLocal(true);
+                    void toLocal()
+                      .catch((e: unknown) => setNote(`Atelier couldn’t start on this computer: ${describe(e)}`))
+                      .finally(() => setStartingLocal(false));
+                  }}
                 />
               </Box>
+              {startingLocal && <Text>{`${spinner} ${paint.fg('muted', 'Starting Atelier on this computer… (the first start can take up to a minute)')}`}</Text>}
+              {note && <Text>{paint.fg('bad', note)}</Text>}
               <Text>{status}</Text>
             </Box>
           ),
@@ -429,7 +495,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
           ),
         };
       case 'checking':
-        return { title: 'Which server?', keys: 'ctrl+c quit', content: <Text>{`${spinner} ${paint.fg('muted', `Checking ${hostOf(step.typed)}…`)}`}</Text> };
+        return { title: 'Which server?', keys: 'esc back · ctrl+c quit', content: <Text>{`${spinner} ${paint.fg('muted', `Checking ${hostOf(step.typed)}…`)}`}</Text> };
       case 'blocked': {
         const program = networkProgram();
         const host = hostOf(/^[a-z][a-z\d+.-]*:\/\//i.test(step.typed) ? step.typed : `https://${step.typed}`);
@@ -515,7 +581,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
               {!server?.info?.terminalSignIn && <Text>{paint.fg('muted', `This server (Atelier ${server?.info?.version ?? 'older'}) signs terminals in with a password. From ${VERSION} on, it can also approve them in the browser.`)}</Text>}
               <Box marginTop={1}>
                 <Form
-                  key={step.error ?? 'form'}
+                  key={`${step.s}:${tries}`}
                   paint={paint}
                   fields={[
                     { name: 'username', label: 'Username', initial: username },
@@ -527,8 +593,8 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
                     setUsername(v.username!);
                     void rpc()
                       .call('auth.login', { username: v.username!.toLowerCase(), password: v.password!, clientKind: serverKind() })
-                      .then(signedIn)
-                      .catch((e: unknown) => setStep({ s: 'password', error: describe(e) }));
+                      .then((r) => (r.user.mustChangePassword ? setStep({ s: 'new-password', current: v.password!, signed: r }) : signedIn(r)))
+                      .catch((e: unknown) => failed({ s: 'password', error: describe(e) }));
                   }}
                 />
               </Box>
@@ -536,6 +602,38 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
           ),
         };
       }
+      case 'new-password':
+        return {
+          title: 'Choose your own password',
+          keys: keys('tab next field · enter continue'),
+          content: (
+            <Box flexDirection="column">
+              {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
+              <Text>{paint.fg('muted', 'You signed in with the password your admin made. Choose your own now (at least 8 characters); the server asks for it before anything else.')}</Text>
+              <Box marginTop={1}>
+                <Form
+                  key={`${step.s}:${tries}`}
+                  paint={paint}
+                  fields={[
+                    { name: 'next', label: 'New password', mask: true },
+                    { name: 'again', label: 'Once more', mask: true },
+                  ]}
+                  onCancel={() => setStep({ s: 'password' })}
+                  onSubmit={(v) => {
+                    if ((v.next ?? '').length < 8) return failed({ ...step, error: 'At least 8 characters.' });
+                    if (v.next !== v.again) return failed({ ...step, error: 'The two don’t match.' });
+                    setStep({ ...step, busy: true, error: undefined });
+                    void rpc()
+                      .call('account.changePassword', { current: step.current, next: v.next! })
+                      .then(() => signedIn({ ...step.signed, user: { ...step.signed.user, mustChangePassword: false } }))
+                      .catch((e: unknown) => failed({ ...step, busy: false, error: describe(e) }));
+                  }}
+                />
+              </Box>
+              {step.busy && <Text>{`${spinner} ${paint.fg('muted', 'Saving it…')}`}</Text>}
+            </Box>
+          ),
+        };
       case 'invite':
         return {
           title: 'Make your account',
@@ -544,7 +642,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
             <Box flexDirection="column">
               {step.error && <Text>{paint.fg('bad', step.error)}</Text>}
               <Form
-                key={step.error ?? 'form'}
+                key={`${step.s}:${tries}`}
                 paint={paint}
                 fields={[
                   { name: 'invite', label: 'Invite code', placeholder: 'XXXX-XXXX-XXXX-XXXX' },
@@ -557,7 +655,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
                   void rpc()
                     .call('auth.acceptInvite', { invite: v.invite!, name: v.name!, username: v.username!.toLowerCase(), password: v.password!, clientKind: serverKind() })
                     .then(signedIn)
-                    .catch((e: unknown) => setStep({ s: 'invite', error: describe(e) }))
+                    .catch((e: unknown) => failed({ s: 'invite', error: describe(e) }))
                 }
               />
             </Box>
@@ -614,7 +712,7 @@ function Wizard({ paths, config: initial, start, shade, afterwards, onDone }: Pr
           ),
         };
       case 'providers':
-        return { title: 'Which models?', keys: keys(), content: <Providers paint={paint} rpc={client!} note={step.note} onAdd={(type) => setStep({ s: 'provider-key', type })} onCode={(sign) => setStep({ s: 'provider-code', ...sign })} onNext={() => void toModel()} onBack={() => setStep({ s: 'start' })} /> };
+        return { title: 'Which models?', keys: keys(), content: <Providers paint={paint} rpc={client!} note={step.note} onAdd={(type) => setStep({ s: 'provider-key', type })} onCode={(sign) => setStep({ s: 'provider-code', ...sign })} onNext={() => void toModel()} onBack={() => (start === 'providers' ? finish(config) : setStep({ s: 'start' }))} /> };
       case 'provider-key': {
         const keyless = step.type === 'ollama' || step.type === 'llamacpp' || step.type === 'openai-compatible';
         return {
@@ -760,11 +858,21 @@ function Providers({ paint, rpc, note, onAdd, onCode, onNext, onBack }: { paint:
   const [state, setState] = useState<{ configured: { id: string; name: string; models: number }[]; detected: { type: ProviderType; baseUrl: string; label: string }[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  /** Why the list couldn't be read, or a sign-in couldn't start. */
+  const [problem, setProblem] = useState<string | null>(null);
   useEffect(() => {
-    void Promise.all([rpc.call('settings.get', {}), rpc.call('providers.status', {}), rpc.call('providers.detect', {}).catch(() => [])]).then(([settings, status, detected]) => {
-      const providers = ((settings.effective as { providers?: { id: string; name: string; baseUrl: string }[] }).providers ?? []).map((pr) => ({ ...pr, models: status.find((s) => s.providerId === pr.id)?.modelCount ?? 0 }));
-      setState({ configured: providers, detected: detected.filter((d) => d.via === 'port' && !providers.some((pr) => pr.baseUrl === d.baseUrl)) });
-    });
+    // The models of each provider are a bonus: a provider that doesn't answer leaves its count out, not the list.
+    void Promise.all([rpc.call('settings.get', {}), rpc.call('providers.status', {}).catch(() => []), rpc.call('providers.detect', {}).catch(() => [])]).then(
+      ([settings, status, detected]) => {
+        const providers = ((settings.effective as { providers?: { id: string; name: string; baseUrl: string }[] }).providers ?? []).map((pr) => ({ ...pr, models: status.find((s) => s.providerId === pr.id)?.modelCount ?? 0 }));
+        setState({ configured: providers, detected: detected.filter((d) => d.via === 'port' && !providers.some((pr) => pr.baseUrl === d.baseUrl)) });
+      },
+      (e: unknown) => {
+        // Still something to pick: adding a provider, or going on.
+        setProblem(`Couldn’t read the providers set up so far: ${describe(e)}`);
+        setState({ configured: [], detected: [] });
+      },
+    );
   }, [rpc, note, refresh]);
   if (!state) return <Text>{paint.fg('muted', 'Looking at this computer…')}</Text>;
   const addDetected = async (d: { type: ProviderType; baseUrl: string; label: string }) => {
@@ -805,6 +913,7 @@ function Providers({ paint, rpc, note, onAdd, onCode, onNext, onBack }: { paint:
   return (
     <Box flexDirection="column">
       {note && <Text>{paint.fg('good', note)}</Text>}
+      {problem && <Text>{paint.fg('bad', problem)}</Text>}
       {state.configured.length > 0 && <Text>{`Set up: ${state.configured.map((c) => `${paint.fg('good', '●')} ${c.name}`).join('  ')}`}</Text>}
       {busy && <Text>{paint.fg('muted', `Adding ${busy}…`)}</Text>}
       <Choices
@@ -815,7 +924,7 @@ function Providers({ paint, rpc, note, onAdd, onCode, onNext, onBack }: { paint:
         onCancel={onBack}
         onPick={(v) => {
           if (v === 'next') return onNext();
-          if (v === 'chatgpt' || v === 'copilot') return void signIn(v).catch(() => undefined);
+          if (v === 'chatgpt' || v === 'copilot') return void signIn(v).catch((e: unknown) => setProblem(`${PROVIDER_LABELS[v]}: ${describe(e)}`));
           if (v.startsWith('add:')) return onAdd(v.slice(4) as ProviderType);
           const d = state.detected.find((x) => `detected:${x.baseUrl}` === v);
           if (d) void addDetected(d);
@@ -876,7 +985,14 @@ export function runSetup(paths: CliPaths, config: CliConfig, start: SetupStart, 
   return new Promise((resolve) => {
     let result: CliConfig | null = null;
     holdInput();
-    const instance = render(<Wizard paths={paths} config={config} start={start} shade={shade} afterwards={afterwards} onDone={(c) => (result = c)} />, { alternateScreen: true, exitOnCtrlC: false, kittyKeyboard: { mode: 'auto' }, interactive: interactive() });
+    const instance = render(<Wizard paths={paths} config={config} start={start} shade={shade} afterwards={afterwards} onDone={(c) => (result = c)} />, {
+      alternateScreen: true,
+      exitOnCtrlC: false,
+      // Plain keys: setup needs no Shift+Enter, and a terminal that reports AltGr or Option as Ctrl+Alt would drop
+      // characters such as @ from a password.
+      kittyKeyboard: { mode: 'disabled' },
+      interactive: interactive(),
+    });
     void instance.waitUntilExit().then(() => resolve(result));
   });
 }

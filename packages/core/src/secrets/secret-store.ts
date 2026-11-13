@@ -15,6 +15,14 @@ export interface Cipher {
   decrypt(ciphertext: string): Promise<string>;
 }
 
+/** A saved secret that this installation's key can't open (the key changed or was lost since it was saved). */
+export class SecretUnreadableError extends Error {
+  readonly code = 'secret_unreadable';
+  constructor(readonly label: string) {
+    super(`The saved ${label} can't be read: it was saved with an encryption key this installation no longer has. Enter it again (in the terminal app: /provider).`);
+  }
+}
+
 /** AES-256-GCM with a 32-byte key (server: ATELIER_SECRET_KEY or a 0600 key file). */
 export class AesGcmCipher implements Cipher {
   constructor(private readonly key: Buffer) {
@@ -98,7 +106,12 @@ export class SecretStore {
     const row = await this.db.select().from(secrets).where(eq(secrets.id, id)).get();
     if (!row) return undefined;
     await this.db.update(secrets).set({ lastUsedAt: Date.now() }).where(eq(secrets.id, id));
-    return this.cipher.decrypt(row.ciphertext);
+    try {
+      return await this.cipher.decrypt(row.ciphertext);
+    } catch {
+      // Node says "Unsupported state or unable to authenticate data": the key it was saved with isn't this one.
+      throw new SecretUnreadableError(row.label || id);
+    }
   }
 
   /** A personal secret, for its owner's own things (their connectors and providers); nothing for anyone else's. */

@@ -3,13 +3,14 @@
  * for a fresh one when it serves another connection or an older version and has nothing running.
  */
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { connect as netConnect, type Socket } from 'node:net';
 import { join } from 'node:path';
 import type { RpcMessage } from '@atelier/protocol';
 import type { ReconnectingTransport } from '@atelier/client';
 import { checkPlace, servicePath, type CliPaths } from '../paths.ts';
 import { selfCommand, VERSION } from '../runtime.ts';
+import { newer } from '../update/update.ts';
 import { onFrames, sameWant, sendFrame, ServiceFrame, type ClientFrame, type ServiceStatus, type Want } from './wire.ts';
 
 export class ServiceError extends Error {}
@@ -84,7 +85,17 @@ export function startService(want: Want, env: NodeJS.ProcessEnv = process.env): 
     windowsHide: true,
     env: { ...env, ATELIER_DAEMON: '1' },
   });
+  // A program security software keeps from starting: told by the wait below, not a crash here.
+  child.on('error', () => undefined);
   child.unref();
+}
+
+/** Why the service that was started didn't (`daemon run` writes it), when it says so after `since`. */
+async function startError(p: CliPaths, since: number): Promise<string | null> {
+  const file = join(p.run, 'daemon.error');
+  const changed = (await stat(file).catch(() => null))?.mtimeMs ?? 0;
+  if (changed < since - 1000) return null;
+  return (await readFile(file, 'utf8').catch(() => '')).trim() || null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -108,13 +119,17 @@ export async function stopService(link: ServiceLink, force = false): Promise<boo
  * nothing running; a busy one serving another connection is an error (the person finishes or stops it first).
  */
 export async function connectService(p: CliPaths, want: Want, options: { start?: boolean; timeoutMs?: number } = {}): Promise<ServiceLink> {
-  const deadline = Date.now() + (options.timeoutMs ?? 20_000);
+  // A first start on Windows (security software looking at a new program, PowerShell unsealing the key) can take long.
+  const since = Date.now();
+  const deadline = since + (options.timeoutMs ?? (process.platform === 'win32' ? 60_000 : 30_000));
   let started = false;
   for (;;) {
     const link = await hello(p, want);
     if (link) {
       const other = !sameWant(link.status.want, want);
-      const older = link.status.version !== VERSION;
+      // Only an older one is replaced: a terminal still on the old version would otherwise stop the new service, and the
+      // new terminal the old one again, each time ending the calls in flight.
+      const older = newer(VERSION, link.status.version);
       if (!other && !older) return link;
       if (await stopService(link, false)) {
         await sleep(300);
@@ -131,7 +146,11 @@ export async function connectService(p: CliPaths, want: Want, options: { start?:
       startService(want);
       started = true;
     }
-    if (Date.now() > deadline) throw new ServiceError(`The background service didn’t start. Its log is in ${join(p.logs, 'daemon.log')}.`);
+    if (started) {
+      const why = await startError(p, since);
+      if (why) throw new ServiceError(`The background service couldn’t start: ${why}`);
+    }
+    if (Date.now() > deadline) throw new ServiceError(`The background service didn’t start in time. Its log is in ${join(p.logs, 'daemon.log')}.`);
     await sleep(150);
   }
 }

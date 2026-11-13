@@ -18,6 +18,7 @@ export type StoreKind = 'keychain' | 'secret-service' | 'dpapi' | 'file';
 
 export interface CredentialStore {
   readonly kind: StoreKind;
+  /** The value, or null when none is stored. A value that is stored but can't be read now throws, never null. */
   get(name: string): Promise<string | null>;
   set(name: string, value: string): Promise<void>;
   delete(name: string): Promise<void>;
@@ -26,7 +27,7 @@ export interface CredentialStore {
 /** What `security -i` and our files can carry unquoted: tokens, hex and base64. */
 const PLAIN = /^[A-Za-z0-9._~+/=:-]{1,4096}$/;
 
-function piped(command: string, args: string[], input: string, timeoutMs = 10_000): Promise<string> {
+function piped(command: string, args: string[], input: string, timeoutMs = 30_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let out = '';
@@ -72,11 +73,13 @@ class FileStore implements CredentialStore {
 
 class MacKeychain implements CredentialStore {
   readonly kind: StoreKind = 'keychain';
+  /** Null only when the item isn't there (`security` exits 44); a locked or refusing keychain throws. */
   async get(name: string): Promise<string | null> {
     try {
-      return (await run('security', ['find-generic-password', '-s', SERVICE, '-a', name, '-w'], { timeout: 10_000 })).stdout.replace(/\n$/, '') || null;
-    } catch {
-      return null;
+      return (await run('security', ['find-generic-password', '-s', SERVICE, '-a', name, '-w'], { timeout: 30_000 })).stdout.replace(/\n$/, '') || null;
+    } catch (e) {
+      if ((e as { code?: unknown }).code === 44) return null;
+      throw new Error(`The keychain didn't give Atelier its saved ${name}: ${e instanceof Error ? e.message.split('\n').at(-1) : String(e)}`, { cause: e });
     }
   }
   async set(name: string, value: string): Promise<void> {
@@ -114,18 +117,32 @@ const DPAPI = (verb: 'Protect' | 'Unprotect') =>
 
 class WindowsDpapi extends FileStore {
   override readonly kind: StoreKind = 'dpapi';
+  /**
+   * A sealed value that can't be unsealed now (PowerShell slow to start, busy or blocked) throws: read as "none", it
+   * made the standalone backend write a new key over the one its saved API keys were sealed with, losing them.
+   */
   override async get(name: string): Promise<string | null> {
     const sealed = await super.get(name);
     if (!sealed?.startsWith('dpapi:')) return sealed;
-    try {
-      return (await piped('powershell.exe', [...PS, DPAPI('Unprotect')], sealed.slice(6))).trim() || null;
-    } catch {
-      return null;
+    let last: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const value = (await piped('powershell.exe', [...PS, DPAPI('Unprotect')], sealed.slice(6))).trim();
+        if (value) return value;
+        last = new Error('PowerShell answered with nothing');
+      } catch (e) {
+        last = e;
+      }
     }
+    throw new Error(`Windows couldn't unlock Atelier's saved ${name} for this user (DPAPI through PowerShell): ${last instanceof Error ? last.message : String(last)}`);
   }
+  /** Sealed for this Windows user; where PowerShell can't seal it, kept as is in the file (readable by this user only). */
   override async set(name: string, value: string): Promise<void> {
-    const sealed = (await piped('powershell.exe', [...PS, DPAPI('Protect')], value)).trim();
-    await super.set(name, `dpapi:${sealed}`);
+    const sealed = await piped('powershell.exe', [...PS, DPAPI('Protect')], value).then(
+      (out) => out.trim(),
+      () => '',
+    );
+    await super.set(name, sealed ? `dpapi:${sealed}` : value);
   }
 }
 
@@ -150,12 +167,33 @@ class Cached implements CredentialStore {
   }
 }
 
+/** One store per file in a process: each read of the system store can start a program (PowerShell on Windows). */
+const stores = new Map<string, Promise<CredentialStore>>();
+
+/** Tests: the next `credentialStore` is a fresh one, as in a new process. */
+export function forgetStores(): void {
+  stores.clear();
+}
+
 /** The best store this computer has; `ATELIER_CLI_CREDENTIALS=file` keeps everything in credentials.json. */
-export async function credentialStore(file: string, env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Promise<CredentialStore> {
+export function credentialStore(file: string, env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Promise<CredentialStore> {
+  const key = `${platform}|${env.ATELIER_CLI_CREDENTIALS ?? ''}|${file}`;
+  let store = stores.get(key);
+  if (!store) {
+    store = pickStore(file, env, platform);
+    stores.set(key, store);
+    store.catch(() => stores.delete(key));
+  }
+  return store;
+}
+
+async function pickStore(file: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): Promise<CredentialStore> {
   const fallback = new FileStore(file);
   if (env.ATELIER_CLI_CREDENTIALS === 'file') return new Cached(fallback);
   if (platform === 'darwin') return new Cached(await usable(new MacKeychain(), fallback));
-  if (platform === 'win32') return new Cached(await usable(new WindowsDpapi(file), fallback));
+  // DPAPI seals into the same credentials.json, so it is its own fallback: a second store over the same file deleted
+  // every value right after it was written (the sign-in looped; the backend's key was new at every start).
+  if (platform === 'win32') return new Cached(new WindowsDpapi(file));
   if (env.DBUS_SESSION_BUS_ADDRESS) {
     const found = await run('secret-tool', ['--version'], { timeout: 3000 }).then(
       () => true,
@@ -185,8 +223,12 @@ class Prefer implements CredentialStore {
   get kind() {
     return this.first.kind;
   }
+  /** The system store's value, else the file's; a sealed value in the file is the system store's to read, never a value. */
   async get(name: string) {
-    return (await this.first.get(name)) ?? (await this.second.get(name));
+    const value = await this.first.get(name);
+    if (value !== null) return value;
+    const raw = await this.second.get(name);
+    return raw?.startsWith('dpapi:') ? null : raw;
   }
   async set(name: string, value: string) {
     try {

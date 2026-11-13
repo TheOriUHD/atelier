@@ -145,3 +145,34 @@ describe('a long list', () => {
     expect(picked).toEqual(['m27']);
   });
 });
+
+describe('a text field under fast typing', () => {
+  it('keeps every key when several come in one read, and Enter among them sends what came before it', async () => {
+    const { TextLine } = await import('./inputs.tsx');
+    const sent: string[] = [];
+    const ui = render(<TextLine paint={paint} mask onSubmit={(v) => sent.push(v)} />);
+    await wait();
+    // A console that hands over several keys at once, then the last letters and Enter together.
+    ui.stdin.write('sec');
+    ui.stdin.write('ret');
+    ui.stdin.write('!\r');
+    await wait();
+    expect(sent).toEqual(['secret!']);
+  });
+
+  it('starts empty after a failed try when its form is drawn anew', async () => {
+    const sent: Record<string, string>[] = [];
+    const fields = [{ name: 'password', label: 'Password', mask: true }];
+    const ui = render(<Form key="1" paint={paint} fields={fields} onSubmit={(v) => sent.push(v)} onCancel={() => undefined} />);
+    await wait();
+    ui.stdin.write('wrong');
+    ui.stdin.write('\r');
+    await wait();
+    ui.rerender(<Form key="2" paint={paint} fields={fields} onSubmit={(v) => sent.push(v)} onCancel={() => undefined} />);
+    await wait();
+    ui.stdin.write('right-one');
+    ui.stdin.write('\r');
+    await wait();
+    expect(sent).toEqual([{ password: 'wrong' }, { password: 'right-one' }]);
+  });
+});

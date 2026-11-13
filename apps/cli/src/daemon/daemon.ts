@@ -9,9 +9,9 @@
  * backend's `auth.localSignIn` needs no secret, so the token is what keeps other users' processes out.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createWriteStream, existsSync } from 'node:fs';
-import { chmod, mkdir, rename, stat, unlink } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, rename, stat, unlink } from 'node:fs/promises';
 import { connect as netConnect, createServer, type Socket } from 'node:net';
 import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -43,12 +43,27 @@ export async function cliDevice(p: CliPaths): Promise<DeviceInfo> {
   return device;
 }
 
-/** The standalone backend's key for its secrets: in the system's store, made the first time. */
-export async function localKey(store: CredentialStore): Promise<Buffer> {
+/** What tells the key apart without being it: kept beside the backend's data, so a lost or changed key is noticed. */
+const keyCheck = (key: Buffer) => createHash('sha256').update('atelier-cli-local-key\0').update(key).digest('hex').slice(0, 32);
+
+/**
+ * The standalone backend's key for its secrets: in the system's store, made the first time. A new key is made only when
+ * none was ever made here (no `checkFile`): writing one over a key that can't be read now loses every API key saved with
+ * it, which is how a slow PowerShell on Windows ended in "Unsupported state or unable to authenticate data".
+ */
+export async function localKey(store: CredentialStore, checkFile: string): Promise<Buffer> {
   const stored = await store.get(LOCAL_KEY);
-  if (stored && /^[0-9a-f]{64}$/.test(stored)) return Buffer.from(stored, 'hex');
+  const check = await readFile(checkFile, 'utf8').then((t: string) => t.trim(), () => null);
+  if (stored && /^[0-9a-f]{64}$/.test(stored)) {
+    const key = Buffer.from(stored, 'hex');
+    if (check && check !== keyCheck(key)) throw new Error(`The key for your saved API keys changed (${store.kind}), so they can't be read. Add your providers' keys again with /provider, or run \`atelier reset-keys\` to start the key store over.`);
+    if (!check) await writePrivate(checkFile, `${keyCheck(key)}\n`);
+    return key;
+  }
+  if (check) throw new Error(`The key for your saved API keys is missing from ${store.kind === 'dpapi' ? 'Windows' : store.kind === 'keychain' ? 'the keychain' : store.kind === 'secret-service' ? 'the keyring' : 'credentials.json'}, so they can't be read. If you moved or reset that store, run \`atelier reset-keys\` and add your providers' keys again.`);
   const key = randomBytes(32);
   await store.set(LOCAL_KEY, key.toString('hex'));
+  await writePrivate(checkFile, `${keyCheck(key)}\n`);
   return key;
 }
 
@@ -88,6 +103,34 @@ function answers(path: string): Promise<boolean> {
   });
 }
 
+/**
+ * Takes the start lock, or says another start holds it: a lock whose process is gone (or older than two minutes) is
+ * taken over.
+ */
+async function startLock(file: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const handle = await open(file, 'wx').catch(() => null);
+    if (handle) {
+      await handle.writeFile(String(process.pid));
+      await handle.close();
+      return true;
+    }
+    const pid = Number((await readFile(file, 'utf8').catch(() => '')).trim());
+    const age = Date.now() - ((await stat(file).catch(() => null))?.mtimeMs ?? 0);
+    const alive = pid > 0 && pid !== process.pid && (() => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    if (alive && age < 120_000) return false;
+    await unlink(file).catch(() => undefined);
+  }
+  return false;
+}
+
 export async function runDaemon(options: DaemonOptions): Promise<void> {
   const p = options.paths ?? cliPaths();
   const idleMs = options.idleMs ?? IDLE_EXIT_MS;
@@ -102,6 +145,13 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
   const running = await servicePath(p.dir);
   if (running && (await answers(running))) {
     log.info('another service is running; leaving');
+    log.end();
+    return;
+  }
+  // One start at a time: two at once each made a token, a key and a pipe, and a terminal could pair one's pipe with the
+  // other's token ("Not this user's service") or end up with the other's key.
+  if (!(await startLock(join(p.run, 'daemon.lock')))) {
+    log.info('another service is starting; leaving');
     log.end();
     return;
   }
@@ -137,7 +187,7 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
   const status = (): ServiceStatus => ({ version: VERSION, pid: process.pid, want: options.want, startedAt, clients: clients.size, busy, keepAvailable: config.keepAvailable, ...(link ? { link } : {}) });
 
   if (options.want.mode === 'local') {
-    const key = await localKey(store);
+    const key = await localKey(store, join(p.backendData, 'local-key.check'));
     const dir = runnerDir();
     backend = await createBackend({
       surface: 'desktop',
@@ -252,7 +302,9 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
     awake(false);
     deviceLink?.close({ exiting: true });
     await backend?.dispose().catch((e: unknown) => log.error('dispose failed', e));
-    if (!windows) await unlink(where).catch(() => undefined);
+    // Only its own socket: a newer service may already listen at the same path (after an update), and removing that
+    // left terminals waiting for a service that was there.
+    if (!windows && (await stat(where).catch(() => null))?.ino === socketInode) await unlink(where).catch(() => undefined);
     log.end();
     setTimeout(() => process.exit(0), 200).unref();
   };
@@ -263,6 +315,9 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
   });
   if (!windows) await chmod(where, 0o600).catch(() => undefined);
   else await writePrivate(pipeFile(p.dir), where);
+  const socketInode = windows ? null : ((await stat(where).catch(() => null))?.ino ?? null);
+  await unlink(join(p.run, 'daemon.lock')).catch(() => undefined);
+  await unlink(join(p.run, 'daemon.error')).catch(() => undefined);
   log.info(`listening (${options.want.mode}${options.want.mode === 'server' ? ` ${options.want.serverUrl}` : ''}), version ${VERSION}`);
 
   setInterval(() => {

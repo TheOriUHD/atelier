@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { credentialStore, tokenName } from './keychain.ts';
+import { credentialStore, forgetStores, tokenName } from './keychain.ts';
 
 let dir = '';
 afterEach(async () => dir && (await rm(dir, { recursive: true, force: true })));
@@ -48,4 +48,31 @@ it('finds the Windows service by the random pipe name it wrote, and nothing else
   expect(await servicePath(dir, 'win32')).toBe(name);
   await writeFile(pipeFile(dir), '\\\\.\\pipe\\someone-elses');
   expect(await servicePath(dir, 'win32')).toBeNull();
+});
+
+it.skipIf(process.platform === 'win32')('on Windows keeps what it saves: a new start reads it back (the token and the key were deleted right after saving)', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'atelier-cli-dpapi-'));
+  const file = join(dir, 'credentials.json');
+  // A stand-in for PowerShell's DPAPI: seals as base64, unseals back.
+  const bin = join(dir, 'bin');
+  await mkdir(bin);
+  await writeFile(
+    join(bin, 'powershell.exe'),
+    `#!${process.execPath}\nlet s='';process.stdin.on('data',(d)=>s+=d).on('end',()=>{const t=s.trim();process.stdout.write(process.argv.join(' ').includes('Unprotect')?Buffer.from(t,'base64').toString():Buffer.from(t).toString('base64'));});\n`,
+    { mode: 0o755 },
+  );
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path ?? ''}`;
+  try {
+    const first = await credentialStore(file, {}, 'win32');
+    expect(first.kind).toBe('dpapi');
+    await first.set('token:atelier.example.com', 'secret-token');
+    const saved = JSON.parse(await readFile(file, 'utf8')) as Record<string, string>;
+    expect(saved['token:atelier.example.com']).toBe(`dpapi:${Buffer.from('secret-token').toString('base64')}`);
+    // A new start: a fresh store reads it back.
+    forgetStores();
+    expect(await (await credentialStore(file, {}, 'win32')).get('token:atelier.example.com')).toBe('secret-token');
+  } finally {
+    process.env.PATH = path;
+  }
 });

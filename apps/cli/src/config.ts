@@ -3,7 +3,7 @@
  * Model, effort and permission rules are the backend's (the server's for a connected terminal); a model chosen here is
  * this terminal's own choice over the account's default.
  */
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import { PermissionMode } from '@atelier/protocol';
@@ -49,6 +49,8 @@ export const CliConfig = z.object({
   channel: z.enum(['stable', 'beta']).default('stable'),
   /** When the last update check ran. */
   checkedForUpdatesAt: z.number().optional(),
+  /** Newer versions download in the background and start next time (as the desktop app does); off: only a notice. */
+  autoUpdate: z.boolean().default(true),
   /** Tips shown so far (one per start, in order). */
   tipIndex: z.number().int().min(0).default(0),
 });
@@ -77,9 +79,23 @@ export async function updateConfig(file: string, change: (c: CliConfig) => CliCo
 
 export async function writePrivate(file: string, text: string): Promise<void> {
   await mkdir(dirname(file), { recursive: true, mode: 0o700 });
-  const temp = `${file}.${process.pid}.tmp`;
+  // A name of its own per write (two writes in one process mustn't share it).
+  const temp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   await writeFile(temp, text, { mode: 0o600 });
-  await rename(temp, file);
+  // Windows refuses the rename for a moment while antivirus, the indexer or a backup has the file open: try again.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(temp, file);
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (attempt >= 20 || (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY')) {
+        await unlink(temp).catch(() => undefined);
+        throw e;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
 }
 
 export async function readJson<T>(file: string, schema: z.ZodType<T>, fallback: T): Promise<T> {

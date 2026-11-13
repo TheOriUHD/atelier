@@ -49,6 +49,7 @@ export const COMMAND_HELP: [string, string][] = [
   ['atelier token', 'Print this terminal’s sign-in, for ATELIER_TOKEN in CI'],
   ['atelier update [--beta]', 'Update to the newest version'],
   ['atelier daemon status|stop|keep|unkeep', 'The background service (keep: start it at login)'],
+  ['atelier reset-keys', 'Start the key store for saved API keys over (they are added again)'],
   ['atelier completion <bash|zsh|fish|pwsh>', 'Shell completion'],
   ['atelier licenses', 'The licenses of the code inside'],
 ];

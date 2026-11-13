@@ -3,7 +3,7 @@
  * passwords) and a list of choices with a cursor, numbers and a line of explanation each.
  */
 import { Box, Text, useInput, usePaste } from 'ink';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Paint } from '../style.ts';
 import * as ed from './editor.ts';
 
@@ -49,26 +49,38 @@ export function TextLine({
   prefix?: string;
 }) {
   const [s, set] = useState(() => ed.emptyEditor(initial));
+  // Keys can come faster than the screen redraws (a busy moment, a console that sends several at once): each one builds
+  // on the text as the last one left it, not on the last drawn one, or keys were lost and a password came out short.
+  const latest = useRef(s);
   const update = (next: ed.EditorState) => {
+    const before = latest.current.text;
+    latest.current = next;
     set(next);
-    if (next.text !== s.text) onChange?.(next.text);
+    if (next.text !== before) onChange?.(next.text);
   };
-  usePaste((text) => update(ed.insert(s, text.replace(/\r?\n/g, mask ? '' : ' '))), { isActive: active });
+  usePaste((text) => update(ed.insert(latest.current, text.replace(/\r?\n/g, mask ? '' : ' '))), { isActive: active });
   useInput(
     (input, key) => {
-      if (key.return) return onSubmit(s.text);
+      const now = latest.current;
+      if (key.return) return onSubmit(now.text);
       if (key.escape) return onCancel?.();
-      if (key.backspace || (key.ctrl && input === 'h')) return update(ed.backspace(s));
-      if (key.delete) return update(ed.del(s));
-      if (key.leftArrow) return update(key.ctrl || key.meta ? ed.wordLeft(s) : ed.left(s));
-      if (key.rightArrow) return update(key.ctrl || key.meta ? ed.wordRight(s) : ed.right(s));
-      if (key.home || (key.ctrl && input === 'a')) return update(ed.home(s));
-      if (key.end || (key.ctrl && input === 'e')) return update(ed.end(s));
-      if (key.ctrl && input === 'u') return update(ed.killToStart(s));
-      if (key.ctrl && input === 'k') return update(ed.killToEnd(s));
-      if (key.ctrl && input === 'w') return update(ed.killWordBack(s));
+      if (key.backspace || (key.ctrl && input === 'h')) return update(ed.backspace(now));
+      if (key.delete) return update(ed.del(now));
+      if (key.leftArrow) return update(key.ctrl || key.meta ? ed.wordLeft(now) : ed.left(now));
+      if (key.rightArrow) return update(key.ctrl || key.meta ? ed.wordRight(now) : ed.right(now));
+      if (key.home || (key.ctrl && input === 'a')) return update(ed.home(now));
+      if (key.end || (key.ctrl && input === 'e')) return update(ed.end(now));
+      if (key.ctrl && input === 'u') return update(ed.killToStart(now));
+      if (key.ctrl && input === 'k') return update(ed.killToEnd(now));
+      if (key.ctrl && input === 'w') return update(ed.killWordBack(now));
       if (key.ctrl || key.meta || key.tab || key.upArrow || key.downArrow) return;
-      if (input) update(ed.insert(s, input));
+      if (!input) return;
+      // The last letters and Enter in one read: the letters, then Enter (it went into the password as a character).
+      const end = input.search(/[\r\n]/);
+      if (end === -1) return update(ed.insert(now, input));
+      const typed = end > 0 ? ed.insert(now, input.slice(0, end)) : now;
+      if (end > 0) update(typed);
+      onSubmit(typed.text);
     },
     { isActive: active },
   );
@@ -185,6 +197,8 @@ export function Form({ paint, fields, onSubmit, onCancel, extra, active = true }
   // The first empty field has the cursor: a remembered username starts on the password.
   const [at, setAt] = useState(() => Math.max(0, fields.findIndex((f) => !f.initial)));
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.name, f.initial ?? ''])));
+  /** What is typed, as of the last key (the drawn `values` can be a key behind). */
+  const typed = useRef(values);
   const last = fields.length - 1 + (extra ? 1 : 0);
   const go = (to: number) => setAt(Math.min(last, Math.max(0, to)));
   const step = (delta: number) => setAt((a) => Math.min(last, Math.max(0, a + delta)));
@@ -201,7 +215,8 @@ export function Form({ paint, fields, onSubmit, onCancel, extra, active = true }
   );
   const width = Math.max(...fields.map((f) => [...f.label].length)) + 2;
   const submit = (name: string, value: string) => {
-    const all = { ...values, [name]: value };
+    const all = { ...typed.current, [name]: value };
+    typed.current = all;
     setValues(all);
     // Enter goes to the next empty field; when none is left, it sends.
     const i = fields.findIndex((f) => f.name === name);
@@ -227,7 +242,10 @@ export function Form({ paint, fields, onSubmit, onCancel, extra, active = true }
             placeholder={f.placeholder ?? ''}
             initial={values[f.name] ?? ''}
             prefix={i === at ? '› ' : '  '}
-            onChange={(v) => setValues((all) => ({ ...all, [f.name]: v }))}
+            onChange={(v) => {
+              typed.current = { ...typed.current, [f.name]: v };
+              setValues(typed.current);
+            }}
             onSubmit={(v) => submit(f.name, v)}
             onCancel={onCancel}
           />

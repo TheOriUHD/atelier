@@ -18,7 +18,12 @@ import { KEY_HELP } from './keys.ts';
 import { todoLines, type TranscriptView } from './views.tsx';
 
 export type Overlay = { kind: 'model' } | { kind: 'effort' } | { kind: 'resume' } | { kind: 'rewind' } | { kind: 'config' } | { kind: 'mode' } | { kind: 'theme' };
-export type AppExit = { kind: 'quit'; keepRunning?: boolean } | { kind: 'setup'; step: 'login' | 'connect' | 'all' } | { kind: 'logout' } | { kind: 'restart'; sessionId: string | null };
+export type AppExit =
+  | { kind: 'quit'; keepRunning?: boolean }
+  /** Setup, then a session again: the one that was open, when there was one. */
+  | { kind: 'setup'; step: 'login' | 'connect' | 'all' | 'providers'; sessionId?: string | null }
+  | { kind: 'logout' }
+  | { kind: 'restart'; sessionId: string | null };
 
 export interface CommandContext {
   conn: Connected;
@@ -387,6 +392,25 @@ export const COMMANDS: Command[] = [
   },
   { name: 'logout', description: 'Sign this terminal out', run: (ctx) => ctx.exit({ kind: 'logout' }) },
   { name: 'connect', description: 'Connect to another server, or work on this computer only', run: (ctx) => ctx.exit({ kind: 'setup', step: 'connect' }) },
+  {
+    name: 'update',
+    description: 'Get the newest version now (it starts next time)',
+    run: async (ctx) => {
+      const { updateNow, updateWords } = await import('../update/auto.ts');
+      ctx.print(ctx.paint.fg('muted', 'Looking for a newer version…'));
+      const result = await updateNow(ctx.paths, ctx.config, { install: true, onProgress: (t) => ctx.print(ctx.paint.fg('muted', t)) });
+      ctx.print(result.kind === 'installed' ? ctx.paint.fg('good', `${updateWords(result)} atelier -c carries on with this session.`) : updateWords(result));
+    },
+  },
+  {
+    name: 'provider',
+    description: 'Add a model provider, or its key again',
+    aliases: ['providers'],
+    run: (ctx) => {
+      if (ctx.conn.mode === 'server') return ctx.print(ctx.paint.fg('muted', `Models on ${new URL(ctx.conn.serverUrl!).host} are set up on the server: Settings › Providers in its web app (admins), or Settings › Your models for your own.`));
+      ctx.exit({ kind: 'setup', step: 'providers', sessionId: ctx.sessionId });
+    },
+  },
   { name: 'setup', description: 'Go through the setup again', run: (ctx) => ctx.exit({ kind: 'setup', step: 'all' }) },
   {
     name: 'doctor',

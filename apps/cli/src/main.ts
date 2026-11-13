@@ -30,16 +30,16 @@ module.enableCompileCache?.();
 const run = promisify(execFile);
 // `atelier licenses | head`: the reader went away, which is fine.
 process.stdout.on('error', (e: NodeJS.ErrnoException) => e.code === 'EPIPE' && process.exit(0));
-
-/** Once a day, an installed copy looks whether a newer one is out (a line under the tip; never in the way). */
-async function updateNotice(p: ReturnType<typeof cliPaths>, config: CliConfig): Promise<string | null> {
-  if (process.env.ATELIER_NO_UPDATE_CHECK || Date.now() - (config.checkedForUpdatesAt ?? 0) < 24 * 3600_000) return null;
-  const { latest, newer, publicFeed, selfInstalled } = await import('./update/update.ts');
-  if (!selfInstalled()) return null;
-  await updateConfig(p.config, (c) => ({ ...c, checkedForUpdatesAt: Date.now() }));
-  const manifest = await latest(publicFeed(config.channel), 2500).catch(() => null);
-  return manifest && newer(manifest.version, VERSION) ? `Atelier CLI ${manifest.version} is out: atelier update` : null;
-}
+// A call that failed with nothing waiting for it (the service restarting under a session, a session deleted elsewhere)
+// goes to the log; Node would otherwise end the whole app on the first one. The service keeps its own log.
+process.on('unhandledRejection', (e) => {
+  if (process.env.ATELIER_DAEMON === '1') return;
+  const line = `${new Date().toISOString()} unhandled ${e instanceof Error ? (e.stack ?? e.message) : String(e)}\n`;
+  void import('node:fs/promises').then(({ appendFile, mkdir }) => {
+    const p = cliPaths();
+    return mkdir(p.logs, { recursive: true }).then(() => appendFile(`${p.logs}/cli.log`, line));
+  }).catch(() => undefined);
+});
 
 async function main(argv: string[]): Promise<number> {
   const { values, positionals } = parse(argv);
@@ -92,6 +92,8 @@ async function main(argv: string[]): Promise<number> {
     }
     case 'update':
       return updateCommand(config, p, !!values.beta, paint);
+    case 'reset-keys':
+      return resetKeys(p, config, !!values.force);
     case 'completion': {
       const { completion } = await import('./commands/completion.ts');
       const script = completion(rest[0] ?? '');
@@ -207,7 +209,7 @@ async function main(argv: string[]): Promise<number> {
       () => null,
     );
     await updateConfig(p.config, (c) => ({ ...c, tipIndex: c.tipIndex + 1 }));
-    const notice = updateNotice(p, config).catch(() => null);
+    const notice = import('./update/auto.ts').then(({ autoUpdate }) => autoUpdate(p, config)).catch(() => null);
     const { App } = await import('./tui/app.tsx');
     const screenReader = !!values['screen-reader'];
     // The fullscreen view: asked once (ATELIER_FULLSCREEN=1 or 0 decides without asking).
@@ -271,13 +273,15 @@ async function main(argv: string[]): Promise<number> {
     }
     if (ended.kind === 'logout') return logout(p, config);
     const next = await setup(p, config, ended.step, shade, 'session');
+    // Back to the session that was open (`/provider`), else a new start as before.
+    if (ended.step === 'providers') return main(ended.sessionId ? ['--session', ended.sessionId] : []);
     return next ? main(argv) : 0;
   } finally {
     conn.close();
   }
 }
 
-async function setup(p: ReturnType<typeof cliPaths>, config: CliConfig, start: 'all' | 'login' | 'connect', shade: Shade, afterwards: 'session' | 'exit' = 'exit'): Promise<CliConfig | null> {
+async function setup(p: ReturnType<typeof cliPaths>, config: CliConfig, start: 'all' | 'login' | 'connect' | 'providers', shade: Shade, afterwards: 'session' | 'exit' = 'exit'): Promise<CliConfig | null> {
   if (!process.stdin.isTTY) {
     process.stderr.write('Setup needs a terminal to ask in. Run atelier setup in one.\n');
     return null;
@@ -311,11 +315,42 @@ async function logout(p: ReturnType<typeof cliPaths>, config: CliConfig): Promis
   return 0;
 }
 
+/**
+ * `atelier reset-keys`: starts the standalone backend's key store over when its key is gone for good (a keychain item
+ * deleted, credentials.json lost). The API keys saved with the old key can't be read by anyone; they are added again
+ * with /provider. Stops the background service first, which holds the key.
+ */
+async function resetKeys(p: ReturnType<typeof cliPaths>, config: CliConfig, force: boolean): Promise<number> {
+  const { LOCAL_KEY } = await import('./keychain.ts');
+  const { rm } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const link = await connectService(p, { mode: 'local' }, { start: false }).catch(() => null);
+  if (link && !(await stopService(link, force))) {
+    process.stderr.write('A reply is still running on this computer. Let it finish, or: atelier reset-keys --force\n');
+    return 1;
+  }
+  await (await credentialStore(p.credentials)).delete(LOCAL_KEY);
+  await rm(join(p.backendData, 'local-key.check'), { force: true });
+  process.stdout.write(`Started the key store over. API keys saved before can't be read any more: add them again with /provider${config.connection?.mode === 'server' ? ' (this applies to this computer only, not your server)' : ''}.\n`);
+  return 0;
+}
+
 async function daemonCommand(rest: string[], values: Record<string, unknown>, p: ReturnType<typeof cliPaths>, config: CliConfig): Promise<number> {
   const sub = rest[0];
   if (sub === 'run') {
     const { runDaemon } = await import('./daemon/daemon.ts');
-    await runDaemon({ want: typeof values.server === 'string' ? { mode: 'server', serverUrl: values.server } : { mode: 'local' }, paths: p });
+    try {
+      await runDaemon({ want: typeof values.server === 'string' ? { mode: 'server', serverUrl: values.server } : { mode: 'local' }, paths: p });
+    } catch (e) {
+      // The service runs without a terminal: what stopped it goes where the terminal that started it reads (daemon.error)
+      // and into its log, instead of a stderr nobody sees.
+      const { appendFile, writeFile } = await import('node:fs/promises');
+      const { join } = await import('node:path');
+      const message = e instanceof Error ? e.message : String(e);
+      await appendFile(join(p.logs, 'daemon.log'), `${new Date().toISOString()} error not starting: ${e instanceof Error ? (e.stack ?? message) : message}\n`).catch(() => undefined);
+      await writeFile(join(p.run, 'daemon.error'), message).catch(() => undefined);
+      process.exit(1);
+    }
     return new Promise(() => undefined);
   }
   const want = config.connection?.mode === 'server' ? { mode: 'server' as const, serverUrl: config.connection.serverUrl } : { mode: 'local' as const };
@@ -367,29 +402,9 @@ async function listCommand(command: 'status' | 'models' | 'sessions', p: ReturnT
 }
 
 async function updateCommand(config: CliConfig, p: ReturnType<typeof cliPaths>, beta: boolean, paint: Paint): Promise<number> {
-  const { activate, install, latest, newer, publicFeed, selfInstalled, serverFeed } = await import('./update/update.ts');
-  const channel = beta ? 'beta' : config.channel;
-  let feed = publicFeed(channel);
-  if (config.connection?.mode === 'server') {
-    const token = await (await credentialStore(p.credentials)).get(tokenName(config.connection.serverUrl));
-    if (token) {
-      const mirrored = serverFeed(config.connection.serverUrl, token, channel);
-      if (await latest(mirrored).then(() => true, () => false)) feed = mirrored;
-    }
-  }
-  const manifest = await latest(feed, 15_000);
-  if (!newer(manifest.version, VERSION)) {
-    process.stdout.write(`Atelier CLI ${VERSION} is the newest${channel === 'beta' ? ' (beta)' : ''}.\n`);
-    return 0;
-  }
-  if (!selfInstalled()) {
-    process.stdout.write(`Atelier CLI ${manifest.version} is out. This copy wasn’t installed with the installer; update it the way you installed it, or run: curl -fsSL https://updates.atelierhq.dev/cli | sh\n`);
-    return 0;
-  }
-  const target = await install(feed, manifest, p.updates, (t) => process.stdout.write(`${paint.fg('muted', t)}\n`));
-  await activate(target);
-  await updateConfig(p.config, (c) => ({ ...c, checkedForUpdatesAt: Date.now() }));
-  process.stdout.write(`${paint.fg('good', '✓')} Updated to Atelier CLI ${manifest.version}. The background service restarts with the next session.\n`);
+  const { updateNow, updateWords } = await import('./update/auto.ts');
+  const result = await updateNow(p, config, { install: true, ...(beta ? { channel: 'beta' } : {}), onProgress: (t) => process.stdout.write(`${paint.fg('muted', t)}\n`) });
+  process.stdout.write(`${updateWords(result, beta)}\n`);
   return 0;
 }
 

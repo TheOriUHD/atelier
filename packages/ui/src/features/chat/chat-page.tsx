@@ -104,7 +104,6 @@ export function ChatPage() {
                 </ComposerImages.Provider>
               )}
             </div>
-            {coop.shared && <CoopTyping live={live} coop={coop} />}
             {!atBottom && <ScrollToBottom onClick={followSmooth} working={live.session?.status === 'running'} />}
             <SelectionReply container={scroller} onReply={(text) => {
                 attachments.addQuote(text);
@@ -130,6 +129,7 @@ export function ChatPage() {
               readOnly={coopReadOnly(coop)}
               answerModels={answerModels}
               onTyping={coop.shared ? coop.typing : undefined}
+              above={coop.shared ? <CoopTyping live={live} coop={coop} /> : undefined}
               streaming={streaming}
               commands={coopCommands(coop, [
                 clearCommand(() =>

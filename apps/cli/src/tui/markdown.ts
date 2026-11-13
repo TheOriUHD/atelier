@@ -90,7 +90,7 @@ function block(t: Token, paint: Paint, columns: number, depth = 0): string[] {
     case 'table':
       return [...table(t as Tokens.Table, paint, columns), ''];
     case 'hr':
-      return [paint.fg('faint', '─'.repeat(Math.min(columns, 60))), ''];
+      return [paint.fg('faint', '─'.repeat(Math.max(0, Math.min(columns, 60)))), ''];
     case 'space':
       return [];
     case 'html':

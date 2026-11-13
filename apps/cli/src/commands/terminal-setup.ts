@@ -50,10 +50,20 @@ export async function setupTerminal(env: NodeJS.ProcessEnv = process.env): Promi
     const file = join(env.LOCALAPPDATA ?? '', 'Packages', 'Microsoft.WindowsTerminal_8wekyb3d8bbwe', 'LocalState', 'settings.json');
     const text = await readFile(file, 'utf8').catch(() => null);
     if (!text) return 'Couldn’t find Windows Terminal’s settings. Add an action that sends "\\u001b\\r" on shift+enter.';
-    const settings = JSON.parse(stripComments(text)) as { actions?: unknown[] };
+    const manual = 'Couldn’t read Windows Terminal’s settings, so they were left as they are. Add an action that sends "\\u001b\\r" on shift+enter.';
+    let settings: { actions?: unknown[] };
+    try {
+      // A byte-order mark, or something the comment stripping missed: the person's file is never rewritten from a guess.
+      settings = JSON.parse(stripComments(text.replace(/^\uFEFF/, ''))) as { actions?: unknown[] };
+    } catch {
+      return manual;
+    }
+    if (!settings || typeof settings !== 'object') return manual;
     settings.actions ??= [];
     if (JSON.stringify(settings.actions).includes('shift+enter')) return 'Windows Terminal already has a Shift+Enter action.';
     settings.actions.push({ command: { action: 'sendInput', input: '\u001b\r' }, keys: 'shift+enter' });
+    // Its comments don't survive the rewrite: the file as it was stays beside it.
+    await writeFile(`${file}.before-atelier`, text);
     await writeFile(file, `${JSON.stringify(settings, null, 4)}\n`);
     return 'Added Shift+Enter to Windows Terminal’s actions.';
   }

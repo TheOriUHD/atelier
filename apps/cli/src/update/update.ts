@@ -127,7 +127,8 @@ export async function activate(target: string): Promise<string> {
   await rename(temp, link);
   await chmod(join(target, 'bin', 'atelier'), 0o755).catch(() => undefined);
   const all = (await readdir(versions).catch(() => [] as string[])).filter((v) => /^\d/.test(v) && !v.endsWith('.part')).sort((a, b) => (newer(a, b) ? -1 : 1));
-  for (const old of all.slice(3)) await rm(join(versions, old), { recursive: true, force: true });
+  // A version still running (Windows keeps its files locked) stays until a later update.
+  for (const old of all.slice(3)) if (!join(versions, old).startsWith(dirname(dirname(process.argv[1] ?? '')))) await rm(join(versions, old), { recursive: true, force: true }).catch(() => undefined);
   return link;
 }
 

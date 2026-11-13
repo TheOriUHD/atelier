@@ -406,7 +406,6 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                           </TranscriptDetail.Provider>
                         )}
                       </div>
-                      {coop.shared && <CoopTyping live={live} coop={coop} />}
                       {!atBottom && <ScrollToBottom onClick={followSmooth} working={live.session?.status === 'running'} />}
                       <SelectionReply container={scroller} onReply={(text) => {
                 attachments.addQuote(text);
@@ -433,6 +432,7 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                         readOnly={coopReadOnly(coop)}
                         answerModels={answerModels}
                         onTyping={coop.shared ? coop.typing : undefined}
+                        above={coop.shared ? <CoopTyping live={live} coop={coop} /> : undefined}
                         streaming={busy}
                         placeholder="Type / for commands"
                         workspaceId={workspaceId}

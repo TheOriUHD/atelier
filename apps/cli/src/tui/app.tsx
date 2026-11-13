@@ -108,8 +108,18 @@ export function App(props: AppProps) {
   const [statusLine, setStatusLine] = useState<string | null>(null);
   const [pip, setPip] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  // Under the tip before the first message; in the conversation after (a download can end mid-session).
+  const startedRef = useRef(started);
   useEffect(() => {
-    void props.notice?.then((n) => n && setNotice(n));
+    startedRef.current = started;
+  }, [started]);
+  useEffect(() => {
+    void props.notice?.then((n) => {
+      if (!n) return;
+      if (startedRef.current) setLocal((l) => [...l, { key: `local:notice:${Date.now()}`, lines: [paint.fg('accentSoft', n)], at: Date.now() }]);
+      else setNotice(n);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the start's own check
   }, [props.notice]);
   const ctrlC = useRef(0);
   const escAt = useRef(0);
@@ -126,6 +136,8 @@ export function App(props: AppProps) {
   const running = session?.status === 'running' || session?.status === 'waiting';
   const ctx: ViewContext = { paint, columns, root: folder.root, view, reveal: fullscreen && props.mouse ? 'click' : 'keys' };
 
+  /** A call that failed, said in the conversation (a call in flight when the service restarts, a session gone elsewhere). */
+  const fail = (e: unknown) => setLocal((l) => [...l, { key: `local:fail:${Date.now()}:${l.length}`, lines: [paint.fg('bad', describe(e))], at: Date.now() }]);
   const print = useCallback((lines: string | string[]) => {
     const list = Array.isArray(lines) ? lines : [lines];
     setLocal((l) => [...l, { key: `local:${Date.now()}:${l.length}`, lines: list, at: Date.now() }]);
@@ -312,7 +324,7 @@ export function App(props: AppProps) {
   };
 
   const run = async (text: string, how: 'send' | 'join') => {
-    void appendHistory(paths.history, folder.root, text).then(() => setHistory((h) => [...h, text]));
+    void appendHistory(paths.history, folder.root, text).then(() => setHistory((h) => [...h, text]), () => undefined);
     const m = /^\/(\S+)\s*([\s\S]*)$/.exec(text);
     const command = m ? findCommand(m[1]!) : undefined;
     try {
@@ -326,7 +338,7 @@ export function App(props: AppProps) {
   };
 
   const runShell = (command: string) => {
-    void appendHistory(paths.history, folder.root, `!${command}`);
+    void appendHistory(paths.history, folder.root, `!${command}`).catch(() => undefined);
     const r = spawnSync(process.platform === 'win32' ? 'cmd' : process.env.SHELL || 'sh', process.platform === 'win32' ? ['/c', command] : ['-c', command], { cwd: process.cwd(), encoding: 'utf8', timeout: 120_000, maxBuffer: 8 * 1024 * 1024 });
     const output = `${r.stdout ?? ''}${r.stderr ?? ''}`.replace(/\n+$/, '');
     const shown = output.split('\n').slice(-30);
@@ -378,7 +390,7 @@ export function App(props: AppProps) {
       }
       case 'shift-tab': {
         const next = MODE_CYCLE[(MODE_CYCLE.indexOf(mode) + 1) % MODE_CYCLE.length]!;
-        void commandCtx.setMode(next);
+        void commandCtx.setMode(next).catch(fail);
         return;
       }
       case 'ctrl-c': {
@@ -425,7 +437,7 @@ export function App(props: AppProps) {
     (_input, key) => {
       if (key.upArrow && outbox.length && sessionId) {
         const last = outbox.at(-1)!;
-        void conn.rpc.call('chat.unqueue', { sessionId, id: last.id }).then((r) => setInject({ text: textOf(r.parts) }));
+        void conn.rpc.call('chat.unqueue', { sessionId, id: last.id }).then((r) => setInject({ text: textOf(r.parts) }), fail);
       }
     },
     { isActive: !!outbox.length && !state.pending && !overlay },
@@ -463,15 +475,15 @@ export function App(props: AppProps) {
       const items: PickItem<ModelInfo>[] = models
         .filter((m) => !m.hidden)
         .map((m) => ({ value: m, label: m.displayName, ...(m.available === false ? { hint: 'its computer is away' } : {}), group: m.personal ? 'Your models' : m.providerId, current: m.ref === model?.ref }));
-      return <ListPicker paint={paint} title="Model" items={items} onCancel={close} onPick={(m) => (close(), void commandCtx.setModel(m))} />;
+      return <ListPicker paint={paint} title="Model" items={items} onCancel={close} onPick={(m) => (close(), void commandCtx.setModel(m).catch(fail))} />;
     }
     if (overlay.kind === 'effort') {
       const items = effortChoices(model, 'code').map((e) => ({ value: e, label: EFFORT_WORDS[e], current: e === effort }));
-      return <ListPicker paint={paint} title="Effort" items={items} onCancel={close} onPick={(e) => (close(), void commandCtx.setEffort(e))} empty="This model has no effort setting." />;
+      return <ListPicker paint={paint} title="Effort" items={items} onCancel={close} onPick={(e) => (close(), void commandCtx.setEffort(e).catch(fail))} empty="This model has no effort setting." />;
     }
     if (overlay.kind === 'mode') {
       const items = (Object.keys(MODE_WORDS) as PermissionMode[]).map((m) => ({ value: m, label: MODE_WORDS[m], current: m === mode, hint: { auto: 'a reviewing model checks what would ask', default: 'asks before edits and commands', acceptEdits: 'edits freely, commands ask', plan: 'reads and plans, changes nothing', bypassPermissions: 'asks nothing at all' }[m] }));
-      return <ListPicker paint={paint} title="Mode" items={items} onCancel={close} onPick={(m) => (close(), void commandCtx.setMode(m))} />;
+      return <ListPicker paint={paint} title="Mode" items={items} onCancel={close} onPick={(m) => (close(), void commandCtx.setMode(m).catch(fail))} />;
     }
     if (overlay.kind === 'resume') return <ResumePicker conn={conn} folder={folder} paint={paint} current={sessionId} onCancel={close} onPick={(id) => (close(), commandCtx.switchTo(id))} />;
     if (overlay.kind === 'rewind') {
@@ -508,13 +520,14 @@ export function App(props: AppProps) {
           : [
               { value: () => commandCtx.saveConfig((c) => ({ ...c, notifications: !c.notifications })), label: `Notifications: ${config.notifications ? 'on' : 'off'}`, hint: 'when a reply ends or needs you' },
               { value: () => commandCtx.saveConfig((c) => ({ ...c, motion: !c.motion })), label: `Animation: ${config.motion ? 'on' : 'off'}`, hint: 'Pip and the banner' },
+              { value: () => commandCtx.saveConfig((c) => ({ ...c, autoUpdate: !c.autoUpdate })), label: `Updates: ${config.autoUpdate ? 'automatic' : 'only tell me'}`, hint: config.autoUpdate ? 'newer versions download in the background and start next time' : '/update gets a newer version' },
               { value: async () => setOverlay({ kind: 'theme' }), label: `Theme: ${config.theme}` },
               { value: () => commandCtx.saveConfig((c) => ({ ...c, transcriptView: view })), label: `Remember the transcript view (${view})`, hint: 'Ctrl+O changes it' },
               { value: () => commandCtx.saveConfig((c) => ({ ...c, permissionMode: mode })), label: `Start new sessions in ${MODE_WORDS[mode]}` },
               ...(model ? [{ value: () => commandCtx.saveConfig((c) => ({ ...c, model: model.ref })), label: `Start new sessions with ${model.displayName}` }] : []),
               ...(conn.mode === 'server' ? [{ value: () => commandCtx.saveConfig((c) => ({ ...c, keepAvailable: !c.keepAvailable })), label: `Keep this computer available: ${config.keepAvailable ? 'on' : 'off'}`, hint: 'the server can use this folder when no terminal is open' }] : []),
             ];
-      return <ListPicker paint={paint} title={overlay.kind === 'theme' ? 'Theme' : 'Settings'} items={items} onCancel={close} onPick={(fn) => void fn().then(() => overlay.kind === 'theme' && close())} />;
+      return <ListPicker paint={paint} title={overlay.kind === 'theme' ? 'Theme' : 'Settings'} items={items} onCancel={close} onPick={(fn) => void fn().then(() => overlay.kind === 'theme' && close(), fail)} />;
     }
     return null;
   };
@@ -668,6 +681,9 @@ function PipDance({ paint }: { paint: Paint }) {
 
 function ResumePicker({ conn, folder, paint, current, onPick, onCancel }: { conn: Connected; folder: WorkspaceSummary; paint: Paint; current: string | null; onPick(id: string): void; onCancel(): void }) {
   const [items, setItems] = useState<PickItem<string>[] | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  // Esc while the list loads (or when it couldn't be read).
+  useInput((_input, key) => key.escape && onCancel(), { isActive: !items });
   useEffect(() => {
     void Promise.all([conn.rpc.call('sessions.list', { mode: 'code', limit: 200 }), conn.rpc.call('workspaces.list', {})]).then(([list, folders]) => {
       const name = new Map(folders.map((f) => [f.id, f.root]));
@@ -677,8 +693,9 @@ function ResumePicker({ conn, folder, paint, current, onPick, onCancel }: { conn
         ...here.map((s) => ({ value: s.id, label: s.title || 'Untitled', hint: `${when(s.updatedAt)}${s.status === 'running' ? ' · running' : ''}`, group: 'In this folder', current: s.id === current })),
         ...elsewhere.map((s) => ({ value: s.id, label: s.title || 'Untitled', hint: `${shortPath(name.get(s.workspaceId ?? '') ?? 'no folder')} · ${when(s.updatedAt)}`, group: 'Elsewhere', current: s.id === current })),
       ]);
-    });
+    }, (e: unknown) => setProblem(describe(e)));
   }, [conn, folder.id, current]);
-  if (!items) return <Text>{paint.fg('muted', 'Looking up your sessions…')}</Text>;
+  if (problem) return <Text>{paint.fg('bad', `Couldn’t list your sessions: ${problem} (esc back)`)}</Text>;
+  if (!items) return <Text>{paint.fg('muted', 'Looking up your sessions… (esc back)')}</Text>;
   return <ListPicker paint={paint} title="Resume a session" items={items} onPick={onPick} onCancel={onCancel} empty="No sessions yet." />;
 }

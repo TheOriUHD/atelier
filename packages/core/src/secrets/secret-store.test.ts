@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase, type Db } from '../store/db.ts';
-import { AesGcmCipher, loadServerKey, SecretStore } from './secret-store.ts';
+import { randomBytes } from 'node:crypto';
+import { AesGcmCipher, loadServerKey, SecretStore, SecretUnreadableError } from './secret-store.ts';
 
 let dir: string;
 let db: Db;
@@ -30,6 +31,15 @@ describe('SecretStore', () => {
     expect(summary).toMatchObject({ id: 'anthropic', masked: '••••1234', usedBy: ['providers.anthropic'] });
     expect(JSON.stringify(summary)).not.toContain('abcdef');
     expect(await store.get('anthropic')).toBe('sk-ant-abcdef1234');
+  });
+
+  it('says which saved key it can’t read, and what to do, when the encryption key changed', async () => {
+    await new SecretStore(db, new AesGcmCipher(randomBytes(32))).set({ id: 'provider-mistral', label: 'Mistral API key', kind: 'api_key', value: 'abc123' });
+    const other = new SecretStore(db, new AesGcmCipher(randomBytes(32)));
+    const failed = await other.get('provider-mistral').catch((e: unknown) => e);
+    expect(failed).toBeInstanceOf(SecretUnreadableError);
+    expect((failed as Error).message).toMatch(/^The saved Mistral API key can't be read: .* Enter it again/);
+    expect((failed as Error).message).not.toMatch(/Unsupported state/);
   });
 
   it('rotates in place and allocates unique ids', async () => {

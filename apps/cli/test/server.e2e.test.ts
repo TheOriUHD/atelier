@@ -137,3 +137,54 @@ it.skipIf(!ready())('signs in through the browser, lends the folder and works in
   const after = await admin.call('account.sessions', {});
   expect(after.some((x) => x.clientKind === 'cli')).toBe(false);
 });
+
+it.skipIf(!ready())('signs in with the password an admin made, and asks for an own one first', { timeout: 180_000 }, async () => {
+  // A second home: a new person on another computer.
+  const other = realpathSync(await mkdtemp(join(tmpdir(), 'atelier-cli-newcomer-')));
+  const otherEnv = { ...env(), HOME: other, USERPROFILE: other, ATELIER_CLI_DIR: join(other, '.atelier', 'cli') };
+  const { temporaryPassword } = await admin.call('users.create', { username: 'bea', name: 'Bea', role: 'user' });
+  const s = await openScreen({ cwd: other, env: otherEnv, command: cliCommand('setup') });
+  try {
+    await s.waitFor('Where should Atelier run?', 60_000);
+    await s.waitFor(/Found (one server|\d+ servers) on your network|No server found|reach your local network/, 30_000);
+    await s.select(/^(Another server|An Atelier server)/);
+    await s.press('enter');
+    await s.waitFor('The address you open it at');
+    await s.type(serverUrl);
+    await s.press('enter');
+    await s.waitFor(/Waiting for you to approve it/, 30_000);
+    // The password instead of the browser.
+    await s.type('p');
+    await s.waitFor('Username', 15_000);
+    await s.type('bea');
+    await s.press('tab');
+    await s.type(temporaryPassword);
+    await s.press('enter');
+    // The server wants an own password before anything else: asked here, not a dead end.
+    await s.waitFor('Choose your own password', 30_000);
+    show('new password', s);
+    await s.type('bea-own-password');
+    await s.press('tab');
+    await s.type('bea-own-password');
+    await s.press('enter');
+    await s.waitFor('What this computer lends the server', 30_000);
+    show('signed in', s);
+  } finally {
+    await s.close();
+    try {
+      execFileSync(process.execPath, [BUNDLE, 'daemon', 'stop', '--force'], { env: otherEnv, timeout: 10_000 });
+    } catch {
+      // Not running.
+    }
+    await removeAll(other);
+  }
+  // The new password is the one that works now.
+  const transport = wsTransport({ serverUrl, headers: () => ({}) });
+  const bea = createRpcClient(contract, transport);
+  try {
+    const signed = await bea.call('auth.login', { username: 'bea', password: 'bea-own-password', clientKind: 'web' });
+    expect(signed.user.mustChangePassword).toBe(false);
+  } finally {
+    transport.close();
+  }
+});
