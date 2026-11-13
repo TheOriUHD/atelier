@@ -356,7 +356,8 @@ export class CoopGateway {
     this.learn(link, event);
     if (event.type === 'pending') this.noteAsked(link, event.pending);
     if (link.snapshot && seq > link.snapshot.seq) link.snapshot = { ...link.snapshot, seq };
-    this.deps.emitSession(link.membership.id, seq, event);
+    const me = link.welcome?.participantId ?? link.state?.me;
+    this.deps.emitSession(link.membership.id, seq, event.type === 'presence' && me ? { ...event, participants: ownModelHere(event.participants, me) } : event);
   }
 
   /** The guest's own connector calls are asked of them in the session; what they allow there may run once. */
@@ -552,11 +553,11 @@ export class CoopGateway {
       case 'checkpoints.list':
         return [];
       case 'coop.state': {
-        if (link.ended) return link.state ? { ...link.state, ended: true, lending: link.lend } : null;
-        if (!link.client || !link.connected || !link.admitted) return link.state ? { ...link.state, hostAway: !link.connected, lending: link.lend } : null;
+        if (link.ended) return link.state ? here({ ...link.state, ended: true, lending: link.lend }) : null;
+        if (!link.client || !link.connected || !link.admitted) return link.state ? here({ ...link.state, hostAway: !link.connected, lending: link.lend }) : null;
         const state = await link.client.call('coop.state', {});
         link.state = state;
-        return state ? { ...state, lending: link.lend } : state;
+        return state ? here({ ...state, lending: link.lend }) : state;
       }
       case 'coop.models': {
         const models = input.models as ModelsChoice;
@@ -565,7 +566,7 @@ export class CoopGateway {
         link.models = models;
         link.model = models === 'own' ? model : null;
         link.state = state;
-        return state;
+        return here(state);
       }
       case 'coop.lend': {
         link.lend = !!input.lend;
@@ -605,7 +606,7 @@ export class CoopGateway {
       case 'coop.navigate': {
         const state = await this.live(userId, id).call('coop.navigate', { on: !!input.on });
         link.state = state;
-        return state;
+        return here(state);
       }
       case 'chat.unqueue':
         return this.live(userId, id).call('chat.unqueue', { id: String(input.id) });
@@ -759,4 +760,16 @@ export class CoopGateway {
       },
     };
   }
+}
+
+/**
+ * The guest's own model as their app knows it: the host keeps it as `peer-<key>/<ref>` (it runs on the guest's computer),
+ * and the app looked for a model by that name among its own, found none and said "no model chosen".
+ */
+export function ownModelHere<P extends { id: string; model: string | null }>(participants: readonly P[], me: string): P[] {
+  return participants.map((p) => (p.id === me && p.model ? { ...p, model: parsePeerModelRef(p.model)?.ref ?? p.model } : p));
+}
+
+function here<S extends { me: string; participants: { id: string; model: string | null }[] } | null>(state: S): S {
+  return state ? { ...state, participants: ownModelHere(state.participants, state.me) } : state;
 }

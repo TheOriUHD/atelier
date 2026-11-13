@@ -96,6 +96,18 @@ export type TurnItem =
 /** Tool calls the transcript shows as items of their own, not as steps of an activity run. */
 const OWN_ITEM: Record<string, 'artifact' | 'visual' | 'image' | 'video' | 'audio'> = { artifact: 'artifact', inline_visual: 'visual', GenerateImage: 'image', GenerateVideo: 'video', GenerateAudio: 'audio' };
 
+/**
+ * Whether a thought says anything: not empty (an encrypted one has no text), and more than a lone heading such as
+ * "**Preparing backup access**", which some providers send as the whole summary of a step. Rows of those only filled
+ * the list.
+ */
+export function hasThought(text: string): boolean {
+  const plain = text.replace(/[*_#`>]/g, ' ').trim();
+  if (!plain) return false;
+  const lines = plain.split('\n').filter((l) => l.trim());
+  return lines.length > 1 || plain.split(/\s+/).length > 8;
+}
+
 /** What an assistant turn renders, in order. Thinking only joins an activity run when the run has a tool call. */
 export function turnItems(messages: readonly Message[]): TurnItem[] {
   const items: TurnItem[] = [];
@@ -105,10 +117,13 @@ export function turnItems(messages: readonly Message[]): TurnItem[] {
     else for (const ref of run) items.push({ kind: 'thinking', ref: ref as PartRef<ThinkingPart> });
     run = [];
   };
+  const last = messages.at(-1);
   for (const message of messages) {
     if (message.role !== 'assistant') continue;
     message.parts.forEach((part, index) => {
       const key = `${message.id}:${index}`;
+      // A thought that says nothing is left out, unless it is the newest part (it may still be coming in).
+      if (part.type === 'thinking' && !hasThought(part.text) && !(message === last && index === message.parts.length - 1)) return;
       const own = part.type === 'tool_call' && Object.hasOwn(OWN_ITEM, part.name) ? OWN_ITEM[part.name] : undefined;
       if (part.type === 'thinking' || (part.type === 'tool_call' && !own)) run.push({ key, message, index, part } as ActivityStep);
       else if (part.type === 'tool_call') {

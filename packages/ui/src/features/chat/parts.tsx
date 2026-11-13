@@ -1,4 +1,5 @@
-import { createContext, memo, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, Fragment, memo, useContext, useEffect, useState, type ReactNode } from 'react';
+import { hasThought } from '@atelier/client';
 import { ChevronRight, CircleAlert, OctagonX, Pencil, RotateCcw } from 'lucide-react';
 import type { MessageError as MessageErrorData, ToolCallPart, ToolResultPart, TranscriptView } from '@atelier/protocol';
 import { Button, Icon, ThinkingDots, cn } from '../../components/ui/index.ts';
@@ -42,6 +43,8 @@ export function Summary({ open, onToggle, children }: { open: boolean; onToggle(
 }
 
 export function ThinkingText({ text, className }: { text: string; className?: string }) {
+  // A line that is all one **heading** (as reasoning summaries start their parts) reads as a heading, without the stars.
+  const lines = text.split('\n');
   return (
     <div
       className={cn(
@@ -49,7 +52,15 @@ export function ThinkingText({ text, className }: { text: string; className?: st
         className,
       )}
     >
-      {text}
+      {lines.map((line, i) => {
+        const heading = /^\s*\*\*([^*]+)\*\*\s*$/.exec(line)?.[1];
+        return (
+          <Fragment key={i}>
+            {heading ? <strong className="font-medium text-fg-secondary">{heading}</strong> : line}
+            {i < lines.length - 1 && '\n'}
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -65,7 +76,7 @@ export const TRANSCRIPT_VIEWS: { value: TranscriptView; label: string }[] = [
 
 export const ThinkingBlock = memo(function ThinkingBlock({ text, active }: { text: string; active: boolean }) {
   const [open, setOpen] = useState(useContext(TranscriptDetail) !== 'normal');
-  if (!active && !text.trim()) return null;
+  if (!active && !hasThought(text)) return null;
   return (
     <div className="flex flex-col">
       <Summary open={open} onToggle={() => setOpen((o) => !o)}>

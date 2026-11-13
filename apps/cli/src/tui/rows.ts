@@ -4,7 +4,7 @@
  * the rest is redrawn as it streams. A row is final when its message ended, when a later part of it began, or (a tool
  * call) when its result came.
  */
-import type { LiveSessionState } from '@atelier/client';
+import { hasThought, type LiveSessionState } from '@atelier/client';
 import type { Message, Notice, ToolCallPart, ToolResultPart } from '@atelier/protocol';
 
 export type Row =
@@ -106,7 +106,8 @@ export function buildRows(state: Pick<LiveSessionState, 'messages' | 'streamingM
       const key = `${m.id}:${index}`;
       const later = index < m.parts.length - 1;
       if (part.type === 'text' && part.text.trim()) rows.push({ key, kind: 'text', text: part.text, final: done || later });
-      else if (part.type === 'thinking' && (part.text.trim() || part.redacted)) {
+      // A thought that says nothing (empty, encrypted, or a lone heading) gets no row, as in the app.
+      else if (part.type === 'thinking' && (hasThought(part.text) || (!done && !later))) {
         rows.push({ key, kind: 'thinking', text: part.text, final: done || later, seconds: m.usage?.durationMs ? Math.round(m.usage.durationMs / 1000) : null });
       } else if (part.type === 'tool_call') {
         const result = results.get(part.id);

@@ -429,7 +429,7 @@ describe('plan card', () => {
 
 describe('transcript views', () => {
   const read = step('Read', { file_path: '/repo/a.ts' }, { result: result('     1\tconst a = 1;') });
-  const thinking: ToolStep = { kind: 'thinking', key: 't', text: 'Checking the file first.', active: false } as unknown as ToolStep;
+  const thinking: ToolStep = { kind: 'thinking', key: 't', text: 'Checking the file first, then the two places that call it.', active: false } as unknown as ToolStep;
   const showIn = (view: TranscriptView) =>
     render(
       <TranscriptDetail.Provider value={view}>
@@ -441,17 +441,17 @@ describe('transcript views', () => {
 
   it('Normal keeps thinking and one-line calls closed', () => {
     showIn('normal');
-    expect(screen.queryByText('Checking the file first.')).toBeNull();
+    expect(screen.queryByText('Checking the file first, then the two places that call it.')).toBeNull();
     expect(screen.queryByText(/const a = 1/)).toBeNull();
   });
 
   it('Thinking opens thinking; Verbose opens every call too', () => {
     const { unmount } = showIn('thinking');
-    expect(screen.getByText('Checking the file first.')).toBeTruthy();
+    expect(screen.getByText('Checking the file first, then the two places that call it.')).toBeTruthy();
     expect(screen.queryByText(/const a = 1/)).toBeNull();
     unmount();
     showIn('verbose');
-    expect(screen.getByText('Checking the file first.')).toBeTruthy();
+    expect(screen.getByText('Checking the file first, then the two places that call it.')).toBeTruthy();
     expect(screen.getByText(/const a = 1/)).toBeTruthy();
   });
 });

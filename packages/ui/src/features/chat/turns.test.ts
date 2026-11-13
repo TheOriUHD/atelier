@@ -73,13 +73,13 @@ describe('turnItems', () => {
 
   it('folds a run of tool calls and the thinking between them into one activity', () => {
     const items = turnItems([
-      m('a1', 'assistant', { parts: [{ type: 'thinking', text: 'plan' }, call('c1'), { type: 'text', text: '\n' }] }),
+      m('a1', 'assistant', { parts: [{ type: 'thinking', text: 'Plan: read the config first, then change the two settings it names.' }, call('c1'), { type: 'text', text: '\n' }] }),
       m('t1', 'tool', { parts: [{ type: 'tool_result', callId: 'c1', content: [] }] }),
       m('a2', 'assistant', {
         parts: [
-          { type: 'thinking', text: 'next' },
+          { type: 'thinking', text: 'Next: the second file has the same setting under another name.' },
           call('c2'),
-          { type: 'thinking', text: 'wrap up' },
+          { type: 'thinking', text: 'Wrap up: both changed, the tests pass, and nothing else needs touching.' },
           { type: 'text', text: 'Done.' },
         ],
       }),
@@ -91,7 +91,7 @@ describe('turnItems', () => {
     const error = { code: 'x', message: 'failed' };
     const items = turnItems([
       m('a1', 'assistant', {
-        parts: [{ type: 'thinking', text: 'hmm' }, { type: 'text', text: 'Here:' }, call('c1', 'artifact'), call('c2')],
+        parts: [{ type: 'thinking', text: 'Hmm, the page wants its own file rather than a block in the reply.' }, { type: 'text', text: 'Here:' }, call('c1', 'artifact'), call('c2')],
         error,
       }),
     ]);
@@ -121,7 +121,7 @@ describe('turnItems and generated images', () => {
 describe('stepView', () => {
   const call = (id: string) => ({ type: 'tool_call' as const, id, name: 'Bash', input: {} });
   const messages = [
-    m('a1', 'assistant', { createdAt: 5, parts: [call('c1'), call('c2'), { type: 'thinking', text: 'more' }] }),
+    m('a1', 'assistant', { createdAt: 5, parts: [call('c1'), call('c2'), { type: 'thinking', text: 'More to check: the last call failed, so try the other path next.' }] }),
     m('t1', 'tool', { parts: [{ type: 'tool_result', callId: 'c1', content: [] }] }),
   ];
   const [activity] = turnItems(messages) as [Extract<TurnItem, { kind: 'activity' }>];
@@ -144,7 +144,24 @@ describe('stepView', () => {
   });
 
   it('marks the last part of the streaming message as active thinking', () => {
-    expect(stepView(thinking, results, run)).toEqual({ kind: 'thinking', key: 'a1:2', text: 'more', active: true });
+    expect(stepView(thinking, results, run)).toEqual({ kind: 'thinking', key: 'a1:2', text: 'More to check: the last call failed, so try the other path next.', active: true });
     expect(stepView(thinking, results, { ...run, streamingMessageId: null })).toMatchObject({ active: false });
+  });
+});
+
+describe('thoughts that say nothing', () => {
+  it('are left out: empty, encrypted, or a lone heading; a newest one that may still be coming in stays', async () => {
+    const { hasThought, turnItems } = await import('@atelier/client');
+    expect(hasThought('')).toBe(false);
+    expect(hasThought('**Preparing backup access**')).toBe(false);
+    expect(hasThought('Checking it')).toBe(false);
+    expect(hasThought('**Preparing backup access**\n\nThe launcher must exit before its profile can be copied safely.')).toBe(true);
+    expect(hasThought('The launcher must exit before its profile can be copied safely, so ask it first.')).toBe(true);
+    const at = (id: string, parts: Message['parts']): Message => ({ id, sessionId: 's', parentId: null, role: 'assistant', parts, model: null, usage: null, stopReason: null, error: null, kind: 'normal', summarizesThroughId: null, createdAt: 0 });
+    const call = (id: string) => ({ type: 'tool_call' as const, id, name: 'Read', input: {} });
+    const items = turnItems([at('a1', [{ type: 'thinking', text: '' }, call('c1'), { type: 'thinking', text: '**Requesting graceful window closure**' }, call('c2'), { type: 'thinking', text: '' }])]);
+    expect(items).toHaveLength(1);
+    // The two calls, and the newest (empty) thought, which may still be coming in.
+    expect(items[0]!.kind === 'activity' && items[0]!.steps.map((s) => s.part.type)).toEqual(['tool_call', 'tool_call', 'thinking']);
   });
 });
