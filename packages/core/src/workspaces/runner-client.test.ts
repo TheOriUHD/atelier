@@ -36,13 +36,14 @@ describe('RunnerClient heartbeat', () => {
     expect(runner.killed).toBe(false);
   });
 
-  it('closes the channel after two missed pings, failing the calls waiting on it', async () => {
+  it('closes the channel after four missed pings, failing the calls waiting on it', async () => {
     const { runner, channel } = fakeRunner();
     const client = await RunnerClient.connect(channel);
     runner.answering = false;
     const stat = client.call('fs.stat', { path: '.' });
     const failed = expect(stat).rejects.toThrow(/stopped answering/);
-    await vi.advanceTimersByTimeAsync(20_000);
+    // A busy link keeps the runner for 40 seconds without a word (it was cut after 20, in the middle of a large copy).
+    await vi.advanceTimersByTimeAsync(40_000);
     expect(runner.killed).toBe(false);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(runner.killed).toBe(true);

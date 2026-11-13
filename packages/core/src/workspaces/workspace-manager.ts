@@ -21,7 +21,7 @@ import { RunnerClient } from './runner-client.ts';
 import { SANDBOX_HOST, sandboxHint, sandboxWrap } from './sandbox.ts';
 import { SandboxAccountError, sandboxChats } from './sandbox-accounts.ts';
 import { bootstrapRunner, remoteRunnerChannel, SshError, sshShell, type RemoteShell } from './ssh.ts';
-import type { Workspace } from './workspace.ts';
+import type { RunnerCalls, Workspace } from './workspace.ts';
 
 const IDLE_MS = 15 * 60_000;
 /**
@@ -39,6 +39,9 @@ export function scratchName(now: Date, suffix = randomBytes(3).toString('hex')):
   const pad = (n: number) => String(n).padStart(2, '0');
   return `scratch-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${suffix}`;
 }
+
+/** How long a step waits for a device whose link dropped to come back. */
+const DEVICE_BACK_MS = 20_000;
 
 interface Live {
   workspace: Workspace;
@@ -90,6 +93,8 @@ export interface WorkspaceManagerDeps {
 
 export class WorkspaceManager {
   private live = new Map<string, Promise<Live>>();
+  /** One workspace per folder for as long as this backend runs, whichever runner serves it now (`steadyFor`). */
+  private steady = new Map<string, Workspace>();
   /** A runner rooted at `/` per SSH host the folder browser is using, shut down when it has been idle a while. */
   private browsers = new Map<string, { client: Promise<RunnerClient>; timer: ReturnType<typeof setTimeout> }>();
 
@@ -373,12 +378,17 @@ export class WorkspaceManager {
     // A runner already up serves the next call as a trusted workspace.
     const live = await this.live.get(row.id)?.catch(() => null);
     if (live) live.workspace.trusted = true;
+    const steady = this.steady.get(row.id);
+    if (steady) steady.trusted = true;
     return this.summary({ ...row, trusted: true });
   }
 
   async remove(userId: string, id: string): Promise<void> {
     const removed = await this.deps.db.delete(workspaces).where(and(eq(workspaces.userId, userId), eq(workspaces.id, id))).returning();
-    if (removed.length) await this.releaseCurrent(id);
+    if (removed.length) {
+      this.steady.delete(id);
+      await this.releaseCurrent(id);
+    }
   }
 
   /**
@@ -408,7 +418,66 @@ export class WorkspaceManager {
     // Trust can change while the runner stays up (the person answers the question later): every open sees the row's.
     live.workspace.trusted = row.trusted;
     this.touch(live);
-    return live.workspace;
+    return this.steadyFor(row, live);
+  }
+
+  /**
+   * The folder's workspace as a session's tools hold it for a whole turn: each call goes to the runner that serves the folder
+   * now. A runner whose link dropped in the middle of a turn (a device's connection blinking, a busy link missing its
+   * heartbeat) stayed dead for every later call of that turn ("Runner is not running"), so a long task couldn't finish;
+   * now the next call starts a new runner, as the next turn already did. A call in flight when the link drops still fails.
+   */
+  private steadyFor(row: WorkspaceRow, live: Live): Workspace {
+    let steady = this.steady.get(row.id);
+    if (!steady) {
+      const id = row.id;
+      let client = live.client;
+      const handlers = new Map<string, Set<(payload: never) => void>>();
+      const forwarded = new WeakMap<RunnerClient, Set<string>>();
+      // Notifications (a command's output) reach the handlers from whichever runner serves the folder.
+      const forward = (c: RunnerClient, event: string) => {
+        let events = forwarded.get(c);
+        if (!events) forwarded.set(c, (events = new Set()));
+        if (events.has(event)) return;
+        events.add(event);
+        c.on(event as never, (payload: never) => handlers.get(event)?.forEach((h) => h(payload)));
+      };
+      const current = async (): Promise<Live> => {
+        const fresh = await this.deps.db.select().from(workspaces).where(eq(workspaces.id, id)).get();
+        if (!fresh) throw new WorkspaceError('This workspace no longer exists.');
+        // A device's link that blinked comes back within seconds: wait for it rather than failing the task's next step.
+        for (let waited = 0; !this.reachable(fresh) && fresh.deviceId && waited < DEVICE_BACK_MS; waited += 500) await new Promise((r) => setTimeout(r, 500));
+        if (!this.reachable(fresh)) throw new WorkspaceError(`${fresh.name} is on a device that isn't connected.`);
+        const now = await this.running(fresh);
+        this.touch(now);
+        if (now.client !== client) {
+          client = now.client;
+          for (const event of handlers.keys()) forward(client, event);
+        }
+        return now;
+      };
+      steady = {
+        ...live.workspace,
+        runner: {
+          call: (async (method: never, params: never, options?: { signal?: AbortSignal }) => (await current()).client.call(method, params, options)) as RunnerCalls['call'],
+          on: ((event: string, handler: (payload: never) => void) => {
+            let set = handlers.get(event);
+            if (!set) handlers.set(event, (set = new Set()));
+            set.add(handler);
+            forward(client, event);
+            return () => void set.delete(handler);
+          }) as RunnerCalls['on'],
+        },
+        shellFor: async (sessionId: string) => (await current()).workspace.shellFor(sessionId),
+      };
+      // What the runner serving it now said at its start (tests, diagnostics).
+      Object.defineProperty(steady.runner, 'info', { get: () => client.info });
+      this.steady.set(id, steady);
+    }
+    // What the runner reports can change with a new one (a device's folder moved, its shell): the newest counts.
+    const { root, home, os, shell, pathSep, trusted, sandbox } = live.workspace;
+    Object.assign(steady, { root, home, os, shell, pathSep, trusted, ...(sandbox ? { sandbox } : {}) });
+    return steady;
   }
 
   async disposeAll(): Promise<void> {

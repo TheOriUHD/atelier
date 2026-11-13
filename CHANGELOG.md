@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **A task goes on when the runner of its folder drops.** On a server working in a folder lent by your desktop, a runner whose link blinked, or that missed its heartbeat while the link was busy (a large copy), stayed dead for the rest of the turn: every later step failed with "Runner is not running", so long tasks couldn't finish. Each step now goes to the runner that serves the folder at that moment, and starts a new one when the old one is gone. It waits up to 20 seconds for a desktop whose link dropped to come back, and a busy link keeps its runner for about 45 seconds of silence instead of 25.
 - **The terminal app tells a desktop app from a server.** A desktop app shared on its network ("Share on your network") works only in the folders opened in that app, so a terminal connected to one stopped with "Only Atelier on the computer you're connected to can do this." Setup's network search now leaves such desktop apps out. Typing one's address explains what it is and offers "Only this computer", and a terminal already connected to one says how to switch (`atelier connect --local`).
 ## [0.7.2] — 2026-11-13
 

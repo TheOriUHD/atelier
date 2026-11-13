@@ -38,6 +38,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.7.3',
+    intro: 'Long tasks in a folder your desktop lends a server finish, even when the connection blinks.',
+    highlights: [
+      {
+        icon: RefreshCw,
+        title: 'Tasks survive a dropped runner',
+        body: 'When the connection to the computer that lends a folder blinked, every later step of a task failed with “Runner is not running”. Each step now reaches the folder again, waiting a few seconds for the computer to come back.',
+      },
+    ],
+    also: ['The terminal app tells the desktop app shared on your network apart from a server, and says how to work on this computer instead.'],
+  },
+  {
     version: '0.7.2',
     intro: 'The terminal app signs in, sets up and keeps its keys reliably, and updates itself.',
     highlights: [

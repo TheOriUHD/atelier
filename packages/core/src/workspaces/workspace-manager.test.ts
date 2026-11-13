@@ -116,14 +116,27 @@ describe.skipIf(!built)('WorkspaceManager', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const ws = await manager.addLocal('ada', dir);
     const idle = await manager.open('ada', ws.id);
+    const first = live(ws.id);
     vi.advanceTimersByTime(15 * 60_000);
-    // Sessions arriving while the idle runner shuts down share one new runner.
+    // Sessions arriving while the idle runner shuts down share one new runner, through the same workspace.
     const [a, b] = await Promise.all([manager.open('ada', ws.id), manager.open('ada', ws.id)]);
-    expect(a).not.toBe(idle);
+    expect(a).toBe(idle);
     expect(b).toBe(a);
-    await (idle.runner as RunnerClient).exited;
-    expect(await manager.open('ada', ws.id)).toBe(a);
+    await (await first).client.exited;
+    expect((await live(ws.id)).client).not.toBe((await first).client);
     expect((await a.runner.call('fs.stat', { path: '.' })).type).toBe('dir');
+  });
+
+  it('goes on with a new runner when the one a turn started with dies in the middle of it', async () => {
+    const ws = await manager.addLocal('ada', dir);
+    // A turn holds the workspace for all its calls.
+    const held = await manager.open('ada', ws.id);
+    expect((await held.runner.call('fs.stat', { path: '.' })).type).toBe('dir');
+    // Its runner goes away (a device's link dropped, a missed heartbeat): it said "Runner is not running" from here on.
+    await (await live(ws.id)).client.shutdown();
+    expect((await held.runner.call('fs.stat', { path: '.' })).type).toBe('dir');
+    const shell = await held.shellFor('s1');
+    expect((await held.runner.call('shell.exec', { shellId: shell, command: 'echo again' })).output).toContain('again');
   });
 
   it('only shuts down runners of workspaces the person removes', async () => {
@@ -132,7 +145,7 @@ describe.skipIf(!built)('WorkspaceManager', () => {
     await manager.remove('bob', ws.id);
     expect((await live.runner.call('fs.stat', { path: '.' })).type).toBe('dir');
     await manager.remove('ada', ws.id);
-    await expect(live.runner.call('fs.stat', { path: '.' })).rejects.toThrow(/not running/);
+    await expect(live.runner.call('fs.stat', { path: '.' })).rejects.toThrow(/no longer exists/);
   });
 
   it('reads project permission rules, Claude Code files only when enabled', async () => {
@@ -278,6 +291,9 @@ describe.skipIf(!built)('scratch folders', () => {
     expect(scratchName(new Date())).toMatch(/^scratch-\d{4}-\d{2}-\d{2}-[0-9a-f]{6}$/);
   });
 });
+
+/** The runner serving a folder now, as the manager keeps it (tests reach in). */
+const live = (id: string) => (manager as unknown as { live: Map<string, Promise<{ client: RunnerClient }>> }).live.get(id)!;
 
 describe('WorkspaceManager on a server', () => {
   it('refuses folders on its own machine', async () => {

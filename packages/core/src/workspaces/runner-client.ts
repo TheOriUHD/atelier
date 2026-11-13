@@ -47,7 +47,9 @@ type Pending = { resolve: (result: unknown) => void; reject: (error: unknown) =>
 
 /** Heartbeat (§5): `sys.ping` every 10 s; the runner is given up on once two in a row go unanswered. */
 const PING_MS = 10_000;
-const MISSED_PINGS = 2;
+// About 40 to 50 seconds without a word: a device's link relays everything through its app, and a busy one (a large copy,
+// a slow network) could miss two pings, which cut the runner off in the middle of a task.
+const MISSED_PINGS = 4;
 
 /** Where a runner's JSON-RPC lines travel. */
 export interface RunnerChannel {
