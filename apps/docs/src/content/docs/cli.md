@@ -34,10 +34,12 @@ package is about 40 MB. The script checks the download against the checksum writ
 first, download it, compare its sha256 with the one on the [release page](https://github.com/TheOriUHD/atelier/releases),
 then run it.
 
-`atelier update` updates it (`--beta` for the beta channel). Each update is checked against the release key's
-signature before it is unpacked, as the desktop app's are. Connected to a server that mirrors releases
-(`ATELIER_UPDATES_REPO`), it updates through the server. Once a day an installed copy looks whether a newer version is
-out and says so under the tip.
+An installed copy updates itself as the desktop app does: when it starts (at most every six hours) it looks for a newer
+version, downloads and unpacks it in the background while you work, and the next start is the new version; a line in
+the session says so. `/update` or `atelier update` does it at once (`--beta` for the beta channel), and `/config` ›
+Updates switches to only being told. Each update is checked against the release key's signature before it is unpacked,
+as the desktop app's are. Connected to a server that mirrors releases (`ATELIER_UPDATES_REPO`), it updates through the
+server. The background service follows once it has nothing running.
 
 To remove it, delete the versions folder and the command, and `~/.atelier/cli` for its settings and data.
 
@@ -116,7 +118,8 @@ run as they do in the app. [The CLI reference](/reference/cli/) lists all comman
 - **Sessions:** `/clear`, `/resume`, `/fork`, `/rewind`, `/btw`, `/loop`, `/export`, `/copy`.
 - **Model and context:** `/model`, `/effort`, `/mode`, `/compact`, `/context`, `/cost`.
 - **Where you are:** `/status`, and `/open`, which opens the session in the browser (with a server).
-- **Setting things up:** `/permissions`, `/mcp`, `/skills`, `/config`, `/statusline` (a command whose output is the
+- **Setting things up:** `/provider` (on this computer: add a model provider, or enter a key again; with a server,
+  where its models are set up), `/update`, `/permissions`, `/mcp`, `/skills`, `/config`, `/statusline` (a command whose output is the
   status line, as in Claude Code; `/statusline import` takes yours), `/terminal-setup`.
 - **Help:** `/init` (writes AGENTS.md), `/review`, `/doctor`, `/help`.
 
@@ -196,5 +199,11 @@ says what to do. `/bug` copies the versions and where the logs are (no messages,
   the same.
 - **"This server signs terminals in with a password only":** the server is older than 0.6.0. Update it, or sign in with
   your password (an account made by single sign-on sets one in Settings › Account).
+- **"The saved … API key can't be read":** the key that seals saved API keys on this computer changed (on Windows,
+  versions before 0.7.2 lost it at times). Enter the key again with `/provider`. If the key store itself is gone (a
+  deleted keychain item, a lost `credentials.json`), `atelier reset-keys` starts it over.
+- **Setup waits and then says the server didn't answer:** the address answers, but its WebSocket doesn't get through:
+  the reverse proxy in front of Atelier has to pass WebSockets (Nginx Proxy Manager: "Websockets Support").
+- **An account your admin made:** sign in with the password they gave you; setup then asks for your own.
 - **Shift+Enter sends the message:** the terminal can't tell it from Enter. Use Alt+Enter or Ctrl+J, or `/terminal-setup`.
 - **The colours are off:** `/theme`, or `--plain` for none.

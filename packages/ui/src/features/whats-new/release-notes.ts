@@ -38,6 +38,31 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.7.2',
+    intro: 'The terminal app signs in, sets up and keeps its keys reliably, and updates itself.',
+    highlights: [
+      {
+        icon: KeyRound,
+        title: 'The terminal app on Windows keeps its sign-in and keys',
+        body: 'Windows’ store wrote each secret and deleted it again at once, so setup asked to sign in again and again, and saved API keys stopped working after a while. It keeps them now, and a key that was already lost says to enter it again with /provider.',
+      },
+      {
+        icon: SquareTerminal,
+        title: 'Setup that works',
+        body: 'Correct passwords sign in (retries no longer add to the old one, fast typing and AltGr keys all count), an account your admin made asks for its own password, and nothing waits for ever: a server that doesn’t answer, a background service that can’t start, each says why.',
+      },
+      {
+        icon: RefreshCw,
+        title: 'Updates by itself, /provider and /update',
+        body: 'The terminal app downloads a newer version in the background and starts it next time, as the desktop app does. /update gets it at once, and /provider adds a model provider or a key again without going through setup.',
+      },
+    ],
+    also: [
+      'Co-op guests can pick one of their own models, and “… is typing” sits right above the message box.',
+      'Empty thinking steps, and ones that are only a heading, no longer fill the list.',
+    ],
+  },
+  {
     version: '0.7.1',
     intro: 'Web pages the assistant makes open as they are, and the terminal app lets you click to see more.',
     highlights: [
