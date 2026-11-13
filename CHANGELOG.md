@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-11-13
+
 - **Computer use with a server.** A desktop app signed in to a server could turn computer use on, but the server's sessions never got its tools, so the assistant said it had none. The desktop now lends computer use to the server like its folders: a session uses the computer you last wrote from, apps are allowed only on the cards in that computer's window, and Full control still asks every time. Servers need this version too (Update server).
 ## [0.7.4] — 2026-11-13
 
