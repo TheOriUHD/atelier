@@ -462,6 +462,16 @@ describe('decide', () => {
     expect(decide(bash('rm -rf /home/me/project'), ctx({}, 'planAuto')).behavior).toBe('deny');
   });
 
+  it('lets the agent talk to its own sub-agents and stop its own background work in every mode', () => {
+    for (const mode of ['default', 'auto', 'acceptEdits', 'planAuto', 'bypassPermissions'] as const) {
+      expect(decide({ name: 'SendMessage', input: { to: 'agent:0153e0d9', message: 'Use the pinned imgui.' } }, ctx({}, mode)).behavior, mode).toBe('allow');
+      expect(decide({ name: 'SendMessage', input: { to: 'parent', message: 'Done.' } }, ctx({}, mode)).behavior, mode).toBe('allow');
+      expect(decide({ name: 'TaskStop', input: { task_id: 'exec-3' } }, ctx({}, mode)).behavior, mode).toBe('allow');
+    }
+    // Another of the person's sessions: work starts there, so the mode decides.
+    expect(decide({ name: 'SendMessage', input: { to: '9b1c2d3e-0000-4000-8000-000000000000', message: 'Hi' } }, ctx()).behavior).toBe('ask');
+  });
+
   it('asks before reading outside the workspace unless a rule allows it', () => {
     const read = { name: 'Read', input: { file_path: '/home/me/.zshrc' } };
     expect(decide(read, ctx()).behavior).toBe('ask');

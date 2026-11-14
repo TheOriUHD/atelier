@@ -100,6 +100,12 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   const denied = firstMatch(deny, units);
   if (denied) return { behavior: 'deny', reason: `Blocked by the rule ${denied.source}.`, rule: denied.source };
 
+  // Past the deny rules, in every mode, Plan too. A word to the agent's own sub-agent, or back to its parent, stays inside the task: the sub-agent's own actions are
+  // decided like the agent's. (A message to another of the person's sessions starts work there, and goes by the mode.)
+  if (call.name === 'SendMessage' && /^(agent:|parent$)/.test(String(call.input.to ?? ''))) return { behavior: 'allow', reason: 'A message within the task.' };
+  // Stopping its own background work never needs anyone's say.
+  if (call.name === 'TaskStop') return { behavior: 'allow', reason: 'It stops the task’s own background work.' };
+
   const warning =
     isBash && !bypass ? dangerousReason(call.input.command as string, { cwd: ctx.cwd, home: ctx.home, roots: ctx.roots, ...(ctx.flavor ? { flavor: ctx.flavor } : {}), ...(auto ? { scratch: [...SCRATCH_DIRS, tmpdir()] } : {}) }) : null;
   // Deleting outside the workspace asks the person even in Auto mode: a model's slip there can't be undone.

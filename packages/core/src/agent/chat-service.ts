@@ -2010,7 +2010,8 @@ export class ChatService {
     this.autoBlocks.set(asker, { row: blocks.row + 1, total: blocks.total + 1 });
     return {
       behavior: 'deny',
-      message: `Auto mode blocked this action: ${verdict.reason} Don't reach the same result another way. Take a safer approach, or tell the person what you need and why so they can do it or allow it.`,
+      // A block mustn't quietly shrink the task: when the work needs this, the person is asked now, not told at the end.
+      message: `Auto mode blocked this action: ${verdict.reason} Don't reach the same result another way. Take a safer approach; if the task can't be done without it, ask the person now (AskUser where you have it) whether to allow it and why, and keep working on the rest.`,
     };
   }
 

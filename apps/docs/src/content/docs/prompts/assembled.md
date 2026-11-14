@@ -56,7 +56,7 @@ prompts or replies.
 | [`code.full.terminal`](/prompts/assembled/code.full.terminal.txt) | Code, full tier, written from the terminal app: no artifact pane, and the note saying where the person is. | 50 KB |
 | [`code.full`](/prompts/assembled/code.full.txt) | Code, full tier: the baseline. | 51 KB |
 | [`code.full.plan`](/prompts/assembled/code.full.plan.txt) | Code in plan mode. | 52 KB |
-| [`code.full.scratch`](/prompts/assembled/code.full.scratch.txt) | Code started with No folder: a scratch folder of its own. | 51 KB |
+| [`code.full.scratch`](/prompts/assembled/code.full.scratch.txt) | Code started with No folder: a scratch folder of its own. | 50 KB |
 | [`code.full.no-effort`](/prompts/assembled/code.full.no-effort.txt) | Code on a model without effort levels, web search off. | 46 KB |
 | [`code.full.subagent`](/prompts/assembled/code.full.subagent.txt) | A sub-agent started by the Agent tool. | 27 KB |
 | [`code.full.defined-agent`](/prompts/assembled/code.full.defined-agent.txt) | A sub-agent defined by an agent file with its own prompt. | 6 KB |

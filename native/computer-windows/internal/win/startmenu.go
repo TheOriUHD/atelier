@@ -114,7 +114,7 @@ func (m *startMenu) startLoadLocked() chan struct{} {
 }
 
 // loadStartMenu runs Get-StartApps (hidden, UTF-8 out) and derives an id for each entry; then it adds the Start menu
-// shortcuts to programs that Get-StartApps didn't list (it lists them all on a normal desktop, but can come back nearly
+// shortcuts to programs that Get-StartApps didn't list, and the games installed through Steam (it lists them all on a normal desktop, but can come back nearly
 // empty, as for an account that never signed in at the screen, or fail where the StartLayout module is missing).
 func loadStartMenu() ([]appid.Installed, error) {
 	r := newResolver()
@@ -124,6 +124,8 @@ func loadStartMenu() ([]appid.Installed, error) {
 		installed = appid.Index(entries, r)
 	}
 	installed = appid.AppendNew(installed, r.shortcutApps())
+	// Games installed through Steam, which often have no Start menu entry of their own.
+	installed = appid.AppendNew(installed, steamApps())
 	if err != nil && len(installed) == 0 {
 		return nil, err
 	}

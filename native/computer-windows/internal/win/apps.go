@@ -238,7 +238,12 @@ func (s *System) OpenApp(id string, activate bool) (proto.App, error) {
 		return proto.App{}, rpc.Internal("could not open %s: %v", id, err)
 	}
 
-	deadline := time.Now().Add(10 * time.Second)
+	// A game takes longer to show its first window than an app: Steam starts first, and may update it.
+	wait := 10 * time.Second
+	if known && inst.Dir != "" {
+		wait = 90 * time.Second
+	}
+	deadline := time.Now().Add(wait)
 	for {
 		pc := newProcCache()
 		_, wins := s.runningApps(pc)
@@ -251,9 +256,10 @@ func (s *System) OpenApp(id string, activate bool) (proto.App, error) {
 			}
 		}
 		if strings.HasPrefix(id, appid.StartAppPrefix) {
-			// What a Start menu entry opens can't be told beforehand: the first new window is it.
+			// What a Start menu entry opens can't be told beforehand: the first new window is it. A Steam game's is the
+			// first one of a process from its folder (Steam's own windows come first and aren't it).
 			for _, w := range topWindows() {
-				if w.altTab() && !before[w.hwnd] && w.pid != s.self {
+				if w.altTab() && !before[w.hwnd] && w.pid != s.self && (!known || inst.Dir == "" || under(fullPath(pc.get(w.appPID).exe), inst.Dir)) {
 					if app := s.appFor(w.appPID, pc); app != nil {
 						return *app, nil
 					}
@@ -275,13 +281,18 @@ func (s *System) OpenApp(id string, activate bool) (proto.App, error) {
 		}
 		return appid.Installed{ID: id, Name: name}.HelperApp(), nil
 	}
-	return proto.App{}, rpc.NotFound("%s didn't start within 10 s", id)
+	return proto.App{}, rpc.NotFound("%s didn't start within %d s", id, int(wait/time.Second))
 }
 
-// launchAppID opens a Start menu entry by its AppUserModelID through the shell, on a COM thread.
+// launchAppID opens a Start menu entry by its AppUserModelID through the shell, on a COM thread. An address (a Steam
+// game's `steam://rungameid/<id>`, an internet shortcut's) is opened as itself.
 func launchAppID(appID string) error {
+	target := `shell:AppsFolder\` + appID
+	if strings.Contains(appID, "://") {
+		target = appID
+	}
 	err := onCOMThread(true, func() error {
-		file, err := windows.UTF16PtrFromString(`shell:AppsFolder\` + appID)
+		file, err := windows.UTF16PtrFromString(target)
 		if err != nil {
 			return err
 		}
@@ -293,7 +304,7 @@ func launchAppID(appID string) error {
 	}
 	// The shell's own launcher, as Explorer does it.
 	explorer := filepath.Join(os.Getenv("SystemRoot"), "explorer.exe")
-	cmd := exec.Command(explorer, `shell:AppsFolder\`+appID)
+	cmd := exec.Command(explorer, target)
 	if startErr := cmd.Start(); startErr != nil {
 		return err
 	}

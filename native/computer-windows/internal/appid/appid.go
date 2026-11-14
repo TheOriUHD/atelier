@@ -144,6 +144,8 @@ type Installed struct {
 	Name  string
 	AppID string
 	Path  string
+	// Dir is a Steam game's folder: its windows are the ones of a process from there (its exe isn't named anywhere).
+	Dir string
 }
 
 // Index derives the ids of Start menu entries: one per id, the first entry winning, in the order given.
