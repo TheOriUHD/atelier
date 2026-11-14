@@ -1241,6 +1241,47 @@ it unpacks into `versions/<v>` and moves the link. The release builds them on th
 `cli/` (served at `/cli` and `/cli.ps1`), and runs the end-to-end tests (`apps/cli/test`: the real app in a pseudo-terminal
 from the runner's PTY, read with `@xterm/headless`) on the Linux and Windows machines.
 
+## 26. Issue reports and feature requests
+
+The app sends a problem or an idea straight to the Atelier developer when the person presses Send, and never otherwise.
+One format (`packages/protocol/src/reports.ts`) is shared by the app, the terminal app, the collector and the admin panel.
+
+- **Two halves of diagnostics.** `reports.prepare` collects the backend's half (`packages/core/src/reports`):
+  - the computer it runs on (`system.ts`: system, processor, memory, graphics cards from nvidia-smi, system_profiler, WMI
+    or lspci, the data folder's disk, a container);
+  - the settings and the person's preferences, redacted (`redact.ts`);
+  - the providers with their state;
+  - the local model servers the settings name, asked briefly and without keys (`inference.ts`: Ollama's tags and ps,
+    llama.cpp's props, LM Studio's or vLLM's models, ComfyUI's system stats);
+  - the connectors.
+
+  The window adds its own half (`features/reports/report-client.ts`): the app, its window, and the computer it runs on (in
+  the desktop app from main, `report-info.ts`, with Chromium's GPU list and the monitors; in a browser what it tells). It
+  also adds computer use, and the main log redacted like Copy diagnostics.
+- **A conversation** (`chat-excerpt.ts`): the active branch with tool calls, results, thinking and context notes, scrubbed
+  of credentials and of this computer's words.
+  - A long one keeps its first three messages, the latest compaction summary, and the newest messages: in full until 70 %
+    of the 2.8 MB budget, then shortened. `coverage.omitted` names the gaps.
+  - Sub-agents of kept calls come with their last six messages, within a sixth of the budget.
+- **Pictures** are scaled to 2560 px and compressed in the window (WebP, else JPEG) to under 2.5 MB. The report shortcut
+  (F1, `report-issue`) has main capture the window (`webContents.capturePage`) before the dialog covers it.
+- **Sending** (`submit.ts`):
+  - core asks the collector for a challenge, finds a nonce whose SHA-256 over challenge, content hash and nonce has the
+    asked number of leading zero bits (18 to 22, in slices so the backend keeps answering);
+  - core then posts the multipart body.
+  - Every surface sends through its backend, so a server's reports leave from the server.
+  - An admin switch (`reports.enabled`, Settings › Privacy) turns reports off; `AppInfo.reports` tells the app.
+- **The collector** (`deploy/reports`, `reports.atelierhq.dev`):
+  - It verifies the proof, the schemas, the text rules (`reportTextProblem`) and the pictures' magic bytes.
+  - It scrubs once more, then stores the parts in R2 and a row in D1.
+  - Limits: per-address rate limits, a daily quota per keyed hash of address and day (no addresses kept), a daily cap, a
+    storage cap and a body limit.
+- **The admin panel** (`apps/admin`, `deploy/admin`, `admin.atelierhq.dev`, behind Cloudflare Access and checking its JWT
+  itself) has:
+  - the two inboxes, report pages showing the hardware, settings, logs and the conversation as a chat;
+  - zips of one or many reports;
+  - download counts the update feed records per day, file, version, platform and country.
+
 ## 20. Decisions
 
 - **Q1 Repo, CI and updates.** The source is a GitHub repository; releases are published from it.

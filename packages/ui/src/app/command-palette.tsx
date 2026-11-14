@@ -1,8 +1,9 @@
+import { openReporter } from '../features/reports/open-report.ts';
 import { useDeferredValue, useState, type ReactNode } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Command } from 'cmdk';
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
-import { Ghost, Lock, MessageSquare, Plus, Search, Settings as SettingsIcon, Users, type LucideIcon } from 'lucide-react';
+import { Bug, Ghost, Lightbulb, Lock, MessageSquare, Plus, Search, Settings as SettingsIcon, Users, type LucideIcon } from 'lucide-react';
 import { Icon, Kbd, cn } from '../components/ui/index.ts';
 import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { relativeTime } from '../lib/dates.ts';
@@ -48,6 +49,8 @@ export function CommandPalette() {
     { id: 'new-temporary-chat', label: 'New temporary chat', icon: Ghost, run: newTemporaryChat },
     { id: 'join-coop', label: 'Join a co-op session…', icon: Users, run: () => setJoining(true) },
     { id: 'settings', label: 'Settings', icon: SettingsIcon, run: () => openSettings() },
+    { id: 'report-issue', label: 'Report an issue…', icon: Bug, run: () => void openReporter('issue') },
+    { id: 'request-feature', label: 'Request a feature…', icon: Lightbulb, run: () => void openReporter('feature') },
     ...(lock?.enabled ? [{ id: 'lock', label: 'Lock Atelier', icon: Lock, run: lockNow }] : []),
   ].filter((a) => a.label.toLowerCase().includes(search.toLowerCase()));
   const chats = [...(sessions ?? []), ...(unified ? (tasks ?? []) : [])].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, search ? 20 : 8);

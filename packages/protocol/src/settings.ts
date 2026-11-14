@@ -225,6 +225,8 @@ export const SettingsSchema = z.object({
   memory: z.object({ manualEditing: z.boolean().default(false) }).default({ manualEditing: false }),
   /** Settings › Admin › Developer: record requests to model providers for the request inspector. */
   developer: z.object({ inspector: z.boolean().default(false) }).default({ inspector: false }),
+  /** Issue reports and feature requests to the Atelier developer (ARCHITECTURE §26): an admin can turn them off for everyone. */
+  reports: z.object({ enabled: z.boolean().default(true) }).default({ enabled: true }),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 
-export const SHORTCUT_IDS = ['new-chat', 'new-temporary-chat', 'search', 'settings', 'toggle-sidebar', 'lock', 'upload', 'effort'] as const;
+export const SHORTCUT_IDS = ['new-chat', 'new-temporary-chat', 'search', 'settings', 'toggle-sidebar', 'lock', 'report-issue', 'upload', 'effort'] as const;
 export type ShortcutId = (typeof SHORTCUT_IDS)[number];
 
 export interface ShortcutInfo {
@@ -24,6 +24,8 @@ export const SHORTCUTS: readonly ShortcutInfo[] = [
   { id: 'toggle-sidebar', label: 'Show or hide the sidebar', group: 'App', binding: 'Mod+B' },
   // The screen lock exists only on "Run on this computer".
   { id: 'lock', label: 'Lock Atelier', group: 'App', binding: 'Mod+Shift+L' },
+  // One key, so it can be pressed the moment something goes wrong: the window's picture then is attached.
+  { id: 'report-issue', label: 'Report an issue, with a screenshot', group: 'App', binding: 'F1' },
   { id: 'upload', label: 'Upload or add files', group: 'Message box', binding: 'Mod+U' },
   { id: 'effort', label: 'Change effort', group: 'Message box', binding: 'Mod+Shift+E' },
 ];
@@ -61,6 +63,7 @@ export const ShortcutPrefs = z.object({
   settings: changed,
   'toggle-sidebar': changed,
   lock: changed,
+  'report-issue': changed,
   upload: changed,
   effort: changed,
 });

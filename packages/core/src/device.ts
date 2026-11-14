@@ -26,3 +26,4 @@ export { isPrivateHost, parseConnection, type Connection } from './device/connec
 export { GUESS_TIMEOUT_MS, healthCheck, resolveConnection, resolveServer, type HealthCheck, type ServerConnection } from './device/server-url.ts';
 export { DEFAULT_PORT, localSubnets, scanNetwork, type FoundServer, type Interfaces, type ScanOptions } from './device/discovery.ts';
 export { describeFailure, diagnose, type LinkProblem } from './device/link-problem.ts';
+export { backendSystem } from './reports/system.ts';

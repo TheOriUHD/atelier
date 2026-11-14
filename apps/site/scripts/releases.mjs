@@ -8,13 +8,14 @@
  * It reads the release with the GitHub CLI, so it works while the repository is private too. Each build links to the
  * update feed's copy (deploy/cloudflare/publish.mjs puts it there) when that copy exists at the same size, since
  * GitHub's links need access to the repository; until it is mirrored, the GitHub link. The macOS disk images are not
- * on the feed any more and always link to the release. Run it again after publishing.
+ * on the feed any more: they link to the feed all the same, which redirects to the release and counts the download
+ * (kinds.mjs `feedLink`). Run it again after publishing.
  */
 import { execFileSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { KINDS, onFeed } from './kinds.mjs';
+import { feedLink, KINDS, onFeed } from './kinds.mjs';
 
 const repo = 'TheOriUHD/atelier';
 const gh = (...args) => JSON.parse(execFileSync('gh', [...args, '--repo', repo], { encoding: 'utf8' }));
@@ -26,7 +27,7 @@ const release = gh('release', 'view', tag, '--json', 'tagName,publishedAt,url,is
 const feed = `https://updates.atelierhq.dev/${release.isPrerelease ? 'beta' : 'stable'}`;
 /** The feed's copy, if it is there and the same file (a release can be replaced, e.g. by signed Mac builds). */
 async function mirrored(asset) {
-  const url = `${feed}/${encodeURIComponent(asset.name)}`;
+  const url = feedLink(feed, asset.name);
   const res = await fetch(url, { method: 'HEAD' }).catch(() => null);
   return res?.ok && Number(res.headers.get('content-length')) === asset.size ? url : null;
 }
@@ -44,7 +45,7 @@ for (const [kind, pattern] of Object.entries(KINDS)) {
     if (asset) older.push(`${kind} from ${earlier[i]}`);
   }
   if (!asset) throw new Error(`no ${kind} in ${tag} or an earlier release`);
-  assets[kind] = { name: asset.name, size: asset.size, url: (onFeed(kind) ? await mirrored(asset) : null) ?? asset.url };
+  assets[kind] = { name: asset.name, size: asset.size, url: onFeed(kind) ? ((await mirrored(asset)) ?? asset.url) : feedLink(feed, asset.name) };
 }
 if (older.length) console.warn(`not in ${tag}, kept from earlier releases: ${older.join(', ')}`);
 const missing = Object.entries(assets).filter(([kind, a]) => onFeed(kind) && !a.url.startsWith(feed)).map(([, a]) => a);

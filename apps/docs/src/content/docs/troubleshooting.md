@@ -337,7 +337,10 @@ See [Run a server](/self-hosting/#the-updater-service).
 
 ## Reporting a bug
 
-Press **Copy diagnostics** (in the desktop app: **Settings › System**, or on the screen Atelier shows when a page breaks)
+*(next release)* The quickest way is **F1** in the desktop app, **Help › Report an Issue…**, or `/bug` in the terminal app:
+it sends the report with diagnostics straight to the developer ([Reporting issues](/reporting-issues/)).
+
+To report on GitHub instead, press **Copy diagnostics** (in the desktop app: **Settings › System**, or on the screen Atelier shows when a page breaks)
 and paste the result into your report instead of a photo of the screen. It puts plain text on your clipboard: the version,
 system, whether you run on this computer or a server, the Electron and Chrome versions, your screen size and theme, how many
 providers, image providers and connectors are set up and which provider types, the last error the window hit, and the last

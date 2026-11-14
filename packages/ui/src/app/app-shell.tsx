@@ -1,3 +1,5 @@
+import { ReportHost } from '../features/reports/report-dialog.tsx';
+import { openReporter } from '../features/reports/open-report.ts';
 import { useEffect } from 'react';
 import { Outlet } from '@tanstack/react-router';
 import { useAppearance } from '../lib/appearance.ts';
@@ -56,6 +58,7 @@ export function AppShell() {
       <TrustWorkspaceHost />
       {desktop && <LendScratchHost />}
       <WhatsNewHost />
+      <ReportHost />
     </div>
   );
 }
@@ -67,6 +70,7 @@ const APP_SHORTCUTS: [ShortcutId, MenuCommand][] = [
   ['search', 'command-palette'],
   ['settings', 'settings'],
   ['toggle-sidebar', 'toggle-sidebar'],
+  ['report-issue', 'report-issue'],
 ];
 
 /**
@@ -93,6 +97,8 @@ function useAppShortcuts(): void {
       else if (command === 'toggle-sidebar') toggleSidebar();
       else if (command === 'lock') lockNow();
       else if (command === 'join-coop') setJoinCoopOpen(true);
+      else if (command === 'report-issue') void openReporter('issue', { capture: true });
+      else if (command === 'request-feature') void openReporter('feature');
       else setPaletteOpen(true);
     };
     if (desktop) return desktop.onMenu(run);

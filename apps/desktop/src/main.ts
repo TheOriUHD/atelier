@@ -28,6 +28,8 @@ import { KeepAwake } from './keep-awake.ts';
 import { FileReads, PAGES_PRIVILEGES, PAGES_SCHEME, WorkspacePages } from './workspace-pages.ts';
 import { loginItem } from './login-item.ts';
 import { applyLending, changeLending, LendingChange, readLending } from '@atelier/core/device';
+import { backendSystem } from '@atelier/core/device';
+import { capturedPicture, clientSystem } from './report-info.ts';
 import { loginShellPath, mergePaths } from './shell-path.ts';
 import { parseShortTime, systemHourCycle, type HourCycle } from './clock.ts';
 import { createBundleSwap } from './bundle-swap.ts';
@@ -692,6 +694,16 @@ function buildMenu(): void {
       ],
     },
     { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [
+        // The report shortcut attaches a picture of the window as it was when pressed (the window takes it).
+        { label: 'Report an Issue…', accelerator: accelerator('report-issue'), click: () => sendMenu('report-issue') },
+        { label: 'Request a Feature…', click: () => sendMenu('request-feature') },
+        { type: 'separator' },
+        { label: 'Atelier Documentation', click: () => void shell.openExternal('https://docs.atelierhq.dev') },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -962,6 +974,20 @@ function registerIpc(): void {
       folders: () => [dataFolder(), app.getPath('userData'), app.getPath('logs')],
     }),
   );
+  // Issue reports (ARCHITECTURE §26): this computer for the diagnostics, and the window's picture at the moment the
+  // person pressed the report shortcut. The window shows both before anything is sent.
+  ipcMain.handle('reports:system', async () =>
+    clientSystem(
+      await backendSystem(dataFolder()),
+      await Promise.race([app.getGPUInfo('complete').catch(() => null), new Promise((resolve) => setTimeout(() => resolve(null), 3000))]),
+      screen.getAllDisplays(),
+      screen.getPrimaryDisplay().id,
+    ),
+  );
+  ipcMain.handle('reports:capture', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win && !win.isDestroyed() ? capturedPicture(await win.webContents.capturePage()) : null;
+  });
   ipcMain.handle('system:setOpenAtLogin', (_e, input: unknown) => launchAtLogin.set(z.boolean().parse(input)));
   ipcMain.handle('system:showDataFolder', async () => {
     const error = await shell.openPath(dataFolder());

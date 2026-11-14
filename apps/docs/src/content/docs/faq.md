@@ -199,8 +199,10 @@ page.
 
 ### Does Atelier phone home? Is there telemetry?
 
-There is no telemetry: no analytics, no crash reports, and nothing that sends your chats, settings or keys to its makers.
-Apart from the model providers and connectors you set up, these are the requests Atelier makes by itself:
+There is no telemetry: no analytics, no automatic crash reports, and nothing that sends your chats, settings or keys to
+its makers by itself. A bug report or feature request you send yourself goes to the developer with what you chose to
+attach, and never keys ([Reporting issues](/reporting-issues/)). Apart from the model providers and connectors you set
+up, these are the requests Atelier makes by itself:
 
 - **Update checks.** The desktop app asks `updates.atelierhq.dev` for the newest version's update file when it starts and
   every 5 minutes. If it is connected to a server whose admin set up updates, it asks that server first. A switch in

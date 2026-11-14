@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KINDS, onFeed } from '../../apps/site/scripts/kinds.mjs';
+import { feedLink, KINDS, onFeed } from '../../apps/site/scripts/kinds.mjs';
 
 const kindOf = (name: string) => Object.entries(KINDS as Record<string, RegExp>).find(([, re]) => re.test(name))?.[0] ?? null;
 
@@ -25,5 +25,10 @@ describe('the website download list', () => {
 
   it('expects everything on the update feed except the macOS disk images', () => {
     expect(Object.keys(KINDS).filter((k) => !onFeed(k))).toEqual(['macos-arm64', 'macos-x64']);
+  });
+
+  it('links a disk image through the feed, which redirects to the release and counts it', () => {
+    expect(feedLink('https://updates.atelierhq.dev/stable', 'Atelier-0.8.2-arm64.dmg')).toBe('https://updates.atelierhq.dev/stable/Atelier-0.8.2-arm64.dmg');
+    expect(feedLink('https://updates.atelierhq.dev/beta/', 'Atelier-0.9.0-beta.1 x.dmg')).toBe('https://updates.atelierhq.dev/beta/Atelier-0.9.0-beta.1%20x.dmg');
   });
 });

@@ -34,7 +34,7 @@ export default defineConfig({
         },
         {
           label: 'Running it',
-          items: ['self-hosting', 'accounts', 'remote-control', 'security', 'privacy', 'data-and-files', 'environment-variables', 'updates', 'troubleshooting'],
+          items: ['self-hosting', 'accounts', 'remote-control', 'security', 'privacy', 'data-and-files', 'environment-variables', 'updates', 'troubleshooting', 'reporting-issues'],
         },
         {
           label: 'System prompts',

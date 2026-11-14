@@ -109,6 +109,7 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     showDataFolder: () => ipcRenderer.invoke('system:showDataFolder'),
   },
   diagnostics: { get: (lines?: number) => ipcRenderer.invoke('diagnostics:get', lines === undefined ? undefined : { lines }) },
+  reports: { system: () => ipcRenderer.invoke('reports:system'), capture: () => ipcRenderer.invoke('reports:capture') },
   keepAwake: { set: (sessionIds: string[]) => ipcRenderer.send('keep-awake:set', sessionIds) },
   browser: {
     onOpen: (handler: (event: { webContentsId: number; url: string }) => void) => {

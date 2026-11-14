@@ -1,0 +1,221 @@
+/*
+ * The admin panel looks like Atelier: the app's own tokens (packages/ui/theme, generated from design/tokens; imported,
+ * not copied, so they can't drift), its three faces from the website's latin subsets, light and dark. The root's
+ * data-theme is system, light or dark (public/theme.js sets it before the first paint).
+ */
+@import 'tailwindcss';
+@import '../../../packages/ui/theme/tailwind.css';
+
+@font-face {
+  font-family: 'Inter Variable';
+  src: url('../../site/public/fonts/inter-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Source Serif 4 Variable';
+  src: url('../../site/public/fonts/source-serif-4-latin-opsz-normal.woff2') format('woff2');
+  font-weight: 200 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  src: url('../../site/public/fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+/* The charts' categorical colors (validated light and dark, in this order), their grid and axis. */
+:root {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-6: #008300;
+  --viz-7: #6250d6;
+  --viz-8: #e34948;
+  --viz-other: #b5b3ac;
+  --viz-grid: #e9e8e3;
+  --viz-axis: #c3c2b7;
+}
+:root[data-theme='dark'] {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-5: #d55181;
+  --viz-6: #0ca30c;
+  --viz-7: #9085e9;
+  --viz-8: #e66767;
+  --viz-other: #5f5e5a;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    --viz-1: #3987e5;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-4: #c98500;
+    --viz-5: #d55181;
+    --viz-6: #0ca30c;
+    --viz-7: #9085e9;
+    --viz-8: #e66767;
+    --viz-other: #5f5e5a;
+    --viz-grid: #2c2c2a;
+    --viz-axis: #383835;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--at-color-text-primary) 26%, transparent) transparent;
+  }
+  body {
+    margin: 0;
+    background: var(--at-color-background);
+    color: var(--at-color-text-primary);
+    font-family: var(--at-font-ui);
+    font-size: var(--at-text-body-size);
+    line-height: var(--at-text-body-leading);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  button,
+  [role='tab'] {
+    cursor: default;
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--at-shadow-focus);
+  }
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+  ::selection {
+    background: var(--at-color-selection);
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Assistant messages and descriptions rendered from markdown (lib/markdown.ts sanitizes them). */
+.md {
+  font-family: var(--at-font-chat);
+  font-size: var(--at-text-prose-size);
+  line-height: var(--at-text-prose-leading);
+  overflow-wrap: anywhere;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md pre,
+.md blockquote,
+.md table {
+  margin: 0 0 0.75em;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-weight: var(--at-weight-bold);
+  line-height: 1.3;
+  margin: 1.1em 0 0.45em;
+}
+.md h1 {
+  font-size: 1.35em;
+}
+.md h2 {
+  font-size: 1.2em;
+}
+.md h3,
+.md h4 {
+  font-size: 1.05em;
+}
+.md ul,
+.md ol {
+  padding-left: 1.4em;
+}
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md li + li {
+  margin-top: 0.2em;
+}
+.md a {
+  color: var(--at-color-interactive-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md code {
+  font-family: var(--at-font-code);
+  font-size: 0.86em;
+  background: var(--at-color-code-inline-background);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+.md pre {
+  font-family: var(--at-font-code);
+  font-size: 12.5px;
+  line-height: 19px;
+  background: var(--at-color-background-sunken);
+  border: 1px solid var(--at-color-border-subtle);
+  border-radius: var(--at-radius-lg);
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+.md pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+.md blockquote {
+  border-left: 2px solid var(--at-color-border-strong);
+  padding-left: 0.8em;
+  color: var(--at-color-text-secondary);
+}
+.md table {
+  border-collapse: collapse;
+  font-family: var(--at-font-ui);
+  font-size: 13px;
+  display: block;
+  overflow-x: auto;
+}
+.md th,
+.md td {
+  border: 1px solid var(--at-color-border);
+  padding: 4px 8px;
+  text-align: left;
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--at-color-border);
+  margin: 1em 0;
+}
+.md .md-image {
+  font-family: var(--at-font-ui);
+  font-size: 12px;
+  color: var(--at-color-text-muted);
+}

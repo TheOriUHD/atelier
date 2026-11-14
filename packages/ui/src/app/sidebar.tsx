@@ -1,3 +1,4 @@
+import { openReporter } from '../features/reports/open-report.ts';
 import { useUnifiedChat } from '../lib/unified-chat.ts';
 import { useEffect, useId, useState, type MouseEvent } from 'react';
 import { Link, useNavigate, useRouter } from '@tanstack/react-router';
@@ -5,6 +6,7 @@ import { Drawer } from '@base-ui/react/drawer';
 import {
   Blocks,
   BriefcaseBusiness,
+  Bug,
   ChartColumn,
   ChevronDown,
   ChevronRight,
@@ -13,6 +15,7 @@ import {
   Images,
   Keyboard,
   Laptop,
+  Lightbulb,
   ListFilter,
   Lock,
   LogOut,
@@ -299,6 +302,8 @@ function MoreRows() {
           {row(Keyboard, 'Keyboard shortcuts', () => setShortcuts(true))}
           {notes.length > 0 && row(Sparkles, 'What’s new', () => setNews(true))}
           {row(Users, 'Join a co-op session…', () => setJoining(true))}
+          {row(Bug, 'Report an issue', () => void openReporter('issue'))}
+          {row(Lightbulb, 'Request a feature', () => void openReporter('feature'))}
         </div>
       )}
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />

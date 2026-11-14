@@ -4,6 +4,13 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Report an issue or request a feature from inside Atelier.** Press **F1** (Settings › Shortcuts changes it), use **Help › Report an Issue…** / **Request a Feature…**, **More** in the sidebar, the search palette, Settings › Privacy › Reports, or `/bug` and `/feature` in the terminal app. Write a title and a sentence or two; Atelier asks for a little more when that is too short to act on and refuses padding. An issue attaches diagnostics by default; a feature request doesn't. You can also attach one conversation and up to four pictures. Each attachment can be shown before it goes:
+  - **Diagnostics:** the computer's system, processor, memory, graphics cards with their memory and driver, free disk and monitors; the server's too, when you use one. Also settings and preferences with keys, addresses, paths and your own words left out, providers with their state, local model servers with the models they have loaded and the memory those take, connectors, computer use, and the end of the app's log.
+  - **A conversation:** with its tool calls, results and thinking. A long one keeps how it started and its newest messages.
+  - **Pictures:** F1 attaches a picture of the window at the moment you pressed it. Pictures are made smaller before sending.
+
+  Keys, tokens, passwords and your account and computer names are taken out of everything. Reports go to the Atelier developer at reports.atelierhq.dev, with a proof of work and per-address limits against flooding. An admin can turn reports off (Settings › Privacy). See docs: Reporting issues.
+
 ## [0.8.2] — 2026-11-14
 
 - **A task isn't left half done.** A turn that ended while the assistant's own task list still had open items, with nothing asked of you, now goes back to work: Atelier adds a note listing what is still open and the turn continues, up to four times and only while the list keeps moving, so one that is truly stuck still ends. Some models stop mid-task to report progress whatever the prompt says (an ETS2 mod menu stopped with 5 of 10 items open after "do the whole thing on your own").

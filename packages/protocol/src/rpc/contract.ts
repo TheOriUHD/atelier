@@ -41,6 +41,7 @@ import { LOOP_MAX_INTERVAL_MS } from '../loops.ts';
 import { LimitsStatus, PersonLimits, UserLimits } from '../limits.ts';
 import { ServerUpdateStatus } from '../versions.ts';
 import { Part } from '../messages.ts';
+import { REPORT_LIMITS, ReportApp, ReportChat, ReportDiagnostics, ReportImageType, ReportKind, ReportReceipt } from '../reports.ts';
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, PlanUsage, ProviderStatus, ProviderType } from '../models.ts';
 import { CoopSettings, CoopState, CoopTrack, ModelsChoice } from '../coop.ts';
@@ -153,6 +154,29 @@ const NewAccount = z.object({ username: Username, name: z.string().trim().min(1)
 export const contract = {
   procedures: {
     'app.info': { input: Empty, output: AppInfo },
+
+    /**
+     * Issue reports and feature requests (ARCHITECTURE §26). `prepare` collects what would be attached: this backend's
+     * diagnostics (redacted) and an excerpt of one of the person's chats; the app shows it, adds its own half and sends
+     * it with `submit`, which posts it to the collector. Refused when an admin turned reports off.
+     */
+    'reports.prepare': {
+      input: z.object({ kind: ReportKind, diagnostics: z.boolean(), chatSessionId: z.string().max(200).nullable() }),
+      output: z.object({ diagnostics: ReportDiagnostics.nullable(), chat: ReportChat.nullable() }),
+    },
+    'reports.submit': {
+      input: z.object({
+        kind: ReportKind,
+        title: z.string().max(REPORT_LIMITS.titleMax),
+        description: z.string().max(REPORT_LIMITS.descriptionMax),
+        contact: z.string().max(REPORT_LIMITS.contactMax).optional(),
+        app: ReportApp,
+        diagnostics: ReportDiagnostics.nullable(),
+        chat: ReportChat.nullable(),
+        screenshots: z.array(z.object({ mime: ReportImageType, dataBase64: z.string().max(Math.ceil((REPORT_LIMITS.screenshotBytes * 4) / 3) + 8), width: z.number().int().positive(), height: z.number().int().positive() })).max(REPORT_LIMITS.screenshots),
+      }),
+      output: ReportReceipt,
+    },
 
     // Public: allowed before sign-in. The returned token is for clients that keep their own (desktop);
     // browsers sign in over HTTP and get an HttpOnly cookie instead.

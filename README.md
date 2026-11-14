@@ -182,7 +182,7 @@ Atelier reads many of Claude Code's files where they already are, so a project s
 
 - **Settings › Privacy**: keep conversations for a set number of days, export everything as a zip, or delete it all.
 - **Settings › Usage**: tokens by day, mode and model, with cost where prices are known.
-- **No telemetry.** Requests go to the model providers and connectors you configure, and to the search engines and pages web search and fetch reach. The desktop app also asks `updates.atelierhq.dev` for the latest version at start and every five minutes; **Settings › System › Check for updates automatically** turns that off. See [What leaves your machine](https://docs.atelierhq.dev/privacy/).
+- **No telemetry.** Requests go to the model providers and connectors you configure, and to the search engines and pages web search and fetch reach. The desktop app also asks `updates.atelierhq.dev` for the latest version at start and every five minutes; **Settings › System › Check for updates automatically** turns that off. A bug report or feature request goes to the developer only when you press Send, with what you chose to attach. See [What leaves your machine](https://docs.atelierhq.dev/privacy/).
 
 <br>
 

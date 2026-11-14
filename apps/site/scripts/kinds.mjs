@@ -23,3 +23,10 @@ export const KINDS = {
  * are for a first install, and the page links them on the GitHub release, which is public.
  */
 export const onFeed = (kind) => !kind.startsWith('macos-');
+
+/**
+ * The feed's address for a build. The download list links the macOS disk images this way too: the feed has no copy,
+ * so it redirects to the same file on the GitHub release (deploy/cloudflare/src/latest.js `diskImageUrl`), and counts
+ * the download on the way (deploy/cloudflare/src/stats.js).
+ */
+export const feedLink = (feed, name) => `${feed.replace(/\/+$/, '')}/${encodeURIComponent(name)}`;

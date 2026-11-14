@@ -688,5 +688,7 @@ export const AppInfo = z.object({
    * pages for users, limits and someone's own computers are left out.
    */
   sharedComputer: z.boolean().optional(),
+  /** Issue reports and feature requests can be sent from here (`reports.*`); false when an admin turned them off, absent on older backends. */
+  reports: z.boolean().optional(),
 });
 export type AppInfo = z.infer<typeof AppInfo>;

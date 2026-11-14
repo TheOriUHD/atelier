@@ -1,0 +1,42 @@
+# Atelier's report collector: issue reports and feature requests from the app (README.md).
+#   cd deploy/reports && npx wrangler deploy
+# Deploy from a checkout of the whole repository: the Worker bundles packages/protocol/src/reports.ts.
+name = "atelier-reports"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+# Only on its own domain.
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "reports.atelierhq.dev", custom_domain = true }]
+
+# No logs: request logs would hold callers' addresses, which the collector never keeps.
+[observability]
+enabled = false
+
+# The admin database, shared with deploy/admin (which owns the migrations) and the update feed's counts. Put the id
+# `wrangler d1 create atelier-admin` printed here, in deploy/admin/wrangler.toml and in deploy/cloudflare/wrangler.toml.
+[[d1_databases]]
+binding = "DB"
+database_name = "atelier-admin"
+database_id = "09d9d37c-bf1a-44bb-9b49-994d97f0e51b"
+migrations_dir = "../admin/migrations"
+
+# The reports themselves: reports/<id>/report.json, chat.json, shot0.webp…
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "atelier-reports"
+
+# Per address, in each Cloudflare location (approximate): reports and challenges per minute. The namespace ids must be
+# unique in the account (the co-op relay uses 4201 and 4202).
+[[ratelimits]]
+name = "REPORT_LIMITER"
+namespace_id = "7301"
+simple = { limit = 4, period = 60 }
+
+[[ratelimits]]
+name = "CHALLENGE_LIMITER"
+namespace_id = "7302"
+simple = { limit = 12, period = 60 }
+
+# Secret (not here): CHALLENGE_SECRET signs challenges and keys the per-address quota.
+#   openssl rand -hex 32 | npx wrangler secret put CHALLENGE_SECRET

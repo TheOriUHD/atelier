@@ -63,10 +63,10 @@
     Telefon: <a href="tel:+4915129404362">+49 151 29404362</a></p>
 
     <h2>Kurz gesagt</h2>
-    <p>Diese Websites (atelierhq.dev, docs.atelierhq.dev und updates.atelierhq.dev) haben keine Konten, keine Analyse und
-    kein Tracking, binden keine Inhalte Dritter ein und setzen selbst keine Cookies. Schriften, Bilder und Skripte kommen
-    vom eigenen Server. Personenbezogene Daten fallen nur an, weil ein Server Anfragen beantworten muss, und wenn Sie mir
-    schreiben.</p>
+    <p>Diese Websites (atelierhq.dev, docs.atelierhq.dev und updates.atelierhq.dev) haben keine Konten, keine
+    Analysewerkzeuge und kein Tracking, binden keine Inhalte Dritter ein und setzen selbst keine Cookies. Schriften, Bilder
+    und Skripte kommen vom eigenen Server. Personenbezogene Daten fallen nur an, weil ein Server Anfragen beantworten muss,
+    wenn Sie mir schreiben und wenn Sie aus der App einen Fehlerbericht oder Wunsch absenden.</p>
 
     <h2>Hosting und Auslieferung</h2>
     <p>Die Websites und die Update-Dateien liefert Cloudflare, Inc., 101 Townsend St., San Francisco, CA 94107, USA, aus.
@@ -75,7 +75,7 @@
     auszuliefern und sie vor Angriffen und Missbrauch zu schützen (Art. 6 Abs. 1 lit. f DSGVO). Cloudflare handelt dabei
     als mein Auftragsverarbeiter (Art. 28 DSGVO). Daten können dabei in die USA übertragen werden; Cloudflare ist nach dem
     EU-U.S. Data Privacy Framework zertifiziert, für das ein Angemessenheitsbeschluss der EU-Kommission besteht
-    (Art. 45 DSGVO). Ich werte diese Zugriffsdaten nicht aus. Nur wenn eine Anfrage verdächtig wirkt, kann Cloudflare nach
+    (Art. 45 DSGVO). Ich werte diese Zugriffsdaten nicht personenbezogen aus. Nur wenn eine Anfrage verdächtig wirkt, kann Cloudflare nach
     einer Sicherheitsprüfung ein technisch notwendiges Cookie setzen (§ 25 Abs. 2 Nr. 2 TDDDG).</p>
 
     <h2>Speicherung in Ihrem Browser</h2>
@@ -91,6 +91,10 @@
     Installation und kein Konto (Art. 6 Abs. 1 lit. f DSGVO). Sie können automatische Updates in der App ausschalten. Die
     Docker-Images des Servers lädt Ihr Rechner direkt aus der Container-Registry von GitHub (ghcr.io); dafür gilt die
     Datenschutzerklärung von GitHub.</p>
+    <p>Der Update-Server zählt, wie oft welche Datei an welchem Tag heruntergeladen oder nach Updates gefragt wurde, mit
+    Version, Plattform und dem Land, das Cloudflare der Anfrage zuordnet. Gespeichert werden nur diese Summen, keine
+    IP-Adressen und keine Kennungen; aus ihnen lässt sich niemand bestimmen. Ich nutze sie, um zu sehen, welche Versionen
+    und Plattformen gebraucht werden (Art. 6 Abs. 1 lit. f DSGVO).</p>
 
     <h2>Co-op über coop.atelierhq.dev</h2>
     <p>Wenn Sie in der Desktop-App eine Co-op-Sitzung mit einem anderen Rechner starten oder einer beitreten, verbinden sich
@@ -109,6 +113,25 @@
     atelierhq.dev/join, die einen Einladungslink an die App übergibt, liest den Link nur in Ihrem Browser und sendet ihn
     nirgendwohin.</p>
 
+    <h2>Fehlerberichte und Wünsche aus der App</h2>
+    <p>In der App können Sie einen Fehler melden oder sich eine Funktion wünschen. Erst wenn Sie dort auf „Send“ drücken,
+    geht der Bericht an reports.atelierhq.dev, einen Dienst, den Cloudflare für mich betreibt (siehe oben). Er enthält, was
+    Sie schreiben, die Version und Betriebsart von Atelier und das, was Sie selbst anhängen und vorher ansehen können:
+    Diagnosedaten (Betriebssystem, Hardware wie Prozessor, Arbeitsspeicher und Grafikkarten, Einstellungen ohne Schlüssel,
+    Adressen und eigene Texte, die eingerichteten Modellanbieter und lokalen Modellserver, das Ende des App-Protokolls), auf
+    Wunsch ein Gespräch aus der App und Bilder, sowie eine Kontaktangabe, wenn Sie eine Antwort möchten. Schlüssel,
+    Passwörter und Ihr Name werden vorher entfernt.</p>
+    <p>Die Berichte liegen in Speichern von Cloudflare unter meinem Konto (R2 und D1), nur ich kann sie lesen, und ich nutze
+    sie nur, um Fehler zu beheben und Atelier weiterzuentwickeln. Ich lösche sie, wenn sie erledigt sind, spätestens nach
+    zwölf Monaten. Ihre IP-Adresse wird nicht gespeichert: Um zu begrenzen, wie viele Berichte von einer Adresse an einem
+    Tag kommen, wird nur ein mit einem geheimen Schlüssel gebildeter Hashwert aus Adresse und Tag gezählt und nach zwei
+    Tagen gelöscht.</p>
+    <p>Rechtsgrundlage ist Ihre Einwilligung, die Sie mit dem Absenden geben (Art. 6 Abs. 1 lit. a DSGVO), und für die
+    Begrenzungen gegen Missbrauch mein berechtigtes Interesse (Art. 6 Abs. 1 lit. f DSGVO). Sie können die Einwilligung
+    jederzeit widerrufen: Schreiben Sie mir die Kennung, die die App nach dem Senden zeigt (etwa I-7F3K2Q), dann lösche
+    ich den Bericht. Cloudflare handelt als mein Auftragsverarbeiter; für die Übermittlung in die USA gilt das oben
+    Gesagte.</p>
+
     <h2>Kontakt</h2>
     <p>E-Mails an contact@atelierhq.dev und licensing@atelierhq.dev leitet Cloudflare an ein Postfach bei Google (Gmail)
     weiter. Wenn Sie mir schreiben oder mich anrufen, verwende ich Ihre Angaben nur, um Ihre Anfrage zu beantworten, bei
@@ -121,8 +144,9 @@
     Issue eröffnen, gilt die Datenschutzerklärung von GitHub; Issues und Beiträge sind dort öffentlich sichtbar.</p>
 
     <h2>Die App selbst</h2>
-    <p>Atelier läuft auf Ihren Geräten oder Ihrem eigenen Server. Abgesehen von den Update-Anfragen und dem Co-op-Relay oben erhalte ich keine
-    Daten aus der App: keine Gespräche, keine Einstellungen, keine Nutzungsstatistik. Was an die Modellanbieter geht, die
+    <p>Atelier läuft auf Ihren Geräten oder Ihrem eigenen Server. Abgesehen von den Update-Anfragen, dem Co-op-Relay und den Berichten, die
+    Sie selbst absenden (oben), erhalte ich keine Daten aus der App: keine Gespräche, keine Einstellungen, keine
+    Nutzungsstatistik. Was an die Modellanbieter geht, die
     Sie selbst einrichten, beschreibt die Dokumentation unter
     <a href="https://docs.atelierhq.dev/privacy/" lang="en">What leaves your machine</a>.</p>
 

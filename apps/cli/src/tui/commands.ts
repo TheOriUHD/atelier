@@ -16,6 +16,7 @@ import { copy, openUrl } from '../term.ts';
 import { EFFORT_WORDS, findModel, MODE_WORDS, modeFrom } from './session.ts';
 import { KEY_HELP } from './keys.ts';
 import { todoLines, type TranscriptView } from './views.tsx';
+import { REPORT_COMMANDS } from './report-command.ts';
 
 export type Overlay = { kind: 'model' } | { kind: 'effort' } | { kind: 'resume' } | { kind: 'rewind' } | { kind: 'config' } | { kind: 'mode' } | { kind: 'theme' };
 export type AppExit =
@@ -432,6 +433,7 @@ export const COMMANDS: Command[] = [
   },
   { name: 'pip', description: 'Say hello to Pip', hidden: true, run: (ctx) => ctx.print('__pip__') },
   { name: 'quit', description: 'Leave (a running reply goes on in the background)', aliases: ['exit', 'q'], run: (ctx) => ctx.exit({ kind: 'quit' }) },
+  ...REPORT_COMMANDS,
 ];
 
 export function findCommand(name: string): Command | undefined {

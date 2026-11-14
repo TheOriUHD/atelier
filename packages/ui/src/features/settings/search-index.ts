@@ -353,6 +353,21 @@ export const SETTINGS_INDEX = [
     keywords: ['erase', 'wipe', 'clear history', 'remove chats', 'sessions'],
   },
   {
+    id: 'privacy.report',
+    page: 'privacy',
+    label: 'Report an issue or request a feature',
+    description: 'Sends it to the Atelier developer, with diagnostics, a conversation and pictures if you choose. Never keys or passwords.',
+    keywords: ['bug', 'feedback', 'support', 'problem', 'crash', 'idea', 'suggestion', 'wish', 'contact', 'diagnostics', 'screenshot'],
+  },
+  {
+    id: 'privacy.reportsAllowed',
+    page: 'privacy',
+    label: 'Allow reports to the Atelier developer',
+    description: 'Lets everyone here send issue reports and feature requests. Off, the report buttons say an admin turned them off.',
+    keywords: ['bug', 'feedback', 'diagnostics', 'telemetry', 'block', 'disable'],
+    admin: true,
+  },
+  {
     id: 'usage.overview',
     page: 'usage',
     label: 'Your usage',

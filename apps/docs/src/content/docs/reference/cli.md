@@ -94,6 +94,8 @@ Skills and commands of the folder and your account are listed in the same menu a
 | `/doctor` | Check that everything works |
 | `/bug` | Copy what helps with a problem report |
 | `/quit` (`/exit`, `/q`) | Leave (a running reply goes on in the background) |
+| `/bug [--chat] <what happened>` (`/report`) | Report an issue to the Atelier developer (with diagnostics; --chat adds this conversation) |
+| `/feature [--chat] <what you would like>` | Request a feature from the Atelier developer (--diagnostics, --chat to attach them) |
 
 ## Keys
 

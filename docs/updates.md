@@ -174,9 +174,10 @@ update file lists, so both installers need theirs (the release command makes the
 ## macOS disk images
 
 A `.dmg` is for a first install, and for the **Download** button on a Mac whose Atelier can't replace itself. It is not
-uploaded to the feed bucket any more (`publish.mjs --disk-images` does it again): it stays on the GitHub release, the website
-links to it there, and the Worker answers a request for a missing `Atelier-<version>[-arm64].dmg` on the feed with a redirect to
-the same file on the release (`GITHUB_REPO` in `wrangler.toml`; the repository must be public). Its `.sig` is on the feed,
+uploaded to the feed bucket any more (`publish.mjs --disk-images` does it again): it stays on the GitHub release, and the Worker
+answers a request for a missing `Atelier-<version>[-arm64].dmg` on the feed with a redirect to the same file on the release
+(`GITHUB_REPO` in `wrangler.toml`; the repository must be public). The website links the disk images through the feed too, so
+those downloads are counted with the others (`deploy/cloudflare/README.md`). Its `.sig` is on the feed,
 because the app asks for it first. Older releases keep their disk images in the bucket and are served from it.
 
 ## Publish a version by hand
@@ -213,5 +214,5 @@ six Mac, Windows and Linux downloads on the website must be the new version befo
 
 ```bash
 curl -s https://updates.atelierhq.dev/stable/latest.yml          # or your own feed's address
-node --test deploy/cloudflare/src/latest.test.mjs         # the Worker's file-name logic
+node --test deploy/cloudflare/src/*.test.mjs             # the Worker: routes, file-name logic, download counts
 ```

@@ -1,0 +1,51 @@
+# Atelier's admin panel: the report inbox and the download counts (README.md).
+#   pnpm --filter @atelier/admin build && cd deploy/admin && npx wrangler deploy
+# Deploy from a checkout of the whole repository: the Worker bundles deploy/reports/src/policy.js and
+# deploy/cloudflare/src/latest.js, and serves apps/admin/dist.
+name = "atelier-admin"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+# Only on its own domain, behind Cloudflare Access (README.md).
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "admin.atelierhq.dev", custom_domain = true }]
+
+# No request logs: they would hold the owner's address and what was looked at.
+[observability]
+enabled = false
+
+# The SPA. Only /api/* runs this Worker; the page and its scripts hold no data.
+[assets]
+directory = "../../apps/admin/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# The database the collector and the update feed write to. This folder owns its migrations:
+#   npx wrangler d1 migrations apply atelier-admin --remote
+# Put the id `wrangler d1 create atelier-admin` printed here, in deploy/reports/wrangler.toml and in
+# deploy/cloudflare/wrangler.toml.
+[[d1_databases]]
+binding = "DB"
+database_name = "atelier-admin"
+database_id = "09d9d37c-bf1a-44bb-9b49-994d97f0e51b"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "atelier-reports"
+
+[vars]
+# Whose GitHub release download counters the daily cron reads.
+GITHUB_REPO = "TheOriUHD/atelier"
+
+# Daily at 03:17 UTC: GitHub's counters, reports past a year, quota rows, the stored-bytes total (src/cron.js).
+[triggers]
+crons = ["17 3 * * *"]
+
+# Secrets (not here, so the public repository doesn't name the owner or their Access team):
+#   TEAM_DOMAIN   the Access team domain, like <team>.cloudflareaccess.com
+#   ACCESS_AUD    the Access application's audience (AUD) tag
+#   ADMIN_EMAILS  who may use the panel, comma-separated
+#   GITHUB_TOKEN  optional: a read-only token, for GitHub's higher rate limit
+# Without the first three, every /api request is refused.

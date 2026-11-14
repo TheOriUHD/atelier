@@ -4,7 +4,7 @@ import type { BrowserCall } from '../tools/browser.ts';
  * injects the only surface-specific pieces; everything else is identical on desktop and web.
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, hostname, userInfo } from 'node:os';
 import { z } from 'zod';
 import { basename, dirname, join, posix, win32 } from 'node:path';
 import { flavorOfSep, pathOps } from '../paths.ts';
@@ -57,6 +57,9 @@ import {
   type SshConnectionView,
   type Transport,
   type UserSummary,
+  REPORTS_URL,
+  reportTextProblem,
+  type Todo,
 } from '@atelier/protocol';
 import { AccountError, AccountService, type Authenticated, type ClientInfo } from '../accounts/account-service.ts';
 import { TerminalSignIns } from '../accounts/terminal-sign-in.ts';
@@ -111,6 +114,10 @@ import { addTrack, mergeTrack, removeTrack, TrackError, trackBranch, trackDiff, 
 import { LoopLimitError } from '../agent/loops.ts';
 import { UsageLimits } from '../usage/limits.ts';
 import { sessionUsage, statsSummary, usageSummary } from '../usage/usage.ts';
+import { buildChatExcerpt } from '../reports/chat-excerpt.ts';
+import { collectBackendDiagnostics } from '../reports/collect.ts';
+import { ReportSendError, submitReport } from '../reports/submit.ts';
+import { reportScreenshot } from '../reports/screenshots.ts';
 import { GitHub, GitHubError } from '../cloud/github.ts';
 import { Codespaces } from '../cloud/codespaces.ts';
 import { collectUnusedBlobs, conversationIds, deleteConversations, exportStream } from '../privacy/privacy.ts';
@@ -2062,6 +2069,78 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     return target && userId && coopGateway.owns(userId, target) ? target : null;
   };
 
+  // ---------------------------------------------------------------- issue reports (ARCHITECTURE §26)
+  const reportsAllowed = () => {
+    if (!settings.effective.reports.enabled) throw appError('forbidden', 'An admin turned off issue reports and feature requests here.');
+  };
+  /** This computer's and account's words, hidden wherever they'd appear in a report. */
+  const reportWords = () => {
+    const words: string[] = [];
+    for (const read of [() => userInfo().username, hostname]) {
+      try {
+        words.push(read());
+      } catch {
+        // Not every system names its user.
+      }
+    }
+    return { home: homedir(), words };
+  };
+  const reportDiagnostics = async (userId: string) => {
+    const effective = settings.effective;
+    const models = await registry.listModels(userId).catch(() => []);
+    const count = (sql: string): number => (db.$client.prepare(sql).get() as { n: number }).n;
+    return collectBackendDiagnostics({
+      kind: platform.surface === 'web' ? 'server' : 'desktop',
+      dataDir: platform.dataDir,
+      settings: effective as never,
+      prefs: await prefs.get(userId).catch(() => null),
+      providerStatus: registry.statusList(),
+      models: (providerId) => models.filter((m) => m.providerId === providerId && !m.hidden).map((m) => m.modelId),
+      connectors: mcp.status(),
+      counts: () => ({
+        users: count('SELECT COUNT(*) AS n FROM users'),
+        sessions: count('SELECT COUNT(*) AS n FROM sessions'),
+        messages: count('SELECT COUNT(*) AS n FROM messages'),
+        workspaces: count('SELECT COUNT(*) AS n FROM workspaces'),
+      }),
+      dataBytes: () => {
+        const page = db.$client.prepare('PRAGMA page_size').get() as { page_size: number };
+        const pages = db.$client.prepare('PRAGMA page_count').get() as { page_count: number };
+        return page.page_size * pages.page_count;
+      },
+      fetch: (url, init) => fetch(url, init),
+      words: reportWords(),
+    });
+  };
+  const reportChat = async (sessionId: string, ctx: Ctx) => {
+    const { summary } = await sessionFor(sessionId, ctx, 'sessions.subscribe');
+    const row = await sessions.getRow(sessionId);
+    const { messages } = await sessions.branch(sessionId);
+    const workspace = summary.workspaceId && row?.userId ? (await workspaceManager.list(row.userId)).find((w) => w.id === summary.workspaceId) : undefined;
+    const providerId = summary.model?.split('/')[0];
+    const usage = (() => {
+      try {
+        return sessionUsage(db, sessionId) as unknown as Record<string, number | null>;
+      } catch {
+        return undefined;
+      }
+    })();
+    return buildChatExcerpt({
+      session: { ...summary, coop: Boolean(summary.coop) },
+      provider: settings.effective.providers.find((p) => p.id === providerId)?.type,
+      workspace: workspace ? { name: workspace.root.split(/[\\/]/).filter(Boolean).pop() ?? workspace.name, kind: workspace.scratch ? 'scratch' : workspace.kind } : undefined,
+      todos: (row?.todos as Todo[] | null) ?? [],
+      usage,
+      messages,
+      child: async (childId) => {
+        const child = await sessions.getRow(childId);
+        if (!child || child.parentSessionId !== sessionId) return null;
+        return { title: child.title, mode: child.mode, status: child.status, messages: (await sessions.branch(childId)).messages };
+      },
+      words: reportWords(),
+    });
+  };
+
   const handlers: Handlers<AppContract, Ctx> = {
     ...coopHandlers<HandlerContext<Ctx>>({
       coop,
@@ -2116,8 +2195,54 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       videoGeneration: true,
       audioGeneration: true,
       terminalSignIn: platform.surface === 'web',
+      reports: settings.effective.reports.enabled,
       ...(ctx.connection().client.network ? { sharedComputer: true } : shareAvailable ? { networkShare: true } : {}),
     }),
+
+    // ---------------------------------------------------------------- issue reports (ARCHITECTURE §26)
+    'reports.prepare': async ({ diagnostics, chatSessionId }, ctx) => {
+      reportsAllowed();
+      const userId = me(ctx).id;
+      const [diag, chatExcerpt] = await Promise.all([diagnostics ? reportDiagnostics(userId) : null, chatSessionId ? reportChat(chatSessionId, ctx) : null]);
+      return { diagnostics: diag, chat: chatExcerpt };
+    },
+    'reports.submit': async (input, ctx) => {
+      reportsAllowed();
+      const title = input.title.trim();
+      const description = input.description.trim();
+      const problem = reportTextProblem('title', title) ?? reportTextProblem('description', description);
+      if (problem) throw appError('invalid_request', problem);
+      const shots = input.screenshots.map((shot, i) => {
+        const checked = reportScreenshot(`shot${i}`, shot);
+        if (typeof checked === 'string') throw appError('invalid_request', checked);
+        return checked;
+      });
+      try {
+        return await submitReport(
+          platform.fetch ?? ((url, init) => fetch(url, init)),
+          platform.env.ATELIER_REPORTS_URL || REPORTS_URL,
+          {
+            envelope: {
+              v: 1,
+              kind: input.kind,
+              title,
+              description,
+              ...(input.contact?.trim() ? { contact: input.contact.trim() } : {}),
+              app: input.app,
+              ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
+              attachments: { chat: input.chat !== null, screenshots: shots.map(({ bytes: data, ...info }) => ({ ...info, bytes: data.byteLength })) },
+              createdAt: Date.now(),
+            },
+            chat: input.chat,
+            screenshots: shots.map((s) => ({ name: s.name, mime: s.mime, bytes: s.bytes })),
+          },
+          ctx.signal,
+        );
+      } catch (e) {
+        if (e instanceof ReportSendError) throw appError(e.status === 429 ? 'rate_limited' : 'report_failed', e.message);
+        throw e;
+      }
+    },
 
     // ---------------------------------------------------------------- sign-in
     'auth.status': async (_input, ctx) => ({

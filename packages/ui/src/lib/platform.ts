@@ -4,7 +4,7 @@
  */
 import { APP, type AppTier, type BrowserStatus, type ComputerApp, type ComputerSettings, type ComputerStatus, type DeviceLending, type RpcMessage, type Transport } from '@atelier/protocol';
 
-export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'join-coop' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock';
+export type MenuCommand = 'new-chat' | 'new-temporary-chat' | 'join-coop' | 'settings' | 'toggle-sidebar' | 'command-palette' | 'lock' | 'report-issue' | 'request-feature';
 
 /** A change to what this computer lends the server (packages/core/src/device/lending.ts). */
 export type LendingChange =
@@ -184,6 +184,14 @@ interface DesktopBridge {
    */
   diagnostics?: {
     get(lines?: number): Promise<{ arch: string; electron: string; chrome: string; packaged: boolean; log: string[]; privateStrings: string[]; appFolders: string[] }>;
+  };
+  /**
+   * Issue reports: this computer (system, hardware, monitors) and the window's picture right now. Absent in desktop
+   * shells older than the UI bundle.
+   */
+  reports?: {
+    system(): Promise<import('@atelier/protocol').ReportSystem>;
+    capture(): Promise<{ mime: 'image/png'; dataBase64: string; width: number; height: number } | null>;
   };
   /**
    * Keeps the computer from sleeping while any of these sessions runs ("Keep computer awake" in a Code session's More

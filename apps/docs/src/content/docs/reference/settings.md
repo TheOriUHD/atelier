@@ -92,6 +92,8 @@ see are hidden in the app.
 | **Temporary chats** | Temporary chats never appear in your history and are deleted when you leave them. Starting fresh also keeps your memory, personal instructions and projects away from the model. |
 | **Export your data** | A zip with all your conversations (as JSON and Markdown), projects, artifacts, files and memory. |
 | **Delete all conversations** | Every chat and Code session, with its messages, files and artifacts. Projects stay. This can’t be undone. |
+| **Report an issue or request a feature** | Sends it to the Atelier developer, with diagnostics, a conversation and pictures if you choose. Never keys or passwords. |
+| **Allow reports to the Atelier developer** *(admins only)* | Lets everyone here send issue reports and feature requests. Off, the report buttons say an admin turned them off. |
 
 ## Settings › Memory
 

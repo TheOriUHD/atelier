@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import { Download } from 'lucide-react';
-import { Button, Dialog, DialogContent, DialogFooter, Field, Select, TextField, toast, type SelectOption } from '../../components/ui/index.ts';
+import { Bug, Download, Lightbulb } from 'lucide-react';
+import { Button, Dialog, DialogContent, DialogFooter, Field, Select, Switch, TextField, toast, type SelectOption } from '../../components/ui/index.ts';
+import { openReporter } from '../reports/open-report.ts';
+import { useAccount } from '../../lib/queries.ts';
 import { useMode } from '../../app/navigation.ts';
 import { saveBlob } from '../../lib/platform.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
-import { usePref, useWrite } from './use-setting.ts';
+import { usePref, useSetting, useWrite } from './use-setting.ts';
 
 const FOREVER = 'forever';
 const RETENTION: SelectOption[] = [
@@ -46,7 +48,34 @@ export function PrivacyPage() {
         <ExportRow />
         <DeleteAllRow />
       </SettingsSection>
+      <ReportsSection />
     </>
+  );
+}
+
+/** Reports to the Atelier developer (ARCHITECTURE §26): the two ways to send one, and the admin's switch for everyone. */
+function ReportsSection() {
+  const { account } = useAccount();
+  const admin = account?.role === 'admin';
+  const allowed = useSetting<boolean>(['reports', 'enabled']);
+  return (
+    <SettingsSection title="Reports">
+      <SettingRow id="privacy.report">
+        <div className="flex gap-2">
+          <Button leadingIcon={Bug} onClick={() => void openReporter('issue')}>
+            Report an issue
+          </Button>
+          <Button leadingIcon={Lightbulb} onClick={() => void openReporter('feature')}>
+            Request a feature
+          </Button>
+        </div>
+      </SettingRow>
+      {admin && (
+        <SettingRow id="privacy.reportsAllowed" setting={allowed}>
+          {(label) => <Switch {...label} checked={allowed.value ?? true} onCheckedChange={(v) => void allowed.set(v)} />}
+        </SettingRow>
+      )}
+    </SettingsSection>
   );
 }
 

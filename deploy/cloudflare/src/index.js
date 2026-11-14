@@ -2,8 +2,15 @@
  * Atelier's update feed and download page (docs/updates.md). Desktop apps read `/<channel>/latest*.yml` and the
  * packages beside it (electron-updater's generic provider, which asks for byte ranges); people open `/` to download.
  * The bucket holds `stable/` and `beta/`, put there by deploy/cloudflare/publish.mjs.
+ *
+ * Downloads and update checks are counted for the admin panel (stats.js, README.md), after the answer and without
+ * addresses; without the `STATS` binding nothing is counted.
  */
 import { announcedFiles, diskImageUrl, latestPackages } from './latest.js';
+import { createCounter } from './stats.js';
+
+/** One per isolate: update checks are added up here between writes. */
+const counter = createCounter();
 
 const CHANNELS = new Set(['stable', 'beta']);
 const SETUP_VERSION = /^[0-9A-Za-z][0-9A-Za-z.-]{0,40}$/;
@@ -69,26 +76,42 @@ async function page(env) {
   );
 }
 
+/** The answer to a request, and what it was for counting (`target`, see stats.js `classify`). */
+async function route(request, env, target) {
+  const [first, ...rest] = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  if (!first) return page(env);
+  if (CHANNELS.has(first) && rest.length === 1 && !rest[0].includes('..')) {
+    Object.assign(target, { channel: first, file: rest[0] });
+    return file(request, env, `${first}/${rest[0]}`);
+  }
+  // The server installer (deploy/ship/install.sh.tmpl): `curl -fsSL https://updates.atelierhq.dev/install | sudo sh`.
+  if (first === 'install' && rest.length === 0) {
+    Object.assign(target, { script: 'server', file: 'install' });
+    const res = await file(request, env, 'setup/install.sh', 'public, max-age=60');
+    if (res.status === 200 || res.status === 206) res.headers.set('content-type', 'text/x-shellscript; charset=utf-8');
+    return res;
+  }
+  // The terminal app's installers (deploy/ship/cli-install.*.tmpl): `curl -fsSL …/cli | sh`, `irm …/cli.ps1 | iex`.
+  if ((first === 'cli' || first === 'cli.ps1') && rest.length === 0) {
+    Object.assign(target, { script: first === 'cli' ? 'cli-unix' : 'cli-windows', file: first });
+    const res = await file(request, env, first === 'cli' ? 'cli/install.sh' : 'cli/install.ps1', 'public, max-age=60');
+    if (res.status === 200 || res.status === 206) res.headers.set('content-type', first === 'cli' ? 'text/x-shellscript; charset=utf-8' : 'text/plain; charset=utf-8');
+    return res;
+  }
+  // Its binaries, one folder per version.
+  if (first === 'setup' && rest.length === 2 && SETUP_VERSION.test(rest[0]) && SETUP_FILE.test(rest[1])) {
+    Object.assign(target, { setup: true, version: rest[0], file: rest[1] });
+    return file(request, env, `setup/${rest[0]}/${rest[1]}`);
+  }
+  return text('Not found', 404);
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405, { allow: 'GET, HEAD' });
-    const [first, ...rest] = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
-    if (!first) return page(env);
-    if (CHANNELS.has(first) && rest.length === 1 && !rest[0].includes('..')) return file(request, env, `${first}/${rest[0]}`);
-    // The server installer (deploy/ship/install.sh.tmpl): `curl -fsSL https://updates.atelierhq.dev/install | sudo sh`.
-    if (first === 'install' && rest.length === 0) {
-      const res = await file(request, env, 'setup/install.sh', 'public, max-age=60');
-      if (res.status === 200 || res.status === 206) res.headers.set('content-type', 'text/x-shellscript; charset=utf-8');
-      return res;
-    }
-    // The terminal app's installers (deploy/ship/cli-install.*.tmpl): `curl -fsSL …/cli | sh`, `irm …/cli.ps1 | iex`.
-    if ((first === 'cli' || first === 'cli.ps1') && rest.length === 0) {
-      const res = await file(request, env, first === 'cli' ? 'cli/install.sh' : 'cli/install.ps1', 'public, max-age=60');
-      if (res.status === 200 || res.status === 206) res.headers.set('content-type', first === 'cli' ? 'text/x-shellscript; charset=utf-8' : 'text/plain; charset=utf-8');
-      return res;
-    }
-    // Its binaries, one folder per version.
-    if (first === 'setup' && rest.length === 2 && SETUP_VERSION.test(rest[0]) && SETUP_FILE.test(rest[1])) return file(request, env, `setup/${rest[0]}/${rest[1]}`);
-    return text('Not found', 404);
+    const target = {};
+    const res = await route(request, env, target);
+    counter.record(request, res, env, ctx, target.file ? target : null);
+    return res;
   },
 };

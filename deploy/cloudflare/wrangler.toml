@@ -15,3 +15,12 @@ bucket_name = "atelier-releases"
 [vars]
 # Where the Worker sends a request for a macOS disk image that the bucket doesn't have (src/index.js).
 GITHUB_REPO = "TheOriUHD/atelier"
+
+# Download and update-check counts for the admin panel (README.md, src/stats.js): the `atelier-admin` database that
+# deploy/admin owns. Put the id `wrangler d1 create atelier-admin` printed here, as in deploy/admin/wrangler.toml.
+# Without the binding the feed serves the same and counts nothing.
+[[d1_databases]]
+binding = "STATS"
+database_name = "atelier-admin"
+database_id = "09d9d37c-bf1a-44bb-9b49-994d97f0e51b"
+migrations_dir = "../admin/migrations"
