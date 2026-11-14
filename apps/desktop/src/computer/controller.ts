@@ -96,6 +96,8 @@ interface SessionState {
   takenBack: boolean;
   /** It looked at or used the computer this turn: a question it asks after giving the mouse back still brings Atelier forward. */
   used?: boolean;
+  /** The app in front when Atelier came forward for a card without having the mouse: back in front before it acts again. */
+  front?: string | null;
   /** Background: the controls of the latest screenshot, for actions aimed at an `element`. */
   elements?: ScreenshotElement[];
   /** Background: the app it opened last and when, so a screenshot right after waits for its first window. */
@@ -476,6 +478,7 @@ export class ComputerController {
         if (this.control?.key === key) await this.end(this.control, { focus: true });
         state().takenBack = false;
         state().used = false;
+        state().front = null;
         // Atelier's windows come back to the monitor they were on, now that nothing works on it.
         if (this.movedAway && !this.control) {
           this.movedAway = false;
@@ -495,8 +498,17 @@ export class ComputerController {
         const control = this.control;
         if (control?.key !== key) {
           // It gave the mouse back already (or worked in the background): what it opened may still cover Atelier, where
-          // the question is, so Atelier comes forward all the same.
-          if (state().used) await this.focusAtelier(true);
+          // the question is, so Atelier comes forward all the same, and that app goes back in front when it acts again.
+          if (!state().used) return {};
+          // A permission card: it acts again right after the answer, so it doesn't take the keyboard away from the app
+          // it works in; Atelier only shows that it waits (taskbar, notification).
+          if (kind === 'permission') {
+            this.deps.windows.attention('Atelier is waiting for your answer.');
+            return {};
+          }
+          const { app } = await this.deps.helper.call('apps.frontmost', {}).catch(() => ({ app: null }));
+          state().front = app && appCategory(app.id) !== 'system' ? app.id : null;
+          await this.focusAtelier(true);
           return {};
         }
         // Full control keeps the computer through a permission card (Atelier stays on screen there); anything else the
@@ -652,7 +664,10 @@ export class ComputerController {
 
   private async begin(backend: string, sessionId: string, settings: ComputerSettings): Promise<void> {
     const helper = this.deps.helper;
-    const control: Control = { key: keyOf(backend, sessionId), backend, sessionId, hidden: [], stopped: false, lastInput: 0, front: null };
+    // An app Atelier came in front of for a card goes back in front before the first action (`refront`).
+    const waited = this.session(backend, sessionId);
+    const control: Control = { key: keyOf(backend, sessionId), backend, sessionId, hidden: [], stopped: false, lastInput: 0, front: waited.front ?? null };
+    waited.front = null;
     this.control = control;
     await helper.call('control.resume', {});
     this.helperStopped = false;

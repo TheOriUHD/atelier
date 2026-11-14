@@ -414,8 +414,19 @@ describe('full control', () => {
     expect(await ask('control.request', {})).toEqual({ granted: true });
     await ask('control.release', {});
     wins.length = 0;
+    helper.front = APPS[1]!;
     await ask('turn.wait', { kind: 'question' });
     expect(wins).toEqual(['focus', 'attention']);
+    // Answered, it acts again: the app Atelier came in front of goes back in front first.
+    helper.front = app('dev.atelier.app', 'Atelier');
+    await ask('control.request', {});
+    await ask('control.batch', { actions: [{ action: 'left_click', coordinate: [1, 1] }], size: SIZE });
+    expect(helper.did('apps.open').at(-1)?.params).toEqual({ id: APPS[1]!.id, activate: true });
+    await ask('control.release', {});
+    // A permission card without the mouse: it acts right after, so the keyboard stays where it is; Atelier only says it waits.
+    wins.length = 0;
+    await ask('turn.wait', { kind: 'permission' });
+    expect(wins).toEqual(['attention']);
     // A session that didn't touch the computer this turn leaves the windows alone.
     await ask('turn.end', {});
     wins.length = 0;
