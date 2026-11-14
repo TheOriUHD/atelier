@@ -61,7 +61,7 @@ git('config', 'core.autocrlf', 'false');
 git('add', '.');
 git('commit', '-qm', 'Initial commit');
 
-// A plain folder for the Cowork task: some notes and a revenue table to work from.
+// A plain folder for a chat to work in as a task: some notes and a revenue table to work from.
 const work = join(parent, 'q3-planning');
 await mkdir(work, { recursive: true });
 await writeFile(
@@ -195,17 +195,17 @@ try {
     .toBe(true);
   await shot(page, cdp, 'artifact');
 
-  // Cowork: a task in a plain folder, finished, with the steps beside it and the file it made.
+  // A task: a new chat given a plain folder works through it, with the steps beside it and the file it made.
   await app.evaluate(({ dialog }, path) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
   }, work);
   await page.keyboard.press('Escape');
-  await page.evaluate(() => (location.hash = '#/work'));
-  await expect(page.getByRole('heading', { name: /^What should we get done/ })).toBeVisible();
-  await page.getByRole('button', { name: 'No folder', exact: true }).click();
+  await newChat();
+  await page.getByRole('button', { name: 'Add files and more' }).click();
+  await page.getByRole('menuitem', { name: 'Add folder' }).click();
   await page.getByRole('menuitem', { name: 'Open folder…' }).click();
   await page.getByRole('button', { name: 'Trust workspace' }).click();
-  await expect(page.getByRole('button', { name: 'q3-planning', exact: true })).toBeVisible();
+  await expect(page.getByText('q3-planning').first()).toBeVisible();
   await message.fill("Summarize this quarter's notes into a one-page brief for the team.");
   await message.press('Enter');
   const panel = page.getByRole('complementary', { name: 'Task progress' });
@@ -214,7 +214,7 @@ try {
   });
   await expect(page.getByRole('button', { name: 'Stop' })).toBeHidden({ timeout: 60_000 });
   await expect(page.getByRole('region', { name: 'Files from this task' })).toBeVisible();
-  await shot(page, cdp, 'cowork');
+  await shot(page, cdp, 'tasks');
 
   // Settings: the provider list, cropped to the part with something in it.
   await page.evaluate(() => (location.hash = '#/?settings=providers'));
@@ -231,8 +231,8 @@ try {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] });
   }, repo);
   await page.getByRole('radio', { name: 'Code' }).click();
-  // The picker remembers the Cowork folder, or shows "No folder" on a first visit.
-  await page.getByRole('button', { name: /^(No folder|q3-planning)$/ }).click();
+  // The picker remembers the task's folder, or shows "No folder" on a first visit.
+  await page.getByRole('main').getByRole('button', { name: /^(No folder|q3-planning|Select folder…)$/ }).click();
   await page.getByRole('menuitem', { name: 'Open folder…' }).click();
   await page.getByRole('button', { name: 'Trust workspace' }).click();
   await expect(page.getByRole('button', { name: 'timeline', exact: true })).toBeVisible();

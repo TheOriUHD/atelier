@@ -75,7 +75,7 @@ The captures come from the real app (dark theme, 1360×850 CSS pixels rendered a
 on throwaway data against a scripted model, never your own profile:
 
 ```bash
-node apps/site/shots/capture.mjs /tmp/shots      # chat, artifact, cowork, providers, code, permission (PNG masters)
+node apps/site/shots/capture.mjs /tmp/shots      # chat, artifact, tasks, providers, code, permission (PNG masters)
 apps/site/shots/convert.sh /tmp/shots            # WebP at 1280, 2560 and 3840 wide into public/img
 ```
 

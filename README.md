@@ -4,7 +4,7 @@
 
 # Atelier
 
-**A self-hosted AI workspace with Chat, Cowork and Code, on the models you choose.**
+**A self-hosted AI workspace with Chat and Code, on the models you choose.**
 
 Run it on your own machine with Ollama or llama.cpp, or use Anthropic, OpenAI, Mistral, GitHub Copilot, a ChatGPT or Mistral Vibe plan, OpenRouter or any OpenAI-compatible endpoint.<br>
 One backend, two ways in: a desktop app and a web app you host yourself.
@@ -38,10 +38,9 @@ One backend, two ways in: a desktop app and a web app you host yourself.
 
 ## What is Atelier?
 
-Atelier is a workspace for language models. Three modes share one conversation model, one set of settings and one backend:
+Atelier is a workspace for language models. Two modes share one conversation model, one set of settings and one backend:
 
-- **Chat** for conversations, with artifacts, projects, attachments and web research.
-- **Cowork** for longer tasks in a folder that end in files you can open.
+- **Chat** for conversations, with artifacts, projects, attachments and web research, and longer tasks in a folder (or the chat's own sandbox) that end in files you can open.
 - **Code** for agentic sessions in a folder. Tool names and permission rules follow Claude Code's, so rules, hooks and skills written for it mostly carry over.
 
 It runs on the models *you* choose, keeps everything in a data folder you control, and reads Claude Code's skills, plugins, commands, agents, hooks and `CLAUDE.md` where they already are, and can import its MCP config.
@@ -135,9 +134,9 @@ Read, Write, Edit, Glob, Grep and Bash, plus a task list, questions to you, sub-
 | **Open it elsewhere** | **Open in** (desktop): a new window with only that session, Cursor, VS Code or Finder. Atelier reopens in the tab (Chat or Code) you left it in. |
 | **Ultracode** | The top effort stop: the model plans, has sub-agents investigate in parallel and others check the results. Slower and far more tokens, so admins can switch it off. |
 
-### Cowork
+### Tasks in Chat
 
-Cowork works through a longer task in a folder and leaves the files it makes there. Pick a folder, describe the task and watch its steps beside the conversation. It ends with cards for the files it wrote, and a system notification tells you when it finishes, fails or needs you while you are in another window.
+A chat answers a quick question as before, and when a request needs files, commands or your computer it works through it as a task: in a folder you give it, or in its own sandbox until you do. Watch its steps beside the conversation; it ends with cards for the files it wrote, and a system notification tells you when it finishes, fails or needs you while you are in another window.
 
 ### Atelier CLI
 
@@ -220,7 +219,7 @@ git clone https://github.com/TheOriUHD/atelier.git
 cd atelier
 corepack enable
 pnpm install
-pnpm runner:build   # the Go runner; needed to open folders for Code and Cowork
+pnpm runner:build   # the Go runner; needed to open folders for Code and for chats
 pnpm dev:desktop    # Electron with hot reload
 ```
 
@@ -316,7 +315,7 @@ In a split view, keys act in the session you are working in.
 
 Every system prompt, side prompt, context-update note and tool description Atelier sends is written by this project, lives in the repository, and is published verbatim:
 
-- **Read them** at [docs.atelierhq.dev/prompts](https://docs.atelierhq.dev/prompts/): Chat, Cowork and Code in the full and compact tier, the shared fragments, the Auto mode reviewer, compaction, memory and title prompts, every context-update note, and [every built-in tool](https://docs.atelierhq.dev/reference/tools/) with its parameters.
+- **Read them** at [docs.atelierhq.dev/prompts](https://docs.atelierhq.dev/prompts/): Chat and Code in the full and compact tier, the shared fragments, the Auto mode reviewer, compaction, memory and title prompts, every context-update note, and [every built-in tool](https://docs.atelierhq.dev/reference/tools/) with its parameters.
 - **In the repository**: the templates are plain Markdown in [`packages/core/prompts/`](packages/core/prompts), and the complete assembled text of typical sessions (system blocks, notes, tool JSON) is in [`packages/core/src/prompts/__snapshots__/prompts/`](packages/core/src/prompts/__snapshots__/prompts). `pnpm prompts:show` lists and prints them; `pnpm prompts:show --assembled code.full` prints what a Code session sends.
 - **Download them** as one file: [Markdown](https://docs.atelierhq.dev/prompts/atelier-prompts.md) or [JSON](https://docs.atelierhq.dev/prompts/atelier-prompts.json).
 - **Design and tests**: [docs/PROMPTS.md](docs/PROMPTS.md) explains how a prompt is assembled, cached and tested. Snapshots, size budgets and a neutrality check fail the build when a prompt changes unreviewed.
@@ -497,6 +496,6 @@ Built on [Electron](https://www.electronjs.org), [React](https://react.dev), [Vi
 
 <br>
 
-<sub>Atelier · a self-hosted AI workspace · Chat, Cowork and Code on the model you choose</sub>
+<sub>Atelier · a self-hosted AI workspace · Chat and Code on the model you choose</sub>
 
 </div>

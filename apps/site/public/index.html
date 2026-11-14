@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atelier: a self-hosted AI workspace</title>
-<meta name="description" content="Chat, Cowork and Code on the model you choose, local or hosted. Self-hosted, no telemetry, free for noncommercial use.">
+<meta name="description" content="Chat and Code on the model you choose, local or hosted, with chats that take on longer tasks. Self-hosted, no telemetry, free for noncommercial use.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
@@ -12,7 +12,7 @@
 <link rel="canonical" href="https://atelierhq.dev/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Atelier: a self-hosted AI workspace">
-<meta property="og:description" content="Chat, Cowork and Code on the model you choose, local or hosted. Self-hosted, no telemetry, free for noncommercial use.">
+<meta property="og:description" content="Chat and Code on the model you choose, local or hosted, with chats that take on longer tasks. Self-hosted, no telemetry, free for noncommercial use.">
 <meta property="og:url" content="https://atelierhq.dev/">
 <meta property="og:image" content="https://atelierhq.dev/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -67,7 +67,7 @@
   <section class="hero">
     <div class="wrap">
       <h1>The AI workspace you already know how to use.</h1>
-      <p class="lead">Chat, Cowork and Code on any model, local or hosted. Run it on your own machine and keep your data.</p>
+      <p class="lead">Chat and Code on any model, local or hosted. Run it on your own machine and keep your data.</p>
       <div class="actions">
         <a class="btn btn-primary" href="/download/" data-download><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span data-download-label>Download Atelier</span></a>
         <a class="btn btn-quiet" href="https://github.com/TheOriUHD/atelier"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github"/></svg>View on GitHub</a>
@@ -80,7 +80,7 @@
         <div class="tabs" role="tablist" aria-label="What Atelier does">
           <button class="tab" role="tab" id="tab-code" aria-controls="panel-code" aria-selected="true" type="button" data-room="Code" data-note="Agentic sessions in your repositories. It reads, edits and runs commands; you review the diff, reject a hunk, commit and open a pull request. Five permission modes decide what it may do without asking.">Code</button>
           <button class="tab" role="tab" id="tab-chat" aria-controls="panel-chat" aria-selected="false" tabindex="-1" type="button" data-room="Chat" data-note="Rich replies with tables, code and math, attachments, projects, web search that cites its sources, and a memory you can read and delete. Retry a reply or edit your message and the earlier versions stay one click away.">Chat</button>
-          <button class="tab" role="tab" id="tab-cowork" aria-controls="panel-cowork" aria-selected="false" tabindex="-1" type="button" data-room="Cowork" data-note="Hand it a longer task in a folder and get files back. Watch each step beside the conversation, and get a notification when it finishes, fails or needs you.">Cowork</button>
+          <button class="tab" role="tab" id="tab-tasks" aria-controls="panel-tasks" aria-selected="false" tabindex="-1" type="button" data-room="Tasks" data-note="A chat takes on longer work too: give it a folder, or let it use its own sandbox, and get files back. Watch each step beside the conversation, and get a notification when it finishes, fails or needs you.">Tasks</button>
           <button class="tab" role="tab" id="tab-artifacts" aria-controls="panel-artifacts" aria-selected="false" tabindex="-1" type="button" data-room="Artifacts" data-note="When a reply builds something, it opens beside the conversation: HTML pages, React components, diagrams, documents. Sandboxed, versioned, ready to copy or download.">Artifacts</button>
           <button class="tab" role="tab" id="tab-approvals" aria-controls="panel-approvals" aria-selected="false" tabindex="-1" type="button" data-room="Approvals" data-note="Auto, Ask, Accept edits, Plan and Bypass decide what it may do without asking. Risky commands such as sudo, deleting outside the folder and force pushes ask first unless you chose Bypass. In Auto a separate review request to the model decides instead, and Plan mode refuses commands.">Approvals</button>
         </div>
@@ -93,8 +93,8 @@
         <div id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
           <img src="/img/chat-2560.webp" srcset="/img/chat-1280.webp 1280w, /img/chat-2560.webp 2560w, /img/chat-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="An Atelier chat answering a question about database indexes with a comparison table, with earlier conversations in the sidebar.">
         </div>
-        <div id="panel-cowork" role="tabpanel" aria-labelledby="tab-cowork" hidden>
-          <img src="/img/cowork-2560.webp" srcset="/img/cowork-1280.webp 1280w, /img/cowork-2560.webp 2560w, /img/cowork-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="A finished Cowork task: three completed steps beside the conversation, and the brief it wrote listed as an output file.">
+        <div id="panel-tasks" role="tabpanel" aria-labelledby="tab-tasks" hidden>
+          <img src="/img/tasks-2560.webp" srcset="/img/tasks-1280.webp 1280w, /img/tasks-2560.webp 2560w, /img/tasks-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="A chat that worked through a task in a folder: three completed steps beside the conversation, and the brief it wrote listed as an output file.">
         </div>
         <div id="panel-artifacts" role="tabpanel" aria-labelledby="tab-artifacts" hidden>
           <img src="/img/artifact-2560.webp" srcset="/img/artifact-1280.webp 1280w, /img/artifact-2560.webp 2560w, /img/artifact-3840.webp 3840w" sizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" width="4080" height="2550" loading="lazy" alt="A chat with a colour palette page open in a panel beside it, as a live preview.">
@@ -115,7 +115,7 @@
       <div class="trio reveal">
         <div>
           <h3>The layout</h3>
-          <p>A Chat and Code toggle sits at the top of the sidebar. In Chat, Cowork, Projects and Artifacts are listed under it, and Settings opens as a dialog.</p>
+          <p>A Chat and Code toggle sits at the top of the sidebar. In Chat, Projects and Artifacts are listed under it, and Settings opens as a dialog.</p>
         </div>
         <div>
           <h3>The shortcuts</h3>
@@ -274,7 +274,7 @@
     <div class="foot">
       <div>
         <a class="brand" href="/" aria-label="Atelier, home"><img src="/icon.svg" width="30" height="30" alt="">Atelier</a>
-        <p class="tagline">A self-hosted AI workspace with Chat, Cowork and Code, on the model you choose.</p>
+        <p class="tagline">A self-hosted AI workspace with Chat and Code, on the model you choose.</p>
       </div>
       <div>
         <h3>Product</h3>

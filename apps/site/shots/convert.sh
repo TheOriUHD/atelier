@@ -18,7 +18,7 @@ encode() { # <master png> <width> <output webp>
   cwebp -quiet -q 88 -m 6 -sharp_yuv "$tmp/frame.png" -o "$3"
 }
 
-for name in chat artifact cowork code permission; do
+for name in chat artifact tasks code permission; do
   for width in 1280 2560 3840; do encode "$src/$name.png" "$width" "$dest/$name-$width.webp"; done
 done
 # The providers shot is a crop of the settings dialog, 2496 wide at most.

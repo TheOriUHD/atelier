@@ -4,7 +4,7 @@
  * a believable model name and speed. Same API subset as e2e/fake-ollama.mjs (the adapter only needs these routes).
  * The scene is picked from what the person typed, so the prompts on screen read naturally.
  *
- * Usage: node demo-model.mjs [port=11590] [repoDir] [workDir]   (repoDir: the folder the Code scene edits; workDir: the Cowork one)
+ * Usage: node demo-model.mjs [port=11590] [repoDir] [workDir]   (repoDir: the folder the Code scene edits; workDir: the folder the task scene works in)
  */
 import { createServer } from 'node:http';
 import { join } from 'node:path';
