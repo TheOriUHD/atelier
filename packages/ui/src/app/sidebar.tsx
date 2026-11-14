@@ -5,14 +5,20 @@ import { Link, useNavigate, useRouter } from '@tanstack/react-router';
 import { Drawer } from '@base-ui/react/drawer';
 import {
   Blocks,
+  BookOpen,
   BriefcaseBusiness,
   Bug,
   ChartColumn,
   ChevronDown,
   ChevronRight,
+  CircleHelp,
   CodeXml,
+  ExternalLink,
   FolderClosed,
+  GitBranch,
+  Globe,
   Images,
+  Info,
   Keyboard,
   Laptop,
   Lightbulb,
@@ -21,14 +27,19 @@ import {
   LogOut,
   MessageCircle,
   MessagesSquare,
+  MonitorDown,
   MoreHorizontal,
   PinOff,
   Plus,
+  Scale,
   Search,
   Server,
   Settings as SettingsIcon,
   Shapes,
+  ShieldCheck,
   Sparkles,
+  SquareTerminal,
+  SunMoon,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -44,6 +55,7 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
+  MenuSubmenu,
   MenuTrigger,
   SegmentedControl,
   cn,
@@ -51,7 +63,7 @@ import {
 } from '../components/ui/index.ts';
 import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { recentGroup } from '../lib/dates.ts';
-import { blobUrl, desktop } from '../lib/platform.ts';
+import { blobUrl, desktop, openExternal } from '../lib/platform.ts';
 import { useConnection } from '../lib/lending.ts';
 import { shortcutText, useShortcutBindings } from '../lib/shortcuts.ts';
 import { useAccount, useImagesOffered, usePrefs, useProjects, useSessions, useSetPref } from '../lib/queries.ts';
@@ -467,6 +479,19 @@ function WhereItRunsItem({ onClick }: { onClick(): void }) {
 }
 
 /** Avatar, name · role and the profile menu; a quiet Settings button on the right. */
+/** Where the profile menu's help and app links go. */
+const LINKS = {
+  docs: 'https://docs.atelierhq.dev/',
+  privacy: 'https://docs.atelierhq.dev/privacy/',
+  license: 'https://docs.atelierhq.dev/license/',
+  github: 'https://github.com/TheOriUHD/atelier',
+  site: 'https://atelierhq.dev/',
+  desktop: 'https://atelierhq.dev/download/#desktop',
+  cli: 'https://atelierhq.dev/download/#cli',
+  server: 'https://atelierhq.dev/download/#server',
+  chrome: 'https://docs.atelierhq.dev/computer-use/#web-pages-atelier-for-chrome',
+};
+
 function ProfileFooter() {
   const { account } = useAccount();
   const { prefs } = usePrefs();
@@ -474,8 +499,17 @@ function ProfileFooter() {
   const openSettings = useOpenSettings();
   const lockNow = useLockNow(openSettings);
   const shortcuts = useShortcutBindings();
+  const notes = useWhatsNewNotes();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [newsOpen, setNewsOpen] = useState(false);
   const name = account?.name || 'You';
   const avatar = account?.avatar;
+  const theme = prefs?.appearance.theme ?? 'system';
+  const link = (icon: LucideIcon, label: string, href: string) => (
+    <MenuItem icon={icon} shortcut={<Icon icon={ExternalLink} size="sm" />} onClick={() => openExternal(href)}>
+      {label}
+    </MenuItem>
+  );
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-t-[0.5px] border-line px-2">
@@ -499,23 +533,59 @@ function ProfileFooter() {
           </span>
           <Icon icon={ChevronDown} className="text-fg-muted" />
         </MenuTrigger>
-        <MenuContent side="top" align="start" className="w-56">
+        <MenuContent side="top" align="start" className="w-64">
+          {account && (
+            <MenuGroup>
+              <MenuLabel className="truncate">{account.username}</MenuLabel>
+            </MenuGroup>
+          )}
           <MenuItem icon={SettingsIcon} shortcut={shortcutText(shortcuts.settings)} onClick={() => openSettings()}>
             Settings
           </MenuItem>
+          <MenuItem icon={ChartColumn} onClick={() => openSettings('usage')}>
+            Usage
+          </MenuItem>
+          <MenuItem icon={Keyboard} onClick={() => setShortcutsOpen(true)}>
+            Keyboard shortcuts
+          </MenuItem>
           {/* The desktop app: where it runs, one click from Settings › Connection, which switches it. */}
           {desktop?.connection && <WhereItRunsItem onClick={() => openSettings('connection')} />}
+          <MenuSubmenu icon={SunMoon} label="Appearance" hint={THEMES.find((t) => t.value === theme)?.label}>
+            <MenuRadioGroup value={theme} onValueChange={(value: Theme) => setPref.mutate({ path: ['appearance', 'theme'], value })}>
+              {THEMES.map((t) => (
+                <MenuRadioItem key={t.value} value={t.value}>
+                  {t.label}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </MenuSubmenu>
           <MenuSeparator />
-          <MenuRadioGroup
-            value={prefs?.appearance.theme ?? 'system'}
-            onValueChange={(value: Theme) => setPref.mutate({ path: ['appearance', 'theme'], value })}
-          >
-            {THEMES.map((t) => (
-              <MenuRadioItem key={t.value} value={t.value}>
-                {t.label}
-              </MenuRadioItem>
-            ))}
-          </MenuRadioGroup>
+          <MenuItem icon={Bug} shortcut={shortcutText(shortcuts['report-issue'])} onClick={() => void openReporter('issue')}>
+            Report an issue
+          </MenuItem>
+          <MenuItem icon={Lightbulb} onClick={() => void openReporter('feature')}>
+            Request a feature
+          </MenuItem>
+          {link(CircleHelp, 'Get help', LINKS.docs)}
+          <MenuSeparator />
+          {notes.length > 0 && (
+            <MenuItem icon={Sparkles} onClick={() => setNewsOpen(true)}>
+              What’s new
+            </MenuItem>
+          )}
+          <MenuSubmenu icon={MonitorDown} label="Get the apps">
+            {link(Laptop, 'Desktop app', LINKS.desktop)}
+            {link(SquareTerminal, 'Terminal app', LINKS.cli)}
+            {link(Server, 'Server', LINKS.server)}
+            {link(Globe, 'Atelier for Chrome', LINKS.chrome)}
+          </MenuSubmenu>
+          <MenuSubmenu icon={Info} label="Learn more">
+            {link(BookOpen, 'Documentation', LINKS.docs)}
+            {link(ShieldCheck, 'What leaves your machine', LINKS.privacy)}
+            {link(GitBranch, 'Source code', LINKS.github)}
+            {link(Scale, 'License', LINKS.license)}
+            {link(Globe, 'atelierhq.dev', LINKS.site)}
+          </MenuSubmenu>
           <MenuSeparator />
           {/* On this computer there is no sign-in to leave; the screen lock takes its place. */}
           {isLocal() ? (
@@ -529,12 +599,10 @@ function ProfileFooter() {
           )}
         </MenuContent>
       </Menu>
-      <IconButton
-        icon={SettingsIcon}
-        label="Settings"
-        className="ml-auto text-fg-secondary"
-        onClick={() => openSettings()}
-      />
+      {/* The report shortcut's button: a picture of the window as it is goes with the report. */}
+      <IconButton icon={Bug} label="Report an issue" className="ml-auto text-fg-secondary" onClick={() => void openReporter('issue', { capture: true })} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      {notes.length > 0 && <WhatsNewDialog notes={notes} open={newsOpen} onOpenChange={setNewsOpen} />}
     </div>
   );
 }

@@ -78,9 +78,11 @@ test('desktop: the report shortcut attaches the window, and the report carries d
 
     await dialog.getByLabel('Title').fill('Shader answer is too short');
     await dialog.getByLabel('What happened?').fill('I asked about shaders and the reply only repeated my question back to me.');
-    // Diagnostics are on for an issue; the open conversation is offered first.
-    await expect(dialog.getByRole('switch', { name: 'Diagnostics' })).toHaveAttribute('aria-checked', 'true');
+    // An issue always carries diagnostics; the open conversation is offered first.
+    await expect(dialog.getByRole('switch', { name: 'Diagnostics' })).toHaveCount(0);
+    await expect(dialog.getByText('Always', { exact: true })).toBeVisible();
     await dialog.getByRole('switch', { name: 'A conversation' }).click();
+    await expect(dialog.getByRole('radio', { name: /open now/ })).toHaveAttribute('aria-checked', 'true');
     await expect(dialog.getByText(/All \d+ messages/)).toBeVisible({ timeout: 30_000 });
     await dialog.getByRole('button', { name: 'Show' }).first().click();
     await expect(dialog.getByText(/"hardware"/).first()).toBeVisible({ timeout: 30_000 });
@@ -106,10 +108,10 @@ test('desktop: the report shortcut attaches the window, and the report carries d
     expect(everything).not.toContain(KEY);
     expect(everything).not.toContain('sk-proj-aaaa');
 
-    // Done; a feature request from the sidebar starts without diagnostics.
+    // Done; a feature request from the menu under the name starts without diagnostics.
     await page.getByRole('button', { name: 'Done' }).click();
-    await page.getByRole('button', { name: 'More', exact: true }).click();
-    await page.getByRole('button', { name: 'Request a feature' }).click();
+    await page.getByRole('button', { name: /^Tester · / }).click();
+    await page.getByRole('menuitem', { name: 'Request a feature' }).click();
     const feature = page.getByRole('dialog', { name: 'Request a feature' });
     await expect(feature.getByRole('switch', { name: 'Diagnostics' })).toHaveAttribute('aria-checked', 'false');
     await expect(feature.getByRole('img')).toHaveCount(0);

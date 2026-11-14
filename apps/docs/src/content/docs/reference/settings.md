@@ -92,8 +92,6 @@ see are hidden in the app.
 | **Temporary chats** | Temporary chats never appear in your history and are deleted when you leave them. Starting fresh also keeps your memory, personal instructions and projects away from the model. |
 | **Export your data** | A zip with all your conversations (as JSON and Markdown), projects, artifacts, files and memory. |
 | **Delete all conversations** | Every chat and Code session, with its messages, files and artifacts. Projects stay. This can’t be undone. |
-| **Report an issue or request a feature** | Sends it to the Atelier developer, with diagnostics, a conversation and pictures if you choose. Never keys or passwords. |
-| **Allow reports to the Atelier developer** *(admins only)* | Lets everyone here send issue reports and feature requests. Off, the report buttons say an admin turned them off. |
 
 ## Settings › Memory
 
@@ -183,6 +181,16 @@ Desktop app only.
 | **Your instructions and skills from this computer** *(only where it works)* | Sessions in folders on this computer use your ~/.claude/CLAUDE.md, ~/.atelier/ATELIER.md, skills, agents, commands and Claude Code settings here. |
 | **Copy diagnostics** | Puts a plain-text summary on the clipboard to paste into a bug report: version, system, the last lines of the app log and the last error. Atelier sends nothing by itself, and the text leaves out keys, addresses, message text, file paths and names. |
 | **Data folder** | Where Atelier keeps its data on this computer. |
+
+## Settings › Help & feedback
+
+| Setting | What it does |
+|---|---|
+| **Report an issue** | Sends it to the Atelier developer with diagnostics, and a conversation and pictures if you choose. Never keys or passwords. |
+| **Request a feature** | An idea or a wish, for the Atelier developer’s list of requests. |
+| **Allow reports to the Atelier developer** *(admins only)* | Lets everyone here send issue reports and feature requests. Off, the report buttons say an admin turned them off. |
+| **Documentation** | docs.atelierhq.dev: guides, settings and what every feature does. |
+| **Copy diagnostics** | Versions, system and the end of the log as plain text on your clipboard, for a report somewhere else. Nothing is sent. |
 
 ## Settings › Admin › Providers
 

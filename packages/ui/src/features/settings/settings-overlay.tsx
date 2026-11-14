@@ -9,6 +9,7 @@ import { useNarrow } from '../../lib/narrow.ts';
 import { useAccount, useAppInfo, usePrefs, useSettings } from '../../lib/queries.ts';
 import { AccountPage } from './account-page.tsx';
 import { AdminCodePage } from './admin-code-page.tsx';
+import { HelpPage } from './help-page.tsx';
 import { CapabilitiesPage } from './capabilities-page.tsx';
 import { CloudPage } from './cloud-page.tsx';
 import { CodePage } from './code-page.tsx';
@@ -54,6 +55,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   skills: SkillsPage,
   computer: ComputerUseSection,
   system: SystemPage,
+  help: HelpPage,
   providers: ProvidersPage,
   'image-providers': ImageProvidersPage,
   models: ModelsPage,

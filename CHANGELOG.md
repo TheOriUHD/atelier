@@ -4,6 +4,14 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Reports, easier to reach and tidier.**
+  - The button next to your name at the bottom of the sidebar is now a bug: it opens a report with a picture of the window, like F1. Settings stays one click away in the menu under your name.
+  - That menu has more: Usage, Keyboard shortcuts, Appearance, Report an issue, Request a feature, Get help, What's new, Get the apps (desktop, terminal, server, Atelier for Chrome) and Learn more (documentation, what leaves your machine, source code, license).
+  - Settings has a **Help & feedback** page with the report buttons, the documentation, Copy diagnostics, and the admin's switch for reports.
+  - An issue always carries diagnostics now; a feature request still only when you add them.
+  - The Issue / Feature request switch is only as wide as its two choices.
+  - A conversation is picked from a short list with a search field, instead of a menu that grew past the top of the window.
+
 ## [0.9.0] — 2026-11-14
 
 - **Report an issue or request a feature from inside Atelier.** Press **F1** (Settings › Shortcuts changes it), use **Help › Report an Issue…** / **Request a Feature…**, **More** in the sidebar, the search palette, Settings › Privacy › Reports, or `/bug` and `/feature` in the terminal app. Write a title and a sentence or two; Atelier asks for a little more when that is too short to act on and refuses padding. An issue attaches diagnostics by default; a feature request doesn't. You can also attach one conversation and up to four pictures. Each attachment can be shown before it goes:

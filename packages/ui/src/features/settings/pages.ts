@@ -1,4 +1,5 @@
 import {
+  LifeBuoy,
   Blocks,
   Box,
   Brain,
@@ -47,6 +48,7 @@ export type SettingsPageId =
   | 'skills'
   | 'computer'
   | 'system'
+  | 'help'
   | 'providers'
   | 'image-providers'
   | 'models'
@@ -104,6 +106,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'skills', label: 'Skills', icon: ScrollText, group: 'Settings' },
   // This computer: the desktop app's version and updates, launch at login, data folder.
   { id: 'system', label: 'System', icon: Laptop, group: 'Settings', available: () => !!desktop },
+  { id: 'help', label: 'Help & feedback', icon: LifeBuoy, group: 'Settings' },
   { id: 'providers', label: 'Providers', icon: Plug, group: 'Admin' },
   // Separate from text providers (ARCHITECTURE §23). An older server has neither the page's calls nor its settings.
   { id: 'image-providers', label: 'Media', icon: Images, group: 'Admin', available: () => imageGenerationOffered() },

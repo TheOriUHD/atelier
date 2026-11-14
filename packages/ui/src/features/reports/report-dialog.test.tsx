@@ -80,9 +80,11 @@ describe('the report dialog', () => {
     act(() => useReports.getState().open_('issue'));
     fireEvent.change(await screen.findByPlaceholderText(/Chat stops after attaching/), { target: { value: 'Code session stops early' } });
     fireEvent.change(screen.getByPlaceholderText(/What did you do/), { target: { value: 'It ends its turn with half the list still open.' } });
-    // Diagnostics are on for an issue; a conversation is the person's choice.
-    expect(screen.getByRole('switch', { name: 'Diagnostics' }).getAttribute('aria-checked')).toBe('true');
+    // An issue always carries diagnostics (no switch); a conversation is the person's choice.
+    expect(screen.queryByRole('switch', { name: 'Diagnostics' })).toBeNull();
+    expect(screen.getByText('Always')).toBeTruthy();
     fireEvent.click(screen.getByRole('switch', { name: 'A conversation' }));
+    expect((await screen.findByRole('radio', { name: /Fix the build/ })).getAttribute('aria-checked')).toBe('true');
     expect(await screen.findByText(/120 of its 900 messages/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByTestId('report-id')).toHaveProperty('textContent', 'I-7F3K2Q');

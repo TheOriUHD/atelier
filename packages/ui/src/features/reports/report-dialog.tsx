@@ -9,7 +9,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Activity, Bug, Check, Copy, ImagePlus, Lightbulb, MessagesSquare, X } from 'lucide-react';
 import { REPORT_LIMITS, reportTextProblem, type ReportChat, type ReportKind } from '@atelier/protocol';
-import { Button, Dialog, DialogContent, DialogFooter, Field, Icon, IconButton, SegmentedControl, Select, Switch, TextArea, TextField, cn } from '../../components/ui/index.ts';
+import { Button, Dialog, DialogContent, DialogFooter, Field, Icon, IconButton, SegmentedControl, Switch, TextArea, TextField, cn } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
 import { openExternal } from '../../lib/platform.ts';
 import { useAppInfo, useSessions } from '../../lib/queries.ts';
@@ -57,9 +57,9 @@ export function ReportDialog() {
   const draft = drafts[kind];
   const copy = COPY[kind];
 
-  // Diagnostics follow the kind until the person decides.
-  const [diagnosticsChoice, setDiagnosticsChoice] = useState<boolean | null>(null);
-  const withDiagnostics = diagnosticsChoice ?? kind === 'issue';
+  // An issue always carries diagnostics: without them it can rarely be followed up. A feature request only on request.
+  const [featureDiagnostics, setFeatureDiagnostics] = useState(false);
+  const withDiagnostics = kind === 'issue' || featureDiagnostics;
   const [withChat, setWithChat] = useState(false);
   // The conversation it was opened from is the one offered first. (A new dialog is mounted for each opening.)
   const [chatId, setChatId] = useState<string | null>(() => params.sessionId ?? null);
@@ -69,16 +69,20 @@ export function ReportDialog() {
   const [receipt, setReceipt] = useState<{ id: string; kind: ReportKind } | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-
+  const [chatQuery, setChatQuery] = useState('');
 
   const sessions = useSessions({}, { enabled: open });
-  const chatOptions = useMemo(() => {
+  /** The person's conversations, the one open now first, newest next. */
+  const chats = useMemo(() => {
     const list = (sessions.data ?? []).filter((s) => !s.temporary);
     const here = list.find((s) => s.id === params.sessionId);
-    const rest = list.filter((s) => s.id !== params.sessionId).slice(0, 60);
-    return [...(here ? [here] : []), ...rest].map((s) => ({ value: s.id, label: `${sessionTitle(s)}${s.id === params.sessionId ? ' (open now)' : ''} · ${relativeTime(s.updatedAt)}` }));
+    return [...(here ? [here] : []), ...list.filter((s) => s.id !== params.sessionId)];
   }, [sessions.data, params.sessionId]);
-  const chosenChat = withChat ? (chatId && chatOptions.some((o) => o.value === chatId) ? chatId : (chatOptions[0]?.value ?? null)) : null;
+  const chosenChat = withChat ? (chatId && chats.some((s) => s.id === chatId) ? chatId : (chats[0]?.id ?? null)) : null;
+  const shownChats = useMemo(() => {
+    const q = chatQuery.trim().toLowerCase();
+    return (q ? chats.filter((s) => sessionTitle(s).toLowerCase().includes(q)) : chats).slice(0, 100);
+  }, [chats, chatQuery]);
 
   const client = useQuery({ queryKey: ['reports', 'client'], queryFn: clientHalf, enabled: open, staleTime: 30_000, gcTime: 60_000 });
   const prepared = useQuery({
@@ -114,7 +118,7 @@ export function ReportDialog() {
     onSuccess: (r) => {
       setReceipt({ id: r.id, kind });
       sent(kind);
-      setDiagnosticsChoice(null);
+      setFeatureDiagnostics(false);
       setWithChat(false);
     },
   });
@@ -153,7 +157,8 @@ export function ReportDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
-      <DialogContent title={receipt ? 'Thank you' : copy.title} width={620} onPaste={onPaste} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      {/* Below the window's title bar on every side: a long report scrolls inside the dialog. */}
+      <DialogContent title={receipt ? 'Thank you' : copy.title} width={620} className="max-h-[calc(100dvh-96px)]" onPaste={onPaste} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         {receipt ? (
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3 text-body text-fg">
@@ -196,6 +201,7 @@ export function ReportDialog() {
             className="flex flex-col gap-5"
           >
             <SegmentedControl
+              className="self-start"
               aria-label="Kind"
               items={[
                 { value: 'issue', label: 'Issue', icon: Bug },
@@ -223,9 +229,13 @@ export function ReportDialog() {
               <AttachRow
                 icon={Activity}
                 title="Diagnostics"
-                description="Atelier's version, this computer's hardware, settings, providers and local model servers. Never keys, passwords or personal details."
+                description={
+                  kind === 'issue'
+                    ? "Always sent with an issue: Atelier's version, this computer's hardware, settings, providers and local model servers. Never keys, passwords or personal details."
+                    : "Atelier's version, this computer's hardware, settings, providers and local model servers. Never keys, passwords or personal details."
+                }
                 checked={withDiagnostics}
-                onCheckedChange={(on) => setDiagnosticsChoice(on)}
+                onCheckedChange={kind === 'issue' ? undefined : setFeatureDiagnostics}
                 previewOpen={preview === 'diagnostics'}
                 onPreview={() => setPreview(preview === 'diagnostics' ? null : 'diagnostics')}
                 loading={withDiagnostics && (prepared.isFetching || client.isFetching)}
@@ -246,9 +256,30 @@ export function ReportDialog() {
                 loading={withChat && prepared.isFetching}
               >
                 {withChat && (
-                  <div className="mt-3">
-                    {chatOptions.length ? (
-                      <Select variant="field" aria-label="Conversation" options={chatOptions} value={chosenChat ?? undefined} onValueChange={setChatId} />
+                  <div className="mt-3 flex flex-col gap-2">
+                    {chats.length > 6 && <TextField value={chatQuery} placeholder="Find a conversation" aria-label="Find a conversation" onChange={(e) => setChatQuery(e.target.value)} />}
+                    {chats.length ? (
+                      <div role="radiogroup" aria-label="Conversation" className="flex max-h-44 flex-col overflow-y-auto rounded-lg p-1 ring-1 ring-line-subtle">
+                        {shownChats.map((s) => {
+                          const on = s.id === chosenChat;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              role="radio"
+                              aria-checked={on}
+                              onClick={() => setChatId(s.id)}
+                              className={cn('flex min-h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-body outline-none focus-ring hover:bg-fill-ghost-hover', on && 'bg-fill-ghost-selected')}
+                            >
+                              <span className="min-w-0 flex-1 truncate text-fg">{sessionTitle(s)}</span>
+                              {s.id === params.sessionId && <span className="shrink-0 text-footnote text-fg-muted">open now</span>}
+                              <span className="shrink-0 text-footnote text-fg-muted">{relativeTime(s.updatedAt)}</span>
+                              {on && <Icon icon={Check} size="sm" className="shrink-0 text-fg-secondary" />}
+                            </button>
+                          );
+                        })}
+                        {!shownChats.length && <p className="px-2 py-1.5 text-footnote text-fg-muted">No conversation by that name.</p>}
+                      </div>
                     ) : (
                       <p className="text-footnote text-fg-muted">{sessions.isLoading ? 'Loading your conversations…' : 'You have no conversations yet.'}</p>
                     )}
@@ -327,7 +358,8 @@ function AttachRow(props: {
   title: string;
   description: string;
   checked: boolean;
-  onCheckedChange(on: boolean): void;
+  /** Absent: always attached, so there is nothing to switch. */
+  onCheckedChange?: ((on: boolean) => void) | undefined;
   previewOpen: boolean;
   onPreview?: (() => void) | undefined;
   loading?: boolean;
@@ -346,7 +378,11 @@ function AttachRow(props: {
             {props.previewOpen ? 'Hide' : 'Show'}
           </Button>
         )}
-        <Switch aria-label={props.title} checked={props.checked} onCheckedChange={props.onCheckedChange} />
+        {props.onCheckedChange ? (
+          <Switch aria-label={props.title} checked={props.checked} onCheckedChange={props.onCheckedChange} />
+        ) : (
+          <span className="mt-0.5 shrink-0 text-footnote text-fg-muted">Always</span>
+        )}
       </div>
       {props.children}
     </div>

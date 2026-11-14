@@ -11,8 +11,10 @@ need to collect versions and screenshots by hand.
 
 - Press **F1** anywhere in the desktop app (change it in **Settings › Shortcuts**). The report opens with a picture of the
   window as it was when you pressed it. Take the picture out if you don't want it sent.
-- Or use **Help › Report an Issue…** or **Help › Request a Feature…** in the desktop app's menu, **More** in the sidebar,
-  the search palette (**Report an issue…**), or **Settings › Privacy › Reports**.
+- Or press the bug button next to your name at the bottom of the sidebar (it attaches the window's picture too), or
+  use **Report an issue** and **Request a feature** in the menu under your name, **Help › Report an Issue…** or
+  **Help › Request a Feature…** in the desktop app's menu, **More** in the sidebar, the search palette
+  (**Report an issue…**), or **Settings › Help & feedback**.
 - In the terminal app: `/bug <what happened>` or `/feature <what you'd like>` ([CLI reference](/reference/cli/)).
 
 Write a title and a sentence or two about what happened and what you expected, or what you'd like and how you'd use it.
@@ -27,7 +29,7 @@ Each of these is shown before you send it: press **Show** to see exactly what go
 
 | Attachment | Issue | Feature request | What it holds |
 |---|---|---|---|
-| **Diagnostics** | on | off | See [below](#diagnostics). |
+| **Diagnostics** | always | off, your choice | See [below](#diagnostics). |
 | **A conversation** | off | off | One chat or Code session you pick: its messages with tool calls, results, thinking and context notes. A long one keeps how it started and its newest messages, with the gap named. Very long parts are shortened in the middle. Sub-agents come with their last few messages. Pictures and files in it are only named. |
 | **Pictures** | the window, with F1 | none | Up to 4, pasted, dropped or added. Each is scaled to at most 2560 pixels on its longest side and compressed (WebP, or JPEG where the browser can't write WebP) to under 2.5 MB. |
 
@@ -69,7 +71,7 @@ carries a small proof of work, so that flooding the collector costs real computi
 
 ## Turning it off
 
-An admin can switch off **Settings › Privacy › Allow reports to the Atelier developer** for everyone on a server or on this
+An admin can switch off **Settings › Help & feedback › Allow reports to the Atelier developer** for everyone on a server or on this
 computer. The report buttons then say so, and nothing can be sent. An older server that predates reports also can't send
 them.
 

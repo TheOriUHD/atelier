@@ -326,7 +326,7 @@ describe('Sidebar', () => {
     ]);
 
     expect(within(sidebar).getByRole('button', { name: 'Ada Lovelace · Admin' })).toBeTruthy();
-    expect(within(sidebar).getByRole('button', { name: 'Settings' })).toBeTruthy();
+    expect(within(sidebar).getByRole('button', { name: 'Report an issue' })).toBeTruthy();
   });
 
   it('groups Code sessions started with no folder under “No folder”, whose + starts another one', async () => {
