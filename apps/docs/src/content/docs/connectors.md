@@ -55,7 +55,7 @@ Brave for that, see [Web search](/web-search/#use-my-own-search-service).
 |---|---|
 | **Name** | 1 to 64 letters, digits, `-` and `_`. Errors: "Give it a name.", "Use up to 64 letters, digits, - and _.", "There is a connector with this name already." |
 | **Connects over** | **HTTP** (the current MCP transport; if a server only speaks the older HTTP+SSE protocol, Atelier switches to it), **SSE** (that older streaming transport, chosen outright) or **stdio** (Atelier starts the server as a program; desktop app only, greyed out on a server). |
-| **URL** (HTTP, SSE) | The server's address, such as `https://example.com/mcp`. On an Atelier server these connectors run on the server, so `localhost` and `127.0.0.1` mean the server itself, and the field says so: a connector on your own computer (an app's local MCP server) goes under [Your own connectors](#your-own-connectors-on-a-server). |
+| **URL** (HTTP, SSE) | The server's address, such as `https://example.com/mcp`. On an Atelier server these connectors run on the server, so in a browser `localhost` and `127.0.0.1` mean the server itself, and the field says so. Added in the desktop app, a new connector at `localhost` means that computer instead: it becomes [your own connector](#your-own-connectors-on-a-server), reached through that desktop app (an app's local MCP server, such as Fusion's). |
 | **Sign in with OAuth** (HTTP, SSE) | For servers you sign in to instead of giving them a token; signing in starts once it is added. |
 | **Command** and **Arguments** (stdio) | For example `npx` and `-y`, `@scope/mcp-server`, one argument per line. |
 | **Headers** (HTTP, SSE) or **Environment variables** (stdio) | Name and value pairs. A value is plain text, a reference to a stored secret (`${secret:id}`) or to an environment variable of the backend (`${NAME}`), filled in only when connecting. The lock beside a value moves it into **Keys & secrets** when you save; names that look like credentials (token, key, secret, password, credential, auth) are locked automatically. `Authorization: Bearer …` keeps its scheme and stores only the token. |
@@ -258,8 +258,8 @@ you answer.
 
 | | |
 |---|---|
-| Connecting | On first use, or when a status is asked for (opening the Connectors page). Gives up after 30 seconds. |
-| Retrying | After a drop or a failed connection: 1 s, 2 s, 4 s … up to every 5 minutes. A connector that needs a sign-in waits for an admin instead. |
+| Connecting | On first use, or when a status is asked for (opening the Connectors page or the message box's Connectors menu). A connector that failed is tried again right then too, at most every 5 seconds, so one started after Atelier shows up without **Test connection**. Gives up after 30 seconds. |
+| Retrying | After a drop or a failed connection: 1 s, 2 s, 4 s … up to every minute, and whenever a conversation starts. A connector that needs a sign-in waits for an admin instead. |
 | Starting a conversation | A run waits up to 10 seconds for connectors still connecting, then starts without their tools. |
 | One call | 60 seconds, then it is cancelled. Time spent waiting for your answer does not count. |
 | Protocol | MCP 2026-07-28 where the server supports it, the earlier `initialize` handshake otherwise (the connector's page says which: "MCP 2026-07-28" or "MCP 2025 or earlier"). Tool changes the server announces are followed. |

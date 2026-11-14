@@ -34,7 +34,8 @@ import {
   TextField,
   toast,
 } from '../../components/ui/index.ts';
-import { openExternal } from '../../lib/platform.ts';
+import { desktop as desktopApp, openExternal } from '../../lib/platform.ts';
+import { allowHere, LIST as PERSONAL_LIST } from './personal-connectors.tsx';
 import { keys, useAppInfo } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import {
@@ -298,10 +299,13 @@ function ConnectorEditor({
   const shown = attempted && !written ? errors : {};
   const update = (patch: Partial<ConnectorForm>) => setForm((f) => ({ ...f, ...patch }));
   const stdio = form.type === 'stdio';
-  // On a server these run there: localhost is the server, not the computer of whoever adds it.
+  // On a server these run there, where localhost is the server itself. Added in the desktop app, a new one at localhost
+  // means that computer: it becomes the person's own connector, reached through this desktop app. In a browser it stays
+  // the server's (a program on the server itself), as the hint says.
   const { data: app } = useAppInfo();
   const host = URL.parse(form.url.trim())?.hostname;
-  const onServer = app?.surface === 'web' && !!host && isLoopbackHost(host);
+  const onServer = app?.surface === 'web' && !stdio && !!host && isLoopbackHost(host);
+  const throughHere = onServer && !existing && !!desktopApp;
 
   const save = async () => {
     setAttempted(true);
@@ -310,6 +314,17 @@ function ConnectorEditor({
     setError(null);
     try {
       const name = form.name.trim();
+      if (throughHere) {
+        // Its headers go as they are: your own connector keeps them encrypted as your secrets.
+        const headers = Object.fromEntries(form.pairs.filter((p) => p.name.trim()).map((p) => [p.name.trim(), p.value]));
+        const saved = await rpc().call('connectors.save', { name, type: form.type, url: form.url.trim(), headers, ...(form.oauth ? { auth: 'oauth' as const } : {}) });
+        await allowHere(saved);
+        await Promise.all([PERSONAL_LIST, keys.mcp].map((queryKey) => qc.invalidateQueries({ queryKey })));
+        setWritten(true);
+        toast.success(`Added ${name} as your own connector: Atelier reaches it through this computer.`);
+        onSaved(name);
+        return;
+      }
       await writeConnector(name, entryFromForm(form, existing));
       setWritten(true);
       await refreshConnectors(qc);
@@ -359,7 +374,13 @@ function ConnectorEditor({
           <Field
             label="URL"
             error={shown.url}
-            description={onServer ? `${host} is the Atelier server itself: this connector runs there. One on your own computer goes under Customize › Connectors › Your connectors, added in the desktop app there.` : undefined}
+            description={
+              throughHere
+                ? `${host} is this computer: it becomes your own connector, reached through this desktop app (the server can't reach your computer's ${host} itself).`
+                : onServer
+                  ? `${host} is the Atelier server itself: this connector runs there. One on your own computer is added in the desktop app, where ${host} means that computer.`
+                  : undefined
+            }
           >
             <TextField value={form.url} placeholder="https://example.com/mcp" inputMode="url" spellCheck={false} onChange={(e) => update({ url: e.target.value })} />
           </Field>

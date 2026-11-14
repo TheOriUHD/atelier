@@ -95,6 +95,8 @@ interface Server {
   connecting: Promise<void> | null;
   retry?: NodeJS.Timeout;
   failures: number;
+  /** When the last connect started (ms), so asking again doesn't hammer a server that is down. */
+  attemptedAt?: number;
   /** Resolved credentials, masked wherever the server's output, errors or logs go. */
   secrets: string[];
   /** An OAuth server's sign-in, as its latest connection uses it. */
@@ -133,7 +135,13 @@ const CONNECT_TIMEOUT_MS = 30_000;
 const PROBE_TIMEOUT_MS = 10_000;
 /** How long a run waits for servers still connecting before it starts without their tools. */
 const FIRST_USE_WAIT_MS = 10_000;
-const MAX_RETRY_MS = 5 * 60_000;
+/**
+ * The longest wait between retries of a connector that failed: a minute, so one that comes up later (an app's local
+ * server, started after Atelier) shows as connected soon without anyone pressing Test.
+ */
+const MAX_RETRY_MS = 60_000;
+/** A failed connector is tried again at once when its status is asked for or a run starts, at most this often. */
+const RECHECK_MS = 5_000;
 /** The SDK's request timeout is replaced by the call's own, which pauses while the person answers. */
 const NO_SDK_TIMEOUT = 2 ** 31 - 1;
 /** Claude Code's cap on a connector tool's description. */
@@ -375,14 +383,22 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     return server.config.enabled && (this.deps.startable?.(server.config) ?? (server.config.type !== 'stdio' || this.deps.surface === 'desktop'));
   }
 
+  /**
+   * Connects a server that wasn't tried yet, and tries a failed one again now rather than at its next retry: someone is
+   * looking at its status or a run wants its tools, and the server may have come up meanwhile (at most every
+   * `RECHECK_MS`; one waiting for a sign-in stays as it is).
+   */
   private ensure(server: Server): Promise<void> {
-    return server.state === 'idle' ? this.connect(server) : (server.connecting ?? Promise.resolve());
+    if (server.state === 'idle') return this.connect(server);
+    if (server.state === 'error' && !server.needsSignIn && !server.connecting && this.startable(server) && Date.now() - (server.attemptedAt ?? 0) >= RECHECK_MS) return this.connect(server);
+    return server.connecting ?? Promise.resolve();
   }
 
   /** Never rejects: a failure shows in the status and schedules a retry. */
   private connect(server: Server): Promise<void> {
     if (server.connecting) return server.connecting;
     clearTimeout(server.retry);
+    server.attemptedAt = Date.now();
     server.state = 'connecting';
     this.publish();
     // Outside any call: what the connection sets up (pipes, streams) must not carry a call's context.
@@ -490,7 +506,7 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
   }
 
   /**
-   * A connect failed or a connection dropped: try again after 1s, 2s, 4s … up to 5 minutes. An OAuth server without
+   * A connect failed or a connection dropped: try again after 1s, 2s, 4s … up to a minute. An OAuth server without
    * a usable sign-in (`signIn`) waits for an admin to sign in instead.
    */
   private failed(server: Server, reason: string, signIn = false): void {

@@ -12,7 +12,15 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('./test-backend.ts');
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
-vi.mock('../../lib/platform.ts', async (importOriginal) => ({ ...(await importOriginal<object>()), openExternal: vi.fn() }));
+/** The desktop bridge the page sees; undefined is the browser. */
+const platform = vi.hoisted(() => ({ desktop: undefined as unknown }));
+vi.mock('../../lib/platform.ts', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  openExternal: vi.fn(),
+  get desktop() {
+    return platform.desktop;
+  },
+}));
 
 const tools: McpServerStatus['tools'] = [
   { name: 'search_issues', description: 'Finds issues.', readOnly: true, enabled: true },
@@ -278,6 +286,37 @@ describe('Connectors page', () => {
     expect(await screen.findByRole('heading', { name: 'mock' })).toBeTruthy();
     expect(callsTo('secrets.set')).toEqual([{ id: 'mcp-mock-authorization', label: 'Authorization for mock', kind: 'token', value: 'test-token-123' }]);
     expect(settings().mcpServers.mock).toMatchObject({ type: 'http', url: 'http://127.0.0.1:9000/mcp', headers: { Authorization: 'Bearer ${secret:mcp-mock-authorization}', 'X-Team': 'blue' } });
+  });
+
+  it('in the desktop app on a server, makes a new localhost connector your own, reached through this computer', async () => {
+    const lent: unknown[] = [];
+    const saved: unknown[] = [];
+    platform.desktop = { lending: { change: async (change: unknown) => (lent.push(change), { scratch: false, ssh: [], connectors: [], http: [], chatgptChat: false, home: true }) } };
+    resetBackend({
+      ...connectorsBackend('web'),
+      'connectors.save': (input: { name: string; url: string }) => {
+        saved.push(input);
+        return { id: 'c1', name: input.name, type: 'http', url: input.url, args: [], envKeys: [], headerKeys: [], enabled: true, disabledTools: [] };
+      },
+      'connectors.list': () => [],
+    });
+    try {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Add connector' }));
+      fireEvent.click(within(await screen.findByRole('dialog', { name: 'Add connector' })).getByRole('button', { name: /^Custom/ }));
+      const form = within(await screen.findByRole('dialog', { name: 'Add a custom connector' }));
+      fireEvent.change(form.getByLabelText('Name'), { target: { value: 'Fusion360' } });
+      fireEvent.change(form.getByLabelText('URL'), { target: { value: 'http://127.0.0.1:27182' } });
+      expect(form.getByText(/127\.0\.0\.1 is this computer: it becomes your own connector/)).toBeTruthy();
+      fireEvent.click(form.getByRole('button', { name: 'Add connector' }));
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0]).toMatchObject({ name: 'Fusion360', type: 'http', url: 'http://127.0.0.1:27182' });
+      await waitFor(() => expect(lent).toEqual([{ kind: 'http', id: 'c1', baseUrl: 'http://127.0.0.1:27182', allowed: true }]));
+      // Not one of the server's: it never reached the server's settings.
+      expect(settings().mcpServers.Fusion360).toBeUndefined();
+    } finally {
+      platform.desktop = undefined;
+    }
   });
 
   it('edits a connector’s connection and keeps its tool settings', async () => {

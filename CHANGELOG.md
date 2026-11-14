@@ -4,6 +4,9 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Connectors notice a server that comes up later.** A connector that failed (an app's local MCP server that wasn't running yet) was tried again on a backoff of up to 5 minutes, so it stayed "Not connected" until someone pressed Test connection. Now it is tried again the moment its status is looked at (the message box's Connectors menu, the Connectors page) or a conversation starts, and in the background at least once a minute.
+- **`localhost` in the desktop app means your computer, also on a server.** Adding a connector at `localhost` or `127.0.0.1` in the desktop app connected to a server made it a server connector, which the server tried on its own machine. It now becomes your own connector, reached through this computer, and the form says so. In a browser it stays the server's, as before.
+
 - **Switching a Code session's view keeps your place.** Normal, Thinking and Verbose opened and closed every card and left you far from where you were (2,600 pixels above the end in a test). Now, at the bottom you stay at the bottom; scrolled up, the turn at the top of the window stays where it was.
 
 - **Docs caught up with Chat and Cowork being one.**

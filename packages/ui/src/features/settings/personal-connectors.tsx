@@ -40,10 +40,10 @@ import { plural } from './provider-wizard.tsx';
 import { SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
 
-const LIST = ['connectors.list'] as const;
+export const LIST = ['connectors.list'] as const;
 
 /** Lets this computer run (or reach) the connector for the server, as the person just chose it here. */
-async function allowHere(connector: PersonalConnector): Promise<void> {
+export async function allowHere(connector: PersonalConnector): Promise<void> {
   if (connector.type === 'stdio') {
     await changeLending({ kind: 'connector', id: connector.id, name: connector.name, command: connector.command!, args: connector.args, envKeys: connector.envKeys, allowed: true });
   } else if (connector.url && isLocalAddress(connector.url)) {

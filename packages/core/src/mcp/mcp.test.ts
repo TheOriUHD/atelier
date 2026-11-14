@@ -360,6 +360,24 @@ describe('MCP connections', () => {
     expect(events.at(-1)).toContain('added');
   });
 
+  it('tries a failed connector again as soon as someone looks, not only at its next retry', async () => {
+    // A port with nothing on it yet: an app's local server that isn't started.
+    const probe = await httpMock();
+    const port = (probe.server.address() as AddressInfo).port;
+    await new Promise((resolve) => probe.server.close(resolve));
+    const m = manager({ mock: { type: 'http', url: probe.url, headers: { Authorization: 'Bearer ${secret:mock-token}' } } });
+    m.status();
+    // Four failures in a row (1, 2 and 4 s apart): the next retry is 8 s away.
+    await until(() => logs.filter((l) => l.includes('MCP server mock')).length >= 4, 20_000);
+    const failedAt = Date.now();
+    await httpMock(port);
+    // Asking for the status a little later connects it at once.
+    await new Promise((resolve) => setTimeout(resolve, 5_100));
+    m.status();
+    await until(() => m.current()[0]!.state === 'ready', 2_000);
+    expect(Date.now() - failedAt).toBeLessThan(8_000);
+  }, 30_000);
+
   it('reconnects after an HTTP server restarts and keeps following its tool changes', async () => {
     const first = await httpMock();
     const m = manager({ mock: { type: 'http', url: first.url, headers: { Authorization: 'Bearer ${secret:mock-token}' } } });
