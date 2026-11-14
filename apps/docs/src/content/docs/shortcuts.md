@@ -33,7 +33,7 @@ close windows and tabs) may not reach Atelier. The keys marked *desktop* exist o
 | Search | ⌘K | Ctrl+K | The [search palette](/sessions/#search). |
 | Settings | ⌘, | Ctrl+, | |
 | Show or hide the sidebar | ⌘B | Ctrl+B | |
-| Report an issue, with a screenshot *(next release)* | F1 | F1 | Opens [the report](/reporting-issues/) with a picture of the window as it was when pressed (desktop only; in a browser it opens without one). Also **Help › Report an Issue…**. |
+| Report an issue, with a screenshot | F1 | F1 | Opens [the report](/reporting-issues/) with a picture of the window as it was when pressed (desktop only; in a browser it opens without one). Also **Help › Report an Issue…**. |
 | Lock Atelier | ⇧⌘L | Ctrl+Shift+L | *Desktop*, and only on "Run on this computer"; also **Lock Atelier** in the profile menu and the **File** menu. Without a screen lock set it says "Set a PIN or password first" and opens the setting. |
 
 ## The message box
@@ -186,7 +186,7 @@ The desktop app has a menu bar. Its own items, with their default keys (the menu
 | File (Windows / Linux) | **Quit** | | |
 | View | **Toggle Sidebar** | ⌘B | Ctrl+B |
 | View | **Search** | ⌘K | Ctrl+K |
-| Help | **Report an Issue…** *(next release)* | F1 | F1 |
+| Help | **Report an Issue…** | F1 | F1 |
 | Help | **Request a Feature…** | | |
 | Help | **Atelier Documentation** (opens this site) | | |
 

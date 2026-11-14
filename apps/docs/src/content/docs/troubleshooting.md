@@ -337,7 +337,7 @@ See [Run a server](/self-hosting/#the-updater-service).
 
 ## Reporting a bug
 
-*(next release)* The quickest way is **F1** in the desktop app, **Help › Report an Issue…**, or `/bug` in the terminal app:
+The quickest way is **F1** in the desktop app, **Help › Report an Issue…**, or `/bug` in the terminal app:
 it sends the report with diagnostics straight to the developer ([Reporting issues](/reporting-issues/)).
 
 To report on GitHub instead, press **Copy diagnostics** (in the desktop app: **Settings › System**, or on the screen Atelier shows when a page breaks)

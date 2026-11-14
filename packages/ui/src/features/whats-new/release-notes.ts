@@ -2,7 +2,7 @@ import { compareVersions } from '@atelier/protocol';
 // Clips are recorded from the real apps on throwaway data: apps/cli/scripts/record-clip.ts (see media/README.md).
 import cliClip from './media/atelier-cli.mp4';
 import cliPoster from './media/atelier-cli.jpg';
-import { AppWindow, Blocks, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Bug, Lightbulb, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /**
  * A clip or picture that shows a larger feature off: it takes the dialog's full width above the feature's title. Clips are
@@ -37,6 +37,23 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.9.0',
+    intro: 'Tell the developer about a problem or an idea, right from Atelier.',
+    highlights: [
+      {
+        icon: Bug,
+        title: 'Report an issue with F1',
+        body: 'Press F1 when something goes wrong: the report opens with a picture of the window as it was. Say what happened in a sentence or two; diagnostics (versions, your computer’s hardware, settings and model servers, never keys or passwords) go with it, and you can add a conversation and more pictures. You see everything before it is sent.',
+      },
+      {
+        icon: Lightbulb,
+        title: 'Request a feature',
+        body: 'Help › Request a Feature…, More in the sidebar, or /feature in the terminal: ideas land in their own list on the developer’s side, without diagnostics unless you add them.',
+      },
+    ],
+    also: ['Help menu in the desktop app, with the documentation.', 'An admin can turn reports off in Settings › Privacy.'],
+  },
   {
     version: '0.8.2',
     intro: 'A task isn’t left half done.',

@@ -3,7 +3,7 @@ title: Reporting issues and requesting features
 description: "Send a problem or an idea to the Atelier developer from the app: what goes with it, what never does, and where it ends up."
 ---
 
-*(next release)* Atelier has a built-in way to tell its developer about a problem or ask for a feature. Reports and
+Atelier has a built-in way to tell its developer about a problem or ask for a feature. Reports and
 requests land in separate inboxes on the developer's side, together with what is needed to understand them, so there's no
 need to collect versions and screenshots by hand.
 
