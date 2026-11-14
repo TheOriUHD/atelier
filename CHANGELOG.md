@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-11-14
+
 - **Report an issue or request a feature from inside Atelier.** Press **F1** (Settings › Shortcuts changes it), use **Help › Report an Issue…** / **Request a Feature…**, **More** in the sidebar, the search palette, Settings › Privacy › Reports, or `/bug` and `/feature` in the terminal app. Write a title and a sentence or two; Atelier asks for a little more when that is too short to act on and refuses padding. An issue attaches diagnostics by default; a feature request doesn't. You can also attach one conversation and up to four pictures. Each attachment can be shown before it goes:
   - **Diagnostics:** the computer's system, processor, memory, graphics cards with their memory and driver, free disk and monitors; the server's too, when you use one. Also settings and preferences with keys, addresses, paths and your own words left out, providers with their state, local model servers with the models they have loaded and the memory those take, connectors, computer use, and the end of the app's log.
   - **A conversation:** with its tool calls, results and thinking. A long one keeps how it started and its newest messages.
