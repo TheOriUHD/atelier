@@ -42,7 +42,7 @@ export { Lightbox, type LightboxImage, type LightboxProps } from './lightbox.tsx
 export { VideoLightbox, type LightboxVideo, type VideoLightboxProps } from './video-lightbox.tsx';
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog.tsx';
 export { Field, type FieldProps } from './field.tsx';
-export { TextField, TextArea, type TextFieldProps, type TextAreaProps } from './text-field.tsx';
+export { TextField, TextArea, GrowingField, type TextFieldProps, type TextAreaProps, type GrowingFieldProps } from './text-field.tsx';
 export { Badge, type BadgeProps, type BadgeTone } from './badge.tsx';
 export { Kbd, type KbdProps } from './kbd.tsx';
 export { Spinner, type SpinnerProps } from './spinner.tsx';

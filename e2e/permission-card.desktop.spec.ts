@@ -105,7 +105,12 @@ test('desktop Code: a made edit keeps its line numbers and the lines around it, 
     const box = page.getByRole('textbox', { name: 'Message', exact: true });
     await box.fill(call('Edit', { file_path: 'big.py', old_string: '300', new_string: '300 # checked' }));
     await box.press('Enter');
-    await page.getByRole('region', { name: 'Allow Atelier to edit big.py?' }).getByRole('button', { name: 'Allow once' }).click();
+    const card = page.getByRole('region', { name: 'Allow Atelier to edit big.py?' });
+    // Its actions sit on one line, also where the keys are long words (Windows and Linux): only each action's own key shows.
+    await expect(card.getByRole('button', { name: 'Allow once' })).toBeVisible();
+    const tops = await Promise.all(['Deny', 'Deny with reason…', 'Always allow', 'Allow once'].map(async (name) => Math.round((await card.getByRole('button', { name, exact: true }).boundingBox())!.y)));
+    expect(new Set(tops).size, `button tops ${tops.join(', ')}`).toBe(1);
+    await card.getByRole('button', { name: 'Allow once' }).click();
     await expect.poll(() => readFile(join(repo, 'big.py'), 'utf8')).toContain('line 300 # checked\n');
 
     // The card: whole lines with the file's numbers, three lines either side.

@@ -482,7 +482,7 @@ export function App(props: AppProps) {
       return <ListPicker paint={paint} title="Effort" items={items} onCancel={close} onPick={(e) => (close(), void commandCtx.setEffort(e).catch(fail))} empty="This model has no effort setting." />;
     }
     if (overlay.kind === 'mode') {
-      const items = (Object.keys(MODE_WORDS) as PermissionMode[]).map((m) => ({ value: m, label: MODE_WORDS[m], current: m === mode, hint: { auto: 'a reviewing model checks what would ask', default: 'asks before edits and commands', acceptEdits: 'edits freely, commands ask', plan: 'reads and plans, changes nothing', bypassPermissions: 'asks nothing at all' }[m] }));
+      const items = (Object.keys(MODE_WORDS) as PermissionMode[]).map((m) => ({ value: m, label: MODE_WORDS[m], current: m === mode, hint: { auto: 'a reviewing model checks what would ask', default: 'asks before edits and commands', acceptEdits: 'edits freely, commands ask', plan: 'reads and plans, changes nothing', planAuto: 'plans; a reviewing model answers what would ask', bypassPermissions: 'asks nothing at all' }[m] }));
       return <ListPicker paint={paint} title="Mode" items={items} onCancel={close} onPick={(m) => (close(), void commandCtx.setMode(m).catch(fail))} />;
     }
     if (overlay.kind === 'resume') return <ResumePicker conn={conn} folder={folder} paint={paint} current={sessionId} onCancel={close} onPick={(id) => (close(), commandCtx.switchTo(id))} />;

@@ -81,7 +81,10 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   const parse = (list: string[]) => list.map(parseRule).filter((r): r is Rule => r !== null);
   const deny = parse(ctx.rules.deny);
   const ask = parse(ctx.rules.ask);
-  const auto = ctx.mode === 'auto';
+  // Plan · Auto: Plan mode whose questions the Auto reviewer answers.
+  const planAuto = ctx.mode === 'planAuto';
+  const plan = ctx.mode === 'plan' || planAuto;
+  const auto = ctx.mode === 'auto' || planAuto;
   const allow = parse(auto ? ctx.rules.allow.filter((r) => !BROAD_RULE.test(r.trim())) : ctx.rules.allow);
   const bypass = ctx.mode === 'bypassPermissions';
   // What would prompt in another mode: in Auto the reviewing model decides instead.
@@ -104,7 +107,12 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   const warned = (d: Decision): Decision =>
     warning ? { behavior: critical ? 'ask' : unsure, reason: `This command ${warning}.`, warning, ...(d.rule ? { rule: d.rule } : {}) } : d;
 
-  if (ctx.mode === 'plan' && !ctx.isReadOnly(call.name) && !PLAN_TOOLS.has(call.name) && !ASKS_ITSELF.has(call.name)) return { behavior: 'deny', reason: planRefusal(ctx.offers ?? (() => true)) };
+  if (plan && !ctx.isReadOnly(call.name) && !PLAN_TOOLS.has(call.name) && !ASKS_ITSELF.has(call.name)) {
+    // Plan · Auto: a command that only looks may run, and the reviewer judges that, never an allow rule (`Bash(npm *)`
+    // would let `npm install` through). One that a check already finds dangerous changes something: refused.
+    if (!(planAuto && isBash) || warning) return { behavior: 'deny', reason: planRefusal(ctx.offers ?? (() => true)) };
+    return { behavior: 'review', reason: PLAN_AUTO_NOTE };
+  }
 
   const asked = firstMatch(ask, units);
   if (asked) return warned({ behavior: 'ask', reason: `The rule ${asked.source} asks before this runs.`, rule: asked.source });
@@ -187,6 +195,10 @@ function routineCleanup(parts: string[], ctx: PermissionContext): boolean {
   }
   return removes;
 }
+
+/** What the reviewer is told about a command in Plan · Auto. */
+const PLAN_AUTO_NOTE =
+  'Plan mode is on: nothing may change until the person approves the plan. ALLOW this command only if it just reads or inspects (listing, searching, reading files, git log or status, a version or help) and changes no file, setting, package, process or anything outside; otherwise BLOCK it.';
 
 /** What still works in plan mode and how it ends, naming only tools the session has. */
 function planRefusal(offers: (tool: string) => boolean): string {

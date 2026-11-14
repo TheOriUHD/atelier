@@ -15,7 +15,14 @@ export const Mode = z.enum(['chat', 'work', 'code']);
 export type Mode = z.infer<typeof Mode>;
 
 /** Claude Code's permission modes (ARCHITECTURE §8); the UI calls them Auto, Ask, Accept edits, Plan and Bypass. */
-export const PermissionMode = z.enum(['auto', 'default', 'acceptEdits', 'plan', 'bypassPermissions']);
+/**
+ * `planAuto` is Plan mode whose questions the Auto reviewer answers: reads anywhere and commands that change nothing go
+ * ahead without asking; edits stay blocked until the plan is approved.
+ */
+export const PermissionMode = z.enum(['auto', 'default', 'acceptEdits', 'plan', 'planAuto', 'bypassPermissions']);
+
+/** Plan mode, answered by the person (`plan`) or by the Auto reviewer (`planAuto`). */
+export const isPlanMode = (mode: string | null | undefined): mode is 'plan' | 'planAuto' => mode === 'plan' || mode === 'planAuto';
 export type PermissionMode = z.infer<typeof PermissionMode>;
 
 /** How people get an account: admins invite them, or anyone may sign up and wait for approval. */

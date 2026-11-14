@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { contract, HOOK_EVENTS, HooksConfig, type PermissionMode } from '@atelier/protocol';
 import { Button, Select, Switch, TextArea, TextField, type SelectOption } from '../../components/ui/index.ts';
-import { keys } from '../../lib/queries.ts';
+import { keys, planAutoOffered } from '../../lib/queries.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { InstructionsField } from './instructions-field.tsx';
 import { ListRow } from './list-row.tsx';
@@ -16,6 +16,7 @@ const MODES: SelectOption<PermissionMode>[] = [
   { value: 'default', label: 'Ask' },
   { value: 'acceptEdits', label: 'Accept edits' },
   { value: 'plan', label: 'Plan' },
+  { value: 'planAuto', label: 'Plan · Auto' },
   { value: 'bypassPermissions', label: 'Bypass' },
 ];
 
@@ -37,7 +38,7 @@ export function AdminCodePage() {
     <>
       <SettingsSection title="Permissions">
         <SettingRow id="permissions.defaultMode" setting={mode}>
-          {(label) => <Select {...label} options={MODES} value={mode.value} onValueChange={(v) => void mode.set(v)} />}
+          {(label) => <Select {...label} options={planAutoOffered() ? MODES : MODES.filter((m) => m.value !== 'planAuto')} value={mode.value} onValueChange={(v) => void mode.set(v)} />}
         </SettingRow>
         {RULE_LISTS.map((list) => (
           <RulesRow key={list.id} {...list} />

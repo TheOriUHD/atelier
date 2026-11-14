@@ -325,7 +325,7 @@ const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', '
 const COMPUTER_CALL_MS = 5 * 60_000;
 
 /** A merged chat has no plan to approve (ExitPlanMode is Code's): Plan, an admin's default made for Code, asks instead. */
-export const workingMode = (mode: PermissionMode, mergedChat: boolean): PermissionMode => (mergedChat && mode === 'plan' ? 'default' : mode);
+export const workingMode = (mode: PermissionMode, mergedChat: boolean): PermissionMode => (!mergedChat ? mode : mode === 'plan' ? 'default' : mode === 'planAuto' ? 'auto' : mode);
 
 export async function createBackend(platform: Platform): Promise<Backend> {
   const db = openDatabase(join(platform.dataDir, 'atelier.db'));
@@ -2110,6 +2110,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...SERVER_DEVICE_SERVICES] } } : {}),
       imageGeneration: true,
       unifiedChat: true,
+      planAuto: true,
       auditLog: !local,
       usageLimits: true,
       videoGeneration: true,

@@ -63,7 +63,8 @@ export function CodeFrame({ label, actions, children }: { label: string; actions
       className="at-code group/code relative min-w-0 rounded-2xl border-[0.5px] border-line bg-code-background"
     >
       <div className="flex h-8 items-end px-3.5 font-sans text-caption text-fg-muted">{label}</div>
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-(--at-duration-snap) ease-out group-focus-within/code:opacity-100 group-hover/code:opacity-100">
+      {/* Opaque, like the diff's: the buttons sit over the code, which must not show through them. */}
+      <div className="absolute top-2 right-2 flex gap-1 rounded-md bg-code-background opacity-0 transition-opacity duration-(--at-duration-snap) ease-out group-focus-within/code:opacity-100 group-hover/code:opacity-100">
         {actions}
       </div>
       {children}

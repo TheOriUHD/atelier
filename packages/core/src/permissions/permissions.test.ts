@@ -444,6 +444,24 @@ describe('decide', () => {
     expect(decide(edit, offering('Read', 'Edit')).reason).toBe("Plan mode is on, so this can't run yet. Reading and searching still work; describe the changes you would make instead of making them.");
   });
 
+  it('in Plan · Auto, lets the reviewer answer what Plan would ask, keeps edits blocked, and never lets a rule run a command', () => {
+    const edit = { name: 'Edit', input: { file_path: '/work/app/src/a.ts', old_string: 'a', new_string: 'b' } };
+    expect(decide(edit, ctx({}, 'planAuto')).behavior).toBe('deny');
+    expect(decide({ name: 'ExitPlanMode', input: {} }, ctx({}, 'planAuto')).behavior).toBe('allow');
+    // Reading elsewhere on the machine goes ahead; a credential file goes to the reviewer; Plan asks the person for both.
+    expect(decide({ name: 'Read', input: { file_path: '/home/me/notes.txt' } }, ctx({}, 'planAuto')).behavior).toBe('allow');
+    expect(decide({ name: 'Read', input: { file_path: '/home/me/notes.txt' } }, ctx({}, 'plan')).behavior).toBe('ask');
+    expect(decide({ name: 'Read', input: { file_path: '/home/me/.ssh/id_ed25519' } }, ctx({}, 'planAuto')).behavior).toBe('review');
+    // A command is the reviewer's to judge, told that nothing may change; an allow rule doesn't skip that.
+    const look = decide(bash('git log --oneline -5'), ctx({ allow: ['Bash(git *)'] }, 'planAuto'));
+    expect(look.behavior).toBe('review');
+    expect(look.reason).toMatch(/^Plan mode is on: nothing may change/);
+    expect(decide(bash('git log --oneline -5'), ctx({}, 'plan')).behavior).toBe('deny');
+    // Deny rules still win, and a command a check already finds dangerous is refused outright.
+    expect(decide(bash('git log'), ctx({ deny: ['Bash(git *)'] }, 'planAuto')).behavior).toBe('deny');
+    expect(decide(bash('rm -rf /home/me/project'), ctx({}, 'planAuto')).behavior).toBe('deny');
+  });
+
   it('asks before reading outside the workspace unless a rule allows it', () => {
     const read = { name: 'Read', input: { file_path: '/home/me/.zshrc' } };
     expect(decide(read, ctx()).behavior).toBe('ask');

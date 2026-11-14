@@ -156,7 +156,7 @@ function ImageGrid({ images, onOpen }: { images: readonly GeneratedImage[]; onOp
             <button type="button" aria-label={`Play video: ${image.prompt}`} onClick={() => onOpen(i)} className="relative block size-full cursor-pointer overflow-hidden rounded-lg bg-fill-ghost-hover outline-none focus-ring">
               {/* The first frame stands in as the picture; nothing plays until the viewer opens. */}
               <video src={`${blobUrl(image.blob)}#t=0.001`} aria-hidden="true" tabIndex={-1} muted playsInline preload="metadata" className="pointer-events-none size-full object-cover" />
-              <span aria-hidden="true" className="absolute bottom-1.5 left-1.5 flex h-6 items-center gap-1 rounded-md bg-popover/90 pr-2 pl-1.5 text-footnote text-fg shadow-popover tabular-nums">
+              <span aria-hidden="true" className="absolute bottom-1.5 left-1.5 flex h-6 items-center gap-1 rounded-md bg-popover pr-2 pl-1.5 text-footnote text-fg shadow-popover tabular-nums">
                 <Icon icon={Play} size="sm" className="fill-current" />
                 {image.seconds !== undefined && clock(image.seconds)}
               </span>

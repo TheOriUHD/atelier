@@ -2,7 +2,7 @@
  * ExitPlanMode (ARCHITECTURE §8): shows the plan for approval. Approving switches the session to the
  * mode the person picked; declining keeps it in plan mode with their feedback.
  */
-import { PLAN_MODE_OFF, type PermissionAnswer, type PermissionMode, type PermissionRequest } from '@atelier/protocol';
+import { isPlanMode, PLAN_MODE_OFF, type PermissionAnswer, type PermissionMode, type PermissionRequest } from '@atelier/protocol';
 import { textOutput, type DescribeContext, type Tool } from './types.ts';
 
 export interface ExitPlanModeDeps {
@@ -13,7 +13,7 @@ export interface ExitPlanModeDeps {
 }
 
 /** The names the person sees in the mode picker. */
-export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = { auto: 'Auto', default: 'Ask', acceptEdits: 'Accept edits', plan: 'Plan', bypassPermissions: 'Bypass' };
+export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = { auto: 'Auto', default: 'Ask', acceptEdits: 'Accept edits', plan: 'Plan', planAuto: 'Plan · Auto', bypassPermissions: 'Bypass' };
 
 const APPROVAL_NOTES: Partial<Record<PermissionMode, string>> = {
   auto: 'Another model reviews your actions in place of the person and blocks the risky ones',
@@ -52,7 +52,7 @@ export function createExitPlanModeTool(deps: ExitPlanModeDeps): Tool<{ plan: str
       additionalProperties: false,
     },
     async run({ plan }, ctx) {
-      if ((await deps.mode(ctx.sessionId)) !== 'plan') return textOutput(PLAN_MODE_OFF);
+      if (!isPlanMode(await deps.mode(ctx.sessionId))) return textOutput(PLAN_MODE_OFF);
       const answer = await deps.approve(
         ctx.sessionId,
         { callId: ctx.callId, toolName: 'ExitPlanMode', input: { plan }, reason: 'Approve the plan to start making changes.', suggestedRule: '' },

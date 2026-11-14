@@ -46,6 +46,7 @@ Every note Atelier can send is below, verbatim. `{{name}}` is filled in when the
 | [`permission-ask`](#permission-ask) | Code: the person switched to Ask permissions. |
 | [`permission-auto`](#permission-auto) | Code: the person switched to Auto. |
 | [`permission-bypass`](#permission-bypass) | Code: the person switched to Bypass permissions. |
+| [`plan-auto-on`](#plan-auto-on) | Code: plan mode started with its questions answered by the Auto reviewer (Plan · Auto). |
 | [`plan-off`](#plan-off) | Code: the picker ended plan mode. |
 | [`plan-on`](#plan-on) | Code: plan mode started. |
 | [`plan-still-on`](#plan-still-on) | Code: every turn while plan mode continues. |
@@ -539,6 +540,16 @@ Source: [`packages/core/prompts/notes/permission-bypass.md`](https://github.com/
 
 ````text wrap
 The permission mode is now Bypass: tool calls run without asking. Confirm destructive or outward-facing steps with the person in the conversation before you take them.
+````
+
+### `plan-auto-on`
+
+Code: plan mode started with its questions answered by the Auto reviewer (Plan · Auto).
+
+Source: [`packages/core/prompts/notes/plan-auto-on.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/notes/plan-auto-on.md)
+
+````text wrap
+Plan mode is on, with its questions answered by a reviewer instead of the person. Until the person approves a plan, only investigate: reading and searching work anywhere<!-- if:Agent -->, and so do sub-agents<!-- endif --><!-- if:Bash -->, and shell commands run if the reviewer finds they only look and change nothing<!-- endif -->, while edits are blocked.<!-- if:ExitPlanMode --> When you understand the task, present the plan with ExitPlanMode, and don't ask whether the plan is fine.<!-- endif --><!-- if:!ExitPlanMode --> When you understand the task, describe the changes you would make instead of making them.<!-- endif --><!-- if:AskUser --> Settle open questions with AskUser first.<!-- endif -->
 ````
 
 ### `plan-off`

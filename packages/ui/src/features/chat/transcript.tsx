@@ -28,7 +28,7 @@ import { CopyButton } from './copy-button.tsx';
 import { ReadAloudButton } from './read-aloud.tsx';
 import { modelSubtitle, useModelGroups } from './models.ts';
 import { MessageTime } from './message-time.tsx';
-import { AgentNotice, MessageNotice, MovedNotice } from '../code/tool-cards.tsx';
+import { AgentNotice, MessageNotice, MovedNotice, StreamingInputs } from '../code/tool-cards.tsx';
 import { AuthorLabel, Outbox, type OutboxActions } from './outbox.tsx';
 import type { Reaction } from '../coop/coop-reactions.tsx';
 import { reportError, turnOwner, useCoopView, type CoopView } from '../coop/coop.ts';
@@ -561,12 +561,15 @@ const AssistantTurn = memo(function AssistantTurn({
     <div className="group/msg flex flex-col" data-first={rowFirst} data-last={rowLast}>
       {forName && <span className="mb-1 text-caption text-fg-muted">for {forName}</span>}
       <div className={cn('flex flex-col', ITEM_GAPS)}>
+        {/* Steps whose input is still coming in (a plan being written) read what has arrived. */}
+        <StreamingInputs.Provider value={toolInputs}>
         {items.map((item) => (
           // `empty:hidden`: a thinking block with nothing to show renders nothing, and must not leave its gap.
           <div key={itemKey(item)} {...(isLine(item) ? { 'data-line': '' } : {})} className="empty:hidden">
             {itemView(item)}
           </div>
         ))}
+        </StreamingInputs.Provider>
         {placeholder && running && items.length === 0 && <Waiting label="Thinking" phase={phase} />}
       </div>
       {!running && <ReactionPills sessionId={sessionId} messageId={final.id} reactions={reactions} />}

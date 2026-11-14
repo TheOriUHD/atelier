@@ -1,4 +1,4 @@
-import type { ComponentPropsWithRef } from 'react';
+import { useLayoutEffect, useRef, type ComponentPropsWithRef } from 'react';
 import { Field as BaseField } from '@base-ui/react/field';
 import { Input } from '@base-ui/react/input';
 import { cn } from './cn.ts';
@@ -46,3 +46,47 @@ export function TextArea({ invalid, rows, className, ...props }: TextAreaProps) 
     />
   );
 }
+
+export interface GrowingFieldProps extends Omit<ComponentPropsWithRef<'textarea'>, 'rows'> {
+  invalid?: boolean;
+  /** The most lines it grows to before it scrolls. */
+  maxRows?: number;
+}
+
+/** Line height of `text-body`, and the field's vertical padding (one line is as tall as a `TextField`). */
+const LINE_PX = 20;
+const PAD_Y_PX = 12;
+
+/**
+ * A one-line field that grows with what is typed, line by line, up to `maxRows`, then scrolls: answers and revisions
+ * that run long stay readable instead of sliding out of a single line. In a form, Enter sends it and Shift+Enter starts
+ * a new line; elsewhere Enter starts a new line.
+ */
+export function GrowingField({ invalid, maxRows = 6, className, onKeyDown, value, ...props }: GrowingFieldProps) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, LINE_PX * maxRows + PAD_Y_PX)}px`;
+  }, [value, maxRows]);
+  return (
+    <textarea
+      {...props}
+      ref={ref}
+      rows={1}
+      value={value}
+      aria-invalid={invalid || props['aria-invalid'] || undefined}
+      onKeyDown={(e) => {
+        onKeyDown?.(e);
+        if (e.defaultPrevented || e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+        const form = e.currentTarget.form;
+        if (!form) return;
+        e.preventDefault();
+        form.requestSubmit();
+      }}
+      className={cn(CONTROL_CLASS, 'block resize-none overflow-y-auto px-3 py-1.5 leading-5', className)}
+    />
+  );
+}
+

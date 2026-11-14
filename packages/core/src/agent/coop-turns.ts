@@ -89,7 +89,7 @@ export const keptOnStop = (items: readonly OutboxMessage[], by: string | null, h
 export const mayHandle = (item: OutboxMessage, by: string | null, hostId: string | null, byRole: ParticipantRole | null): boolean => byRole === 'host' || wrote(item, by, hostId);
 
 /** Permission modes from the strictest; a guest's turn runs at the host's mode or Accept edits, whichever is stricter. */
-const STRICTNESS = ['plan', 'default', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
+const STRICTNESS = ['plan', 'planAuto', 'default', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
 type Mode = (typeof STRICTNESS)[number];
 
 /**

@@ -15,7 +15,7 @@ import { PaneFrame, type PaneFrameState } from './pane-dock.tsx';
 import { TodoList } from './todo-widget.tsx';
 
 /** The newest plan in the conversation and where it stands, or null before the first. */
-export function latestPlan(messages: readonly Message[]): { plan: string; status: 'waiting' | 'approved' | 'declined' } | null {
+export function latestPlan(messages: readonly Message[]): { plan: string; status: 'writing' | 'waiting' | 'approved' | 'declined' } | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!;
     if (message.role !== 'assistant') continue;
@@ -24,12 +24,14 @@ export function latestPlan(messages: readonly Message[]): { plan: string; status
     const result = toolResults(messages.slice(i)).get(call.id);
     // Called outside plan mode: no plan was up for approval.
     if (result && messageText(result.content) === PLAN_MODE_OFF) continue;
-    return { plan: str(asRecord(call.input).plan), status: !result ? 'waiting' : result.isError ? 'declined' : 'approved' };
+    const plan = str(asRecord(call.input).plan);
+    // Its input is still streaming in: the model is writing it, nothing is up for approval yet.
+    return { plan, status: result ? (result.isError ? 'declined' : 'approved') : plan ? 'waiting' : 'writing' };
   }
   return null;
 }
 
-const STATUS = { waiting: 'Waiting for your approval', approved: 'Approved', declined: 'Not approved' } as const;
+const STATUS = { writing: 'Writing the plan…', waiting: 'Waiting for your approval', approved: 'Approved', declined: 'Not approved' } as const;
 
 /**
  * The plan's text, where a passage can be selected to comment on it (while the plan waits for an answer). A selection
@@ -84,7 +86,7 @@ function Annotatable({ sessionId, children }: { sessionId: string; children: Rea
       {selected && (
         <div className="absolute z-10" style={{ left: selected.left, top: selected.top }}>
           {draft === null ? (
-            <Button size="sm" variant="secondary" leadingIcon={MessageSquareText} onMouseDown={(e) => e.preventDefault()} onClick={() => setDraft('')}>
+            <Button size="sm" variant="secondary" floating leadingIcon={MessageSquareText} onMouseDown={(e) => e.preventDefault()} onClick={() => setDraft('')}>
               Comment
             </Button>
           ) : (

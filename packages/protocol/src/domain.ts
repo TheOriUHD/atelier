@@ -669,6 +669,8 @@ export const AppInfo = z.object({
   imageGeneration: z.boolean().optional(),
   /** Chat and Cowork are one kind of conversation here; an older server keeps Cowork as it was, and the app shows it so. */
   unifiedChat: z.boolean().optional(),
+  /** Plan mode can be answered by the Auto reviewer (`planAuto`); an older server knows only Plan. */
+  planAuto: z.boolean().optional(),
   /** This backend keeps the admin activity log (a shared server); absent on the desktop app's own backend and on older servers. */
   auditLog: z.boolean().optional(),
   /** This backend keeps per-person usage limits (ARCHITECTURE §8); a newer app hides them on an older server. */

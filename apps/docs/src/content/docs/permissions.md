@@ -16,7 +16,7 @@ Permissions decide what Atelier lets a tool call do. They are not an operating-s
 
 ## The five modes
 
-The mode picker sits under the message box in Code (in a chat, the chip at the bottom left of the box, without Plan). In Code, with the message box empty, **Shift+Tab** cycles Auto, Ask, Accept edits and Plan. Bypass is only chosen from the menu. A mode change applies at once, also in the middle of a run, and the model is told about it.
+The mode picker sits under the message box in Code (in a chat, the chip at the bottom left of the box, without Plan). In Code, with the message box empty, **Shift+Tab** cycles Auto, Ask, Accept edits and Plan. Bypass and **Plan · Auto** are only chosen from the menu. A mode change applies at once, also in the middle of a run, and the model is told about it.
 
 <!-- screenshot: the permission mode menu open above the message box, with the five modes and their descriptions -->
 
@@ -325,6 +325,15 @@ A block counts against the top-level conversation, sub-agents included.
 ## Plan mode
 
 Plan mode lets the model investigate without changing anything. The model can read, search, use the web tools and start sub-agents (which are in plan mode too); edits and every Bash command are refused with **Plan mode is on, so this can't run yet. …**
+
+**Plan mode** in the mode picker opens a side menu with two ways:
+
+- **Manual** (the chip reads **Plan**): what plan mode lets through and would ask about, such as reading a file outside the folder, asks you, as described above.
+- **Auto** (the chip reads **Plan · Auto**): the [Auto mode](#auto-mode) reviewer answers in your place. Reading anywhere goes ahead (credentials and keys still go to the reviewer), and a Bash command runs if the reviewer finds it only looks, for example `git log` or `ls`, and changes nothing. Allow rules never let a command through here, a command already found dangerous is refused, and edits stay refused until you approve the plan.
+
+A server from before this version offers only **Plan**. An admin can make **Plan · Auto** the default in **Settings › Admin › Code › Default permission mode**.
+
+While the model writes its plan, its step in the conversation reads **Writing plan…** and shows what has come in so far; it reads **Waiting for approval** once the approval card is up.
 
 When the model understands the task it calls ExitPlanMode with a Markdown plan (up to 20,000 characters). That shows **Atelier proposed a plan** above the message box and opens the **Plan** pane, where you can read it and select any passage to **Comment**.
 

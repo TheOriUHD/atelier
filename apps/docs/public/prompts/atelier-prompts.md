@@ -52,6 +52,7 @@ Every prompt template Atelier ships, verbatim, in one file. Generated from `pack
 - notes/permission-ask
 - notes/permission-auto
 - notes/permission-bypass
+- notes/plan-auto-on
 - notes/plan-off
 - notes/plan-on
 - notes/plan-still-on
@@ -995,6 +996,16 @@ File: packages/core/prompts/notes/permission-bypass.md
 
 ````text
 The permission mode is now Bypass: tool calls run without asking. Confirm destructive or outward-facing steps with the person in the conversation before you take them.
+````
+
+---
+
+## notes/plan-auto-on
+
+File: packages/core/prompts/notes/plan-auto-on.md
+
+````text
+Plan mode is on, with its questions answered by a reviewer instead of the person. Until the person approves a plan, only investigate: reading and searching work anywhere<!-- if:Agent -->, and so do sub-agents<!-- endif --><!-- if:Bash -->, and shell commands run if the reviewer finds they only look and change nothing<!-- endif -->, while edits are blocked.<!-- if:ExitPlanMode --> When you understand the task, present the plan with ExitPlanMode, and don't ask whether the plan is fine.<!-- endif --><!-- if:!ExitPlanMode --> When you understand the task, describe the changes you would make instead of making them.<!-- endif --><!-- if:AskUser --> Settle open questions with AskUser first.<!-- endif -->
 ````
 
 ---

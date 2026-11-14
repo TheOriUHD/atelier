@@ -340,7 +340,7 @@ export function ImportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               <pre aria-label="Import prompt" className="max-h-40 overflow-y-auto rounded-lg bg-fill-field p-3 pr-12 font-sans text-footnote whitespace-pre-wrap text-fg-secondary inset-ring inset-ring-fill-field-ring">
                 {MEMORY_IMPORT_PROMPT}
               </pre>
-              <Button size="sm" variant="secondary" leadingIcon={copied ? Check : Copy} onClick={() => void copy()} className="absolute top-2 right-2">
+              <Button size="sm" variant="secondary" floating leadingIcon={copied ? Check : Copy} onClick={() => void copy()} className="absolute top-2 right-2">
                 {copied ? 'Copied' : 'Copy'}
               </Button>
             </div>

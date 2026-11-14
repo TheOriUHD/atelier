@@ -27,7 +27,7 @@ export interface FooterInfo {
 const NARROW = 96;
 
 export function Footer({ info, paint, columns }: { info: FooterInfo; paint: Paint; columns: number }) {
-  const modeColour = { auto: 'accent', default: 'muted', acceptEdits: 'good', plan: 'info', bypassPermissions: 'bad' } as const;
+  const modeColour = { auto: 'accent', default: 'muted', acceptEdits: 'good', plan: 'info', planAuto: 'info', bypassPermissions: 'bad' } as const;
   // The key's hint goes first when the terminal is narrow: the mode, the context and the model matter more.
   const mode = paint.fg(modeColour[info.mode], `⏵⏵ ${MODE_WORDS[info.mode]}`) + (columns >= NARROW ? paint.fg('faint', ' (shift+tab)') : '');
   const dot = !info.connected ? paint.fg('bad', '○') : info.link === 'signed_out' ? paint.fg('bad', '●') : info.link === 'connecting' || info.link === 'off' ? paint.fg('warn', '●') : paint.fg('good', '●');

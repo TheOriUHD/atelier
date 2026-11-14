@@ -6,13 +6,13 @@ import { defaultModelFor, type AppContract, type Effort, type ModelInfo, type Pe
 
 export const EFFORT_WORDS: Record<Effort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra', max: 'Max', ultracode: 'Ultracode' };
 
-export const MODE_WORDS: Record<PermissionMode, string> = { auto: 'Auto', default: 'Ask', acceptEdits: 'Accept edits', plan: 'Plan', bypassPermissions: 'Bypass' };
+export const MODE_WORDS: Record<PermissionMode, string> = { auto: 'Auto', default: 'Ask', acceptEdits: 'Accept edits', plan: 'Plan', planAuto: 'Plan · Auto', bypassPermissions: 'Bypass' };
 export const MODE_CYCLE: PermissionMode[] = ['auto', 'default', 'acceptEdits', 'plan'];
 
 /** Words for a mode typed after /mode. */
 export function modeFrom(word: string): PermissionMode | null {
   const w = word.toLowerCase().replace(/[\s_-]/g, '');
-  const map: Record<string, PermissionMode> = { auto: 'auto', ask: 'default', default: 'default', accept: 'acceptEdits', acceptedits: 'acceptEdits', edits: 'acceptEdits', plan: 'plan', bypass: 'bypassPermissions', bypasspermissions: 'bypassPermissions', yolo: 'bypassPermissions' };
+  const map: Record<string, PermissionMode> = { auto: 'auto', ask: 'default', default: 'default', accept: 'acceptEdits', acceptedits: 'acceptEdits', edits: 'acceptEdits', plan: 'plan', planauto: 'planAuto', autoplan: 'planAuto', bypass: 'bypassPermissions', bypasspermissions: 'bypassPermissions', yolo: 'bypassPermissions' };
   return map[w] ?? null;
 }
 

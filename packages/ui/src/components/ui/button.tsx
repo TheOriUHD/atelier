@@ -17,6 +17,12 @@ export interface ButtonProps extends ComponentPropsWithRef<'button'> {
   trailingIcon?: LucideIcon;
   /** Shows a spinner in place of the content, keeps the width, and ignores presses. */
   loading?: boolean;
+  /**
+   * Over content rather than on a surface (a selection's Comment, a toolbar over a picture): the secondary and ghost
+   * fills are see-through tints, so here they are laid over the opaque popover surface, at rest and on hover, and the
+   * text underneath never shows through.
+   */
+  floating?: boolean;
 }
 
 const BASE_CLASS = [
@@ -35,6 +41,24 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   ghost: 'bg-transparent text-fg hover:bg-fill-ghost-hover data-popup-open:bg-fill-ghost-hover',
   danger: 'bg-danger font-medium text-[color:white] hover:bg-danger-hover',
   brand: 'bg-accent font-medium text-on-accent hover:bg-accent-hover',
+};
+
+/**
+ * The see-through variants over content: the opaque popover surface with their tint laid on it as an image, so the tint
+ * adds to the surface instead of replacing it (the solid variants need nothing). Written out whole for Tailwind to see.
+ */
+const FLOATING_CLASS: Partial<Record<ButtonVariant, string>> = {
+  secondary: [
+    'bg-popover text-fg shadow-popover',
+    'bg-[image:linear-gradient(var(--at-color-fill-secondary),var(--at-color-fill-secondary))]',
+    'hover:bg-[image:linear-gradient(var(--at-color-fill-secondary-hover),var(--at-color-fill-secondary-hover))]',
+    'data-popup-open:bg-[image:linear-gradient(var(--at-color-fill-secondary-hover),var(--at-color-fill-secondary-hover))]',
+  ].join(' '),
+  ghost: [
+    'bg-popover text-fg shadow-popover',
+    'hover:bg-[image:linear-gradient(var(--at-color-fill-ghost-hover),var(--at-color-fill-ghost-hover))]',
+    'data-popup-open:bg-[image:linear-gradient(var(--at-color-fill-ghost-hover),var(--at-color-fill-ghost-hover))]',
+  ].join(' '),
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
@@ -62,6 +86,7 @@ export function Button({
   leadingIcon,
   trailingIcon,
   loading = false,
+  floating = false,
   className,
   children,
   onClick,
@@ -79,7 +104,7 @@ export function Button({
       onClick={blocked ? preventPress : onClick}
       className={cn(
         BASE_CLASS,
-        VARIANT_CLASS[variant],
+        (floating && FLOATING_CLASS[variant]) || VARIANT_CLASS[variant],
         iconOnly ? ICON_ONLY_CLASS[size] : SIZE_CLASS[size],
         // Positioned only while the spinner overlay needs it, so callers can place the button absolutely.
         loading && 'relative',

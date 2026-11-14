@@ -98,7 +98,7 @@ export const InlineVisual = memo(function InlineVisual({ call, result, partialIn
       )}
       {!ready && !failed && <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-3 py-4" aria-label="Building interactive visual"><div className="h-3 w-1/3 animate-pulse rounded bg-skeleton motion-reduce:animate-none" /><div className="h-32 animate-pulse rounded-lg bg-skeleton/40 motion-reduce:animate-none" /></div>}
       {(error || failed) && <div role="alert" className="flex items-center gap-3 py-4 text-body text-fg-secondary"><span>{error ?? 'The visual was not completed.'}</span>{!failed && <Button size="sm" variant="ghost" onClick={reload}>Try again</Button>}</div>}
-      {final && <div className="absolute top-1 right-1 z-10 flex gap-1 rounded-lg bg-bg/95 p-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/visual:opacity-100 max-md:opacity-100">
+      {final && <div className="absolute top-1 right-1 z-10 flex gap-1 rounded-lg bg-bg p-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/visual:opacity-100 max-md:opacity-100">
         <IconButton icon={RotateCcw} label="Reset visual" size="xs" onClick={reload} />
         <IconButton icon={Download} label="Download as HTML" size="xs" onClick={() => { exportPending.current = true; frame.current?.contentWindow?.postMessage({ type: 'inline:export' }, '*'); }} />
         <IconButton icon={expanded ? Minimize2 : Maximize2} label={expanded ? 'Exit fullscreen' : 'Expand visual'} size="xs" onClick={() => { void (expanded ? document.exitFullscreen() : container.current?.requestFullscreen())?.catch(() => undefined); }} />

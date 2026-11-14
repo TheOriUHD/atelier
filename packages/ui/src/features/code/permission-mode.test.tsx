@@ -11,7 +11,15 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
 
-beforeEach(() => resetBackend({ 'settings.get': () => snapshot({ permissions: { ...defaultSettings().permissions, defaultMode: 'acceptEdits' } }) }));
+beforeEach(() =>
+  resetBackend({
+    'settings.get': () => snapshot({ permissions: { ...defaultSettings().permissions, defaultMode: 'acceptEdits' } }),
+    'app.info': () => ({ name: 'Atelier', version: '0.8.1', surface: 'web', platform: 'linux', dataDir: '', planAuto: true }),
+  }),
+);
+
+/** The picker reads what the server offers (Plan · Auto), so it needs a query client. */
+const withQueries = (node: ReactNode) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{node}</QueryClientProvider>;
 
 describe('permission modes', () => {
   it('cycles Auto → Ask → Accept edits → Plan with Shift+Tab; Bypass goes back to Auto', () => {
@@ -33,7 +41,7 @@ describe('permission modes', () => {
 
   it('picks a mode from the menu', async () => {
     const onChange = vi.fn();
-    render(<PermissionModePicker value="plan" onChange={onChange} />);
+    render(withQueries(<PermissionModePicker value="plan" onChange={onChange} />));
     const trigger = screen.getByRole('button', { name: 'Permission mode: Plan mode' });
     expect(trigger.textContent).toBe('Plan');
     expect(trigger.className).toContain('text-interactive-text');
@@ -45,11 +53,25 @@ describe('permission modes', () => {
   it('offers a chat no Plan, which it has no plan to approve, and shows Plan from the system default as Ask', async () => {
     expect(chatMode('plan')).toBe('default');
     expect(chatMode('auto')).toBe('auto');
-    render(<PermissionModePicker value={chatMode('plan')} onChange={vi.fn()} modes={CHAT_MODES} hint={false} />);
+    render(withQueries(<PermissionModePicker value={chatMode('plan')} onChange={vi.fn()} modes={CHAT_MODES} hint={false} />));
     fireEvent.click(screen.getByRole('button', { name: 'Permission mode: Ask permissions' }));
     const items = await screen.findAllByRole('menuitemradio');
     expect(items.some((i) => /^Plan mode/.test(i.textContent ?? ''))).toBe(false);
     expect(items).toHaveLength(4);
     expect(screen.queryByText(/Shift\+Tab/)).toBeNull();
+  });
+
+  it('chooses Plan answered by the person or by the reviewer in Plan’s side menu', async () => {
+    const onChange = vi.fn();
+    render(withQueries(<PermissionModePicker value="planAuto" onChange={onChange} />));
+    const trigger = screen.getByRole('button', { name: 'Permission mode: Plan mode · Auto' });
+    expect(trigger.textContent).toBe('Plan · Auto');
+    expect(trigger.className).toContain('text-interactive-text');
+    fireEvent.click(trigger);
+    const plan = await screen.findByRole('menuitem', { name: /^Plan mode/ });
+    fireEvent.click(plan);
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /^Manual/ }));
+    expect(onChange).toHaveBeenCalledWith('plan');
+    expect(chatMode('planAuto')).toBe('auto');
   });
 });

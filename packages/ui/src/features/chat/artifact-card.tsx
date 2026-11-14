@@ -3,6 +3,7 @@ import { Atom, FileCode2, FileText, Globe, Image, Workflow, type LucideIcon } fr
 import { artifactIdForPath, type ArtifactSummary, type ArtifactType, type ToolCallPart } from '@atelier/protocol';
 import { Icon, ThinkingDots, cn } from '../../components/ui/index.ts';
 import { useUi } from '../../lib/ui-store.ts';
+import { partialField } from '../../lib/partial-json.ts';
 
 /** Each artifact type's name and glyph (cards here and on the Artifacts page). */
 export const ARTIFACT_TYPES: Record<ArtifactType, { label: string; icon: LucideIcon }> = {
@@ -16,17 +17,6 @@ export const ARTIFACT_TYPES: Record<ArtifactType, { label: string; icon: LucideI
 
 /** Where a page shows artifacts in a pane of its own (Code): the one it shows, if open, and how to show or hide one. */
 export const ArtifactPaneContext = createContext<{ shown: string | null; toggle(artifactId: string): void } | null>(null);
-
-/** A string field of tool-call JSON that may still be streaming (`{"title": "Tal…`). */
-function partialField(json: string | undefined, field: string): string | undefined {
-  const match = json && new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`).exec(json);
-  if (!match) return undefined;
-  try {
-    return JSON.parse(`"${match[1]!.replace(/\\$/, '')}"`) as string;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * Transcript card for an `artifact` tool call (design/components.md › ArtifactCard). The whole card

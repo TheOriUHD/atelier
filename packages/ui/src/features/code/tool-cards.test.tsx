@@ -5,7 +5,7 @@ import { PLAN_MODE_OFF, type Message, type SessionSnapshot, type ToolCallPart } 
 import { callsTo, resetBackend } from '../settings/test-backend.ts';
 import type { TranscriptView } from '@atelier/protocol';
 import { TranscriptDetail } from '../chat/parts.tsx';
-import { ActivityList, CodeActivity, MovedNotice, TranscriptSession, WorkspaceRoot, bashResult, folderRead, summarize, type ToolStep } from './tool-cards.tsx';
+import { ActivityList, AskingCall, CodeActivity, MovedNotice, StreamingInputs, TranscriptSession, WorkspaceRoot, bashResult, folderRead, summarize, type ToolStep } from './tool-cards.tsx';
 import { activityLabel } from './activity-summary.ts';
 
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
@@ -424,6 +424,28 @@ describe('plan card', () => {
     show(step('ExitPlanMode', { plan: '1. Write index.html' }, { result: result(PLAN_MODE_OFF) }));
     expect(screen.getByText('Not in plan mode')).toBeTruthy();
     expect(screen.queryByText('Not approved')).toBeNull();
+  });
+
+  it('says the plan is being written, with what has come in, until the approval card is up', async () => {
+    const writing = step('ExitPlanMode', {}, { running: true });
+    const { unmount } = render(
+      <StreamingInputs.Provider value={{ 'm:ExitPlanMode': '{"plan": "## Steps\\n1. Read the save file\\n2. Back it' }}>
+        <ActivityList steps={[writing]} />
+      </StreamingInputs.Provider>,
+    );
+    expect(screen.getByText('Writing plan…')).toBeTruthy();
+    expect(screen.queryByText('Waiting for approval')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Plan/ }));
+    // Streamed text is revealed word by word, in pieces of its own.
+    await waitFor(() => expect(document.body.textContent).toContain('Read the save file'));
+    unmount();
+    // The card asks about this call: now it waits.
+    render(
+      <AskingCall.Provider value="call-ExitPlanMode">
+        <ActivityList steps={[step('ExitPlanMode', { plan: '1. Read the save file' }, { running: true })]} />
+      </AskingCall.Provider>,
+    );
+    expect(screen.getByText('Waiting for approval')).toBeTruthy();
   });
 });
 

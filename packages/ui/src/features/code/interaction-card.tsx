@@ -20,7 +20,7 @@ import type {
   QuestionAnswer,
   QuestionRequest,
 } from '@atelier/protocol';
-import { Badge, Button, Field, Icon, IconButton, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Select, TextField, cn, toast } from '../../components/ui/index.ts';
+import { Badge, Button, Field, GrowingField, Icon, IconButton, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Select, TextField, cn, toast } from '../../components/ui/index.ts';
 import { refreshComputer, useComputerHere, useComputerStatus } from '../../lib/computer.ts';
 import { desktop, isMac, openExternal } from '../../lib/platform.ts';
 import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts';
@@ -104,12 +104,17 @@ interface AskKeys {
   letters?: Record<string, () => void> | undefined;
 }
 
-/** The key caps beside an action's name. They are decoration: the button's name carries the label. */
+/**
+ * The key caps beside an action's name. They are decoration: the button's name carries the label. A card's actions stay
+ * on one line: below a wide card only an action's own key (a digit or letter) shows, not the chords that also work
+ * ("Shift Ctrl Enter" is long on Windows and Linux), and in a narrow pane none.
+ */
 function Caps({ keys, className }: { keys: readonly string[]; className?: string }) {
+  const own = keys.length > 0 && /^[0-9A-Z]$/.test(keys[0]!) ? 1 : 0;
   return (
     <span aria-hidden className={cn('flex items-center gap-1', className)}>
       {keys.map((k, i) => (
-        <Kbd key={i} className="text-current/70">
+        <Kbd key={i} className={cn('text-current/70', i >= own && '@max-3xl:hidden')}>
           {k}
         </Kbd>
       ))}
@@ -231,13 +236,13 @@ function ReasonField({ why, sending }: { why: DenyReason; sending: boolean }) {
   return (
     <form
       data-reason-field
-      className="flex items-center gap-2"
+      className="flex items-end gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         why.send();
       }}
     >
-      <TextField
+      <GrowingField
         autoFocus
         aria-label="Why not"
         placeholder={`Tell ${APP.name} why, or what to do instead`}
@@ -900,13 +905,13 @@ function PlanApproval({
       )}
       {revising && (
         <form
-          className="flex items-center gap-2"
+          className="flex items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             revise();
           }}
         >
-          <TextField
+          <GrowingField
             autoFocus
             aria-label="What should change"
             placeholder="What should change?"
@@ -1012,7 +1017,7 @@ function QuestionCard({ request, sending, respond }: { request: QuestionRequest;
               onChange={() => update(i, (c) => (q.multiSelect ? { ...c, other: c.other === null ? '' : null } : { picked: [], other: c.other ?? '' }))}
             />
             {choice.other !== null && (
-              <TextField
+              <GrowingField
                 autoFocus
                 aria-label={`Your answer to “${q.question}”`}
                 placeholder="Type your answer"

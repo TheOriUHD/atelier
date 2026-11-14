@@ -26,6 +26,7 @@ import { CommandCode } from './command-code.tsx';
 import { navigatorNotes } from '../coop/coop.ts';
 import { MEMORY_TOOLS, MemoryStep } from '../chat/memory-steps.tsx';
 import { activitySummary, asRecord, backgroundId, backgroundSummary, bashResult, changedLines, count, messageReceipt, resultText, shownCall, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
+import { partialField } from '../../lib/partial-json.ts';
 export { activitySummary, actionWords, asRecord, backgroundId, backgroundSummary, bashResult, computerActions, folderName, folderRead, messageReceipt, str, summarize, taskOutcome } from '@atelier/client/tools.ts';
 
 export type ToolStep = Extract<ActivityStepView, { kind: 'tool' }>;
@@ -43,6 +44,9 @@ export const ToolCardsOpen = createContext(true);
 export const TranscriptSession = createContext<string | null>(null);
 /** The tool call the session's open card asks the person about (its `callId`), for the "Asking…" line. */
 export const AskingCall = createContext<string | null>(null);
+
+/** Tool-call input still streaming in, by the call's part key: what has arrived of it (a plan being written). */
+export const StreamingInputs = createContext<Record<string, string>>({});
 
 /** The tool call an open card asks about, from the session's pending interaction (a permission card names its call). */
 export function askingCall(pending: { kind: string; payload: unknown } | null | undefined): string | null {
@@ -586,18 +590,27 @@ function CommandOutput({ text, live, bare }: { text: string; live: boolean; bare
   );
 }
 
-/** ExitPlanMode in the transcript: the plan, collapsed, and whether it was approved (the card at the end asks). */
+/**
+ * ExitPlanMode in the transcript: the plan, collapsed, and whether it was approved (the card at the end asks). While the
+ * model still writes it, it says so and shows what has come in; it waits for approval only once the card is up.
+ */
 function PlanCard({ step }: { step: ToolStep }) {
   const [open, setOpen] = useState(useStartsOpen(false));
+  const asking = useContext(AskingCall);
+  const streaming = useContext(StreamingInputs)[step.key];
+  const given = str(asRecord(step.call.input).plan);
+  const plan = given || partialField(streaming, 'plan') || '';
   const status = step.result
     ? resultText(step.result) === PLAN_MODE_OFF
       ? 'Not in plan mode'
       : step.result.isError
         ? 'Not approved'
         : 'Approved'
-    : step.running
-      ? 'Waiting for approval'
-      : null;
+    : !step.running
+      ? null
+      : asking === step.call.id
+        ? 'Waiting for approval'
+        : 'Writing plan…';
   return (
     <div className="flex flex-col">
       <Summary open={open} onToggle={() => setOpen((o) => !o)}>
@@ -607,7 +620,7 @@ function PlanCard({ step }: { step: ToolStep }) {
       </Summary>
       {open && (
         <div className="mt-2 rounded-xl px-4 py-3 inset-ring inset-ring-line">
-          <Markdown text={str(asRecord(step.call.input).plan)} streaming={false} />
+          {plan ? <Markdown text={plan} streaming={!given} /> : <span className="text-body text-fg-muted">The plan is on its way.</span>}
         </div>
       )}
     </div>

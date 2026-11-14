@@ -4,7 +4,7 @@
  * `state`, so what a branch has been told is read back from the branch itself: editing an earlier message starts a
  * branch that hasn't heard the later notes, and gets them again. A compaction summary restates the state it cut off.
  */
-import type { EffortGuidance, Message, Mode, Part, PermissionMode, Todo } from '@atelier/protocol';
+import { isPlanMode, type EffortGuidance, type Message, type Mode, type Part, type PermissionMode, type Todo } from '@atelier/protocol';
 import { escapeAttr, escapeTags } from '../prompts/escape.ts';
 import { renderNote, type Overrides } from '../prompts/templates.ts';
 import { approvedMode, PERMISSION_MODE_LABELS } from '../tools/exit-plan-mode.ts';
@@ -91,8 +91,8 @@ const REFRESHER_TURNS = 30;
 const ULTRACODE_REMINDER_TURNS = 10;
 const EFFORT_REMINDER_TURNS = 10;
 const SUBJECT_CHARS = 100;
-/** The note announcing each mode but Plan, which has notes of its own. */
-const PERMISSION_NOTES: Record<Exclude<PermissionMode, 'plan'>, string> = {
+/** The note announcing each mode but Plan (and Plan · Auto), which have notes of their own. */
+const PERMISSION_NOTES: Record<Exclude<PermissionMode, 'plan' | 'planAuto'>, string> = {
   auto: 'permission-auto',
   default: 'permission-ask',
   acceptEdits: 'permission-accept-edits',
@@ -129,8 +129,8 @@ export async function turnNote(facts: TurnFacts, prior: NoteState, history: read
   const mode = facts.permissionMode;
   if (mode) {
     const before = prior.permissionMode;
-    if (mode === 'plan') note(before === 'plan' ? 'plan-still-on' : 'plan-on');
-    else if (before === 'plan') note('plan-off', { mode: PERMISSION_MODE_LABELS[mode] });
+    if (isPlanMode(mode)) note(isPlanMode(before) && before === mode ? 'plan-still-on' : mode === 'planAuto' ? 'plan-auto-on' : 'plan-on');
+    else if (isPlanMode(before)) note('plan-off', { mode: PERMISSION_MODE_LABELS[mode] });
     else if (before !== undefined && before !== mode) note(PERMISSION_NOTES[mode]);
     set('permissionMode', mode);
   }

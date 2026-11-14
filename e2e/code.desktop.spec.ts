@@ -100,6 +100,16 @@ test('desktop Code: a folder, approvals, live command output, a question, plan a
     await page.keyboard.press('Enter');
     await expect(terminal.locator('.xterm-rows')).toContainText('atelier-42');
 
+    // Plan · Auto, from Plan's side menu: the reviewer answers what Plan would ask, so reading outside the folder needs no card.
+    await page.getByRole('button', { name: /^Permission mode:/ }).click();
+    await page.getByRole('menuitem', { name: /^Plan mode/ }).click();
+    await page.getByRole('menuitemradio', { name: /^Auto\s*The reviewer answers/ }).click();
+    await expect(page.getByRole('button', { name: 'Permission mode: Plan mode · Auto' })).toHaveText('Plan · Auto');
+    await box.fill(call('Read', { file_path: join(configDir, 'settings.json') }));
+    await sendWhenIdle(page);
+    await expect(page.getByText(/^Tool result:[\s\S]*"profile"/).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('region', { name: /Allow Atelier to use Read/ })).toHaveCount(0);
+
     // Back on the Code home, the session shows in the stats card, and the folder stays chosen.
     await page.evaluate(() => (location.hash = '#/code'));
     const stats = page.getByRole('region', { name: 'Your Code stats' });

@@ -48,6 +48,7 @@
     "notes/permission-ask": "The permission mode is now Ask: file changes and commands ask the person first.\n",
     "notes/permission-auto": "The permission mode is now Auto: a reviewer checks your actions in place of the person, and blocks the risky ones. Keep working without stopping to ask for routine approvals. When an action is blocked, the result says why: take a safer approach, or tell the person what you need.\n",
     "notes/permission-bypass": "The permission mode is now Bypass: tool calls run without asking. Confirm destructive or outward-facing steps with the person in the conversation before you take them.\n",
+    "notes/plan-auto-on": "Plan mode is on, with its questions answered by a reviewer instead of the person. Until the person approves a plan, only investigate: reading and searching work anywhere<!-- if:Agent -->, and so do sub-agents<!-- endif --><!-- if:Bash -->, and shell commands run if the reviewer finds they only look and change nothing<!-- endif -->, while edits are blocked.<!-- if:ExitPlanMode --> When you understand the task, present the plan with ExitPlanMode, and don't ask whether the plan is fine.<!-- endif --><!-- if:!ExitPlanMode --> When you understand the task, describe the changes you would make instead of making them.<!-- endif --><!-- if:AskUser --> Settle open questions with AskUser first.<!-- endif -->\n",
     "notes/plan-off": "Plan mode is off, and the permission mode is now {{mode}}. You can make changes.\n",
     "notes/plan-on": "Plan mode is on. Until the person approves a plan, only investigate: reading and searching work<!-- if:Agent -->, and so do sub-agents<!-- endif -->, while edits and shell commands are blocked.<!-- if:ExitPlanMode --> When you understand the task, present the plan with ExitPlanMode, and don't ask whether the plan is fine.<!-- endif --><!-- if:!ExitPlanMode --> When you understand the task, describe the changes you would make instead of making them.<!-- endif --><!-- if:AskUser --> Settle open questions with AskUser first.<!-- endif -->\n",
     "notes/plan-still-on": "Plan mode is still on: investigate, then <!-- if:ExitPlanMode -->present the plan with ExitPlanMode<!-- endif --><!-- if:!ExitPlanMode -->describe the changes you would make<!-- endif -->.\n",
@@ -201,6 +202,11 @@
       "group": "Permissions and plan mode",
       "when": "Code: the person switched to Bypass permissions.",
       "text": "The permission mode is now Bypass: tool calls run without asking. Confirm destructive or outward-facing steps with the person in the conversation before you take them.\n"
+    },
+    "plan-auto-on": {
+      "group": "Permissions and plan mode",
+      "when": "Code: plan mode started with its questions answered by the Auto reviewer (Plan · Auto).",
+      "text": "Plan mode is on, with its questions answered by a reviewer instead of the person. Until the person approves a plan, only investigate: reading and searching work anywhere<!-- if:Agent -->, and so do sub-agents<!-- endif --><!-- if:Bash -->, and shell commands run if the reviewer finds they only look and change nothing<!-- endif -->, while edits are blocked.<!-- if:ExitPlanMode --> When you understand the task, present the plan with ExitPlanMode, and don't ask whether the plan is fine.<!-- endif --><!-- if:!ExitPlanMode --> When you understand the task, describe the changes you would make instead of making them.<!-- endif --><!-- if:AskUser --> Settle open questions with AskUser first.<!-- endif -->\n"
     },
     "plan-off": {
       "group": "Permissions and plan mode",
