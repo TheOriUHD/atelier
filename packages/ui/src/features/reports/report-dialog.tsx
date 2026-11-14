@@ -9,7 +9,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { Activity, Bug, Check, Copy, ImagePlus, Lightbulb, MessageCircle, MessagesSquare, SquareTerminal, X } from 'lucide-react';
 import { REPORT_LIMITS, reportTextProblem, type ReportChat, type ReportKind } from '@atelier/protocol';
-import { Button, Dialog, DialogContent, DialogFooter, Field, Icon, IconButton, SegmentedControl, Switch, TextArea, TextField, cn } from '../../components/ui/index.ts';
+import { Button, Dialog, DialogContent, DialogFooter, Field, Icon, IconButton, Lightbox, SegmentedControl, Switch, TextArea, TextField, cn } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
 import { openExternal } from '../../lib/platform.ts';
 import { useAppInfo, useSessions } from '../../lib/queries.ts';
@@ -72,6 +72,8 @@ export function ReportDialog() {
   const [copied, setCopied] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [chatQuery, setChatQuery] = useState('');
+  /** The picture shown full size, as in a chat. */
+  const [viewing, setViewing] = useState<number | null>(null);
 
   const sessions = useSessions({}, { enabled: open });
   /** The person's conversations, the one open now first, newest next. */
@@ -318,14 +320,17 @@ export function ReportDialog() {
                   <ul className="grid grid-cols-4 gap-2" aria-label="Attached pictures">
                     {shots.map((s) => (
                       <li key={s.id} className="group relative overflow-hidden rounded-lg ring-1 ring-line">
-                        <img src={s.url} alt={s.source === 'window' ? 'Screenshot of Atelier' : 'Attached picture'} className="aspect-video w-full bg-fill-secondary object-cover" />
-                        <span className="absolute bottom-1 left-1 rounded bg-popover px-1 text-[11px] text-fg-secondary">{s.source === 'window' ? 'Atelier' : megabytes(s.bytes)}</span>
+                        <button type="button" className="block w-full cursor-zoom-in outline-none focus-ring" aria-label={`Show ${s.source === 'window' ? 'the screenshot' : 'the picture'} larger`} onClick={() => setViewing(shots.indexOf(s))}>
+                          <img src={s.url} alt={s.source === 'window' ? 'Screenshot of Atelier' : 'Attached picture'} className="aspect-video w-full bg-fill-secondary object-cover" />
+                        </button>
+                        <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-popover px-1 text-[11px] text-fg-secondary">{s.source === 'window' ? 'Atelier' : megabytes(s.bytes)}</span>
                         <IconButton icon={X} label="Take out" iconSize="sm" floating className="absolute top-1 right-1" onClick={() => removeShot(s.id)} />
                       </li>
                     ))}
                   </ul>
                 )}
                 {pictureError && <p className="text-footnote text-danger-text">{pictureError}</p>}
+                <Lightbox images={shots.map((s) => ({ src: s.url, alt: s.source === 'window' ? 'Screenshot of Atelier' : 'Attached picture' }))} index={viewing !== null && viewing < shots.length ? viewing : null} onIndexChange={setViewing} />
               </div>
             </section>
 

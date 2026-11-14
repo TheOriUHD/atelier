@@ -68,6 +68,13 @@ test('desktop: the report shortcut attaches the window, and the report carries d
     const dialog = page.getByRole('dialog', { name: 'Report an issue' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('img', { name: 'Screenshot of Atelier' })).toBeVisible({ timeout: 15_000 });
+    // It opens full size, as a picture in a chat does; Escape comes back to the report.
+    await dialog.getByRole('button', { name: 'Show the screenshot larger' }).click();
+    const big = page.getByRole('dialog', { name: 'Image' });
+    await expect(big.getByRole('img', { name: 'Screenshot of Atelier' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(big).toHaveCount(0);
+    await expect(dialog).toBeVisible();
 
     // Padding isn't a report.
     await dialog.getByLabel('Title').fill('Bad');
