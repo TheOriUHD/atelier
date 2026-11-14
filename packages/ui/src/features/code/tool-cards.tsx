@@ -2,7 +2,7 @@
  * The Code transcript shows every tool call on its own: reads and searches as one-line summaries,
  * edits as inline diffs, commands with their live output and exit status, sub-agents with their own transcript.
  */
-import { createContext, useContext, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { AudioLines, Bot, Compass, Film, FolderInput, ListChecks, Maximize2, MessageSquare } from 'lucide-react';
 import { PLAN_MODE_OFF, type BackgroundTask, type Notice, type Todo, type ToolResultPart } from '@atelier/protocol';
 import { Badge, DiffStat, Icon, IconButton, ThinkingDots, cn } from '../../components/ui/index.ts';
@@ -18,7 +18,7 @@ import { DiffCard, editRows, placedEditRows, writeRows } from './inline-diff.tsx
 import { displayPath, languageOf } from './paths.ts';
 import { workspaceLabel } from './workspaces.ts';
 import { TodoList } from './todo-widget.tsx';
-import { OWN_CARD, activityLabel, failedCount } from './activity-summary.ts';
+import { OWN_CARD, activityLabel, failedCount, noticePhrases } from './activity-summary.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
 import { SearchResults } from './search-results.tsx';
 import { WithViewedImages } from '../chat/images.tsx';
@@ -117,6 +117,22 @@ function CompactActivity({ steps, live, thinking, turnSince }: { steps: Activity
   );
 }
 
+/**
+ * A run's summary line: what its calls did, then what other agents said in it ("Read 3 files, messaged a sub-agent,
+ * 4 messages from sub-agents"); `idle` when it holds neither (only thinking).
+ */
+export function runSummary(steps: readonly ActivityStepView[], root: string | null, idle: string): string {
+  const tools = steps.filter((s): s is ToolStep => s.kind === 'tool');
+  const notices = noticePhrases(steps);
+  const line = [tools.length ? activitySummary(tools.map(shownCall), root) : '', ...notices].filter(Boolean).join(', ');
+  return line ? line.charAt(0).toUpperCase() + line.slice(1) : idle;
+}
+
+/** A message from another agent, or a background agent that ended, as its row in the transcript. */
+export function noticeRow(step: Extract<ActivityStepView, { kind: 'notice' }>): ReactNode {
+  return step.notice.kind === 'agent' ? <AgentNotice notice={step.notice} /> : <MessageNotice notice={step.notice} />;
+}
+
 /** "Read app.ts, ran 9 commands (1 failed)" with the lines its edits added and removed. */
 function FinishedLine({ steps, root, open, onToggle }: { steps: ActivityStepView[]; root: string | null; open: boolean; onToggle(): void }) {
   const tools = steps.filter((s) => s.kind === 'tool');
@@ -125,7 +141,7 @@ function FinishedLine({ steps, root, open, onToggle }: { steps: ActivityStepView
   return (
     <Summary open={open} onToggle={onToggle}>
       <span className="truncate">
-        {tools.length ? activitySummary(tools.map(shownCall), root) : 'Thought it over'}
+        {runSummary(steps, root, 'Thought it over')}
         {failed > 0 && ` (${failed} failed)`}
       </span>
       {(changed.added > 0 || changed.removed > 0) && <DiffStat added={changed.added} removed={changed.removed} />}
@@ -150,8 +166,10 @@ function ActivityRows({ steps }: { steps: ActivityStepView[] }) {
 function ActivityRow({ step }: { step: ActivityStepView }) {
   const root = useContext(WorkspaceRoot);
   const [open, setOpen] = useState(false);
-  const running = step.kind === 'tool' ? step.running : step.active;
+  const running = step.kind === 'tool' ? step.running : step.kind === 'thinking' ? step.active : false;
   const now = useNow(running);
+  // Another agent's word: its own row, as in the transcript (it opens to the message).
+  if (step.kind === 'notice') return <div className="border-t border-line px-3 py-1.5 first:border-t-0">{noticeRow(step)}</div>;
   let title = 'Thinking';
   let status: ReactNode = null;
   let body: ReactNode;
@@ -253,6 +271,8 @@ export function ActivityList({ steps }: { steps: ActivityStepView[] }) {
           <BackgroundCommandsCard key={item[0]!.key} steps={item} />
         ) : item.kind === 'thinking' ? (
           <ThinkingBlock key={item.key} text={item.text} active={item.active} />
+        ) : item.kind === 'notice' ? (
+          <Fragment key={item.key}>{noticeRow(item)}</Fragment>
         ) : (
           <ToolCard key={item.key} step={item} />
         ),
@@ -310,8 +330,8 @@ export function GroupedActivity({ steps }: { steps: ActivityStepView[] }) {
     <div className="flex flex-col">
       <WithViewedImages steps={steps}>
         <Summary open={open} onToggle={() => setOpen((o) => !o)}>
-          {steps.some((s) => (s.kind === 'tool' ? s.running : s.active)) && <ThinkingDots />}
-          <span className="truncate">{tools.length ? activitySummary(tools.map(shownCall), root) : 'Thought process'}</span>
+          {steps.some((s) => (s.kind === 'tool' ? s.running : s.kind === 'thinking' && s.active)) && <ThinkingDots />}
+          <span className="truncate">{runSummary(steps, root, 'Thought process')}</span>
           {(changed.added > 0 || changed.removed > 0) && <DiffStat added={changed.added} removed={changed.removed} />}
         </Summary>
       </WithViewedImages>

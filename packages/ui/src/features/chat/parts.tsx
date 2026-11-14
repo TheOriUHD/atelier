@@ -109,7 +109,16 @@ export const elapsed = (now: number, since: number) => formatElapsed(now - since
 export { inputPreview } from '@atelier/client/phase.ts';
 import { inputPreview } from '@atelier/client/phase.ts';
 
-const isActive = (step: ActivityStepView) => (step.kind === 'tool' ? step.running : step.active);
+const isActive = (step: ActivityStepView) => (step.kind === 'tool' ? step.running : step.kind === 'thinking' && step.active);
+
+type NoticeStep = Extract<ActivityStepView, { kind: 'notice' }>;
+/**
+ * How a message from another agent (or a background agent that ended) shows as a step: the transcript provides the
+ * row Code uses (tool-cards.tsx imports this file, so it can't be imported here).
+ */
+export const NoticeRows = createContext<(step: NoticeStep) => ReactNode>(() => null);
+/** Phrases for the summary line ("4 messages from sub-agents"), provided the same way. */
+export const NoticePhrases = createContext<(steps: readonly ActivityStepView[]) => string[]>(() => []);
 
 /**
  * "ToolActivity": a run of tool calls (and the thinking between them) as one summary line that opens
@@ -133,6 +142,9 @@ function GenericActivity({ steps, turnSince }: { steps: ActivityStepView[]; turn
   const now = useNow(!!current && since !== undefined);
   const tools = steps.filter((s) => s.kind === 'tool');
   const failed = tools.filter((s) => s.result?.isError).length;
+  const said = useContext(NoticePhrases)(steps);
+  const used = tools.length ? `Used ${[...new Set(tools.map((s) => s.call.name))].join(', ')}` : '';
+  const finished = [used, ...said].filter(Boolean).join(', ');
 
   return (
     <div className="flex flex-col">
@@ -142,13 +154,13 @@ function GenericActivity({ steps, turnSince }: { steps: ActivityStepView[]; turn
             <>
               <ThinkingDots />
               <span className="truncate">
-                {current.kind === 'tool' ? current.call.name : lastLine(current.text) || 'Thinking…'}
+                {current.kind === 'tool' ? current.call.name : current.kind === 'thinking' ? lastLine(current.text) || 'Thinking…' : 'Working'}
               </span>
               {since !== undefined && <span className="text-fg-muted tabular-nums">{elapsed(now, since)}</span>}
             </>
           ) : (
             <span className="truncate">
-              Used {[...new Set(tools.map((s) => s.call.name))].join(', ')}
+              {finished.charAt(0).toUpperCase() + finished.slice(1)}
               {failed > 0 && <span className="text-danger-text"> · {failed} failed</span>}
             </span>
           )}
@@ -167,6 +179,8 @@ function GenericActivity({ steps, turnSince }: { steps: ActivityStepView[]; turn
 
 function StepRow({ step, now }: { step: ActivityStepView; now: number }) {
   const [open, setOpen] = useState(useContext(TranscriptDetail) === 'verbose');
+  const notice = useContext(NoticeRows);
+  if (step.kind === 'notice') return <li className="border-t border-line px-3 py-1.5 first:border-t-0">{notice(step)}</li>;
   const preview = step.kind === 'tool' ? inputPreview(step.call.input) : '';
   return (
     <li className="border-t border-line first:border-t-0">

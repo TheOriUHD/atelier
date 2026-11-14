@@ -33,6 +33,7 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
   const step = steps.findLast((s) => s.kind === 'tool' && s.running) ?? steps.at(-1);
   if (!step) return 'Working';
   if (step.kind === 'thinking') return 'Thinking';
+  if (step.kind === 'notice') return step.notice.kind === 'agent' ? 'A background agent finished' : `Reading a message from ${MESSAGE_FROM[step.notice.from.relation]}`;
   const args = input(step);
   const path = () => displayPath(text(args.file_path), root);
   switch (step.call.name) {
@@ -99,6 +100,30 @@ export function activityLabel(steps: readonly ActivityStepView[], root: string |
     default:
       return step.call.name.startsWith('mcp__') ? 'Using a connector' : `Using ${step.call.name}`;
   }
+}
+
+/** Who a message another agent sent came from, as the transcript says it. */
+export const MESSAGE_FROM = { session: 'another session', parent: 'the parent session', 'sub-agent': 'a sub-agent' } as const;
+
+type NoticeView = Extract<ActivityStepView, { kind: 'notice' }>;
+
+/**
+ * The part of a run's summary for what other agents said: "a message from a sub-agent", "4 messages from sub-agents",
+ * "2 background agents finished". Empty when there is none.
+ */
+export function noticePhrases(steps: readonly ActivityStepView[]): string[] {
+  const notices = steps.filter((s): s is NoticeView => s.kind === 'notice');
+  const phrases: string[] = [];
+  const from = new Map<string, number>();
+  for (const n of notices) if (n.notice.kind === 'message') from.set(n.notice.from.relation, (from.get(n.notice.from.relation) ?? 0) + 1);
+  const many = { session: 'other sessions', parent: 'the parent session', 'sub-agent': 'sub-agents' } as const;
+  for (const [relation, count] of from) {
+    const key = relation as keyof typeof MESSAGE_FROM;
+    phrases.push(count === 1 ? `a message from ${MESSAGE_FROM[key]}` : `${count} messages from ${many[key]}`);
+  }
+  const ended = notices.filter((n) => n.notice.kind === 'agent').length;
+  if (ended) phrases.push(ended === 1 ? 'a background agent finished' : `${ended} background agents finished`);
+  return phrases;
 }
 
 /** Who a SendMessage call writes to, from its `to`: "parent", a sub-agent's task id, or a session id. */

@@ -13,7 +13,7 @@ import { formatTokenCount } from '../code/live-context.ts';
 import { CommandText } from './command-text.tsx';
 import { QuoteBlock } from './quote.tsx';
 import { Markdown } from './markdown.tsx';
-import { MessageError, ProviderStopped, ThinkingBlock, ToolActivity } from './parts.tsx';
+import { MessageError, NoticePhrases, NoticeRows, ProviderStopped, ThinkingBlock, ToolActivity } from './parts.tsx';
 import { PhaseText, usePhaseText } from './run-phase.tsx';
 import { ArtifactCard } from './artifact-card.tsx';
 import { InlineVisual } from './inline-visual.tsx';
@@ -28,7 +28,8 @@ import { CopyButton } from './copy-button.tsx';
 import { ReadAloudButton } from './read-aloud.tsx';
 import { modelSubtitle, useModelGroups } from './models.ts';
 import { MessageTime } from './message-time.tsx';
-import { AgentNotice, MessageNotice, MovedNotice, StreamingInputs } from '../code/tool-cards.tsx';
+import { AgentNotice, MessageNotice, MovedNotice, StreamingInputs, noticeRow } from '../code/tool-cards.tsx';
+import { noticePhrases } from '../code/activity-summary.ts';
 import { AuthorLabel, Outbox, type OutboxActions } from './outbox.tsx';
 import type { Reaction } from '../coop/coop-reactions.tsx';
 import { reportError, turnOwner, useCoopView, type CoopView } from '../coop/coop.ts';
@@ -82,6 +83,8 @@ export function Transcript({
   return (
     <ChangeAreaProvider sessionId={sessionId}>
     <SessionImagesProvider messages={live.messages}>
+    <NoticeRows.Provider value={noticeRow}>
+    <NoticePhrases.Provider value={noticePhrases}>
     <div ref={column} data-transcript-turns className={cn('mx-auto flex w-full max-w-[calc(var(--at-transcript-max)+48px)] flex-col px-6 pt-9 pb-10 max-md:px-4', ROW_GAPS)}>
       {turns.map((turn, i) =>
         turn.kind === 'user' ? (
@@ -154,6 +157,8 @@ export function Transcript({
         </div>
       )}
     </div>
+    </NoticePhrases.Provider>
+    </NoticeRows.Provider>
     </SessionImagesProvider>
     </ChangeAreaProvider>
   );

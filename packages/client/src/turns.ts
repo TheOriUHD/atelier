@@ -1,4 +1,4 @@
-import type { ImageProgress, Message, TextPart, ThinkingPart, ToolCallPart, ToolResultPart } from '@atelier/protocol';
+import type { ContextPart, ImageProgress, Message, Notice, TextPart, ThinkingPart, ToolCallPart, ToolResultPart } from '@atelier/protocol';
 
 /** How the transcript is laid out: each user message, then everything the assistant did until the next one. */
 export type Turn =
@@ -6,11 +6,23 @@ export type Turn =
   | { kind: 'assistant'; messages: Message[] }
   | { kind: 'compaction'; message: Message };
 
+/**
+ * A note that another agent's word reached the model (a message from a sub-agent, the parent or another session; a
+ * background sub-agent that ended): part of the assistant's work, not something the person said. Its context part.
+ */
+export function agentNote(m: Message): (ContextPart & { notice: Extract<Notice, { kind: 'message' | 'agent' }> }) | null {
+  if (m.role !== 'user' || !m.parts.length || !m.parts.every((p) => p.type === 'context')) return null;
+  const part = m.parts.find((p): p is ContextPart => p.type === 'context' && (p.notice?.kind === 'message' || p.notice?.kind === 'agent'));
+  return (part as (ContextPart & { notice: Extract<Notice, { kind: 'message' | 'agent' }> }) | undefined) ?? null;
+}
+
 export function groupTurns(messages: readonly Message[]): Turn[] {
   const turns: Turn[] = [];
   for (const m of messages) {
     const last = turns.at(-1);
     if (m.kind === 'compaction_summary') turns.push({ kind: 'compaction', message: m });
+    // Messages between agents carry on the assistant's turn, as steps of its work, instead of splitting it.
+    else if (last?.kind === 'assistant' && agentNote(m)) last.messages.push(m);
     else if (m.role === 'user') turns.push({ kind: 'user', message: m });
     else if (last?.kind === 'assistant') last.messages.push(m);
     else turns.push({ kind: 'assistant', messages: [m] });
@@ -33,11 +45,14 @@ export interface PartRef<P> {
   part: P;
 }
 
-export type ActivityStep = PartRef<ThinkingPart> | PartRef<ToolCallPart>;
+/** A step of a run of work: thinking, a tool call, or another agent's word reaching the model (`agentNote`). */
+export type ActivityStep = PartRef<ThinkingPart> | PartRef<ToolCallPart> | PartRef<ContextPart>;
 
 /** An activity step as the transcript shows it: thinking (live or done) or a tool call with its result. */
 export type ActivityStepView =
   | { kind: 'thinking'; key: string; text: string; active: boolean }
+  /** A message from another agent, or a background sub-agent that ended. */
+  | { kind: 'notice'; key: string; notice: Extract<Notice, { kind: 'message' | 'agent' }> }
   | {
       kind: 'tool';
       key: string;
@@ -65,6 +80,7 @@ export const isStreaming = (ref: PartRef<unknown>, streamingMessageId: string | 
 
 export function stepView(ref: ActivityStep, results: Map<string, ToolResultPart>, run: RunState): ActivityStepView {
   if (ref.part.type === 'thinking') return { kind: 'thinking', key: ref.key, text: ref.part.text, active: isStreaming(ref, run.streamingMessageId) };
+  if (ref.part.type === 'context') return { kind: 'notice', key: ref.key, notice: ref.part.notice as Extract<Notice, { kind: 'message' | 'agent' }> };
   const result = results.get(ref.part.id);
   return {
     kind: 'tool',
@@ -113,12 +129,17 @@ export function turnItems(messages: readonly Message[]): TurnItem[] {
   const items: TurnItem[] = [];
   let run: ActivityStep[] = [];
   const flush = () => {
-    if (run.some((s) => s.part.type === 'tool_call')) items.push({ kind: 'activity', key: run[0]!.key, steps: run });
+    if (run.some((s) => s.part.type === 'tool_call' || s.part.type === 'context')) items.push({ kind: 'activity', key: run[0]!.key, steps: run });
     else for (const ref of run) items.push({ kind: 'thinking', ref: ref as PartRef<ThinkingPart> });
     run = [];
   };
   const last = messages.at(-1);
   for (const message of messages) {
+    const note = agentNote(message);
+    if (note) {
+      run.push({ key: `${message.id}:${message.parts.indexOf(note)}`, message, index: message.parts.indexOf(note), part: note });
+      continue;
+    }
     if (message.role !== 'assistant') continue;
     message.parts.forEach((part, index) => {
       const key = `${message.id}:${index}`;

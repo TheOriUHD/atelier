@@ -320,6 +320,8 @@ describe('Transcript', () => {
     expect(screen.getByLabelText('Sent by a loop, run 2').textContent).toBe('Loop');
     expect(screen.getByText('check the deploy')).toBeTruthy();
     expect(screen.queryByText(/This message comes from a loop/)).toBeNull();
+    // A background sub-agent's end is a step of the assistant's work: in its group's summary, and its row inside.
+    fireEvent.click(screen.getByRole('button', { name: /A background agent finished/ }));
     expect(screen.getByText(/^Background agent finished ·/).textContent).toBe('Background agent finished · Survey the repo');
     expect(screen.queryByText(/has finished…/)).toBeNull();
   });

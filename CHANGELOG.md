@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Messages between agents join the work they belong to.** "Received a message from a sub-agent", "Messaged a sub-agent" and "Background agent finished" were rows of their own that split the work into many small groups. They are now steps of the work group around them, and its summary counts them ("Read 3 files, messaged a sub-agent, 4 messages from sub-agents"); opening the group shows each one as before.
+
 - **Connectors notice a server that comes up later.** A connector that failed (an app's local MCP server that wasn't running yet) was tried again on a backoff of up to 5 minutes, so it stayed "Not connected" until someone pressed Test connection. Now it is tried again the moment its status is looked at (the message box's Connectors menu, the Connectors page) or a conversation starts, and in the background at least once a minute.
 - **`localhost` in the desktop app means your computer, also on a server.** Adding a connector at `localhost` or `127.0.0.1` in the desktop app connected to a server made it a server connector, which the server tried on its own machine. It now becomes your own connector, reached through this computer, and the form says so. In a browser it stays the server's, as before.
 
