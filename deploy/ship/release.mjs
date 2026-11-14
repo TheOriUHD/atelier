@@ -24,7 +24,7 @@
  * question before "publish": the git push, the GitHub release, the update feed, the website and the docs.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createWriteStream, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -239,9 +239,17 @@ async function main() {
     ['mac', () => buildMac({ version, tree, artifacts, log: log('mac') })],
     ['cli', () => buildCli({ version, channel, tree, work, artifacts, log: log('cli') })],
   ].filter(([name]) => !skipped(name));
+  // The clean checkout (about 3 GB) only serves the installer, Mac and terminal-app builds: once they are done it goes,
+  // before the Linux packages arrive and the files are collected, so a nearly full disk still finishes the release.
+  const treeBuilds = ['installer', 'mac', 'cli'].filter((n) => !skipped(n));
+  const freeTree = async () => {
+    if (!treeBuilds.every((n) => state.done[`build:${n}`]) || !existsSync(tree)) return;
+    await exec('git', ['worktree', 'remove', '--force', tree], { log: log('tree'), check: false });
+  };
   const results = await Promise.allSettled(
     builds.map(([name, fn]) =>
       once(`build:${name}`, `build ${name}`, fn)
+        .then(() => (treeBuilds.includes(name) ? freeTree() : undefined))
         .then(() => (name === 'windows' || name === 'linux' ? stage(name) : undefined))
         .catch((e) => {
           say(`${name} failed: ${e.message.split('\n')[0]}`);
@@ -698,7 +706,14 @@ async function assemble({ version, platforms, artifacts, publish, log }) {
   rmSync(publish, { recursive: true, force: true });
   mkdirSync(publish, { recursive: true });
   for (const platform of platforms) {
-    for (const file of readdirSync(join(artifacts, platform))) copyFileSync(join(artifacts, platform, file), join(publish, file));
+    // Linked, not copied (they are the same files): a copy would need the room of the whole release once more.
+    for (const file of readdirSync(join(artifacts, platform))) {
+      try {
+        linkSync(join(artifacts, platform, file), join(publish, file));
+      } catch {
+        copyFileSync(join(artifacts, platform, file), join(publish, file));
+      }
+    }
   }
   const problems = checkRelease(publish, version, platforms);
   if (problems.length) throw new Error(`The built files don't add up:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
