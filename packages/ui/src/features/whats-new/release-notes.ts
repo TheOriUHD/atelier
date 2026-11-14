@@ -2,7 +2,7 @@ import { compareVersions } from '@atelier/protocol';
 // Clips are recorded from the real apps on throwaway data: apps/cli/scripts/record-clip.ts (see media/README.md).
 import cliClip from './media/atelier-cli.mp4';
 import cliPoster from './media/atelier-cli.jpg';
-import { AppWindow, Blocks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /**
  * A clip or picture that shows a larger feature off: it takes the dialog's full width above the feature's title. Clips are
@@ -37,6 +37,28 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.8.1',
+    intro: 'Long tasks see it through, and computer use stays out of your way.',
+    highlights: [
+      {
+        icon: ListChecks,
+        title: 'Plan mode, answered for you',
+        body: 'Plan mode has a side menu now: Manual, as before, or Auto, where the reviewer answers what it would ask. Reading anywhere and commands that change nothing go ahead; nothing changes until you approve the plan. While the plan is written it says so and shows it coming in.',
+      },
+      {
+        icon: Repeat2,
+        title: 'Long tasks don’t stop halfway',
+        body: 'The assistant no longer ends its turn at the edge of the folder, tests what it builds through logs and consoles before the screen, sets up test servers and profiles itself, and asks you right away when something it needs is blocked. Sub-agents and official tool downloads are no longer blocked by Auto mode.',
+      },
+      {
+        icon: Monitor,
+        title: 'Computer use on more than one monitor',
+        body: 'While it has the mouse and keyboard, Atelier moves to a monitor it isn’t working on and comes back afterwards, and nothing on your other monitors is minimized. A question always brings Atelier forward, and Steam games are found on Windows.',
+      },
+    ],
+    also: ['Answers and revisions grow as you type.', 'A card’s buttons stay on one line.', 'Buttons over text are never see-through.'],
+  },
   {
     version: '0.8.0',
     intro: 'Chat and Cowork are one conversation now.',
