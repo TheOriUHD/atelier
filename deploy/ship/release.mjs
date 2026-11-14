@@ -895,45 +895,48 @@ async function publishInstaller({ version, prerelease, dir, log }) {
 // ---------------------------------------------------------------------------------------------------------------------
 // What is live
 
+/** The live check's requests say who they are, so the feed's download counts leave them out (deploy/cloudflare/src/stats.js). */
+const LIVE_CHECK = { 'user-agent': 'atelier-release-check' };
+
 async function verifyLive({ version, tag, channel, repo, publish, installerFiles, cliFiles }) {
   const problems = [];
   const names = readdirSync(publish);
   // The update feed: each update file names this version; each package is there at its size, with its signature.
   for (const file of names.filter((n) => /^latest.*\.yml$/.test(n))) {
-    const res = await fetch(`${CONFIG.feed}/${channel}/${file}`).catch(() => null);
+    const res = await fetch(`${CONFIG.feed}/${channel}/${file}`, { headers: LIVE_CHECK }).catch(() => null);
     if (!res?.ok) problems.push(`feed: ${file} is not served (${res?.status ?? 'no answer'})`);
     else if (parseUpdateFile(await res.text()).version !== version) problems.push(`feed: ${file} does not say ${version}`);
   }
   for (const file of names.filter(isPackage)) {
     const size = statSync(join(publish, file)).size;
-    const head = await fetch(`${CONFIG.feed}/${channel}/${encodeURIComponent(file)}`, { method: 'HEAD', redirect: 'manual' }).catch(() => null);
+    const head = await fetch(`${CONFIG.feed}/${channel}/${encodeURIComponent(file)}`, { method: 'HEAD', redirect: 'manual', headers: LIVE_CHECK }).catch(() => null);
     if (file.endsWith('.dmg') && head && head.status >= 300 && head.status < 400) {
       // Not in the bucket: the Worker sends it to the same file on the GitHub release (checked below with the assets).
       if (!(head.headers.get('location') ?? '').includes(`/releases/download/${tag}/`)) problems.push(`feed: ${file} is sent to ${head.headers.get('location')}, not to the ${tag} release`);
     } else if (!head?.ok) problems.push(`feed: ${file} is not served (${head?.status ?? 'no answer'})`);
     else if (Number(head.headers.get('content-length')) !== size) problems.push(`feed: ${file} is ${head.headers.get('content-length')} bytes there, ${size} here`);
-    const sig = await fetch(`${CONFIG.feed}/${channel}/${encodeURIComponent(`${file}.sig`)}`, { method: 'HEAD' }).catch(() => null);
+    const sig = await fetch(`${CONFIG.feed}/${channel}/${encodeURIComponent(`${file}.sig`)}`, { method: 'HEAD', headers: LIVE_CHECK }).catch(() => null);
     if (!sig?.ok) problems.push(`feed: ${file}.sig is not served`);
   }
   // The installer: its script is served (stable), and each binary is there at its size.
   if (installerFiles) {
     for (const name of readdirSync(installerFiles).filter((n) => n.startsWith('atelier-setup-'))) {
-      const head = await fetch(`${CONFIG.feed}/setup/${version}/${name}`, { method: 'HEAD' }).catch(() => null);
+      const head = await fetch(`${CONFIG.feed}/setup/${version}/${name}`, { method: 'HEAD', headers: LIVE_CHECK }).catch(() => null);
       if (!head?.ok) problems.push(`installer: ${name} is not served (${head?.status ?? 'no answer'})`);
       else if (Number(head.headers.get('content-length')) !== statSync(join(installerFiles, name)).size) problems.push(`installer: ${name} has another size there`);
     }
     if (channel === 'stable') {
-      const script = await fetch(`${CONFIG.feed}/install`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
+      const script = await fetch(`${CONFIG.feed}/install`, { headers: LIVE_CHECK }).then((r) => (r.ok ? r.text() : null)).catch(() => null);
       if (script !== readFileSync(join(installerFiles, 'install.sh'), 'utf8')) problems.push('installer: /install does not serve this release\'s script');
     }
   }
   // The terminal app: its manifest names this version, and the install scripts are served (stable).
   if (cliFiles) {
-    const manifest = await fetch(`${CONFIG.feed}/${channel}/atelier-cli.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const manifest = await fetch(`${CONFIG.feed}/${channel}/atelier-cli.json`, { headers: LIVE_CHECK }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     if (manifest?.version !== version) problems.push(`terminal app: ${channel}/atelier-cli.json does not say ${version}`);
     if (channel === 'stable') {
       for (const [route, file] of [['cli', 'install-cli.sh'], ['cli.ps1', 'install-cli.ps1']]) {
-        const script = await fetch(`${CONFIG.feed}/${route}`).then((r) => (r.ok ? r.text() : null)).catch(() => null);
+        const script = await fetch(`${CONFIG.feed}/${route}`, { headers: LIVE_CHECK }).then((r) => (r.ok ? r.text() : null)).catch(() => null);
         if (script !== readFileSync(join(cliFiles, file), 'utf8')) problems.push(`terminal app: /${route} does not serve this release's script`);
       }
     }

@@ -70,6 +70,8 @@ test('tells downloads by people from the app updating itself', () => {
   const target = (file) => ({ channel: 'stable', file });
   assert.equal(classify(ask('/', { ua: UA_BROWSER }), ok, target('Atelier-Setup-0.8.2-x64.exe')).kind, 'download');
   assert.equal(classify(ask('/', { ua: UA_UPDATER }), ok, target('Atelier-Setup-0.8.2-x64.exe')).kind, 'update');
+  // The release's own check of what it published counts as nothing.
+  assert.equal(classify(ask('/', { ua: 'atelier-release-check' }), ok, target('Atelier-Setup-0.8.2-x64.exe')), null);
   assert.equal(
     classify(ask('/', { ua: 'curl/8.7.1' }), ok, target('atelier-cli-0.8.2-linux-x64.tar.gz')).kind,
     'download',

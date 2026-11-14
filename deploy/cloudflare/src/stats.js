@@ -76,6 +76,8 @@ const countryOf = (request) => {
  */
 export function classify(request, response, target) {
   if (!target || !fromStart(request)) return null;
+  // The release's own check of what it published (deploy/ship/release.mjs) is nobody's download.
+  if (/^atelier-release-check\b/.test(request.headers.get('user-agent') ?? '')) return null;
   const ok =
     response.status === 200 || response.status === 206 || (response.status === 302 && /\.dmg$/.test(target.file ?? ''));
   if (!ok) return null;
