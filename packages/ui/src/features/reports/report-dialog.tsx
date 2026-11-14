@@ -367,8 +367,9 @@ function AttachRow(props: {
 }) {
   return (
     <div className="px-4 py-3">
-      <div className="flex items-start gap-3">
-        <Icon icon={props.icon} size="md" className="mt-0.5 text-fg-secondary" />
+      {/* The controls sit centred against the title and description; the icon stays by the title. */}
+      <div className="flex items-center gap-3">
+        <Icon icon={props.icon} size="md" className="mt-0.5 self-start text-fg-secondary" />
         <div className="min-w-0 flex-1">
           <div className="text-body font-medium text-fg">{props.title}</div>
           <div className="text-footnote text-fg-muted">{props.description}</div>
@@ -378,11 +379,8 @@ function AttachRow(props: {
             {props.previewOpen ? 'Hide' : 'Show'}
           </Button>
         )}
-        {props.onCheckedChange ? (
-          <Switch aria-label={props.title} checked={props.checked} onCheckedChange={props.onCheckedChange} />
-        ) : (
-          <span className="mt-0.5 shrink-0 text-footnote text-fg-muted">Always</span>
-        )}
+        {/* Always attached: no switch, Show takes its place. */}
+        {props.onCheckedChange && <Switch aria-label={props.title} checked={props.checked} onCheckedChange={props.onCheckedChange} />}
       </div>
       {props.children}
     </div>

@@ -80,7 +80,6 @@ test('desktop: the report shortcut attaches the window, and the report carries d
     await dialog.getByLabel('What happened?').fill('I asked about shaders and the reply only repeated my question back to me.');
     // An issue always carries diagnostics; the open conversation is offered first.
     await expect(dialog.getByRole('switch', { name: 'Diagnostics' })).toHaveCount(0);
-    await expect(dialog.getByText('Always', { exact: true })).toBeVisible();
     await dialog.getByRole('switch', { name: 'A conversation' }).click();
     await expect(dialog.getByRole('radio', { name: /open now/ })).toHaveAttribute('aria-checked', 'true');
     await expect(dialog.getByText(/All \d+ messages/)).toBeVisible({ timeout: 30_000 });
