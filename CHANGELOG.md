@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-11-14
+
 - **Reports, easier to reach and tidier.**
   - The button next to your name at the bottom of the sidebar is now a bug: it opens a report with a picture of the window, like F1. Settings stays one click away in the menu under your name.
   - That menu has more: Usage, Keyboard shortcuts, Appearance, Report an issue, Request a feature, Get help, What's new, Get the apps (desktop, terminal, server, Atelier for Chrome) and Learn more (documentation, what leaves your machine, source code, license).
