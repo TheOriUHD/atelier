@@ -38,6 +38,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.9.1',
+    intro: 'Reporting a problem is one click away.',
+    highlights: [
+      {
+        icon: Bug,
+        title: 'The bug button next to your name',
+        body: 'It opens a report with a picture of the window and, in a conversation, that conversation attached. The menu under your name now has Usage, Keyboard shortcuts, Appearance, help and feedback, What’s new, the apps and more.',
+      },
+      {
+        icon: Lightbulb,
+        title: 'Help & feedback in Settings',
+        body: 'Report an issue, request a feature, open the documentation or copy diagnostics from one page.',
+      },
+    ],
+    also: ['An issue always carries diagnostics.', 'Attached pictures open full size.', 'Conversations are picked from a short list that fits the window, with chats and Code sessions marked.'],
+  },
+  {
     version: '0.9.0',
     intro: 'Tell the developer about a problem or an idea, right from Atelier.',
     highlights: [
