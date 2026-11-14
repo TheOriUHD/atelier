@@ -3,7 +3,7 @@
  * with a card per tool call and the question the run waits on at its end, the composer with the permission mode, and
  * the dock of panes beside them (Terminal, Diff, Browser, Files, Background tasks, Plan, Artifact, Side chat).
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Navigate, useNavigate, useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { GitBranch, Rows3 } from 'lucide-react';
@@ -24,7 +24,7 @@ import { Composer, FileDropZone, type ComposerHandle } from '../chat/composer.ts
 import { ModelPicker } from '../chat/model-picker.tsx';
 import { PlanLimitWarning } from '../chat/plan-usage.tsx';
 import { UsageLimitWarning } from '../chat/usage-limit-warning.tsx';
-import { ScrollToBottom, SessionHeader, clearCommand, compactCommand, loopCommand, modelCommand, useFollowScroll } from '../chat/session-view.tsx';
+import { ScrollToBottom, SessionHeader, clearCommand, compactCommand, loopCommand, modelCommand, useFollowScroll, useKeepPlace } from '../chat/session-view.tsx';
 import { SelectionReply } from '../chat/selection-reply.tsx';
 import { TRANSCRIPT_VIEWS, TranscriptDetail } from '../chat/parts.tsx';
 import { Transcript } from '../chat/transcript.tsx';
@@ -117,10 +117,14 @@ function CodeSession({ sessionId }: { sessionId: string }) {
   const { data: workspaces } = useWorkspaces();
   const attachments = useAttachments(draftKeys.session(sessionId), isCoopMirror(sessionId) ? sessionId : undefined);
   const { ref: scroller, atBottom, followSmooth, onScroll } = useFollowScroll(live);
+  // Switching the view draws the transcript again: the reader stays where they were (at the bottom, or on the same turn).
+  const place = useKeepPlace(scroller, atBottom);
   // This session's own pick; until then, the person's default (Settings › Code).
   const { prefs } = usePrefs();
   const [pickedView, setView] = useState<TranscriptView | null>(null);
   const view = pickedView ?? prefs?.code.transcriptView ?? 'normal';
+  // Right after the transcript is drawn in the new view, before it is painted.
+  useLayoutEffect(() => place.restore(), [view, place]);
   const [pickingModel, setPickingModel] = useState(false);
   // Rewind's dialog, with the message it opened on ("Rewind to here"), or the newest (/rewind).
   const [rewind, setRewind] = useState<{ open: boolean; messageId: string | null }>({ open: false, messageId: null });
@@ -352,7 +356,13 @@ function CodeSession({ sessionId }: { sessionId: string }) {
                   <MenuContent className="w-56">
                     <MenuGroup>
                       <MenuLabel>Transcript view</MenuLabel>
-                      <MenuRadioGroup value={view} onValueChange={(v: TranscriptView) => setView(v)}>
+                      <MenuRadioGroup
+                        value={view}
+                        onValueChange={(v: TranscriptView) => {
+                          place.capture();
+                          setView(v);
+                        }}
+                      >
                         {TRANSCRIPT_VIEWS.map((v) => (
                           <MenuRadioItem key={v.value} value={v.value} closeOnClick>
                             {v.label}

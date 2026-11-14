@@ -82,7 +82,7 @@ export function Transcript({
   return (
     <ChangeAreaProvider sessionId={sessionId}>
     <SessionImagesProvider messages={live.messages}>
-    <div ref={column} className={cn('mx-auto flex w-full max-w-[calc(var(--at-transcript-max)+48px)] flex-col px-6 pt-9 pb-10 max-md:px-4', ROW_GAPS)}>
+    <div ref={column} data-transcript-turns className={cn('mx-auto flex w-full max-w-[calc(var(--at-transcript-max)+48px)] flex-col px-6 pt-9 pb-10 max-md:px-4', ROW_GAPS)}>
       {turns.map((turn, i) =>
         turn.kind === 'user' ? (
           <UserMessage

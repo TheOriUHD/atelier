@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Switching a Code session's view keeps your place.** Normal, Thinking and Verbose opened and closed every card and left you far from where you were (2,600 pixels above the end in a test). Now, at the bottom you stay at the bottom; scrolled up, the turn at the top of the window stays where it was.
+
 - **Docs caught up with Chat and Cowork being one.**
   - The prompt pages no longer describe Cowork as a mode, and the old Cowork prompt files are gone (old Cowork tasks already used Chat's).
   - `/prompts/cowork/` now leads to the Chat prompt instead of a 404.

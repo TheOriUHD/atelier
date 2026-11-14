@@ -1,9 +1,33 @@
 /** Pieces the Chat and Code session pages share: the header, following the stream, the context meter and the built-in commands. */
-import { useLayoutEffect, useRef, useState, type ReactNode, type UIEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowDown, Box, ChevronDown, FoldVertical, Pencil, Pin, PinOff, Repeat, SquarePen, Trash2, X } from 'lucide-react';
+import {
+  ArrowDown,
+  Box,
+  ChevronDown,
+  FoldVertical,
+  Pencil,
+  Pin,
+  PinOff,
+  Repeat,
+  SquarePen,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { formatInterval, parseLoopCommand, type SessionSummary } from '@atelier/protocol';
-import { ConfirmDialog, Icon, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, ThinkingDots, cn, toast } from '../../components/ui/index.ts';
+import {
+  ConfirmDialog,
+  Icon,
+  IconButton,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+  ThinkingDots,
+  cn,
+  toast,
+} from '../../components/ui/index.ts';
 import { trafficLightInset, useSidebarHidden } from '../../app/chrome.tsx';
 import { MODE_HOME } from '../../app/navigation.ts';
 import { RenameDialog } from '../../app/session-rows.tsx';
@@ -32,7 +56,8 @@ export function useFollowScroll(content: unknown) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || !atBottom) return;
-    if (Date.now() < smoothUntil.current && typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    if (Date.now() < smoothUntil.current && typeof el.scrollTo === 'function')
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     else el.scrollTop = el.scrollHeight;
   }, [content, atBottom]);
   return {
@@ -52,6 +77,63 @@ export function useFollowScroll(content: unknown) {
       setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 32);
     },
   };
+}
+
+/** Where the reader was before the whole transcript was drawn again: at the bottom, or a turn at some height in the window. */
+type Place = { bottom: true } | { index: number; offset: number };
+
+/**
+ * Keeps the reader's place across a change that draws the whole transcript again (Code's Normal, Thinking and Verbose
+ * views open and close every card, so everything moves): `capture` before the change, `restore` right after it is laid
+ * out. At the bottom it stays at the bottom; scrolled up, the first turn that starts in the window stays at the same height.
+ * Turns are found by their place among the transcript's rows, which a view change leaves as they were.
+ */
+export function useKeepPlace(ref: RefObject<HTMLDivElement | null>, atBottom: boolean) {
+  const saved = useRef<Place | null>(null);
+  const bottom = useRef(atBottom);
+  useLayoutEffect(() => {
+    bottom.current = atBottom;
+  }, [atBottom]);
+  return useMemo(() => {
+    const rows = (el: HTMLElement) => [...(el.querySelector('[data-transcript-turns]')?.children ?? [])];
+    const restoreOnce = () => {
+      const el = ref.current;
+      const place = saved.current;
+      if (!el || !place) return;
+      if ('bottom' in place) {
+        el.scrollTop = el.scrollHeight;
+        return;
+      }
+      const row = rows(el)[place.index];
+      if (row) el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - place.offset;
+    };
+    return {
+      capture() {
+        const el = ref.current;
+        if (!el) return;
+        if (bottom.current) {
+          saved.current = { bottom: true };
+          return;
+        }
+        const top = el.getBoundingClientRect().top;
+        const list = rows(el);
+        // The first turn that starts in the window: one cut off above may shrink out of sight in the new view. A turn taller
+        // than the window, started above it, is kept by the part in view instead.
+        const starts = list.findIndex((row) => row.getBoundingClientRect().top >= top);
+        const index = starts >= 0 ? starts : list.findIndex((row) => row.getBoundingClientRect().bottom > top);
+        saved.current = index < 0 ? null : { index, offset: list[index]!.getBoundingClientRect().top - top };
+      },
+      restore() {
+        if (!saved.current) return;
+        restoreOnce();
+        // Code and pictures that finish drawing a moment later change heights again: once more on the next frame.
+        requestAnimationFrame(() => {
+          restoreOnce();
+          saved.current = null;
+        });
+      },
+    };
+  }, [ref]);
 }
 
 /** The arrow that brings a reader who scrolled up back down; while the model works it shows that it still does. */
@@ -117,11 +199,20 @@ async function runLoopCommand(sessionId: string, args: string, list: () => void)
       case 'stop': {
         const { stopped } = await rpc().call('loops.stop', { sessionId, target: command.target });
         if (stopped) toast.success(stopped === 1 ? 'Stopped the loop.' : `Stopped ${stopped} loops.`);
-        else toast.error(command.target ? `There is no loop “${command.target}” in this session.` : 'This session has no loops running.');
+        else
+          toast.error(
+            command.target
+              ? `There is no loop “${command.target}” in this session.`
+              : 'This session has no loops running.',
+          );
         return;
       }
       case 'start': {
-        const { intervalMs } = await rpc().call('loops.start', { sessionId, prompt: command.prompt, intervalMs: command.intervalMs });
+        const { intervalMs } = await rpc().call('loops.start', {
+          sessionId,
+          prompt: command.prompt,
+          intervalMs: command.intervalMs,
+        });
         const rounded = intervalMs > command.intervalMs ? ' (the shortest interval)' : '';
         toast.success(`Loop started: every ${formatInterval(intervalMs)}${rounded}`, { description: command.prompt });
       }
@@ -144,7 +235,15 @@ export function modelCommand(openPicker: () => void): SlashCommand {
  * Co-op button at the end (`coopButton={false}`: the page places it itself). A co-op guest's title is only the title:
  * renaming, pinning and deleting the session are the host's.
  */
-export function SessionHeader({ session, children, coopButton = true }: { session: SessionSummary | null; children?: ReactNode; coopButton?: boolean }) {
+export function SessionHeader({
+  session,
+  children,
+  coopButton = true,
+}: {
+  session: SessionSummary | null;
+  children?: ReactNode;
+  coopButton?: boolean;
+}) {
   const coop = useCoopView();
   const guest = coop.shared && !coop.isHost;
   const sidebarHidden = useSidebarHidden();
@@ -176,15 +275,29 @@ export function SessionHeader({ session, children, coopButton = true }: { sessio
             <Icon icon={ChevronDown} className="text-fg-muted" />
           </MenuTrigger>
           <MenuContent className="w-52">
-            <MenuItem icon={session.pinnedAt ? PinOff : Pin} onClick={() => void rpc().call('sessions.update', { id: session.id, pinned: !session.pinnedAt })}>
+            <MenuItem
+              icon={session.pinnedAt ? PinOff : Pin}
+              onClick={() => void rpc().call('sessions.update', { id: session.id, pinned: !session.pinnedAt })}
+            >
               {session.pinnedAt ? 'Unpin' : 'Pin'}
             </MenuItem>
             <MenuItem icon={Pencil} onClick={() => setRenaming(true)}>
               Rename
             </MenuItem>
-            {!isLocal() && <MenuItem disabled={prefs?.remoteControl === false} onClick={() => void rpc().call('sessions.update', { id: session.id, remoteControl: session.remoteControl === false }).catch((error: unknown) => toast.error(describeError(error).message))}>
-              {prefs?.remoteControl === false ? 'Remote control disabled in account' : `Remote control: ${session.remoteControl === false ? 'Off' : 'On'}`}
-            </MenuItem>}
+            {!isLocal() && (
+              <MenuItem
+                disabled={prefs?.remoteControl === false}
+                onClick={() =>
+                  void rpc()
+                    .call('sessions.update', { id: session.id, remoteControl: session.remoteControl === false })
+                    .catch((error: unknown) => toast.error(describeError(error).message))
+                }
+              >
+                {prefs?.remoteControl === false
+                  ? 'Remote control disabled in account'
+                  : `Remote control: ${session.remoteControl === false ? 'Off' : 'On'}`}
+              </MenuItem>
+            )}
             <MenuSeparator />
             <MenuItem icon={Trash2} danger onClick={() => setDeleting(true)}>
               Delete
@@ -194,7 +307,15 @@ export function SessionHeader({ session, children, coopButton = true }: { sessio
       )}
       {children}
       {session && coopButton && <CoopButton session={session} className="ml-auto" />}
-      {cell && <IconButton icon={X} label="Close split view" size="sm" className="app-no-drag text-fg-secondary" onClick={cell.close} />}
+      {cell && (
+        <IconButton
+          icon={X}
+          label="Close split view"
+          size="sm"
+          className="app-no-drag text-fg-secondary"
+          onClick={cell.close}
+        />
+      )}
       {session && (
         <>
           <RenameDialog session={session} open={renaming} onOpenChange={setRenaming} />
