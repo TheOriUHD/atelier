@@ -38,6 +38,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.8.2',
+    intro: 'A task isn’t left half done.',
+    highlights: [
+      {
+        icon: ListChecks,
+        title: 'It keeps going until its list is done',
+        body: 'When the assistant ended its turn with items still open on its task list and nothing to ask you, it now goes back to work on them, a few times at most and only while it makes progress, instead of stopping to report.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.8.1',
     intro: 'Long tasks see it through, and computer use stays out of your way.',
     highlights: [
