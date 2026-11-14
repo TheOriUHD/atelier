@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-11-14
+
 - **A question during computer use can't be missed.** When the assistant asked something after giving the mouse back, the app or game it had used stayed in front and Atelier stayed hidden behind it, so the task waited unseen. Atelier now comes forward for every question in a reply that used the computer; where Windows won't let it (a full-screen game), its taskbar button flashes and a notification says it is waiting.
 - **Atelier moves to your other monitor while it works.** With more than one monitor, Atelier's windows move to one the assistant isn't using while it has the mouse and keyboard, and come back when the reply ends (Settings › Computer use › Move Atelier to another monitor, on by default). Windows and apps on your other monitors are no longer minimized: only what is on the monitor it works on steps aside.
 - **The assistant tests without the screen first, and doesn't ask about test licenses.** It checks what it built through logs, the program's own console or debug options and scripts before reaching for the screen, sets up test servers, profiles and data itself, builds every other part when one is blocked, and accepts the license or notice of something it set up for the task (a test server's EULA, a game's SDK notice) instead of stopping to ask. Agreeing to terms for your own accounts or purchases still asks.
