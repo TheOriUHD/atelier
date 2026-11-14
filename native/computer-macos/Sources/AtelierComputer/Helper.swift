@@ -99,7 +99,8 @@ public final class Helper: @unchecked Sendable {
     }
     async(.appsHide) { (params: AppsHideParams) in
       try Self.validate(ids: params.ids)
-      return AppsHideResult(ids: await MainActor.run { Apps.hide(ids: params.ids) })
+      let display = params.display.flatMap { CGDirectDisplayID($0) }
+      return AppsHideResult(ids: await MainActor.run { Apps.hide(ids: params.ids, display: display) })
     }
     async(.appsActivate) { (params: AppsActivateParams) in
       guard params.pid > 0, params.pid <= Int(Int32.max) else { throw RPCError.invalidParams("pid must be a process id") }

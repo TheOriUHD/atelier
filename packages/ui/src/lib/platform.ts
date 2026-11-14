@@ -127,7 +127,7 @@ interface DesktopBridge {
   };
   computer?: {
     status(): Promise<ComputerStatus>;
-    settings(patch: Partial<Pick<ComputerSettings, 'enabled' | 'mode' | 'unhideOnFinish'>>): Promise<ComputerSettings>;
+    settings(patch: Partial<Pick<ComputerSettings, 'enabled' | 'mode' | 'unhideOnFinish' | 'moveAway'>>): Promise<ComputerSettings>;
     deny(app: ComputerApp): Promise<ComputerSettings>;
     undeny(id: string): Promise<ComputerSettings>;
     revoke(backend: string, id: string): Promise<ComputerSettings>;

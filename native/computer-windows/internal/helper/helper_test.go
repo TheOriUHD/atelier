@@ -79,7 +79,7 @@ func (f *fakeSystem) Frontmost() (*proto.App, error) { return nil, nil }
 func (f *fakeSystem) OpenApp(id string, activate bool) (proto.App, error) {
 	return proto.App{}, rpc.NotFound("no app %s", id)
 }
-func (f *fakeSystem) HideApps(ids []string) ([]string, error) { return ids, nil }
+func (f *fakeSystem) HideApps(ids []string, display string) ([]string, error) { return ids, nil }
 func (f *fakeSystem) UnhideApps([]string) error               { return nil }
 func (f *fakeSystem) Activate(int) (bool, error)              { return true, nil }
 func (f *fakeSystem) Capture(req CaptureRequest) (proto.CaptureResult, error) {

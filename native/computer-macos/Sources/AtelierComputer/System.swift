@@ -289,11 +289,19 @@ enum Apps {
   }
 
   @MainActor
-  static func hide(ids: [String]) -> [String] {
+  /// With a display, an app is hidden only when all its windows are on that display: macOS hides an app as a whole, and
+  /// a window of it on another monitor must stay where the person has it.
+  static func hide(ids: [String], display: CGDirectDisplayID? = nil) -> [String] {
     var hidden: [String] = []
+    let bounds = display.map { CGDisplayBounds($0) }
+    let windows = bounds == nil ? [] : Windows.list(onScreenOnly: true).filter { $0.layer == 0 }
     for id in ids {
       var did = false
       for app in NSRunningApplication.runningApplications(withBundleIdentifier: id) where !app.isHidden {
+        if let bounds {
+          let own = windows.filter { $0.pid == app.processIdentifier }
+          if own.isEmpty || own.contains(where: { !bounds.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY)) }) { continue }
+        }
         if app.hide() { did = true }
       }
       if did && !hidden.contains(id) { hidden.append(id) }

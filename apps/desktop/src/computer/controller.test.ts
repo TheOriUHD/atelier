@@ -100,8 +100,14 @@ let helper: FakeHelper;
 let events: { sessionId: string; event: ControllerEvent }[];
 let overlay: string[];
 let controller: ComputerController;
+/** Whether another monitor takes Atelier's windows (the test's `windows.moveAway` answer). */
+let otherMonitor: boolean;
+/** What happened to Atelier's windows: stepped aside, moved, brought forward, asking for attention. */
+let wins: string[];
 
 beforeEach(async () => {
+  otherMonitor = false;
+  wins = [];
   dir = mkdtempSync(join(tmpdir(), 'atelier-computer-'));
   settingsPath = join(dir, 'computer-use.json');
   helper = new FakeHelper();
@@ -112,7 +118,14 @@ beforeEach(async () => {
     hasHelper: true,
     settingsPath,
     overlay: { show: () => overlay.push('show'), hide: () => overlay.push('hide'), esc: (phase) => overlay.push(`esc:${phase}`), paused: (on) => overlay.push(`paused:${on}`) },
-    windows: { hide() {}, restore() {}, focus: () => overlay.push('focus') },
+    windows: {
+      hide: (display) => wins.push(`hide:${display?.id ?? 'all'}`),
+      restore() {},
+      focus: () => (overlay.push('focus'), wins.push('focus')),
+      moveAway: (display) => (wins.push(`moveAway:${display.id}`), otherMonitor),
+      moveBack: () => wins.push('moveBack'),
+      attention: () => wins.push('attention'),
+    },
     event: (_backend, sessionId, event) => events.push({ sessionId, event }),
     changed() {},
     platform: 'darwin',
@@ -199,7 +212,7 @@ describe('full control', () => {
     expect(await ask('control.request', {})).toEqual({ granted: true });
     expect(overlay).toContain('show');
     // Others are hidden while it works (not the allowed app, never the system's).
-    expect(helper.did('apps.hide')[0]?.params).toEqual({ ids: ['com.apple.Safari', 'com.apple.Terminal', 'com.apple.mail', 'com.apple.Notes', 'com.1password.1password'] });
+    expect(helper.did('apps.hide')[0]?.params).toEqual({ ids: ['com.apple.Safari', 'com.apple.Terminal', 'com.apple.mail', 'com.apple.Notes', 'com.1password.1password'], display: '1' });
     // One conversation at a time.
     await controller.grant('local', 's2', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
     expect(await ask('control.request', {}, 's2')).toMatchObject({ granted: false, reason: /Another conversation/ });
@@ -382,8 +395,9 @@ describe('full control', () => {
     helper.front = APPS[1]!;
     await ask('turn.wait', { kind: 'permission' });
     expect(helper.did('control.end')).toHaveLength(0);
-    // Atelier comes forward, where the card is, while it keeps the computer.
+    // Atelier comes forward, where the card is, while it keeps the computer (and says so if it can't).
     expect(overlay.at(-1)).toBe('focus');
+    expect(wins.slice(-2)).toEqual(['focus', 'attention']);
     expect(helper.did('apps.activate')).toHaveLength(1);
     // The person answers the card in Atelier, which takes the keyboard; the next batch brings Safari back first.
     helper.front = app('dev.atelier.app', 'Atelier');
@@ -392,6 +406,47 @@ describe('full control', () => {
     // A question ends it: the person answers, the agent waits.
     await ask('turn.wait', { kind: 'question' });
     expect(helper.did('control.end')).toHaveLength(1);
+  });
+
+  it('brings Atelier forward for a question asked after it gave the mouse back, and says so where it can’t come forward', async () => {
+    await controller.settings((s) => ({ ...s, mode: 'full' }));
+    await ask('screenshot', { size: SIZE });
+    expect(await ask('control.request', {})).toEqual({ granted: true });
+    await ask('control.release', {});
+    wins.length = 0;
+    await ask('turn.wait', { kind: 'question' });
+    expect(wins).toEqual(['focus', 'attention']);
+    // A session that didn't touch the computer this turn leaves the windows alone.
+    await ask('turn.end', {});
+    wins.length = 0;
+    await ask('turn.wait', { kind: 'question' });
+    expect(wins).toEqual([]);
+  });
+
+  it('moves Atelier to another monitor while it has the computer, back when the turn ends, and not with the setting off', async () => {
+    await controller.settings((s) => ({ ...s, mode: 'full' }));
+    otherMonitor = true;
+    await ask('screenshot', { size: SIZE });
+    await ask('control.request', {});
+    expect(wins).toContain('moveAway:1');
+    // A question keeps it there, in view; the end of the turn brings it back.
+    await ask('turn.wait', { kind: 'question' });
+    expect(wins).not.toContain('moveBack');
+    await ask('turn.end', {});
+    expect(wins.at(-1)).toBe('moveBack');
+    wins.length = 0;
+    await controller.settings((s) => ({ ...s, moveAway: false }));
+    await ask('screenshot', { size: SIZE });
+    await ask('control.request', {});
+    expect(wins.filter((o) => o.startsWith('moveAway'))).toEqual([]);
+  });
+
+  it('hides other apps and steps Atelier aside only on the monitor it works on', async () => {
+    await ready([{ id: 'com.apple.TextEdit', tier: 'full' }]);
+    const hid = helper.did('apps.hide');
+    expect(hid.length).toBeGreaterThan(0);
+    expect(hid.every((c) => (c.params as { display?: string }).display === '1')).toBe(true);
+    expect(wins).toContain('hide:1');
   });
 
   it('hands the computer back for any card in Background', async () => {
@@ -572,7 +627,7 @@ describe('on Windows', () => {
       hasHelper: true,
       settingsPath,
       overlay: { show() {}, hide() {}, esc() {}, paused() {} },
-      windows: { hide() {}, restore() {}, focus() {} },
+      windows: { hide() {}, restore() {}, focus() {}, moveAway: () => false, moveBack() {}, attention() {} },
       event() {},
       changed() {},
       platform: 'win32',
@@ -606,7 +661,7 @@ describe('on Linux', () => {
         paused() {},
         capturing: async (on) => void log.push(`capturing:${on}`),
       },
-      windows: { hide() {}, restore() {}, focus() {} },
+      windows: { hide() {}, restore() {}, focus() {}, moveAway: () => false, moveBack() {}, attention() {} },
       event() {},
       changed() {},
       platform: 'linux',

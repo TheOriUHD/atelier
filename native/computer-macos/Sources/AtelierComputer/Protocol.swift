@@ -270,6 +270,8 @@ public struct AppsOpenParams: Codable, Sendable {
 
 public struct AppsHideParams: Codable, Sendable {
   public var ids: [String]
+  /// Only what is on this display (its id): the person's other monitors are left alone.
+  public var display: String?
 }
 
 /// A running app by its process: Atelier itself (main's pid), which has no bundle id worth trusting in development.

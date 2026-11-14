@@ -39,7 +39,8 @@ type System interface {
 	Apps(installed bool) ([]proto.App, error)
 	Frontmost() (*proto.App, error)
 	OpenApp(id string, activate bool) (proto.App, error)
-	HideApps(ids []string) ([]string, error)
+	// HideApps minimizes those apps' windows; with a display id, only the ones on that display.
+	HideApps(ids []string, display string) ([]string, error)
 	UnhideApps(ids []string) error
 	Activate(pid int) (bool, error)
 	Capture(req CaptureRequest) (proto.CaptureResult, error)
@@ -216,7 +217,14 @@ func (h *Helper) register() {
 		if err != nil {
 			return nil, err
 		}
-		hidden, err := sys.HideApps(ids)
+		// Optional: only the windows on the display the agent works on; the person's other monitors are left alone.
+		display := ""
+		if p.Has("display") {
+			if display, err = p.String("display"); err != nil {
+				return nil, err
+			}
+		}
+		hidden, err := sys.HideApps(ids, display)
 		if err != nil {
 			return nil, err
 		}

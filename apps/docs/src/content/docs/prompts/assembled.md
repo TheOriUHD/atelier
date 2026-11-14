@@ -32,14 +32,14 @@ prompts or replies.
 | [`chat.full.personalization`](/prompts/assembled/chat.full.personalization.txt) | Chat with a name, a response style and the person’s own instructions. | 34 KB |
 | [`chat.compact`](/prompts/assembled/chat.compact.txt) | Chat, compact tier. | 14 KB |
 | [`chat.compact.prompted`](/prompts/assembled/chat.compact.prompted.txt) | Chat, compact tier, for a model that calls tools through text (prompted tool calls). | 11 KB |
-| [`chat.full.sandbox`](/prompts/assembled/chat.full.sandbox.txt) | Chat with a conversation sandbox, where its file and command tools run until it has a folder. | 50 KB |
+| [`chat.full.sandbox`](/prompts/assembled/chat.full.sandbox.txt) | Chat with a conversation sandbox, where its file and command tools run until it has a folder. | 51 KB |
 | [`chat.compact.sandbox`](/prompts/assembled/chat.compact.sandbox.txt) | Chat, compact tier, with a conversation sandbox. | 21 KB |
 | [`chat.full.folder`](/prompts/assembled/chat.full.folder.txt) | Chat given one of the person’s folders: the file and command tools work there. | 51 KB |
 | [`chat.full.memory`](/prompts/assembled/chat.full.memory.txt) | Chat for a person with memory, with the memory tools and digest. | 43 KB |
 | [`chat.full.memory-explicit`](/prompts/assembled/chat.full.memory-explicit.txt) | Chat with memory where “Generate memory from chats” and chat search are off. | 40 KB |
 | [`chat.compact.memory`](/prompts/assembled/chat.compact.memory.txt) | Chat, compact tier, with memory. | 20 KB |
 | [`chat.full.computer`](/prompts/assembled/chat.full.computer.txt) | Chat in the desktop app with computer use on: the computer use tools. | 60 KB |
-| [`chat.full.browser`](/prompts/assembled/chat.full.browser.txt) | Chat with computer use on and Atelier for Chrome connected: the Browser tool. | 63 KB |
+| [`chat.full.browser`](/prompts/assembled/chat.full.browser.txt) | Chat with computer use on and Atelier for Chrome connected: the Browser tool. | 64 KB |
 | [`chat.full.images`](/prompts/assembled/chat.full.images.txt) | Chat with an image model: GenerateImage and how to use it. | 40 KB |
 | [`code.full.images`](/prompts/assembled/code.full.images.txt) | Code with an image model: GenerateImage and SaveImage. | 58 KB |
 | [`code.compact.images`](/prompts/assembled/code.compact.images.txt) | Code, compact tier, with an image model: the shorter GenerateImage schema. | 24 KB |

@@ -61,6 +61,11 @@ export const ComputerSettings = z.object({
   mode: ComputerMode.default('background'),
   /** Apps hidden while it had full control are shown again when it lets go. */
   unhideOnFinish: z.boolean().default(true),
+  /**
+   * With more than one monitor, Atelier's windows move to one it isn't working on while it has the mouse and keyboard
+   * (its progress and questions stay in view), and come back when the turn ends.
+   */
+  moveAway: z.boolean().default(true),
   /** Apps it may never use: asking for them is turned down without a question. */
   denied: z.array(ComputerApp).max(500).default([]),
   /** Apps allowed for good ("Always allow on this computer"), per backend: `local`, or a server's URL. */
@@ -163,6 +168,8 @@ export interface AppsOpenParams {
 
 export interface AppsHideParams {
   ids: string[];
+  /** Only the windows on this display (its id): the person's other monitors are left alone. */
+  display?: string;
 }
 
 /** `ids`: the apps this call hid (not those already hidden), for `apps.unhide` afterwards. */

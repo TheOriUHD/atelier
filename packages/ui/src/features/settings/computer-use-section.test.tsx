@@ -26,7 +26,7 @@ const status = (patch: Partial<ComputerStatus>): ComputerStatus => ({
   session: 'x11',
   permissions: { accessibility: true, screenRecording: true },
   background: false,
-  settings: { enabled: true, mode: 'background', unhideOnFinish: true, denied: [{ id: 'keepassxc', name: 'KeePassXC' }], always: {} },
+  settings: { enabled: true, mode: 'background', unhideOnFinish: true, moveAway: true, denied: [{ id: 'keepassxc', name: 'KeePassXC' }], always: {} },
   control: null,
   ...patch,
 });

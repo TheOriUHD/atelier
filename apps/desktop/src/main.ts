@@ -3,7 +3,7 @@
  * All application logic runs in a utility process: the embedded backend (backend.ts), or in server mode
  * a relay to the Atelier server (remote.ts).
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, powerSaveBlocker, protocol, safeStorage, session, shell, systemPreferences, utilityProcess, webContents, type UtilityProcess, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, Notification, powerSaveBlocker, protocol, safeStorage, screen, session, shell, systemPreferences, utilityProcess, webContents, type UtilityProcess, type WebContents } from 'electron';
 import { AppWindows } from './app-windows.ts';
 import { shortcutIcon, windowIconOption } from './app-icon.ts';
 import { fileExists, repairShortcuts, shortcutPaths } from './shortcuts.ts';
@@ -37,6 +37,7 @@ import { startBrowserBridge, type BrowserBridge } from './browser/bridge.ts';
 import { ComputerHelper } from './computer/helper.ts';
 import { createOverlay, type ScreenOverlay } from './computer/overlay.ts';
 import { stepAside, stepBack } from './computer/step-aside.ts';
+import { displayFor, isOn, moveAway, moveBack, type Moved } from './computer/move-away.ts';
 import { collectDesktopDiagnostics } from './diagnostics.ts';
 import { describe, logMain, openMainLog, readMainLogTail } from './main-log.ts';
 import {
@@ -254,6 +255,8 @@ const macPermissions = process.platform === 'darwin' && !process.env.ATELIER_COM
 
 /** Atelier's windows that stepped aside while it has the computer, to bring back after. */
 let steppedAside: BrowserWindow[] = [];
+/** Atelier's windows moved to another monitor while it works, with where they were. */
+let movedAway: Moved[] = [];
 // A test run with hidden windows doesn't light up the screen of the computer running it.
 const screenOverlay: ScreenOverlay = process.env.ATELIER_HIDE_WINDOW ? { show() {}, hide() {}, esc() {}, paused() {}, owns: () => false } : createOverlay();
 const appWindows = new AppWindows<BrowserWindow>();
@@ -268,9 +271,42 @@ const computer = new ComputerController({
   settingsPath: computerSettingsFile(),
   overlay: screenOverlay,
   windows: {
-    hide: () => {
-      steppedAside = stepAside(atelierWindows(), process.platform);
+    hide: (display) => {
+      // Only those on the monitor it works on: a window on another monitor is in nobody's way.
+      const on = display ? displayFor(screen, display, process.platform) : null;
+      steppedAside = stepAside(atelierWindows().filter((win) => !on || isOn(screen, win, on)), process.platform);
       logMain(`computer use: ${steppedAside.length} window(s) stepped aside`);
+    },
+    moveAway: (display) => {
+      const moved = moveAway(screen, atelierWindows(), displayFor(screen, display, process.platform));
+      if (!moved) return false;
+      movedAway = [...movedAway, ...moved];
+      logMain(`computer use: ${moved.length} window(s) moved to another monitor`);
+      return true;
+    },
+    moveBack: () => {
+      moveBack(movedAway);
+      movedAway = [];
+    },
+    attention: (message) => {
+      const win = atelierWindows()[0];
+      // A test run's window stays hidden, and a window in front needs nothing more.
+      if (!win || process.env.ATELIER_HIDE_WINDOW || win.isFocused()) return;
+      // Windows won't let an app in the background take the front (a full-screen game keeps it): the taskbar button
+      // flashes, the Dock bounces, and a notification says what waits. Clicking it brings Atelier forward.
+      win.flashFrame(true);
+      win.once('focus', () => win.flashFrame(false));
+      if (process.platform === 'darwin') app.dock?.bounce('critical');
+      if (Notification.isSupported()) {
+        const note = new Notification({ title: APP.name, body: message });
+        note.on('click', () => {
+          if (win.isDestroyed()) return;
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+        });
+        note.show();
+      }
     },
     restore: () => {
       stepBack(steppedAside);
@@ -682,7 +718,7 @@ function registerComputerIpc(): void {
   ipcMain.handle('browserExtension:status', () => ({ ...(browserBridge?.status() ?? { connected: false, problem: 'Atelier for Chrome isn’t available in this app.' }), extensionDir: browserExtensionDir }));
   ipcMain.handle('browserExtension:reveal', () => shell.showItemInFolder(join(browserExtensionDir, 'manifest.json')));
   ipcMain.handle('computer:settings', (_e, input: unknown) => {
-    const patch = z.object({ enabled: z.boolean().optional(), mode: ComputerMode.optional(), unhideOnFinish: z.boolean().optional() }).strict().parse(input);
+    const patch = z.object({ enabled: z.boolean().optional(), mode: ComputerMode.optional(), unhideOnFinish: z.boolean().optional(), moveAway: z.boolean().optional() }).strict().parse(input);
     return computer.settings((s) => ({ ...s, ...patch }));
   });
   ipcMain.handle('computer:deny', (_e, input: unknown) => {

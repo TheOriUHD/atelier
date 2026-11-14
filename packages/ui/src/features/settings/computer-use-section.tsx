@@ -62,6 +62,9 @@ export function ComputerUseSection() {
           <SettingRow id="system.computerUnhide" error={error}>
             {(label) => <Switch {...label} checked={settings.unhideOnFinish} onCheckedChange={(on) => change(() => computer.settings({ unhideOnFinish: on }))} />}
           </SettingRow>
+          <SettingRow id="system.computerMoveAway" error={error}>
+            {(label) => <Switch {...label} checked={settings.moveAway} onCheckedChange={(on) => change(() => computer.settings({ moveAway: on }))} />}
+          </SettingRow>
           <SettingRow id="system.computerMode" error={error} detail={status.background ? undefined : NO_BACKGROUND}>
             {(label) => <SegmentedControl {...label} items={modes(status.background)} value={settings.mode} onValueChange={(mode) => change(() => computer.settings({ mode }))} />}
           </SettingRow>

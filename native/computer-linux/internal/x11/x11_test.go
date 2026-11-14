@@ -267,7 +267,7 @@ func TestHideAndUnhideMinimizeAndRestore(t *testing.T) {
 	}
 	xterm(t, "hide-app", "sleep 30")
 	waitFor(t, "the xterm", func() bool { _, ok := appNamed(s, "hide-app"); return ok })
-	done, err := s.HideApps([]string{"hide-app"})
+	done, err := s.HideApps([]string{"hide-app"}, "")
 	if err != nil || len(done) != 1 {
 		t.Fatalf("hide: %v %v", done, err)
 	}

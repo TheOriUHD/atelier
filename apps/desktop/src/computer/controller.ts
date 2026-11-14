@@ -53,10 +53,17 @@ export interface ControllerDeps {
   overlay: Overlay;
   /** Atelier's own windows step aside when it takes over from Background (they would be in the way of clicks), and come back. */
   windows: {
-    hide(): void;
+    /** Steps aside Atelier's windows on that display (the one it works on); those on other monitors stay. */
+    hide(display: HelperDisplay | null): void;
     restore(): void;
     /** Shows a window of Atelier's in front (making Atelier the active app is the helper's part). */
     focus(): void;
+    /** Moves Atelier's windows on that display to another monitor; false when there is no other (nothing moved). */
+    moveAway(display: HelperDisplay): boolean;
+    /** Puts the windows `moveAway` moved back as they were. */
+    moveBack(): void;
+    /** The person must answer: when Atelier couldn't come to the front, its taskbar button flashes and a notification says why. */
+    attention(message: string): void;
   };
   /** Tells the backend that owns a session: the person held Esc, or took the mouse back. */
   event(backend: string, sessionId: string, event: ControllerEvent): void;
@@ -87,6 +94,8 @@ interface SessionState {
   target: string | null;
   /** The person held Esc: the computer is theirs until this turn ends. */
   takenBack: boolean;
+  /** It looked at or used the computer this turn: a question it asks after giving the mouse back still brings Atelier forward. */
+  used?: boolean;
   /** Background: the controls of the latest screenshot, for actions aimed at an `element`. */
   elements?: ScreenshotElement[];
   /** Background: the app it opened last and when, so a screenshot right after waits for its first window. */
@@ -198,6 +207,10 @@ export class ComputerController {
   private control: Control | null = null;
   private apps: { at: number; list: HelperApp[] } | null = null;
   private writes: Promise<unknown> = Promise.resolve();
+  /** The display of the latest full-screen screenshot: the monitor it works on. */
+  private working: HelperDisplay | null = null;
+  /** Atelier's windows are on another monitor while it works (`windows.moveAway`), until the turn ends. */
+  private movedAway = false;
   /** Secure input is on (a password field somewhere): typing is refused, the Esc watch is blind. */
   private secureInput = false;
   /**
@@ -312,6 +325,7 @@ export class ComputerController {
       if (method === 'control.request') return { granted: false, reason: TAKEN_BACK } as ControllerMethods[M]['result'];
       throw new Error(TAKEN_BACK);
     }
+    if (USES_COMPUTER.has(method)) this.session(backend, sessionId).used = true;
     const run = this.methods(backend, sessionId, settings) as unknown as Record<string, (p: unknown) => Promise<unknown>>;
     const handler = run[method];
     if (!handler) throw new Error(`Unknown computer use request ${method}.`);
@@ -320,6 +334,7 @@ export class ComputerController {
 
   async dispose(): Promise<void> {
     if (this.control) await this.end(this.control, { unhide: true });
+    if (this.movedAway) this.deps.windows.moveBack();
     await this.deps.helper.shutdown();
   }
 
@@ -402,6 +417,7 @@ export class ComputerController {
         const target = await this.display(display);
         const shot = await this.capture(target, policy, size).catch((e: unknown) => Promise.reject(new Error(helperMessage(e))));
         state().frame = { rect: shot.rect, width: shot.width, height: shot.height };
+        this.working = target;
         const note = policy.full ? 'The screen as the person sees it; their denied apps are left out.' : 'Only the apps you may use are shown.';
         return { data: shot.data, mime: shot.mime, width: shot.width, height: shot.height, display: target.name, note };
       },
@@ -459,6 +475,12 @@ export class ComputerController {
       'turn.end': async () => {
         if (this.control?.key === key) await this.end(this.control, { focus: true });
         state().takenBack = false;
+        state().used = false;
+        // Atelier's windows come back to the monitor they were on, now that nothing works on it.
+        if (this.movedAway && !this.control) {
+          this.movedAway = false;
+          this.deps.windows.moveBack();
+        }
         await this.reopen();
         // What background work turned on in apps (Chromium's page accessibility) goes off until it is needed again, and
         // the software cursor goes.
@@ -471,17 +493,22 @@ export class ComputerController {
       },
       'turn.wait': async ({ kind }: ControllerMethods['turn.wait']['params']) => {
         const control = this.control;
-        if (control?.key !== key) return {};
+        if (control?.key !== key) {
+          // It gave the mouse back already (or worked in the background): what it opened may still cover Atelier, where
+          // the question is, so Atelier comes forward all the same.
+          if (state().used) await this.focusAtelier(true);
+          return {};
+        }
         // Full control keeps the computer through a permission card (Atelier stays on screen there); anything else the
         // person must answer, and Background (its windows stepped aside), hands it back.
         // Either way Atelier comes to the front, where the card is.
         if (settings.mode === 'full' && kind === 'permission') {
           const { app } = await this.deps.helper.call('apps.frontmost', {});
           control.front = app && appCategory(app.id) !== 'system' ? app.id : null;
-          await this.focusAtelier();
+          await this.focusAtelier(true);
           return {};
         }
-        await this.end(control, { focus: true });
+        await this.end(control, { focus: true, waiting: true });
         return {};
       },
       // (A background session has nothing to hand back: it never had the mouse and keyboard.)
@@ -634,6 +661,12 @@ export class ComputerController {
     if (this.deps.platform === 'darwin') await helper.call('bg.cursorHide', {}).catch(() => undefined);
     this.deps.overlay.show();
     this.deps.changed();
+    // The monitor it works on: the one of its latest screenshot, else the main one. Everything it moves or hides is on
+    // that monitor; the person's other monitors are left as they are.
+    const display = this.working ?? (await this.display().catch(() => null));
+    // With another monitor (and the setting on), Atelier's windows go there and stay in view.
+    const moved = !!display && settings.moveAway && this.deps.windows.moveAway(display);
+    if (moved) this.movedAway = true;
     // Full control takes the computer as it is. In Background only the allowed apps stay in view, and Atelier's own
     // windows too step aside, until it's done.
     if (settings.mode === 'full') return;
@@ -642,9 +675,9 @@ export class ComputerController {
     // Every app it asked to hide is shown again afterwards, whatever the hide call reported.
     if (others.length) {
       control.hidden = others.map((a) => a.id);
-      await helper.call('apps.hide', { ids: control.hidden });
+      await helper.call('apps.hide', { ids: control.hidden, ...(display ? { display: display.id } : {}) });
     }
-    this.deps.windows.hide();
+    if (!moved) this.deps.windows.hide(display);
   }
 
   /**
@@ -655,7 +688,7 @@ export class ComputerController {
    * `unhide`: show the apps it hid whatever the setting says (computer use turned off, the app quitting). `focus`: bring
    * Atelier to the front (the task is done, or it asks the person something).
    */
-  private async end(control: Control, { unhide = false, focus = false }: { unhide?: boolean; focus?: boolean } = {}): Promise<void> {
+  private async end(control: Control, { unhide = false, focus = false, waiting = false }: { unhide?: boolean; focus?: boolean; waiting?: boolean } = {}): Promise<void> {
     if (this.control !== control) return;
     this.control = null;
     const helper = this.deps.helper;
@@ -665,14 +698,18 @@ export class ComputerController {
     this.deps.windows.restore();
     const settings = await readComputerSettings(this.deps.settingsPath);
     if (control.hidden.length && (settings.unhideOnFinish || unhide)) await helper.call('apps.unhide', { ids: control.hidden }).catch(() => undefined);
-    if (focus) await this.focusAtelier();
+    if (focus) await this.focusAtelier(waiting);
     this.deps.changed();
   }
 
-  /** Atelier in front: its window shown, and the app made active through the helper (macOS 14+ ignores its own ask). */
-  private async focusAtelier(): Promise<void> {
+  /**
+   * Atelier in front: its window shown, and the app made active through the helper (macOS 14+ ignores its own ask).
+   * `asking`: the person must answer, so where it couldn't come to the front (a full-screen game keeps it) it says so.
+   */
+  private async focusAtelier(asking = false): Promise<void> {
     this.deps.windows.focus();
     await this.deps.helper.call('apps.activate', { pid: process.pid }).catch(() => undefined);
+    if (asking) this.deps.windows.attention('Atelier is waiting for your answer.');
   }
 
   private notified(n: ComputerNotification): void {

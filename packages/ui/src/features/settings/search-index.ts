@@ -603,6 +603,14 @@ export const SETTINGS_INDEX = [
     available: () => !!desktop?.computer,
   },
   {
+    id: 'system.computerMoveAway',
+    page: 'computer',
+    label: 'Move Atelier to another monitor',
+    description: 'With more than one monitor, Atelier moves to one the assistant isn’t working on while it uses your mouse and keyboard, so you see its progress and questions there. It comes back when the reply ends.',
+    keywords: ['computer use', 'monitor', 'display', 'screen', 'second screen', 'move', 'window', 'full control'],
+    available: () => !!desktop?.computer,
+  },
+  {
     id: 'system.computerMode',
     page: 'computer',
     label: 'How Atelier uses the apps you allow',

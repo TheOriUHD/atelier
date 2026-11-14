@@ -340,9 +340,23 @@ func onCOMThread(sta bool, f func() error) error {
 	return <-done
 }
 
-// HideApps minimizes every visible window of those apps, and remembers exactly which, for UnhideApps.
-func (s *System) HideApps(ids []string) ([]string, error) {
+// HideApps minimizes every visible window of those apps (with a display id, only those whose middle is on that
+// display), and remembers exactly which, for UnhideApps.
+func (s *System) HideApps(ids []string, display string) ([]string, error) {
 	_, wins := s.runningApps(newProcCache())
+	var on *proto.Display
+	if display != "" {
+		for _, d := range listDisplays() {
+			if strings.EqualFold(d.ID, display) {
+				d := d
+				on = &d
+				break
+			}
+		}
+		if on == nil {
+			return nil, rpc.NotFound("no display %s", display)
+		}
+	}
 	var hidden []string
 	s.hiddenMu.Lock()
 	defer s.hiddenMu.Unlock()
@@ -350,7 +364,7 @@ func (s *System) HideApps(ids []string) ([]string, error) {
 		key := strings.ToLower(id)
 		did := false
 		for _, w := range wins[key] {
-			if w.iconic {
+			if w.iconic || (on != nil && !onDisplay(w.rect, *on)) {
 				continue
 			}
 			// Async: a hung app must not hold this up.
@@ -531,4 +545,10 @@ func containsString(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// onDisplay says whether a window's middle is on the display (both in the same screen coordinates).
+func onDisplay(r rect, d proto.Display) bool {
+	x, y := float64(r.Left+r.Right)/2, float64(r.Top+r.Bottom)/2
+	return x >= d.X && x < d.X+d.Width && y >= d.Y && y < d.Y+d.Height
 }

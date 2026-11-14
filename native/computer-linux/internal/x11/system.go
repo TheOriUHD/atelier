@@ -371,7 +371,20 @@ func (s *System) Activate(pid int) (bool, error) {
 
 // HideApps minimizes the apps' windows: the window manager is asked as a minimize button would. Without a window manager
 // the windows are unmapped (and mapped again by UnhideApps).
-func (s *System) HideApps(ids []string) ([]string, error) {
+func (s *System) HideApps(ids []string, display string) ([]string, error) {
+	var on *proto.Display
+	if display != "" {
+		for _, d := range s.c.Displays() {
+			if strings.EqualFold(d.ID, display) {
+				d := d
+				on = &d
+				break
+			}
+		}
+		if on == nil {
+			return nil, rpc.NotFound("no display %s", display)
+		}
+	}
 	snap := s.c.Snapshot()
 	byID, _ := s.runningApps(snap)
 	wm := s.c.hasWM()
@@ -385,7 +398,8 @@ func (s *System) HideApps(ids []string) ([]string, error) {
 		}
 		var moved []xproto.Window
 		for _, w := range r.windows {
-			if w.Iconic {
+			// With a display: only the windows whose middle is on it.
+			if w.Iconic || (on != nil && !onDisplay(w.Rect, *on)) {
 				continue
 			}
 			if wm {
@@ -545,4 +559,10 @@ func (s *System) InspectFocused() (proto.InspectResult, error) {
 		el, _ = s.access.Focused()
 	}
 	return inspect.Describe(el, app), nil
+}
+
+// onDisplay says whether a window's middle is on the display (both in the root's coordinates).
+func onDisplay(r region.Rect, d proto.Display) bool {
+	x, y := float64(r.X0+r.X1)/2, float64(r.Y0+r.Y1)/2
+	return x >= d.X && x < d.X+d.Width && y >= d.Y && y < d.Y+d.Height
 }

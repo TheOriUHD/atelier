@@ -150,11 +150,20 @@ has them:
 
 - a soft clay glow runs along the edges of every screen, and a small panel below the menu bar says **Atelier is using
   your computer · Hold Esc to stop**;
-- when it took them from Background, apps it wasn't allowed are hidden, and Atelier's own windows step aside: hidden on macOS, minimized to the taskbar on Windows; **Unhide
-  apps when Atelier finishes** (on by default) shows them again afterwards. Full control hides nothing;
+- with more than one monitor, Atelier's windows move to a monitor it isn't working on, where you keep seeing its
+  progress and its questions, and come back when the reply ends. **Settings › Computer use › Move Atelier to another
+  monitor** (on by default) turns this off;
+- when it took them from Background, apps it wasn't allowed are hidden, and Atelier's own windows step aside (unless
+  they moved to another monitor): hidden on macOS, minimized to the taskbar on Windows. Only what is on the monitor it
+  works on is touched; your other monitors stay as they are (on macOS, where an app hides as a whole, an app with a
+  window on another monitor isn't hidden). **Unhide apps when Atelier finishes** (on by default) shows them again
+  afterwards. Full control hides nothing;
 - it keeps them for the whole task and gives them back when it is done (as it writes its reply), when it asks you a
-  question, or when you stop it. When it is done or asks you something, Atelier comes back to the front. In Full control a permission prompt doesn't end it: it waits for your answer and
-  carries on. In Background any card hands them back.
+  question, or when you stop it. When it is done or asks you something, Atelier comes back to the front, also when it
+  already gave the mouse back earlier in the reply. Where the system doesn't let it come forward (a full-screen game
+  keeps the front), its taskbar button flashes (the Dock icon bounces on macOS) and a notification says it is waiting
+  for your answer. In Full control a permission prompt doesn't end it: it waits for your answer and carries on. In
+  Background any card hands them back.
 
 In **Background** it only takes them for what can't be done in the background, after a card asks **Let Atelier take
 over your mouse and keyboard?** **Allow** is for this conversation; **Always allow** switches the setting to Full
