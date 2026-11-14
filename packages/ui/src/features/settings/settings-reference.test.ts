@@ -16,7 +16,7 @@ const FILE = join(import.meta.dirname, '../../../../../apps/docs/src/content/doc
 const EXTRA: Record<string, string> = {
   'appearance.theme': 'Light, Dark, or System (follow the operating system).',
   'appearance.chatFont': 'Atelier Serif, Atelier Sans, System, or OpenDyslexic.',
-  'usage.byDay': 'A chart of tokens per day, split by Chat, Cowork and Code.',
+  'usage.byDay': 'A chart of tokens per day, split by Chat and Code.',
   'system.updates': 'Where an update stands, with **Check now**, which looks for a new version right away. See [Updates](/updates/).',
   'system.version': 'The version of the desktop app you are running.',
   'models.aliases.opus': 'Which of your models answers when an agent file asks for `opus`. See [Models](/models/).',

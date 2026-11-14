@@ -4,6 +4,16 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Docs caught up with Chat and Cowork being one.**
+  - The prompt pages no longer describe Cowork as a mode, and the old Cowork prompt files are gone (old Cowork tasks already used Chat's).
+  - `/prompts/cowork/` now leads to the Chat prompt instead of a 404.
+  - The usage chart counts old Cowork tasks as Chat.
+- **Docs checks.** The docs check now refuses a retired feature named as current (a page saying "Open Cowork…") and a redirect to a missing page. The release runs these checks before it publishes anything, not only when the docs are deployed.
+- **Docs additions.**
+  - Three reading paths on the docs home: getting productive, building with agents, running your own setup.
+  - A "What works where" page: desktop, server, browser and terminal; what needs a capable model; each OS; unofficial integrations.
+  - On Providers, what can go stale, and when each provider was last checked against the live service.
+
 ## [0.9.1] — 2026-11-14
 
 - **Reports, easier to reach and tidier.**

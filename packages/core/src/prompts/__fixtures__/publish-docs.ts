@@ -121,7 +121,7 @@ ${verbatim('fragments/search.full', 'Web search', 'The searching and citing guid
 
 ${verbatim('fragments/search.compact', 'Web search (compact tier)')}
 
-${verbatim('fragments/no-search', 'Web search switched off', 'Chat and Cowork without WebSearch (an administrator turned it off; it is on by default):')}
+${verbatim('fragments/no-search', 'Web search switched off', 'Chat without WebSearch (an administrator turned it off; it is on by default):')}
 
 ${verbatim('fragments/artifacts.full', 'Artifacts', 'Joined when the session has the artifact tool (Chat). Full tier:')}
 
@@ -135,7 +135,7 @@ ${verbatim('safeguards.full', 'Optional safeguards', 'Atelier adds nothing of th
 
 ${verbatim('safeguards.compact', 'Optional safeguards (compact tier)')}
 
-${verbatim('strings/instructions-header', 'Instruction files header', 'The text above the instruction files in Code and Cowork (and above the administrator’s instructions in Chat). It says where the instructions come from and how they rank when they conflict.')}
+${verbatim('strings/instructions-header', 'Instruction files header', 'The text above the instruction files in Code and in a chat with a folder (and above the administrator’s instructions in any chat). It says where the instructions come from and how they rank when they conflict.')}
 `;
   return page(
     'Shared prompts',
@@ -206,19 +206,19 @@ export const NOTE_WHEN: Record<string, { group: string; when: string }> = {
   'audio-models': { group: 'Capabilities', when: 'A session with GenerateAudio: the first turn, and when the sound models it can use, their voices or the person’s choices change.' },
   'safeguards-changed': { group: 'Capabilities', when: 'Safeguards were turned on or changed.' },
   'workspace-settings-changed': { group: 'Capabilities', when: 'Safeguards were turned off (neutral wording; it does not claim anything is lifted).' },
-  refresher: { group: 'Long conversations', when: 'Right after a compaction, once per compaction cycle past 60% of the window, and every 30 person turns in Chat and Cowork; repeats style guidance and lists open tasks.' },
+  refresher: { group: 'Long conversations', when: 'Right after a compaction, once per compaction cycle past 60% of the window, and every 30 person turns in Chat; repeats style guidance and lists open tasks.' },
   'after-compaction': { group: 'Long conversations', when: 'On every compaction summary: the announced state restated, the approved plan, recently loaded skills and the files read most recently.' },
   'output-cut': { group: 'Long conversations', when: 'A reply stopped at the output limit; the loop carries on once, after this note.' },
   'restart-continue': { group: 'Long conversations', when: 'Atelier restarted while a reply was being written and the person asked it to continue.' },
-  'todo-nudge': { group: 'Tool loops', when: 'Code and Cowork: ten tool calls without a TodoWrite while the task list has unfinished items. Rides on a tool result.' },
-  'instructions-nested': { group: 'Tool loops', when: 'Code and Cowork: the first file tool call in or under a folder that has its own instruction file. Rides on a tool result.' },
+  'todo-nudge': { group: 'Tool loops', when: 'Code, and a chat working as a task: ten tool calls without a TodoWrite while the task list has unfinished items. Rides on a tool result.' },
+  'instructions-nested': { group: 'Tool loops', when: 'Code, and a chat working as a task: the first file tool call in or under a folder that has its own instruction file. Rides on a tool result.' },
   'message-while-working': { group: 'Tool loops', when: 'The person sent a message while the model was working; it joins at the next step.' },
   'message-interrupt': { group: 'Tool loops', when: 'The person pressed Send now: the message interrupted the work in progress.' },
-  'background-agent': { group: 'Agents and sessions', when: 'Code and Cowork: a sub-agent started with run_in_background ended. Carries its task, how it ended and its result.' },
-  'session-message': { group: 'Agents and sessions', when: 'Code and Cowork: another of the person’s sessions, the parent or a sub-agent sent a message.' },
+  'background-agent': { group: 'Agents and sessions', when: 'Code, and a chat working as a task: a sub-agent started with run_in_background ended. Carries its task, how it ended and its result.' },
+  'session-message': { group: 'Agents and sessions', when: 'Code, and a chat working as a task: another of the person’s sessions, the parent or a sub-agent sent a message.' },
   coop: { group: 'Agents and sessions', when: 'Co-op: the first turn of a shared session, and the next turn after someone joined or left. Names everyone in it and who hosts it.' },
-  'loop-tick': { group: 'Agents and sessions', when: 'Code and Cowork: a /loop sends its prompt again.' },
-  'folder-moved': { group: 'Agents and sessions', when: 'Code and Cowork: the person moved the session to another of their folders. Sent at once, as a note of its own; the system prompt is rebuilt for the next turn.' },
+  'loop-tick': { group: 'Agents and sessions', when: 'Code, and a chat working as a task: a /loop sends its prompt again.' },
+  'folder-moved': { group: 'Agents and sessions', when: 'Code, and a chat with a folder: the person moved the session to another of their folders. Sent at once, as a note of its own; the system prompt is rebuilt for the next turn.' },
   'side-chat': { group: 'Agents and sessions', when: 'Every request of a side chat (/btw): it was asked beside the main session, answers briefly and only reads.' },
 };
 
@@ -387,7 +387,8 @@ function designPage(): string {
 
 type ToolDefJson = { name: string; description: string; inputSchema?: Record<string, unknown>; input_schema?: Record<string, unknown> };
 
-const MODE_LABEL = { chat: 'Chat', work: 'Cowork', code: 'Code' } as const;
+// An old Cowork task (`work`) is a chat, with Chat's prompt and tools.
+const MODE_LABEL = { chat: 'Chat', work: 'Chat', code: 'Code' } as const;
 
 function schemaOf(tool: ToolDefJson): Record<string, unknown> {
   return (tool.inputSchema ?? tool.input_schema ?? {}) as Record<string, unknown>;
@@ -478,13 +479,13 @@ export async function collectTools(): Promise<ToolRecord[]> {
 
 function sessionLabel(caseName: string): string {
   const [mode, tier] = caseName.split('.');
-  const m = mode === 'chat' ? 'Chat' : mode === 'work' ? 'Cowork' : mode === 'code' ? 'Code' : mode;
+  const m = mode === 'chat' || mode === 'work' ? 'Chat' : mode === 'code' ? 'Code' : mode;
   return `${m}, ${tier} tier`;
 }
 
 function toolsPage(tools: ToolRecord[]): string {
   const availability = (t: ToolRecord) =>
-    ['Chat', 'Cowork', 'Code']
+    ['Chat', 'Code']
       .flatMap((m) => (t.modes.always.includes(m) ? [m] : t.modes.sometimes.includes(m) ? [`${m} (some setups)`] : []))
       .join(', ') || '—';
   const sections = tools

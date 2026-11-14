@@ -316,7 +316,7 @@ use Git for those. Checkpoints are kept for 30 days by default (**Settings › A
 
 ### Can Code work on another machine?
 
-Yes: over **SSH** from the desktop app running on this computer (**Add SSH connection…** in the environment chip's SSH menu;
+Yes: over **SSH** from the desktop app, on this computer or connected to a server (**Add SSH connection…** in the environment chip's SSH menu;
 your keys and `~/.ssh/config` work as with `ssh`), or in a **GitHub codespace**. Codespace support is implemented but has not
 been verified against a real account. In a browser, Code uses a folder lent by one of your desktop apps. See
 [Code](/code/) and [Remote control](/remote-control/).

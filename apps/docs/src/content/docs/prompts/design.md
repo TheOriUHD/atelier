@@ -15,7 +15,7 @@ how tests keep it honest. Architecture lives in `ARCHITECTURE.md` (§8 runtime, 
 
 ## 0. Principles
 
-1. **Same behaviour, own words.** Code should work the way a careful coding agent works, Chat and Cowork the way a
+1. **Same behaviour, own words.** Code should work the way a careful coding agent works, Chat the way a
    good assistant does: stay in scope, verify, report truthfully, keep git safe, delegate sensibly, format with
    restraint, search before citing. The prompts encode those behaviours in Atelier's sentences. Published
    prompts of other products are read only to check that nothing was copied (§10).
@@ -49,12 +49,12 @@ relative name override a template; overrides are read again when that folder cha
 
 | File | Use |
 |---|---|
-| `chat.full.md`, `chat.compact.md` | Chat core |
-| `work.full.md`, `work.compact.md` | Cowork core (internal mode `work`) |
+| `chat.full.md`, `chat.compact.md` | Chat core; old Cowork tasks (internal mode `work`) use it too |
+| `fragments/tasks.full.md`, `fragments/tasks.compact.md` | A chat working as a task: when it has `TodoWrite` and `Write` (§6) |
 | `code.full.md`, `code.compact.md` | Code core |
 | `subagent.md` | Core for every sub-agent without a prompt of its own |
 | `fragments/search.full.md`, `fragments/search.compact.md` | Searching and citing, when the session has `WebSearch` |
-| `fragments/no-search.md` | Chat and Cowork without `WebSearch` |
+| `fragments/no-search.md` | Chat without `WebSearch` |
 | `fragments/artifacts.full.md`, `fragments/artifacts.compact.md` | When the session has `artifact` (Chat; Code's cores say how to show work with it instead) |
 | `safeguards.full.md`, `safeguards.compact.md` | The optional safeguards block (§9) |
 | `notes/<key>.md` | One file per context note (§7) |
@@ -77,19 +77,19 @@ Numbered rules are numbered again after guards removed some.
 
 `buildSystemPrompt` (`src/prompts/builder.ts`) emits these blocks in order:
 
-| # | Block | Chat | Cowork | Code | Sub-agent |
-|---|---|---|---|---|---|
-| 1 | Core: `<mode>.<tier>`, `subagent`, or a defined agent's own prompt | ✓ | ✓ | ✓ | ✓ |
-| 2 | Fragments: search or no-search, then artifacts, then memory (with the memory tools) | ✓ | ✓ | search | search |
-| — | *cache breakpoint 1, on the last of 1–2* | | | | |
-| 3 | Safeguards, only when on for the person | ✓ | ✓ | ✓ | ✓ |
-| 4 | `<env>` | ✓ | ✓ | ✓ | ✓ |
-| 5 | Instructions: the administrator's text, then the instruction files (§1.5) | admin's text | ✓ | ✓ | ✓ |
-| 6 | `<available_skills>`, only with the Skill tool | ✓ | ✓ | ✓ | ✓ |
-| 7 | Personalization: name, response style, `<user_instructions>` | ✓ | ✓ | ✓ | — |
-| 7a | Memory digest, when they have memory (§5.4): Preferences as `<user_instructions source="memory">`, then `<memory>` background | ✓ | ✓ | — | — |
-| 8 | `<project>` | Chat projects | — | — | — |
-| — | *cache breakpoint 2, on the last block* | | | | |
+| # | Block | Chat | Code | Sub-agent |
+|---|---|---|---|---|
+| 1 | Core: `<mode>.<tier>`, `subagent`, or a defined agent's own prompt; a chat working as a task adds `fragments/tasks` | ✓ | ✓ | ✓ |
+| 2 | Fragments: search or no-search, then artifacts, then memory (with the memory tools) | ✓ | search | search |
+| — | *cache breakpoint 1, on the last of 1–2* | | | |
+| 3 | Safeguards, only when on for the person | ✓ | ✓ | ✓ |
+| 4 | `<env>` | ✓ | ✓ | ✓ |
+| 5 | Instructions: the administrator's text, then the instruction files (§1.5) | admin's text; the files too in a chat with a folder | ✓ | ✓ |
+| 6 | `<available_skills>`, only with the Skill tool | ✓ | ✓ | ✓ |
+| 7 | Personalization: name, response style, `<user_instructions>` | ✓ | ✓ | — |
+| 7a | Memory digest, when they have memory (§5.4): Preferences as `<user_instructions source="memory">`, then `<memory>` background | ✓ | — | — |
+| 8 | `<project>` | Chat projects | — | — |
+| — | *cache breakpoint 2, on the last block* | | | |
 
 Models without native tool calling get the prompted-tools specification appended by their adapter wrapper, after the
 second breakpoint.
@@ -127,20 +127,20 @@ second breakpoint.
 
 One fact per line, the same for the whole session:
 
-| Line | Chat | Cowork | Code |
-|---|---|---|---|
-| `App: Atelier, a self-hosted workspace` | ✓ | ✓ | ✓ |
-| `Mode` | ✓ | ✓ | ✓ |
-| `Model: <name> (<ref>), developed by <developer>`, or `developer unknown` | ✓ | ✓ | ✓ |
-| `Served through: <provider>`, the serving software or API, kept apart from the developer | ✓ | ✓ | ✓ |
-| `Knowledge cutoff` (not recorded yet, and the line says so) | ✓ | ✓ | ✓ |
-| `Date at session start: <weekday>, <ISO date> (time zone <zone>)`, in the backend's time zone | ✓ | ✓ | ✓ |
-| `Model changes`: the person can switch models mid-conversation | ✓ | ✓ | ✓ |
-| `Workspace`: a folder on the person's computer, the Atelier server, an SSH host, a codespace | — | ✓ | ✓ |
-| `Working directory`, `Additional directories` | — | ✓ | ✓ |
-| `Folder: none chosen; …`: the working directory is a new, empty scratch folder made for this session, not a project (sessions started with No folder only) | — | ✓ | ✓ |
-| `Git repository: yes/no` | — | — | ✓ |
-| `Platform`, `Shell` | — | ✓ | ✓ |
+| Line | Chat | Code |
+|---|---|---|
+| `App: Atelier, a self-hosted workspace` | ✓ | ✓ |
+| `Mode` | ✓ | ✓ |
+| `Model: <name> (<ref>), developed by <developer>`, or `developer unknown` | ✓ | ✓ |
+| `Served through: <provider>`, the serving software or API, kept apart from the developer | ✓ | ✓ |
+| `Knowledge cutoff` (not recorded yet, and the line says so) | ✓ | ✓ |
+| `Date at session start: <weekday>, <ISO date> (time zone <zone>)`, in the backend's time zone | ✓ | ✓ |
+| `Model changes`: the person can switch models mid-conversation | ✓ | ✓ |
+| `Workspace`: a folder on the person's computer, the Atelier server, an SSH host, a codespace | with a folder or its sandbox | ✓ |
+| `Working directory`, `Additional directories` | with a folder or its sandbox | ✓ |
+| `Folder: none chosen; …`: the working directory is a new, empty scratch folder made for this session, not a project (sessions started with No folder only) | in its sandbox | ✓ |
+| `Git repository: yes/no` | — | ✓ |
+| `Platform`, `Shell` | with a folder or its sandbox | ✓ |
 
 The developer comes from the model id (`modelDeveloper` in `src/prompts/env.ts`: a Qwen model served by Ollama is
 Alibaba's, not Ollama's), falling back to the provider for Anthropic and OpenAI and to "unknown" otherwise. The
@@ -170,11 +170,11 @@ default) reach every mode and every sub-agent as `<instructions source="admin se
 block. Chat gets only this text; its header there says it comes from the administrator and outranks the prompt's
 defaults and what the person and their project ask, and `chat.full.md` puts the administrator first in its own order
 of precedence. It is a setting of its own rather than the system AGENTS.md reused, because that file holds
-conventions written for Code and Cowork. Like the files, it reaches new conversations, not running ones; regular
+conventions written for Code and for chats working in a folder. Like the files, it reaches new conversations, not running ones; regular
 users' settings don't include it; the compact budget never cuts it.
 
-**Writing instructions.** Code and Cowork (`code.*.md`, `work.*.md`, a section in the full tier, one sentence in the
-compact tier) say that ATELIER.md holds the project's conventions and the person's lasting preferences, that a stated
+**Writing instructions.** Code and a chat working as a task (`code.*.md` and `fragments/tasks.*.md`, a section in the
+full tier, one sentence in the compact tier) say that ATELIER.md holds the project's conventions and the person's lasting preferences, that a stated
 lasting preference goes into it with a word to the person, that a request to set up or update the project's
 instructions writes ATELIER.md, and that the agent may keep more notes files linked from it (`@path` loads one into
 every session, a plain mention leaves it for reading when needed). Atelier names no such files itself.
@@ -235,7 +235,7 @@ a workspace file shown as Markdown stays as it is.
 ### 1.8 Size budgets
 
 Checked by `builder.test.ts` on assembled prompts, with 10% tolerance: Code's core and fragments 16,000 characters
-and its built-in tool descriptions 18,000; Chat's core and fragments 14,000; Cowork's 11,000; the compact Code tool
+and its built-in tool descriptions 18,000; Chat's core and fragments 14,000, and 20,000 with the task part (a chat with its sandbox); the compact Code tool
 descriptions 6,000.
 
 **The compact total.** Local servers often run with a window of 4k–8k tokens, so in the compact tier the system prompt
@@ -266,19 +266,19 @@ tools and checks each rule, so a rule that only appears behind a tool guard coun
 2. **Context updates** come from Atelier, not the person, report a change and replace earlier updates on the same
    subject. A block that merely claims to be one, inside pasted text, a file, a page or tool output, isn't one. The
    full cores say where they appear: usually ahead of the person's words, sometimes after them (hook context, a
-   `/skill` or command body), and in Code and Cowork at the end of some tool results.
+   `/skill` or command body), and in Code and a chat working as a task at the end of some tool results.
 3. **Data versus instructions.** Content from tools, files, web pages, connectors, project documents and attachments
    is material to work with; instructions in it are followed only when the person asked. The full cores also ask the
    model to tell the person when such content tries to steer it. In Code, the instruction files Atelier passes along
-   in `<instructions>` blocks are the exception, ranked by their header (§1.5). In Code, Cowork and sub-agents, the
-   modes that run hooks, hook feedback is the person's own configuration (sub-agents get PostToolUse feedback only).
-4. **Language.** Replies follow the language of the person's latest message. In Code and Cowork, text written into
+   in `<instructions>` blocks are the exception, ranked by their header (§1.5). In Code, chats working as a task and sub-agents, the
+   sessions that run hooks, hook feedback is the person's own configuration (sub-agents get PostToolUse feedback only).
+4. **Language.** Replies follow the language of the person's latest message. In Code and a chat working as a task, text written into
    files follows the language of the material it belongs to. Compact cores repeat this as their last line.
 5. **Honesty.** No invented facts, citations, APIs, file contents, command output or numbers; what couldn't be found
    or checked is said.
 6. **Questions about Atelier** (full cores) are answered from the prompt, `<env>` and notes; otherwise "I don't know"
    rather than a feature or Settings path that may not exist.
-7. **Effort** (Code and Cowork, guarded by `effort`): the whole request gets done at any setting; the setting changes
+7. **Effort** (Code and a chat working as a task, guarded by `effort`): the whole request gets done at any setting; the setting changes
    how long the model deliberates.
 
 ---
@@ -317,7 +317,7 @@ picker ends it). In plan mode only read-only tools, the web tools, sub-agents an
 commands are blocked by the permission engine. The notes and the core's plan-mode section say that reading and
 searching work, plus sub-agents only with the Agent tool, and the notes mention ExitPlanMode and AskUser only when the
 session has them. The engine's refusal names only tools the session has too: a session with ExitPlanMode is told to
-present its plan, one without it (a sub-agent, which inherits plan mode, or a Cowork task) to describe the changes it
+present its plan, one without it (a sub-agent, which inherits plan mode, or a chat) to describe the changes it
 would make. ExitPlanMode's approval result names the new permission mode, so no extra note
 repeats it.
 
@@ -383,11 +383,11 @@ command again).
 | Glob / Grep | Names versus contents; `output_mode`, `glob`, `type`, `head_limit`; ripgrep escaping; independent searches together. Undo tag escaping in the pattern. |
 | Bash | Current directory persists, file tools resolve from the root; non-interactive; background for servers; output cut in the middle; repeat what matters. In Code: the commit procedure, the commands that discard work, and the pull-request procedure. Undoes tag escaping in the command. |
 | BashOutput / KillShell | Both take the ID Bash returned for a background command. |
-| TodoWrite | When to use it; `content`/`activeForm`/`status`; one item in progress; completed means really done; in Cowork the last item checks the deliverable. |
+| TodoWrite | When to use it; `content`/`activeForm`/`status`; one item in progress; completed means really done; in a chat working as a task the last item checks the deliverable. |
 | AskUser | Only for the person's choices; up to four questions, a `header` of at most 12 characters, 2–4 options, the recommended one first; no "Other". |
 | Agent | When and when not; parallel investigation, one writer at a time; a self-contained `prompt`; check claimed edits; `run_in_background` for useful work meanwhile or long investigations side by side, off when the next step needs the report, and no guessing or waiting in sleep loops until the note arrives (full tier; the compact tier has only the parameter's own description). Lists the sub-agent types. |
 | SendMessage | Only when the person asks or a running sub-agent needs it, never on its own; `to` is a session id (from ListSessions) or a sub-agent's task id, each named only when the session has that tool; the message arrives as a note naming the sender, an answer arrives as a note (no waiting in sleep loops); the result says how it was delivered. The sub-agents' version writes only to `to: "parent"` and says a waiting parent reads it after the report. Not offered to compact-tier models (no room in the compact budget). |
-| ListSessions | The person's other Code sessions and Cowork tasks, most recent first, at most 30; to find the one they mean before SendMessage; `query` narrows by title and messages. Read-only. |
+| ListSessions | The person's other Code sessions and chats, most recent first, at most 30; to find the one they mean before SendMessage; `query` narrows by title and messages. Read-only. |
 | Skill | Load a matching skill first and follow it; exact names; don't reload a skill already in the turn. |
 | ExitPlanMode | Implementation plans only, after investigating; open questions before it; revise when declined. |
 | WebSearch | Changing facts; the year in dated queries; fetch what you rely on; cite (with a `Sources` section outside Code). |
@@ -415,10 +415,10 @@ abilities, project documents are reference material); tools and content; thinkin
 
 ### 5.2 Fragments
 
-- **Search** (one file for all modes; the answer-writing and citation lines are guarded to Chat and Cowork): when to
+- **Search** (one file for all modes; the answer-writing and citation lines are guarded to Chat): when to
   search and when not, how much, queries, reading the pages relied on, disagreement, writing the answer, citations as
   inline links plus a closing `Sources` list of pages actually used.
-- **No search** (Chat and Cowork without `WebSearch`, which now means an administrator turned it off: search is on by
+- **No search** (Chat without `WebSearch`, which now means an administrator turned it off: search is on by
   default): give what was known, say it may be out of date, and mention that an administrator can turn on web search in
   Settings › Admin › Capabilities.
 - **Artifacts**: when to make one and when to stay in the reply, how to create and change one, the sandbox limits,
@@ -426,7 +426,7 @@ abilities, project documents are reference material); tools and content; thinkin
 
 ### 5.4 Memory
 
-Chat and Cowork sessions of a person with memory (ARCHITECTURE › Memory) get `fragments/memory.md` with the memory
+Chats of a person with memory (ARCHITECTURE › Memory), old Cowork tasks too, get `fragments/memory.md` with the memory
 tools: their saved preferences are standing instructions, followed in every reply from the first; the rest is
 background used when relevant, without announcing, reciting it or bringing up memory unless asked; MemoryUpdate for
 lasting facts and requests to remember or forget, never small talk, one-off tasks or credentials; ChatSearch with a few
@@ -464,17 +464,25 @@ language. The language rule closes the prompt again.
 
 ---
 
-## 6. Cowork
+## 6. Tasks in Chat
 
-`work.full.md`: the task agent working in the person's real folder (changes are visible as they happen, relative paths
-in prose, the language of deliverables, notes, data versus instructions with hook messages as the person's own); before starting (know what "done" is, one round of AskUser questions, research
-searches first, skills' needs); doing the work (look at the folder first, a task list ending in a check, content before
-format, nothing invented, the format the person named or a sensible default, make the actual file, no files for plain
-questions, read-only sub-agents for many documents, one writer, check before finishing, no narration around calls); the
-person's files (new versions beside originals, ask before bulk deletes or moves and prefer a holding folder, file tools
-over shell commands, nothing outward-facing or irreversible without an explicit request); connectors and sources;
-finishing (outcome, changed files, what is left). `work.compact.md` has the same in twelve rules. Cowork has no
-`artifact` and no ExitPlanMode; the files are the deliverable.
+Chat and Cowork are one: a chat answers a quick question as before, and when a request needs files, commands or the
+computer it works through it as a task. Old Cowork tasks (internal mode `work`) are chats and get Chat's prompt; the
+Cowork cores are gone. A chat that has `TodoWrite` and `Write` (not a temporary chat, not a sub-agent) gets
+`fragments/tasks.full.md` after its core:
+
+- where it works: its own sandbox (a private folder that starts empty) until the person gives it one of their folders,
+  which is their real folder, changes visible as they happen, relative paths in prose;
+- before starting: know what "done" is, one round of AskUser questions, research searches first;
+- doing the work: a task list ending in a check of the deliverable, content before format, nothing invented, the
+  actual file rather than a long paste, read-only sub-agents for many documents and one writer, check before finishing;
+- the person's files: new versions beside originals, ask before bulk deletes or moves and prefer a holding folder,
+  nothing outward-facing or irreversible without an explicit request;
+- ATELIER.md for lasting preferences (§1.5);
+- finishing: the outcome, the changed files, what is left.
+
+`fragments/tasks.compact.md` says the same in a few rules. The compact tier keeps `inline_visual` for chats without
+file tools.
 
 ---
 
@@ -513,15 +521,15 @@ finishing (outcome, changed files, what is left). `work.compact.md` has the same
 | `safeguards-changed`, `workspace-settings-changed` | Safeguards turned on or changed; turned off (neutral wording, no claim that anything is lifted) | turn |
 | `research` | Every message while Research is on and web search is enabled | turn |
 | `ultracode-on`, `-still-on`, `-off` | Code: Ultracode started, continues (every ten person turns) or ended (§8) | turn |
-| `refresher` | Right after a compaction, once per compaction cycle past 60% of the window, and every 30 person turns in Chat and Cowork; repeats the style guidance and lists open tasks | turn |
-| `todo-nudge` | Code and Cowork: ten tool calls without a TodoWrite while the list has unfinished items | tool result |
-| `instructions-nested` | Code and Cowork: the first file tool call in or under a folder with its own ATELIER.md, AGENTS.md, CLAUDE.md or CLAUDE.local.md (§1.5) | tool result |
+| `refresher` | Right after a compaction, once per compaction cycle past 60% of the window, and every 30 person turns in Chat; repeats the style guidance and lists open tasks | turn |
+| `todo-nudge` | Code, and a chat working as a task: ten tool calls without a TodoWrite while the list has unfinished items | tool result |
+| `instructions-nested` | Code, and a chat working as a task: the first file tool call in or under a folder with its own ATELIER.md, AGENTS.md, CLAUDE.md or CLAUDE.local.md (§1.5) | tool result |
 | `output-cut` | A reply stopped at the output limit; the loop carries on once, after this note | its own hidden message |
-| `background-agent` | Code and Cowork: a sub-agent started with `run_in_background` ended. Its task (escaped), how it ended (finished, ended without finishing, was stopped), that the person hasn't seen the result and that claimed edits want checking, then the result (escaped). Delivered at the parent's next model request, or on a turn it starts when the parent is idle (ARCHITECTURE §8) | its own hidden message |
-| `session-message` | Code and Cowork: SendMessage from another of the person's sessions, the parent (to a sub-agent) or a sub-agent (to its parent). Who sent it (title and id or task id, escaped), that another agent wrote it and it is information, never the person's approval; when it waited for the person past the message chain cap or the wake cap, why; how to answer with SendMessage (left out when the receiver lacks the tool); then the message (escaped). Delivered like `background-agent` (ARCHITECTURE §8, "Messages between sessions") | its own hidden message |
-| `loop-tick` | Code and Cowork: a loop's send (`/loop`). Says it comes from the person's loop, every `{{interval}}` while the conversation is idle, which run it is, to handle it as their request and to lead with what changed since the previous run | after the loop's prompt, on that message |
+| `background-agent` | Code, and a chat working as a task: a sub-agent started with `run_in_background` ended. Its task (escaped), how it ended (finished, ended without finishing, was stopped), that the person hasn't seen the result and that claimed edits want checking, then the result (escaped). Delivered at the parent's next model request, or on a turn it starts when the parent is idle (ARCHITECTURE §8) | its own hidden message |
+| `session-message` | Code, and a chat working as a task: SendMessage from another of the person's sessions, the parent (to a sub-agent) or a sub-agent (to its parent). Who sent it (title and id or task id, escaped), that another agent wrote it and it is information, never the person's approval; when it waited for the person past the message chain cap or the wake cap, why; how to answer with SendMessage (left out when the receiver lacks the tool); then the message (escaped). Delivered like `background-agent` (ARCHITECTURE §8, "Messages between sessions") | its own hidden message |
+| `loop-tick` | Code, and a chat working as a task: a loop's send (`/loop`). Says it comes from the person's loop, every `{{interval}}` while the conversation is idle, which run it is, to handle it as their request and to lead with what changed since the previous run | after the loop's prompt, on that message |
 | `side-chat` | A side chat's every request (`/btw`, ARCHITECTURE §8 › Side chats): that it was asked beside the main session (its title) without interrupting it, to answer briefly from the conversation and the files and web, that its tools only read and the main work isn't its to continue, whether the main session is still working, then the main conversation so far in `<transcript>` (escaped, capped to the auto-compaction tail budget) | in front of the side chat's newest message, in what is sent only |
-| `change-area` | The person brushed over part of an image (Chat, Cowork, Code with an image model). Written by the backend from the two images alone, never from client text, after checking that the image is in this conversation, that the mask reads as a black and white mask for it, and that an image model exists: the image id and the mask id, that the mask isn't a picture to describe (white marks what changes), to call GenerateImage with the image first in `reference_images` and the id as `mask`, to describe the whole picture as it should look afterwards, which image models can change one area, and what to do if the tool says the model can't. The mask joins the message as a `notice` of kind `area`, not as an attachment, so the model never receives it as pixels | on that message, in front of the person's words |
+| `change-area` | The person brushed over part of an image (Chat, Code with an image model). Written by the backend from the two images alone, never from client text, after checking that the image is in this conversation, that the mask reads as a black and white mask for it, and that an image model exists: the image id and the mask id, that the mask isn't a picture to describe (white marks what changes), to call GenerateImage with the image first in `reference_images` and the id as `mask`, to describe the whole picture as it should look afterwards, which image models can change one area, and what to do if the tool says the model can't. The mask joins the message as a `notice` of kind `area`, not as an attachment, so the model never receives it as pixels | on that message, in front of the person's words |
 | `after-compaction` | On every compaction summary (§3.5) | summary message |
 
 Not built yet: connector instructions, `file-changed`, `instructions-changed`, `unattended`, detecting an `ultracode`
@@ -709,7 +717,7 @@ Parts of the design that the prompts are worded not to claim:
   for it; nothing enforces it);
 - a read-only shell classifier for plan mode (shell commands stay blocked there);
 - a read registry that makes Write and Edit refuse files not read in the session;
-- Cowork's rule that deletes always ask;
+- a rule that deletes in a chat's task always ask;
 - git attribution in `<env>`, the `unattended` note, and the knowledge cutoff from the model catalog;
 - skipping nested instruction files in gitignored folders (dependency and build folders are skipped);
 - a per-model compact budget;

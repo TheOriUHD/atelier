@@ -182,9 +182,10 @@ describe('templates', () => {
 
 describe('rules every core carries', () => {
   // docs/PROMPTS.md §2. Each core is rendered without optional tools, so a rule hidden behind a tool guard counts as missing.
-  type Core = { name: string; mode: 'chat' | 'work' | 'code'; tier: 'full' | 'compact'; subagent: boolean };
+  // Two cores: Chat (which old Cowork tasks use too) and Code.
+  type Core = { name: string; mode: 'chat' | 'code'; tier: 'full' | 'compact'; subagent: boolean };
   const cores: Core[] = [
-    ...(['chat', 'work', 'code'] as const).flatMap((mode) =>
+    ...(['chat', 'code'] as const).flatMap((mode) =>
       (['full', 'compact'] as const).map((tier) => ({ name: `${mode}.${tier}`, mode, tier, subagent: false })),
     ),
     { name: 'subagent', mode: 'code', tier: 'full', subagent: true },

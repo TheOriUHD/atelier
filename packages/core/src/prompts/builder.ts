@@ -99,9 +99,13 @@ const ARTIFACT_EXAMPLES = [
   { command: 'rewrite', identifier: '<the same id>', content: '<the complete new content>' },
 ];
 
-/** The core template for a session: `<mode>.<tier>`, or the full tier when no compact one exists. */
+/**
+ * The core template for a session: `<mode>.<tier>`, or the full tier when no compact one exists. An old Cowork task
+ * (`work`) is a chat: Chat and Cowork are one, and Cowork's own prompt is gone.
+ */
 export function coreTemplate(mode: Mode, tier: PromptTier, overrides: Overrides): string {
-  return hasTemplate(`${mode}.${tier}`, overrides) ? `${mode}.${tier}` : `${mode}.full`;
+  const core = mode === 'work' ? 'chat' : mode;
+  return hasTemplate(`${core}.${tier}`, overrides) ? `${core}.${tier}` : `${core}.full`;
 }
 
 export function buildSystemPrompt(ctx: PromptContext): SystemBlock[] {

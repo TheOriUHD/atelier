@@ -31,7 +31,6 @@ The templates are plain Markdown files, one per prompt:
 ```text
 packages/core/prompts/
   chat.full.md  chat.compact.md        Chat
-  work.full.md  work.compact.md        Cowork (the mode's internal name is "work")
   code.full.md  code.compact.md        Code
   subagent.md                          sub-agents without a prompt of their own
   auto-mode.md  compaction.md  memory-update.md  title.md  web-fetch.md
@@ -62,7 +61,7 @@ A session’s system prompt is built when the session starts, from these pieces,
 2. **Fragments** that match the tools the session has: searching and citing, artifacts, memory.
 3. **The optional safeguards block**, only if an administrator or the person turned it on. Atelier adds nothing of this
    kind by default.
-4. **`<env>`**: the app, the mode, the model and who developed it, the date, and in Cowork and Code the folder and platform.
+4. **`<env>`**: the app, the mode, the model and who developed it, the date, and with a folder (Code, or a chat working as a task) the folder and platform.
 5. **Instructions**: your administrator’s text, then the instruction files (`ATELIER.md`, `AGENTS.md`, `CLAUDE.md`,
    rules). See [Customize](/customize/).
 6. **The skill list**, **your personalization** (name, personality, response style, your own instructions), the
@@ -106,8 +105,8 @@ override in a new conversation; a note uses the new text from the next message.
 
 The design principles are printed in full in [How prompts are built](/prompts/design/#0-principles). In short:
 
-- **Atelier’s own words.** The prompts aim for Code to work like a careful coding agent and for Chat and Cowork to
-  work like a good assistant. Every sentence is Atelier’s own.
+- **Atelier’s own words.** The prompts aim for Code to work like a careful coding agent and for Chat to work like a
+  good assistant. Every sentence is Atelier’s own.
 - **Compatible where people rely on it.** Tool and parameter names stay Claude Code’s (`Read`, `Edit`, `old_string`,
   `run_in_background`, `subagent_type`…), so existing `CLAUDE.md` files, skills, agents and hooks keep working. See
   [Claude Code compatibility](/claude-code-compatibility/).
@@ -127,7 +126,7 @@ The prompts are code, and are tested like code:
   description or the assembly shows up as a diff in review ([Assembled prompts](/prompts/assembled/)).
 - **Published copies.** These pages are generated from the templates and the snapshots, and a test fails when they are
   stale.
-- **Size budgets.** Code’s core and fragments, its tool descriptions, Chat’s and Cowork’s cores and the compact total
+- **Size budgets.** Code’s core and fragments, its tool descriptions, Chat’s core (with and without the task part) and the compact total
   each have a character limit that a test enforces.
 - **Neutrality.** A test fails if a shipped prompt or note uses content-policy vocabulary while safeguards are off.
 - **Originality.** A test checks that no prompt uses the signature phrases of other products’ prompts.

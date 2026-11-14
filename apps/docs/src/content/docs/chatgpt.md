@@ -33,7 +33,7 @@ Both are unofficial. If you need something that will not break without notice, u
 | Several requests at once | As a hosted API | Exactly one conversation slot |
 | Auto mode | Reviews as usual | Never reviews through it |
 | Cost | No per-token price; it uses your plan | Uses your plan; Pro mode has its own small allowance |
-| On a server | Yes, with a device code; everyone uses the admin's plan | No |
+| On a server | Yes, with a device code; everyone uses the admin's plan | Not for everyone: each person adds it as their own model from their desktop app ([below](#add-it)) |
 
 ## ChatGPT Plan
 

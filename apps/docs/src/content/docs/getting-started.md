@@ -126,7 +126,7 @@ pick another. If Ollama runs but has no models, pull one (for example `ollama pu
 | **Mistral Vibe** | A Le Chat Pro or Team plan and a key for Vibe | Create the key in Le Chat under **Code › Vibe CLI** and paste it; uses the plan's Vibe allowance instead of per-token billing. On a server, everyone using the provider spends the admin's plan. |
 | **ChatGPT Plan** | A ChatGPT plan; you sign in | Uses your plan's limits instead of per-token billing. Unofficial. Desktop on this computer: your browser opens. On a server: a one-time code to enter on OpenAI's page within 15 minutes, and everyone using the provider uses the admin's plan. |
 | **GitHub Copilot** | A Copilot plan; you sign in with GitHub | A code to enter at `github.com/login/device`; counts against the plan's allowance. Unofficial. |
-| **ChatGPT Chat** | A ChatGPT account | Experimental. ChatGPT itself, driven through a signed-in browser window. Desktop app on this computer only. |
+| **ChatGPT Chat** | A ChatGPT account | Experimental. ChatGPT itself, driven through a signed-in browser window. Desktop app only: on a server, each person adds it as their own model from their desktop app. |
 | **OpenRouter** | An OpenRouter account or key | **Connect with OpenRouter** creates a key for you. Models marked free are limited to 50 requests a day (1,000 once you have bought 10 credits). |
 | **OpenCode Zen** | An OpenCode Console key | Billing may be required; its free models may only work inside OpenCode itself. |
 
@@ -182,7 +182,7 @@ Hover a message to copy it, retry a reply or edit your own message; the earlier 
 
 ![A Code session asking permission before running a git commit](/img/permission-2560.webp)
 
-**No folder** (first in the folder menu, offered when the desktop app runs on this computer) gives each new session an
+**No folder** (first in the folder menu in the desktop app, on this computer or connected to a server) gives each new session an
 empty folder of its own, a safe way to try Code. In a browser, Code works in a folder lent by one of your desktop apps
 or in a GitHub codespace; the server never runs commands on its own machine. See [Code](/code/).
 
@@ -289,6 +289,9 @@ makers. What it does send:
 Details are in [What leaves your machine](/privacy/), [Web search](/web-search/) and [Updates](/updates/).
 
 ## Where to go next
+
+The [docs home](/) has three reading orders: getting productive, building with agents, and running your own setup.
+Every page, by topic:
 
 **Start here:** [Install](/install/) · [Providers](/providers/) · [Models](/models/) · [Local models](/local-models/) · [ChatGPT](/chatgpt/)
 

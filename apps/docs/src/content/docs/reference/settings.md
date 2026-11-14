@@ -108,7 +108,7 @@ see are hidden in the app.
 | Setting | What it does |
 |---|---|
 | **Your usage** | Requests, tokens, images and cost of your chats and Code sessions. |
-| **Tokens by day** | A chart of tokens per day, split by Chat, Cowork and Code. |
+| **Tokens by day** | A chart of tokens per day, split by Chat and Code. |
 | **By model** | Tokens, cost and average output speed of each model. |
 | **Images** *(only where it works)* | Images each model made and what they cost. A cost marked “estimate” comes from a price list, because the service didn’t report one. |
 | **Your limits** *(only where it works)* | What an admin lets you use, and how much of it you have used. Tokens, cost and requests count across all of your chats and Code sessions, including deleted ones. A cost limit counts only requests to models with a price. |

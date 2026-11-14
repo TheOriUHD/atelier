@@ -61,6 +61,22 @@ sets up for you.
 the provider's own setting cannot express a level, Atelier asks the model for it in a short note (see [Effort](/effort/)).
 The exceptions are ChatGPT Chat, whose stops replace the scale, and Ultracode, which only Code offers.
 
+### How current this is
+
+The model list and what each model can do (tools, images, reasoning, and the context length where the provider says) are
+read from the provider while Atelier runs, so they don't go stale here. What can lag behind a change on the provider's
+side:
+
+- **How the table above describes each API.** It changes when a provider changes its API; Atelier's adapter changes
+  with it in a release.
+- **The list prices built in** for Anthropic, OpenAI and Mistral, and OpenAI's catalog of model limits. **Settings ›
+  Usage › Prices** overrides a price.
+- **The unofficial integrations** (ChatGPT Plan, ChatGPT Chat, GitHub Copilot) can stop working whenever the service
+  changes, without notice.
+
+How each provider is tested, against the live service or recorded responses, and when the live checks last ran, is in
+[What is tested live](#what-is-tested-live).
+
 ## Ollama
 
 - **Base URL:** `http://localhost:11434` by default. A trailing `/v1` that you paste is dropped.
@@ -431,7 +447,7 @@ The project tests against real servers for only some providers:
 | llama.cpp | Recorded responses only. |
 | OpenAI | Recorded responses only. |
 | OpenAI-compatible, OpenRouter, OpenCode Zen, GitHub Copilot, ChatGPT Plan | Unit tests against recorded or hand-made responses; the optional live checks in the repository can target an OpenAI-compatible endpoint, but they are not part of the regular runs. Copilot Auto has not been tried on a Free or Student account. |
-| Mistral, Mistral Vibe | Unit tests against recorded or hand-made responses only; nothing has run against Mistral's service yet. With `MISTRAL_API_KEY` or `MISTRAL_VIBE_API_KEY` in `.env.local` (and optionally `ATELIER_LIVE_MISTRAL_MODEL`, `ATELIER_LIVE_MISTRAL_VIBE_MODEL`), the live checks stream text and thinking, read an image, call a tool with another provider's call id and, for Vibe, read the allowance. |
+| Mistral, Mistral Vibe | Unit tests against recorded or hand-made responses, and live checks against Mistral's service (model list, streaming, reasoning, images, tool calls, a reply cut at the output limit, Vibe's allowance), last run 2026-11-14. With `MISTRAL_API_KEY` or `MISTRAL_VIBE_API_KEY` in `.env.local` (and optionally `ATELIER_LIVE_MISTRAL_MODEL`, `ATELIER_LIVE_MISTRAL_VIBE_MODEL`), the live checks stream text and thinking, read an image, call a tool with another provider's call id and, for Vibe, read the allowance. |
 | ChatGPT Chat | Driven against the real chatgpt.com page for formatting, continuing a chat, temporary chats, model and effort selection, and tool calls. A long Code session on it has not been run end to end. |
 
 ChatGPT's and Copilot's sign-ins are not documented by their owners as APIs, and Mistral allows Vibe keys in other apps

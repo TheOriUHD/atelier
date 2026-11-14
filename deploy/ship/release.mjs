@@ -365,6 +365,13 @@ async function preflight({ version, tag, args, done = {} }) {
       const marked = nextReleaseProblem(markers.out);
       if (marked) problems.push(marked);
     }
+    if (!isPrereleaseVersion(version)) {
+      // The documentation is checked here as well as when it is deployed: a broken link, a redirect to nowhere or a
+      // retired feature named as current stops the release before anything is published, not after.
+      const docs = await exec('pnpm', ['--filter', '@atelier/docs', 'run', 'build'], { check: false });
+      const checked = docs.code === 0 ? await exec('pnpm', ['--filter', '@atelier/docs', 'run', 'check'], { check: false }) : docs;
+      need(checked.code === 0, `The documentation doesn't pass its checks: run pnpm --filter @atelier/docs build && pnpm --filter @atelier/docs run check.\n${checked.out.split('\n').filter((l) => /problems|:\d+:|no such|names /.test(l)).slice(0, 8).join('\n')}`);
+    }
     const notices = await exec('node', [join(ROOT, 'deploy/ship/notices.mjs'), '--check'], { check: false });
     need(notices.code === 0, 'The third-party notices are out of date: run pnpm notices and commit the result.');
     const changelog = readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8');

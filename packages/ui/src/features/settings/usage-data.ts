@@ -1,11 +1,12 @@
 /** Settings › Usage: totals, days and models from `usage.summary` rows (one per day, model and mode). */
 import type { UsageRow } from '@atelier/protocol';
 
-export const MODES = ['chat', 'work', 'code', 'other'] as const;
+export const MODES = ['chat', 'code', 'other'] as const;
 export type ModeKey = (typeof MODES)[number];
-export const MODE_LABELS: Record<ModeKey, string> = { chat: 'Chat', work: 'Cowork', code: 'Code', other: 'Other' };
+export const MODE_LABELS: Record<ModeKey, string> = { chat: 'Chat', code: 'Code', other: 'Other' };
 
-const modeOf = (row: UsageRow): ModeKey => (MODES as readonly string[]).includes(row.mode) ? (row.mode as ModeKey) : 'other';
+/** Chat and Cowork are one: an old Cowork task's tokens count as Chat's. */
+const modeOf = (row: UsageRow): ModeKey => (row.mode === 'work' ? 'chat' : (MODES as readonly string[]).includes(row.mode) ? (row.mode as ModeKey) : 'other');
 
 /** Every token a request processed: its whole prompt (`input` excludes cache reads and writes) and its output. */
 export const tokensOf = (r: Pick<UsageRow, 'input' | 'output' | 'cacheRead' | 'cacheWrite'>) => r.input + r.cacheRead + r.cacheWrite + r.output;
@@ -86,7 +87,7 @@ export function tokensByDay(rows: readonly UsageRow[], days: number, now = new D
   const list: DayTokens[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    list.push({ day: localDay(date), chat: 0, work: 0, code: 0, other: 0 });
+    list.push({ day: localDay(date), chat: 0, code: 0, other: 0 });
   }
   const byDay = new Map(list.map((d) => [d.day, d]));
   for (const r of rows) {

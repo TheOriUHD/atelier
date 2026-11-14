@@ -1,0 +1,4 @@
+# Pages that moved or were folded into others: old links (search results, bookmarks) land where the content is now.
+# scripts/check-links.mjs checks that every target exists.
+/prompts/cowork /prompts/chat/ 301
+/prompts/cowork/ /prompts/chat/ 301

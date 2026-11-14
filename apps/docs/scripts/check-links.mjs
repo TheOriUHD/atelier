@@ -36,7 +36,30 @@ for (const [page, text] of html) {
     if (hash && found.endsWith('.html') && !ids.get(found)?.has(decodeURIComponent(hash))) problems.push(`${page}: ${raw} (no anchor #${hash} in ${found})`);
   }
 }
-console.log(`${pages.length} pages, ${checked} internal links checked`);
+// Redirects (public/_redirects): every target must be a page that exists.
+const redirects = (await readFile(join(dist, '_redirects'), 'utf8').catch(() => ''))
+  .split('\n')
+  .filter((l) => l.trim() && !l.startsWith('#'))
+  .map((l) => l.trim().split(/\s+/));
+for (const [from, to] of redirects) {
+  const rel = (to ?? '').replace(/^\//, '').split('#')[0];
+  if (!(await exists(join(dist, rel, 'index.html'))) && !(await exists(join(dist, rel)))) problems.push(`_redirects: ${from} → ${to} (no such page)`);
+}
+
+// Retired names: a page may name a retired feature only as history ("former Cowork tasks", "part of Chat now"), never
+// as something that exists, which is how pages fall out of step with the product. Checked on the Markdown sources.
+const RETIRED = [{ name: /\bCowork\b/, history: /\b(former|old|older|before it became part of Chat|(is|now) part of|part of Chat now|are one|where did Cowork go|took over from|no longer|gone|keeps Cowork|title: Cowork|your Cowork tasks)\b/i }];
+const sources = resolve(dirname(fileURLToPath(import.meta.url)), '../src/content/docs');
+for (const file of (await readdir(sources, { recursive: true })).filter((f) => /\.mdx?$/.test(f))) {
+  const lines = (await readFile(join(sources, file), 'utf8')).split('\n');
+  lines.forEach((line, i) => {
+    for (const { name, history } of RETIRED) {
+      if (name.test(line) && !history.test(`${lines[i - 1] ?? ''} ${line}`)) problems.push(`${file}:${i + 1}: names ${name.source.replace(/\\b/g, '')} as if it still existed: "${line.trim().slice(0, 100)}"`);
+    }
+  });
+}
+
+console.log(`${pages.length} pages, ${checked} internal links, ${redirects.length} redirects checked`);
 if (problems.length) {
   console.log(`\n${problems.length} problems:\n${[...new Set(problems)].join('\n')}`);
   process.exit(1);

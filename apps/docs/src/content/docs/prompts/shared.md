@@ -58,7 +58,7 @@ Web search:
 
 ## Web search switched off
 
-Chat and Cowork without WebSearch (an administrator turned it off; it is on by default):
+Chat without WebSearch (an administrator turned it off; it is on by default):
 
 Source: [`packages/core/prompts/fragments/no-search.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/fragments/no-search.md)
 
@@ -206,7 +206,7 @@ The administrator turned on content safeguards for this account. They apply to e
 
 ## Instruction files header
 
-The text above the instruction files in Code and Cowork (and above the administrator’s instructions in Chat). It says where the instructions come from and how they rank when they conflict.
+The text above the instruction files in Code and in a chat with a folder (and above the administrator’s instructions in any chat). It says where the instructions come from and how they rank when they conflict.
 
 Source: [`packages/core/prompts/strings/instructions-header.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/strings/instructions-header.md)
 

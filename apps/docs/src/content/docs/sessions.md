@@ -110,7 +110,7 @@ The **Search** box at the top of the sidebar, or ⌘K / Ctrl+K from anywhere, op
 - **Chats**: with an empty box, your 8 most recent chats under **Recent chats**; with text, up to 20 matches under
   **Chats**. A match is a chat whose title contains your text, or any of whose messages contains every word you typed (each
   word matches as a prefix). Temporary chats are never found.
-- It searches chats, and the tasks you started in Cowork, but not Code sessions. Use the Code list and its view options
+- It searches chats (former Cowork tasks too), but not Code sessions. Use the Code list and its view options
   for those.
 
 ↑ and ↓ move, Enter opens, Esc closes.

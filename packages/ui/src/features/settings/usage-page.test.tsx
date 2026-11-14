@@ -378,9 +378,10 @@ describe('usage data', () => {
     const now = new Date(2026, 9, 14, 0, 30);
     const rows = [usage({ day: '2026-10-14', mode: 'work' }), usage({ day: '2026-10-12', mode: 'research' }), usage({ day: '2026-09-01' })];
     expect(tokensByDay(rows, 3, now)).toEqual([
-      { day: '2026-10-12', chat: 0, work: 0, code: 0, other: 150 },
-      { day: '2026-10-13', chat: 0, work: 0, code: 0, other: 0 },
-      { day: '2026-10-14', chat: 0, work: 150, code: 0, other: 0 },
+      { day: '2026-10-12', chat: 0, code: 0, other: 150 },
+      { day: '2026-10-13', chat: 0, code: 0, other: 0 },
+      // An old Cowork task counts as a chat.
+      { day: '2026-10-14', chat: 150, code: 0, other: 0 },
     ]);
   });
 

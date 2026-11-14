@@ -174,7 +174,8 @@ tasks compact often. Raise it in Settings › Admin › Models.").
 
 ### ChatGPT
 
-- "ChatGPT Chat requires the desktop app." It runs only in the desktop app; a server does not offer it.
+- "ChatGPT Chat requires the desktop app." It runs only in the desktop app: a server can't offer it to everyone. With the
+  desktop app connected to a server, add it for yourself in **Settings › Your models**.
 - "Open the ChatGPT session to sign in." Use the provider's ⋯ menu › **Open ChatGPT session**.
 - ChatGPT Plan on a server signs in with a one-time code shown in the dialog (valid 15 minutes); everyone on the server then uses the admin's plan.
 - Both are unofficial; see [ChatGPT](/chatgpt/).
@@ -254,7 +255,8 @@ this action: …". See [Permissions](/permissions/).
   the GitHub CLI: "Codespaces need the GitHub CLI (gh) on this computer. Install it from https://cli.github.com …" (a
   server's image includes it).
 - A Code session without a folder says "Sessions without a folder need the desktop app running on this computer." when
-  the backend is a server.
+  it is started in a browser on a server: the folder is made on your computer, so start it from the desktop app
+  connected to that server.
 - Hooks that fail show "Hook failed (exit *n*): …" or "Hook timed out after *n*s". Exit code 2 blocks the call.
 - **Chat sandbox:** "Chats here have no sandbox." (no `ATELIER_SANDBOX_HOST`), "The sandbox can't be reached: …" (with
   "Permission denied" the `sandbox` container is older than the server or refused the account's user: update both, or read

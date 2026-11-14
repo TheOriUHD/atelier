@@ -44,8 +44,8 @@ const SCOPES = [
  * apart with color blindness, in both themes), gray for anything else.
  */
 const SERIES =
-  '[--series-chat:#2a78d6] [--series-work:#eb6834] [--series-code:#1baf7a] [--series-other:#898781] dark:[--series-chat:#3987e5] dark:[--series-work:#d95926] dark:[--series-code:#199e70]';
-const SWATCH: Record<ModeKey, string> = { chat: 'bg-(--series-chat)', work: 'bg-(--series-work)', code: 'bg-(--series-code)', other: 'bg-(--series-other)' };
+  '[--series-chat:#2a78d6] [--series-code:#1baf7a] [--series-other:#898781] dark:[--series-chat:#3987e5] dark:[--series-code:#199e70]';
+const SWATCH: Record<ModeKey, string> = { chat: 'bg-(--series-chat)', code: 'bg-(--series-code)', other: 'bg-(--series-other)' };
 
 type Price = Settings['pricing'][string];
 
