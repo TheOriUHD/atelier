@@ -206,6 +206,7 @@ describe('what the preflight and the Linux machine are told', () => {
     stub('xvfb-run', '[ -n "$E2E_FAILS" ] && exit 1');
     stub('pnpm');
     stub('pkill');
+    stub('sleep');
     // Node runs the check of Playwright's record for real; the Electron download is skipped.
     writeFileSync(join(bin, 'node'), `#!/bin/bash\n[ "$1" = "-e" ] && exec ${process.execPath} "$@"\nexit 0\n`, { mode: 0o755 });
     const build = join(home, 'builds', 'v1.2.3');
@@ -238,7 +239,7 @@ describe('what the preflight and the Linux machine are told', () => {
       writeFileSync(join(e2e, 'test-results', '.last-run.json'), JSON.stringify({ status: 'failed', failedTests: ['a'] }));
       const browser = run(true);
       expect(browser.code).toBe(0);
-      expect(browser.ran).toEqual(['pkill', 'xvfb-run']);
+      expect(browser.ran).toEqual(['pkill', 'sleep', 'xvfb-run']);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

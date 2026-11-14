@@ -278,7 +278,9 @@ export function e2eScript({ name, lastFailed = false }) {
     'set -eo pipefail',
     'export PATH=/usr/local/go/bin:$PATH CI=1',
     // Leftovers of an earlier run that was stopped (ssh does not stop what it started) would hold the test servers' ports.
-    "pkill -u $USER -f 'e2e/serve.mjs|e2e/fake-ollama.mjs|apps/server/dist/server.mjs|playwright' || true",
+    // A run whose connection dropped may still be going: what it started from its folder goes too, and is waited for.
+    `pkill -u $USER -f 'e2e/serve.mjs|e2e/fake-ollama.mjs|apps/server/dist/server.mjs|playwright|xvfb-run|/builds/${name}-e2e/' || true`,
+    'sleep 3',
     ...(lastFailed
       ? [
           `cd ~/builds/${name}-e2e`,
@@ -290,7 +292,8 @@ export function e2eScript({ name, lastFailed = false }) {
           'exit $status',
         ]
       : [
-          `rm -rf ~/builds/${name}-e2e && cp -a ~/builds/${name} ~/builds/${name}-e2e && cd ~/builds/${name}-e2e`,
+          // A process that was still writing there may leave a file behind once: try again after it is gone.
+          `{ rm -rf ~/builds/${name}-e2e || { sleep 5; rm -rf ~/builds/${name}-e2e; }; } && cp -a ~/builds/${name} ~/builds/${name}-e2e && cd ~/builds/${name}-e2e`,
           'pnpm --filter @atelier/server build >/dev/null 2>&1',
           'pnpm --filter @atelier/desktop build >/dev/null 2>&1',
           'pnpm --filter @atelier/cli build >/dev/null 2>&1',

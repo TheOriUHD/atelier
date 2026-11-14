@@ -549,7 +549,14 @@ async function buildLinux({ tag, version, work, artifacts, log, skipImage, skipE
   await exec('ssh', [...SSH, host, `${env}; cd ~/builds/${name} && pnpm install --frozen-lockfile`], { log });
   // nice: the packaging and the image build take the cores the end-to-end tests leave, not the other way round (a test
   // timed out under their load in 0.3.1).
-  const packages = exec('ssh', [...SSH, host, `${env}; cd ~/builds/${name}/apps/desktop && nice -n 19 node scripts/build.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false nice -n 19 pnpm exec electron-builder --config electron-builder.yml --linux --publish never`], { log });
+  const packages = remoteRun({
+    host,
+    id: `${name}-packages`,
+    script: `set -eo pipefail\n${env}\ncd ~/builds/${name}/apps/desktop\nnice -n 19 node scripts/build.mjs\nCSC_IDENTITY_AUTO_DISCOVERY=false nice -n 19 pnpm exec electron-builder --config electron-builder.yml --linux --publish never`,
+    log,
+  }).then((r) => {
+    if (r.code !== 0) throw new Error(`Building the Linux packages failed:\n${r.tail}`);
+  });
   const image = skipImage ? Promise.resolve() : buildImages({ host, name, tag, imageBase, log });
   const e2e = skipE2e ? Promise.resolve(null) : runE2e({ host, name, log });
   const [, , first] = await Promise.all([packages, image, e2e]);
@@ -581,8 +588,48 @@ async function buildImages({ host, name, tag, imageBase, log }) {
  * One retry absorbs a slow first start of Electron.
  */
 async function runE2e({ host, name, log, lastFailed = false }) {
-  const r = await exec('ssh', [...SSH, host, 'bash -s'], { input: e2eScript({ name, lastFailed }), log, check: false });
-  return { ok: r.code === 0, tail: r.out.split('\n').slice(-40).join('\n') };
+  const r = await remoteRun({ host, id: `${name}-e2e${lastFailed ? '-again' : ''}`, script: e2eScript({ name, lastFailed }), log });
+  return { ok: r.code === 0, tail: r.tail };
+}
+
+/** Pauses a while; the release waits on machines it can't hurry. */
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Runs a long script on a build machine without hanging on one SSH connection: it starts there detached, writing its
+ * output and exit code to files under ~/builds/runs, and is checked on with short connections. One that fails (this
+ * Mac's network drops now and then, through its VPN) is tried again, so a blip never reads as the script failing; only
+ * a machine out of reach for 15 minutes, or a script past its time, ends it. The result: its exit code and last lines.
+ */
+async function remoteRun({ host, id, script, log, timeoutMs = 90 * 60_000 }) {
+  const dir = '~/builds/runs';
+  // Only the last command goes to the background: `a && b &` would background the whole list, `cat` with no input.
+  const start = `mkdir -p ${dir} && rm -f ${dir}/${id}.exit ${dir}/${id}.log && cat > ${dir}/${id}.sh && { setsid nohup bash -c 'bash ${dir}/${id}.sh > ${dir}/${id}.log 2>&1; echo $? > ${dir}/${id}.exit' > /dev/null 2>&1 < /dev/null & }`;
+  let started = null;
+  for (let i = 0; i < 4 && started?.code !== 0; i++) {
+    if (i) await pause(20_000);
+    started = await exec('ssh', [...SSH, host, start], { input: script, log, check: false });
+  }
+  if (started.code !== 0) throw new Error(`Couldn't start ${id} on ${host}: ${started.out.slice(-500)}`);
+  const deadline = Date.now() + timeoutMs;
+  let lostSince = null;
+  for (;;) {
+    await pause(15_000);
+    const r = await exec('ssh', [...SSH, host, `cat ${dir}/${id}.exit 2>/dev/null || echo running`], { check: false });
+    if (r.code !== 0) {
+      lostSince ??= Date.now();
+      if (Date.now() - lostSince > 15 * 60_000) throw new Error(`Lost ${host} for 15 minutes while ${id} ran there (it may still be running: ${dir}/${id}.log).`);
+      continue;
+    }
+    lostSince = null;
+    const answer = r.out.trim();
+    if (/^\d+$/.test(answer)) {
+      // The whole output goes to the local log; the last lines are what a failure shows.
+      const output = await exec('ssh', [...SSH, host, `cat ${dir}/${id}.log`], { log, check: false });
+      return { code: Number(answer), tail: output.out.split('\n').slice(-40).join('\n') };
+    }
+    if (Date.now() > deadline) throw new Error(`${id} on ${host} didn't finish within ${Math.round(timeoutMs / 60_000)} minutes (${dir}/${id}.log).`);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
