@@ -78,10 +78,12 @@ test('desktop: the report shortcut attaches the window, and the report carries d
 
     await dialog.getByLabel('Title').fill('Shader answer is too short');
     await dialog.getByLabel('What happened?').fill('I asked about shaders and the reply only repeated my question back to me.');
-    // An issue always carries diagnostics; the open conversation is offered first.
+    // An issue always carries diagnostics; F1 in a conversation attaches that conversation, marked as a chat.
     await expect(dialog.getByRole('switch', { name: 'Diagnostics' })).toHaveCount(0);
-    await dialog.getByRole('switch', { name: 'A conversation' }).click();
-    await expect(dialog.getByRole('radio', { name: /open now/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(dialog.getByRole('switch', { name: 'A conversation' })).toHaveAttribute('aria-checked', 'true');
+    const here = dialog.getByRole('radio', { name: /open now/ });
+    await expect(here).toHaveAttribute('aria-checked', 'true');
+    await expect(here.getByRole('img', { name: 'Chat' })).toBeVisible();
     await expect(dialog.getByText(/All \d+ messages/)).toBeVisible({ timeout: 30_000 });
     await dialog.getByRole('button', { name: 'Show' }).first().click();
     await expect(dialog.getByText(/"hardware"/).first()).toBeVisible({ timeout: 30_000 });

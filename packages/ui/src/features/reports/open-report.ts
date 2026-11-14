@@ -1,6 +1,7 @@
 /**
- * Opens the report dialog. With `capture` (the report shortcut, Help › Report an Issue…) the desktop app first takes a
- * picture of the window as it is, before the dialog covers it, and attaches it; the person can take it out again.
+ * Opens the report dialog. With `capture` (the report shortcut, the bug button, Help › Report an Issue…) the report is
+ * about where the person is: the desktop app first takes a picture of the window as it is, before the dialog covers it,
+ * and the conversation open now is attached. The person can take either out again.
  */
 import type { ReportKind } from '@atelier/protocol';
 import { desktop } from '../../lib/platform.ts';
@@ -22,5 +23,5 @@ export async function openReporter(kind: ReportKind, { capture = false }: { capt
       // No picture, then: the dialog opens all the same.
     }
   }
-  useReports.getState().open_(kind, shot);
+  useReports.getState().open_(kind, shot, capture);
 }

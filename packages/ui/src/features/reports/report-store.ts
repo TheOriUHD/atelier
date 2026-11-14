@@ -19,9 +19,11 @@ interface ReportState {
   /** How many times it was opened: each opening mounts a fresh dialog. */
   opens: number;
   kind: ReportKind;
+  /** Opened from where the person is (F1, the bug button, Help › Report an Issue…): the conversation open now goes with it. */
+  fromHere: boolean;
   drafts: Record<ReportKind, ReportDraft>;
   shots: Shot[];
-  open_(kind: ReportKind, shot?: Shot | null): void;
+  open_(kind: ReportKind, shot?: Shot | null, fromHere?: boolean): void;
   close(): void;
   setKind(kind: ReportKind): void;
   setDraft(kind: ReportKind, patch: Partial<ReportDraft>): void;
@@ -41,13 +43,14 @@ export const useReports = create<ReportState>((set) => ({
   open: false,
   opens: 0,
   kind: 'issue',
+  fromHere: false,
   drafts: { issue: EMPTY, feature: EMPTY },
   shots: [],
-  open_: (kind, shot) =>
+  open_: (kind, shot, fromHere = false) =>
     set((s) => {
       const shots = shot ? [...s.shots, shot] : s.shots;
       if (shots.length > MAX_SHOTS) release(shots.slice(0, shots.length - MAX_SHOTS));
-      return { open: true, opens: s.open ? s.opens : s.opens + 1, kind, shots: shots.slice(-MAX_SHOTS) };
+      return { open: true, opens: s.open ? s.opens : s.opens + 1, kind, fromHere: s.open ? s.fromHere : fromHere, shots: shots.slice(-MAX_SHOTS) };
     }),
   close: () => set({ open: false }),
   setKind: (kind) => set({ kind }),

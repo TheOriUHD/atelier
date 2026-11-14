@@ -7,7 +7,7 @@
 import { useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
-import { Activity, Bug, Check, Copy, ImagePlus, Lightbulb, MessagesSquare, X } from 'lucide-react';
+import { Activity, Bug, Check, Copy, ImagePlus, Lightbulb, MessageCircle, MessagesSquare, SquareTerminal, X } from 'lucide-react';
 import { REPORT_LIMITS, reportTextProblem, type ReportChat, type ReportKind } from '@atelier/protocol';
 import { Button, Dialog, DialogContent, DialogFooter, Field, Icon, IconButton, SegmentedControl, Switch, TextArea, TextField, cn } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
@@ -60,7 +60,9 @@ export function ReportDialog() {
   // An issue always carries diagnostics: without them it can rarely be followed up. A feature request only on request.
   const [featureDiagnostics, setFeatureDiagnostics] = useState(false);
   const withDiagnostics = kind === 'issue' || featureDiagnostics;
-  const [withChat, setWithChat] = useState(false);
+  // Opened from a conversation with F1 (or the bug button): that conversation goes with it, as the picture does.
+  const [attachedHere] = useState(() => useReports.getState().fromHere && Boolean(params.sessionId));
+  const [withChat, setWithChat] = useState(attachedHere);
   // The conversation it was opened from is the one offered first. (A new dialog is mounted for each opening.)
   const [chatId, setChatId] = useState<string | null>(() => params.sessionId ?? null);
   const [preview, setPreview] = useState<'diagnostics' | 'chat' | null>(null);
@@ -78,7 +80,8 @@ export function ReportDialog() {
     const here = list.find((s) => s.id === params.sessionId);
     return [...(here ? [here] : []), ...list.filter((s) => s.id !== params.sessionId)];
   }, [sessions.data, params.sessionId]);
-  const chosenChat = withChat ? (chatId && chats.some((s) => s.id === chatId) ? chatId : (chats[0]?.id ?? null)) : null;
+  // A conversation that isn't listed (a temporary chat) isn't attached in its place: nothing is, until one is picked.
+  const chosenChat = withChat ? (chatId && chats.some((s) => s.id === chatId) ? chatId : attachedHere && chatId === params.sessionId ? null : (chats[0]?.id ?? null)) : null;
   const shownChats = useMemo(() => {
     const q = chatQuery.trim().toLowerCase();
     return (q ? chats.filter((s) => sessionTitle(s).toLowerCase().includes(q)) : chats).slice(0, 100);
@@ -271,6 +274,7 @@ export function ReportDialog() {
                               onClick={() => setChatId(s.id)}
                               className={cn('flex min-h-8 shrink-0 items-center gap-2 rounded-md px-2 text-left text-body outline-none focus-ring hover:bg-fill-ghost-hover', on && 'bg-fill-ghost-selected')}
                             >
+                              <Icon icon={s.mode === 'code' ? SquareTerminal : MessageCircle} size="sm" className="shrink-0 text-fg-muted" label={s.mode === 'code' ? 'Code session' : 'Chat'} />
                               <span className="min-w-0 flex-1 truncate text-fg">{sessionTitle(s)}</span>
                               {s.id === params.sessionId && <span className="shrink-0 text-footnote text-fg-muted">open now</span>}
                               <span className="shrink-0 text-footnote text-fg-muted">{relativeTime(s.updatedAt)}</span>

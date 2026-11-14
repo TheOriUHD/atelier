@@ -30,7 +30,7 @@ Each of these is shown before you send it: press **Show** to see exactly what go
 | Attachment | Issue | Feature request | What it holds |
 |---|---|---|---|
 | **Diagnostics** | always | off, your choice | See [below](#diagnostics). |
-| **A conversation** | off | off | One chat or Code session you pick: its messages with tool calls, results, thinking and context notes. A long one keeps how it started and its newest messages, with the gap named. Very long parts are shortened in the middle. Sub-agents come with their last few messages. Pictures and files in it are only named. |
+| **A conversation** | the open one, with F1 or the bug button; else off | off | One chat or Code session you pick from a list (a speech bubble marks chats, a terminal Code sessions): its messages with tool calls, results, thinking and context notes. A long one keeps how it started and its newest messages, with the gap named. Very long parts are shortened in the middle. Sub-agents come with their last few messages. Pictures and files in it are only named. |
 | **Pictures** | the window, with F1 | none | Up to 4, pasted, dropped or added. Each is scaled to at most 2560 pixels on its longest side and compressed (WebP, or JPEG where the browser can't write WebP) to under 2.5 MB. |
 
 Atelier's version, whether it runs on this computer, a server or in a browser, and the window's size and theme go with every

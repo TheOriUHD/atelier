@@ -10,7 +10,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
   - Settings has a **Help & feedback** page with the report buttons, the documentation, Copy diagnostics, and the admin's switch for reports.
   - An issue always carries diagnostics now; a feature request still only when you add them.
   - The Issue / Feature request switch is only as wide as its two choices.
-  - A conversation is picked from a short list with a search field, instead of a menu that grew past the top of the window.
+  - A conversation is picked from a short list with a search field, instead of a menu that grew past the top of the window; a speech bubble marks chats and a terminal Code sessions. F1 or the bug button in a conversation attaches that conversation already.
 
 ## [0.9.0] — 2026-11-14
 
