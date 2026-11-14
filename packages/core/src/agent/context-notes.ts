@@ -264,6 +264,14 @@ export function todoNudge(todos: Todo[], overrides: Overrides): string | null {
   return renderNote('notes/todo-nudge', { todos: todos.map((t) => `- ${mark[t.status]} ${escapeTags(t.content)}`).join('\n') }, overrides);
 }
 
+/** The note that sends a turn back to work when it ended with open items on its task list; null when none are open. */
+export function todosOpen(todos: Todo[], overrides: Overrides): string | null {
+  const open = todos.filter((t) => t.status !== 'completed');
+  if (!open.length) return null;
+  const mark = { in_progress: '[~]', pending: '[ ]' } as const;
+  return renderNote('notes/todos-open', { todos: open.map((t) => `- ${mark[t.status as 'in_progress' | 'pending']} ${escapeTags(t.content)}`).join('\n') }, overrides);
+}
+
 /** The after-compaction part (§3.7): the announced state restated, and what the summary can't carry word for word. */
 export function afterCompaction(
   input: { state: NoteState; models: Map<string, string>; plan: string | null; skills: { name: string; text: string }[]; files: string[] },

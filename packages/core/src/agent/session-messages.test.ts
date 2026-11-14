@@ -307,3 +307,35 @@ describe('messages between sessions', () => {
     ]);
   }, 30_000);
 });
+
+describe('a turn that ends with its task list unfinished', () => {
+  const todos = (a: string, b: string) => ({ todos: [{ content: 'Build the overlay', status: a, activeForm: 'Building the overlay' }, { content: 'Add money and repair', status: b, activeForm: 'Adding money and repair' }] });
+
+  it('goes back to work, and ends once the list is done', async () => {
+    const s = await repo.create({ mode: 'code', userId: 'u1', title: 'Mod menu' });
+    const { chat, of } = service((_id, _req, n) =>
+      n === 1 ? call('t1', 'TodoWrite', todos('in_progress', 'pending')) : n === 2 ? say('The overlay is in; the rest is still to do.') : n === 3 ? call('t2', 'TodoWrite', todos('completed', 'completed')) : say('All done.'),
+    );
+    await chat.send(s.id, [{ type: 'text', text: 'Build all of it.' }]);
+    await chat.settle(s.id);
+    const requests = of(s.id);
+    expect(requests).toHaveLength(4);
+    expect(notesIn(requests[2]!).join('\n')).toContain('your task list still has open items');
+    expect(notesIn(requests[2]!).join('\n')).toContain('Add money and repair');
+  });
+
+  it('lets a turn end that makes no progress after a push, or that ends asking the person', async () => {
+    const stuck = await repo.create({ mode: 'code', userId: 'u1', title: 'Stuck' });
+    const one = service((_id, _req, n) => (n === 1 ? call('t1', 'TodoWrite', todos('in_progress', 'pending')) : say('Paused here.')));
+    await one.chat.send(stuck.id, [{ type: 'text', text: 'Build all of it.' }]);
+    await one.chat.settle(stuck.id);
+    // The first stop is pushed once; the second, with the list as it was, ends the turn.
+    expect(one.of(stuck.id)).toHaveLength(3);
+
+    const asking = await repo.create({ mode: 'code', userId: 'u1', title: 'Asking' });
+    const two = service((_id, _req, n) => (n === 1 ? call('t1', 'TodoWrite', todos('in_progress', 'pending')) : say('Should the menu open with F4 or Insert?')));
+    await two.chat.send(asking.id, [{ type: 'text', text: 'Build all of it.' }]);
+    await two.chat.settle(asking.id);
+    expect(two.of(asking.id)).toHaveLength(2);
+  });
+});

@@ -4,6 +4,7 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **A task isn't left half done.** A turn that ended while the assistant's own task list still had open items, with nothing asked of you, now goes back to work: Atelier adds a note listing what is still open and the turn continues, up to four times and only while the list keeps moving, so one that is truly stuck still ends. Some models stop mid-task to report progress whatever the prompt says (an ETS2 mod menu stopped with 5 of 10 items open after "do the whole thing on your own").
 ## [0.8.1] — 2026-11-14
 
 - **A question during computer use can't be missed.** When the assistant asked something after giving the mouse back, the app or game it had used stayed in front and Atelier stayed hidden behind it, so the task waited unseen. Atelier now comes forward for every question in a reply that used the computer; where Windows won't let it (a full-screen game), its taskbar button flashes and a notification says it is waiting.

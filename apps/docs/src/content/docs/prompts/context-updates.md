@@ -60,6 +60,7 @@ Every note Atelier can send is below, verbatim. `{{name}}` is filled in when the
 | [`terminal-off`](#terminal-off) | The person wrote from the app window again after the terminal app. |
 | [`terminal-on`](#terminal-on) | The person wrote from the terminal app: its first turn there, and the first after the app window. The session goes without `artifact` and inline visuals while they are there. |
 | [`todo-nudge`](#todo-nudge) | Code and Cowork: ten tool calls without a TodoWrite while the task list has unfinished items. Rides on a tool result. |
+| [`todos-open`](#todos-open) | Code and chats with a task list: the turn ended while items were still open and nothing was asked of the person, so it goes back to work (a few times at most, while the list keeps moving). |
 | [`ultracode-off`](#ultracode-off) | Code: the first turn after Ultracode was switched off or clamped away. |
 | [`ultracode-on`](#ultracode-on) | Code: Ultracode started, on the first turn of a branch that runs at Ultracode, and on the first turn after a compaction. |
 | [`ultracode-still-on`](#ultracode-still-on) | Code: after ten person turns without an Ultracode note while it stays on. |
@@ -498,6 +499,18 @@ Source: [`packages/core/prompts/notes/todo-nudge.md`](https://github.com/TheOriU
 ````text wrap
 The task list hasn't changed for a while. If it no longer matches what you are doing, update it; if the work is finished, mark it so. Ignore this if it doesn't apply. Current list:
 {{todos}}
+````
+
+### `todos-open`
+
+Code and chats with a task list: the turn ended while items were still open and nothing was asked of the person, so it goes back to work (a few times at most, while the list keeps moving).
+
+Source: [`packages/core/prompts/notes/todos-open.md`](https://github.com/TheOriUHD/atelier/blob/main/packages/core/prompts/notes/todos-open.md)
+
+````text wrap
+You ended your turn, but your task list still has open items:
+{{todos}}
+The person asked for the whole task, so keep working through them now; don't stop to report progress. If one truly needs the person, ask with AskUser and go on with the rest meanwhile. If one can't be done at all, say why in one line and go on. When everything is done (or only what needs the person is left), finish with your summary.
 ````
 
 ## Permissions and plan mode

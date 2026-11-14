@@ -944,8 +944,9 @@ describe('auto-compaction', () => {
       expect(summary.parts.at(-1)).toMatchObject({ type: 'context', text: expect.stringMatching(/^Carried over from before the summary\. The current state: the model is Fake \(fake\/m\)/) });
     }
     // Every request fit the window with room for the reply, and once compacted, started from a summary.
+    // 14 for the task, and one more after "All done": its list still had open items, so the turn was sent back once.
     const sent = main(requests);
-    expect(sent).toHaveLength(14);
+    expect(sent).toHaveLength(15);
     for (const req of sent) expect(counted(req) + req.maxOutputTokens).toBeLessThanOrEqual(small.contextLength);
     const firstCompacted = sent.findIndex((r) => r.messages[0]!.kind === 'compaction_summary');
     expect(firstCompacted).toBeGreaterThan(0);
@@ -1013,9 +1014,11 @@ describe('auto-compaction', () => {
     const { messages } = await repo.branch(s.id);
     expect(messages.at(-1)!.parts).toEqual([{ type: 'text', text: 'All done' }]);
     expect(messages.some((m) => m.kind === 'compaction_summary')).toBe(false);
+    // The note about the summary, and the one that sent the turn back once over its unfinished list.
     const notes = messages.filter((m) => m.kind === 'context');
-    expect(notes).toHaveLength(1);
+    expect(notes).toHaveLength(2);
     expect(notes[0]!.parts[0]).toMatchObject({ type: 'context', text: expect.stringContaining('could not be summarized (summarizer down)') });
+    expect(notes[1]!.parts[0]).toMatchObject({ type: 'context', text: expect.stringContaining('your task list still has open items') });
     // The session's model, then once more with smaller chunks; not again for the rest of the turn.
     expect(requests.filter(isSummaryRequest)).toHaveLength(2);
     const last = main(requests).at(-1)!;

@@ -129,7 +129,7 @@ import { isTrusted, type Workspace } from '../workspaces/workspace.ts';
 import { runTurn, type PreparedRequest } from './loop.ts';
 import { actorFor, answerWithProblem, COOP_QUESTION_TIMEOUT_MS, guestMode, guestParts, keptOnStop, mayHandle, nextTurn, senderTag, soloActor, takenByTurn, type TurnActor, type TurnParticipant } from './coop-turns.ts';
 import { renderForSummary, renderState, summarize, type CarriedState } from './compaction.ts';
-import { afterCompaction, announcedState, todoNudge, turnNote, type GitSnapshot, type NoteState } from './context-notes.ts';
+import { afterCompaction, announcedState, todoNudge, todosOpen, turnNote, type GitSnapshot, type NoteState } from './context-notes.ts';
 import { isSideChat, mainTranscript, SIDE_CHAT_EFFORT, SIDE_CHAT_KEY, sideChatNote, sideChatTitle, sideChatTools, withSideChatNote } from './side-chat.ts';
 import {
   Calibration,
@@ -1510,6 +1510,19 @@ export class ChatService {
         await this.addContextMessage(sessionId, `Stop hook feedback: ${escapeTags(feedback)}`);
         result = await turn();
       }
+      // The turn ended with open items on the task list and nothing asked of the person: it goes back to work. A model
+      // that stops to report progress mid-task (some do, whatever the prompt says) carries on; only while the list keeps
+      // moving, and a few times at most, so one that is truly stuck ends.
+      let listBefore: string | null = null;
+      for (let round = 0; result.stopReason === 'end' && !signal.aborted && !session.parentSessionId && round < MAX_CONTINUE_ROUNDS; round++) {
+        const todos = (await this.requireSession(sessionId)).todos as Todo[];
+        const note = todosOpen(todos, this.deps.promptOverrides());
+        const list = JSON.stringify(todos);
+        if (!note || list === listBefore || (await this.endsAsking(sessionId))) break;
+        listBefore = list;
+        await this.addContextMessage(sessionId, note);
+        result = await turn();
+      }
       if (result.stopReason === 'error') finalStatus = 'error';
       // A usage limit reached before a request: nothing was sent, so the error is a reply of its own, after the last tool results
       // (where a sub-agent's report and the person's transcript look for it).
@@ -2013,6 +2026,14 @@ export class ChatService {
       // A block mustn't quietly shrink the task: when the work needs this, the person is asked now, not told at the end.
       message: `Auto mode blocked this action: ${verdict.reason} Don't reach the same result another way. Take a safer approach; if the task can't be done without it, ask the person now (AskUser where you have it) whether to allow it and why, and keep working on the rest.`,
     };
+  }
+
+  /** Whether the turn's last reply ends by asking the person something: then the turn waits for them. */
+  private async endsAsking(sessionId: string): Promise<boolean> {
+    const { messages } = await this.deps.repo.branch(sessionId);
+    const last = messages.findLast((m) => m.role === 'assistant');
+    const text = last?.parts.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('').trim() ?? '';
+    return /\?\s*(\*\*)?\s*$/.test(text);
   }
 
   /** After each tool call: PostToolUse hook feedback and context, and a nudge when the task list has gone stale. */
@@ -3622,6 +3643,8 @@ const COMPUTER_SAID_MESSAGES = 20;
 
 /** How often Stop hooks may send the model back to work in one turn. */
 const MAX_STOP_ROUNDS = 3;
+/** Times a turn that ended with open items on its task list goes back to work. */
+const MAX_CONTINUE_ROUNDS = 4;
 
 type SessionHooks = { workspace: Workspace; configs: HooksConfig[] };
 

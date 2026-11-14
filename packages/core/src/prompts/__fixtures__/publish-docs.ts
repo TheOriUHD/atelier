@@ -185,6 +185,7 @@ export const NOTE_WHEN: Record<string, { group: string; when: string }> = {
   'permission-auto': { group: 'Permissions and plan mode', when: 'Code: the person switched to Auto.' },
   'permission-bypass': { group: 'Permissions and plan mode', when: 'Code: the person switched to Bypass permissions.' },
   'plan-on': { group: 'Permissions and plan mode', when: 'Code: plan mode started.' },
+  'todos-open': { group: 'Tool loops', when: 'Code and chats with a task list: the turn ended while items were still open and nothing was asked of the person, so it goes back to work (a few times at most, while the list keeps moving).' },
   'plan-auto-on': { group: 'Permissions and plan mode', when: 'Code: plan mode started with its questions answered by the Auto reviewer (Plan · Auto).' },
   'plan-still-on': { group: 'Permissions and plan mode', when: 'Code: every turn while plan mode continues.' },
   'plan-off': { group: 'Permissions and plan mode', when: 'Code: the picker ended plan mode.' },
