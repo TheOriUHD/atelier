@@ -259,6 +259,8 @@ export interface ChatServiceDeps {
   computer?: {
     available(session: SessionRow): Promise<boolean>;
     call<M extends keyof ControllerMethods>(session: SessionRow, method: M, params: ControllerMethods[M]['params']): Promise<ControllerMethods[M]['result']>;
+    /** On a server: which of the person's computers it is, for the cards (only that computer's desktop app can allow them). */
+    where?(session: SessionRow): Promise<{ deviceId: string; name: string } | null>;
   };
   /** Atelier for Chrome on the person's computer (ARCHITECTURE §22): web pages in tabs of its own; offered while connected. */
   browser?: { call: BrowserCall };
@@ -674,6 +676,7 @@ export class ChatService {
         return tier === 'compact' ? { maxWidth: 1024, maxHeight: 1024 } : { maxWidth: 1280, maxHeight: 1280 };
       },
       wanted: (sessionId) => this.computerWanted(sessionId),
+      where: async (sessionId) => (this.deps.computer?.where ? this.deps.computer.where(await this.requireSession(sessionId)) : null),
     });
     this.browserTool = this.deps.browser ? (createBrowserTool({ call: this.deps.browser.call, blobs: this.deps.blobs }) as Tool & { closeTabs(sessionId: string): Promise<void> }) : null;
     this.addConnector = createAddConnectorTool({

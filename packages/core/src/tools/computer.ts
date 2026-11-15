@@ -20,6 +20,11 @@ export interface ComputerToolDeps {
    * (not a co-op guest's), where an app named outright is allowed without a card. Absent: every new app asks.
    */
   wanted?(sessionId: string): Promise<{ all: boolean; said: string }>;
+  /**
+   * Which computer the session's computer use is on, when that isn't plain (on a server): its cards say so, and only the
+   * desktop app on that computer can allow them. Absent or null: the computer running the session.
+   */
+  where?(sessionId: string): Promise<{ deviceId: string; name: string } | null>;
 }
 
 /** Words before or after an app's name that people leave out when they name it ("chrome" for Google Chrome). */
@@ -95,6 +100,11 @@ function describeAction({ tier }: DescribeContext): string {
 }
 
 export function createComputerTools(deps: ComputerToolDeps): Tool[] {
+  /** The card's `computer`: the one it is for, when the server says (Remote Control: the computer the session runs on). */
+  const onComputer = async (sessionId: string) => {
+    const computer = await deps.where?.(sessionId).catch(() => null);
+    return computer ? { computer } : {};
+  };
   /** Takes the mouse and keyboard, asking the person first unless they let it always. */
   const takeControl = async (sessionId: string, callId: string, reason: string, signal: AbortSignal): Promise<string | null> => {
     const first = await deps.call(sessionId, 'control.request', {});
@@ -103,7 +113,7 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
     const state = await deps.call(sessionId, 'access.state', {});
     const answer = await deps.approve(
       sessionId,
-      { callId, toolName: 'FullControl', input: { reason, apps: state.apps }, reason: 'The assistant wants to take over the mouse and keyboard.', suggestedRule: '' },
+      { callId, toolName: 'FullControl', input: { reason, apps: state.apps, ...(await onComputer(sessionId)) }, reason: 'The assistant wants to take over the mouse and keyboard.', suggestedRule: '' },
       signal,
     );
     if (answer.behavior === 'deny') return answer.message ? `The person kept control and said: ${answer.message}` : 'The person kept control of their computer. Go on without it, or ask them.';
@@ -138,7 +148,7 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
     if (pending.length) {
       const answer = await deps.approve(
         ctx.sessionId,
-        { callId: ctx.callId, toolName: 'ComputerAccess', input: { apps: pending satisfies PreparedApp[], reason }, reason: 'The assistant wants to use apps on this computer.', suggestedRule: '' },
+        { callId: ctx.callId, toolName: 'ComputerAccess', input: { apps: pending satisfies PreparedApp[], reason, ...(await onComputer(ctx.sessionId)) }, reason: 'The assistant wants to use apps on this computer.', suggestedRule: '' },
         ctx.signal,
       );
       if (answer.behavior === 'deny') return { refused: answer.message ? `The person didn't allow it and said: ${answer.message}` : "The person didn't allow those apps. Go on without them, or ask why.", notes, ids: [] };

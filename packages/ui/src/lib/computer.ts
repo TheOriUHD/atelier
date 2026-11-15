@@ -23,9 +23,12 @@ export function useComputerStatus(): ComputerStatus | undefined {
  * backend (`local`), or the server it is signed in to (its address), whose sessions use this computer through the
  * device link. A browser can't allow anything on a computer.
  */
-export function useComputerHere(): string | null {
+export function useComputerHere(card?: unknown): string | null {
   const { data: connection } = useConnection();
   if (!desktop?.computer) return null;
+  // A card for another of the person's computers (Remote Control: the session runs there) is allowed on that one.
+  const target = cardComputer(card);
+  if (target && target.deviceId !== desktop.device.id) return null;
   if (connection?.mode === 'local') return 'local';
   return connection?.mode === 'server' && connection.serverUrl ? connection.serverUrl : null;
 }
@@ -33,4 +36,12 @@ export function useComputerHere(): string | null {
 export async function refreshComputer(qc: ReturnType<typeof useQueryClient>, run: () => Promise<unknown>): Promise<void> {
   await run();
   await qc.invalidateQueries({ queryKey: KEY });
+}
+
+/** The computer a computer-use card is for, when the server named it (a session that runs on another computer). */
+export function cardComputer(card: unknown): { deviceId: string; name: string } | null {
+  const computer = card && typeof card === 'object' ? (card as { computer?: unknown }).computer : undefined;
+  if (!computer || typeof computer !== 'object') return null;
+  const { deviceId, name } = computer as { deviceId?: unknown; name?: unknown };
+  return typeof deviceId === 'string' && typeof name === 'string' ? { deviceId, name } : null;
 }

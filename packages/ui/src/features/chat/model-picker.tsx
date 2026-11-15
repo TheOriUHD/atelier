@@ -14,7 +14,7 @@ import {
   toast,
 } from '../../components/ui/index.ts';
 import { useOpenSettings } from '../../app/navigation.ts';
-import { useAccount, usePrefs, useSetPref, useSettings } from '../../lib/queries.ts';
+import { useAccount, usePrefs, useSetPref, useSettings, useSteadyPrefs } from '../../lib/queries.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { EffortControl } from './effort-control.tsx';
 import { modelSubtitle, useModelGroups } from './models.ts';
@@ -42,6 +42,8 @@ export interface ModelPickerProps {
 export function ModelPicker({ model, mode, effort, onModelChange, onEffortChange, inSession, sessionId, thinking, open, onOpenChange }: ModelPickerProps) {
   const { settings } = useSettings();
   const { prefs } = usePrefs();
+  // A conversation about to start shows thinking as its screen started with it (another device's pick doesn't move it).
+  const steady = useSteadyPrefs();
   const setPref = useSetPref();
   /**
    * A model picked in a conversation is the one the next conversation starts with, unless the person turned that off:
@@ -59,7 +61,7 @@ export function ModelPicker({ model, mode, effort, onModelChange, onEffortChange
   return (
     <>
       <ModelMenu value={model?.ref ?? null} label={model?.displayName ?? 'Choose a model'} onChange={(ref) => ref && choose(ref)} open={open} onOpenChange={onOpenChange} />
-      <EffortControl model={model} mode={mode} effort={effort} onChange={changeEffort} inSession={inSession} thinking={thinking ?? prefs?.thinking ?? true} onThinkingChange={sessionId ? (value) => rpc().call('sessions.update', { id: sessionId, thinking: value }).catch(() => toast.error('Couldn’t change thinking')) : (value) => setPref.mutate({ path: ['thinking'], value })} ultracode={settings?.ultracode?.enabled !== false} />
+      <EffortControl model={model} mode={mode} effort={effort} onChange={changeEffort} inSession={inSession} thinking={thinking ?? steady?.thinking ?? true} onThinkingChange={sessionId ? (value) => rpc().call('sessions.update', { id: sessionId, thinking: value }).catch(() => toast.error('Couldn’t change thinking')) : (value) => setPref.mutate({ path: ['thinking'], value })} ultracode={settings?.ultracode?.enabled !== false} />
     </>
   );
 }

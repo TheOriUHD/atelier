@@ -23,7 +23,7 @@ links to the section with the details.
 | [SSH hosts](/code/#ssh-hosts) | ✓ | [✓, with this computer's `ssh`](/code/#connected-to-a-server) | Under Remote Control | — |
 | [Codespaces](/code/#codespaces) | ✓ | ✓ | ✓ | — |
 | [Chat sandbox](/chat/#the-sandbox) | A folder on this computer | The server's | The server's | — |
-| [Computer use](/computer-use/) | ✓ | ✓, on the computer you last wrote from | — | — |
+| [Computer use](/computer-use/) | ✓ | ✓, on the computer the folder is on, else the one you last wrote from | — | — |
 | [Browser pane and Preview](/code/#browser) | ✓ | ✓ | — | — |
 | [Artifacts](/artifacts/) and inline visuals | ✓ | ✓ | ✓ | — |
 | [Co-op](/co-op/) | With other computers, through the relay | With teammates on the server | With teammates on the server | — |

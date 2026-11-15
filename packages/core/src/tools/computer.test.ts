@@ -21,7 +21,7 @@ const prepared = (name: string, over: Partial<PreparedApp> = {}): PreparedApp =>
 });
 
 /** The tools against a pretend controller: `answers` are the person's, in order; every call is recorded. */
-function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof ControllerMethods]: (p: ControllerMethods[M]['params']) => ControllerMethods[M]['result'] }>, wanted?: ComputerToolDeps['wanted']) {
+function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof ControllerMethods]: (p: ControllerMethods[M]['params']) => ControllerMethods[M]['result'] }>, wanted?: ComputerToolDeps['wanted'], where?: ComputerToolDeps['where']) {
   const asked: PermissionRequest[] = [];
   const calls: { method: string; params: unknown }[] = [];
   const call: ComputerCall = async (_session, method, params) => {
@@ -36,6 +36,7 @@ function setup(answers: PermissionAnswer[], computer: Partial<{ [M in keyof Cont
     blobs: { put: async () => ({ sha256: 'blob1' }) as never },
     size: async () => ({ maxWidth: 1280, maxHeight: 800 }),
     ...(wanted ? { wanted } : {}),
+    ...(where ? { where } : {}),
   });
   const tool = (name: string) => tools.find((t) => t.name === name) as Tool<Record<string, unknown>>;
   return { tool, asked, calls };
@@ -53,6 +54,22 @@ const state = (apps: AppGrant[], control = false, mode: 'background' | 'full' = 
 const textEdit: AppGrant = { app: { id: 'com.example.TextEdit', name: 'TextEdit' }, tier: 'full' };
 
 describe('ComputerAccess', () => {
+  it('names the computer on its cards when the session uses another one (Remote Control: only that one can allow them)', async () => {
+    const pc = { deviceId: 'd-pc', name: 'Gaming PC' };
+    const { tool, asked } = setup(
+      [{ behavior: 'allow' }, { behavior: 'allow' }],
+      { 'access.prepare': () => ({ apps: [prepared('TextEdit')], unknown: [] }), 'access.state': () => state([textEdit]), 'control.request': () => ({ granted: false, reason: 'ask' }) },
+      undefined,
+      async () => pc,
+    );
+    await tool('ComputerAccess').run({ apps: ['TextEdit'], reason: 'Write notes.' }, ctx);
+    await tool('FullControl').run({ action: 'request', reason: 'Play a level.' }, ctx);
+    expect(asked.map((r) => [r.toolName, (r.input as { computer?: unknown }).computer])).toEqual([
+      ['ComputerAccess', pc],
+      ['FullControl', pc],
+    ]);
+  });
+
   it('asks the person about the apps not yet allowed, then says what it may use', async () => {
     const { tool, asked } = setup([{ behavior: 'allow' }], {
       'access.prepare': () => ({ apps: [prepared('TextEdit'), prepared('Notes', { granted: 'full' }), prepared('1Password', { denied: true }), prepared('Settings', { tier: null, maxTier: null })], unknown: ['Nope'] }),

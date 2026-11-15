@@ -97,6 +97,7 @@ import * as git from '../workspaces/git.ts';
 import { DeviceLinkError, DeviceLinks, type LinkSocket } from '../workspaces/device-links.ts';
 import { deviceFetch } from '../workspaces/device-fetch.ts';
 import { deviceSocket } from '../workspaces/device-socket.ts';
+import { computerDeviceFor } from '../workspaces/computer-device.ts';
 import { findFiles, gitDiff, gitStatus, grepFiles, listDir, readFile as readWorkspaceFile, sessionDiff } from '../workspaces/workspace-view.ts';
 import { FileBytesError, fileBytes } from '../workspaces/file-bytes.ts';
 import { ChatService, ModelHiddenError, type ExtensionCatalog } from '../agent/chat-service.ts';
@@ -384,18 +385,19 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       emitToUser(userId, 'extensions.changed', {});
     },
   );
-  /** Which of a person's computers a session's computer use reaches on a server: the one they last wrote from (in it, else anywhere), else the one connected longest. */
+  /**
+   * Which of a person's computers a session's computer use reaches on a server (`computerDeviceFor`): the one its folder
+   * is on (Remote Control runs there, wherever it is written from), else the one they last wrote from.
+   */
   const lastDevice = new Map<string, string>();
   const lastDeviceOf = new Map<string, string>();
-  const computerDevice = (session: { id: string; userId: string | null }): string | null => {
+  const computerDevice = async (session: { id: string; userId: string | null; workspaceId: string | null }): Promise<{ device: string | null; folderDevice: string | null }> => {
     const userId = session.userId;
-    if (!userId) return null;
-    const lends = (id: string | undefined): id is string => !!id && !!links.info(userId, id)?.services.includes('computer');
-    const last = lastDevice.get(session.id);
-    if (lends(last)) return last;
-    const mine = lastDeviceOf.get(userId);
-    if (lends(mine)) return mine;
-    return links.devices(userId).find((d) => lends(d)) ?? null;
+    if (!userId) return { device: null, folderDevice: null };
+    const folderDevice = session.workspaceId ? await workspaceManager.deviceOf(userId, session.workspaceId) : null;
+    const lends = (id: string) => !!links.info(userId, id)?.services.includes('computer');
+    const device = computerDeviceFor({ folderDevice, lastInSession: lastDevice.get(session.id), lastAnywhere: lastDeviceOf.get(userId), devices: links.devices(userId), lends });
+    return { device, folderDevice };
   };
   /** A message or action from a window: which app it came from, and on a server which of the person's computers. */
   const heard = (sessionId: string, client: ClientInfo) => {
@@ -1350,16 +1352,24 @@ export async function createBackend(platform: Platform): Promise<Backend> {
             // turned on and every app is allowed on that computer's cards.
             computer: {
               available: async (session) => {
-                const device = computerDevice(session);
+                const { device } = await computerDevice(session);
                 if (!device || !session.userId) return false;
                 return (await links.request(session.userId, device, { op: 'computer', sessionId: '', method: 'available', params: {} }, 5_000).catch(() => false)) === true;
               },
               call: async (session, method, params) => {
-                const device = computerDevice(session);
-                if (!device || !session.userId) throw new Error('No computer of yours is connected: open the Atelier desktop app with computer use turned on.');
+                const { device, folderDevice } = await computerDevice(session);
+                if (!device || !session.userId) {
+                  if (folderDevice && session.userId)
+                    throw new Error(`This session runs on ${await deviceName(session.userId, folderDevice)}, where its folder is, and computer use isn't on there: open the Atelier desktop app on it with computer use turned on.`);
+                  throw new Error('No computer of yours is connected: open the Atelier desktop app with computer use turned on.');
+                }
                 return (await links.request(session.userId, device, { op: 'computer', sessionId: session.id, method, params }, COMPUTER_CALL_MS).catch((e: unknown) => {
                   throw e instanceof Error ? new Error(e.message, { cause: e }) : new Error(String(e));
                 })) as never;
+              },
+              where: async (session) => {
+                const { device } = await computerDevice(session);
+                return device && session.userId ? { deviceId: device, name: await deviceName(session.userId, device) } : null;
               },
             },
           }

@@ -21,7 +21,7 @@ import type {
   QuestionRequest,
 } from '@atelier/protocol';
 import { Badge, Button, Field, GrowingField, Icon, IconButton, Kbd, Menu, MenuContent, MenuItem, MenuTrigger, Select, TextField, cn, toast } from '../../components/ui/index.ts';
-import { refreshComputer, useComputerHere, useComputerStatus } from '../../lib/computer.ts';
+import { cardComputer, refreshComputer, useComputerHere, useComputerStatus } from '../../lib/computer.ts';
 import { desktop, isMac, openExternal } from '../../lib/platform.ts';
 import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts';
 import { useAppInfo } from '../../lib/queries.ts';
@@ -662,6 +662,12 @@ function ConnectorRequest({ request, sending, respond }: { request: PermissionRe
   );
 }
 
+/** Where a computer-use card can be allowed when not in this window: the desktop app on the computer it is for. */
+function allowWhere(input: unknown): string {
+  const target = cardComputer(input);
+  return target ? `This session uses ${target.name}: allow this in the ${APP.name} desktop app there.` : `Allow this in the ${APP.name} desktop app on the computer running this session.`;
+}
+
 const TIER_LABEL: Record<AppTier, string> = { view: 'See only', click: 'See and click', full: 'Full use' };
 const TIER_ORDER: AppTier[] = ['view', 'click', 'full'];
 
@@ -703,7 +709,8 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
   const input = asRecord(request.input);
   const apps = (Array.isArray(input.apps) ? input.apps : []) as PreparedApp[];
   const reason = str(input.reason);
-  const here = useComputerHere();
+  const here = useComputerHere(input);
+  const elsewhere = allowWhere(input);
   const status = useComputerStatus();
   const background = status?.settings.mode === 'background' && status.background;
   const [tiers, setTiers] = useState<Record<string, AppTier>>(() => Object.fromEntries(apps.map((a) => [a.app.id, a.tier ?? 'view'])));
@@ -764,7 +771,7 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
           ? background
             ? `${APP.name} works in these apps in the background, one at a time, without your mouse and keyboard, and sees only their windows.`
             : `${APP.name} sees only these apps in its screenshots. Taking over your mouse and keyboard asks again, unless Settings › System says otherwise.`
-          : `Allow this in the ${APP.name} desktop app on the computer running this session.`}
+          : elsewhere}
       </p>
       {why.open && <ReasonField why={why} sending={busy} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
@@ -791,7 +798,7 @@ function FullControlRequest({ sessionId, request, sending, respond }: { sessionI
   const input = asRecord(request.input);
   const apps = (Array.isArray(input.apps) ? input.apps : []) as AppGrant[];
   const reason = str(input.reason);
-  const here = useComputerHere();
+  const here = useComputerHere(input);
   const [allowing, setAllowing] = useState(false);
   const busy = sending || allowing;
   const allow = async (always: boolean) => {
@@ -824,7 +831,7 @@ function FullControlRequest({ sessionId, request, sending, respond }: { sessionI
         {apps.length ? `It works in ${apps.map((g) => g.app.name).join(', ')}; other apps are hidden meanwhile. ` : 'Other apps are hidden meanwhile. '}
         Hold <Kbd>Esc</Kbd> for a second to take your computer back.
       </p>
-      {!here && <p className="text-footnote text-fg-muted">Allow this in the {APP.name} desktop app on the computer running this session.</p>}
+      {!here && <p className="text-footnote text-fg-muted">{allowWhere(input)}</p>}
       {why.open && <ReasonField why={why} sending={busy} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">

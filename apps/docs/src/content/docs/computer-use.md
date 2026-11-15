@@ -12,9 +12,10 @@ It is off until you turn it on, it only uses apps you allow, and you can stop it
 
 :::note
 Computer use works on **macOS**, **Windows** and **Linux** (X11), in the desktop app, both with **Run on this computer**
-and signed in to a server. On a server, the session uses the computer you last wrote from: turn computer use on in that
-computer's desktop app, and allow apps on the cards in its window (the server can't allow any). A session in the browser
-can't use your computer. [Linux](#linux) differs in a few ways, which are listed there.
+and signed in to a server. On a server, a session in a folder on one of your computers (Remote Control) uses that
+computer, wherever you write from; any other session uses the computer you last wrote from. Turn computer use on in
+that computer's desktop app, and allow apps on the cards in its window (the server can't allow any). A session started
+in the browser can't use your computer, unless its folder is on one of your computers. [Linux](#linux) differs in a few ways, which are listed there.
 :::
 
 ## Turn it on

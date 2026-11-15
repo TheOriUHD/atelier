@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { defaultModelFor, effortGuidance, nativeEfforts, ULTRACODE_LEVEL, type Effort, type EffortGuidance, type Mode, type ModelInfo } from '@atelier/protocol';
-import { useModels, usePrefs, useSettings } from '../../lib/queries.ts';
+import { useModels, useSettings, useSteadyPrefs } from '../../lib/queries.ts';
 
 export const EFFORT_LABELS: Record<Effort, string> = {
   low: 'Low',
@@ -102,12 +102,13 @@ export function useModelGroups(): { providerId: string; label: string; models: M
 
 /**
  * The model a new session in `mode` starts with: the person's preferred model while it is enabled, else
- * the system default, else the first visible model.
+ * the system default, else the first visible model. The preference as this screen started with it (`useSteadyPrefs`):
+ * another device of the person's picking a model doesn't change it here.
  */
 export function useDefaultModel(mode: Mode): ModelInfo | undefined {
   const { data: models } = useModels();
   const { settings } = useSettings();
-  const { prefs } = usePrefs();
+  const prefs = useSteadyPrefs();
   const preferred = prefs?.models[mode];
   const systemDefault = settings ? defaultModelFor(settings, mode) : undefined;
   return (

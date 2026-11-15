@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import type { AppContract, Part } from '@atelier/protocol';
 import { toast } from '../../components/ui/index.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
+import { useSteadyPrefs } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useSplitCell } from '../../lib/split-cell.tsx';
 import { lendSsh } from '../../lib/lending.ts';
@@ -24,6 +25,8 @@ export function useStartSession(attachments: ReturnType<typeof useAttachments>) 
   // In a split view cell the new session takes the cell's place; elsewhere the page goes to it.
   const cell = useSplitCell();
   const [sending, setSending] = useState(false);
+  // Thinking as the screen shows it (`useSteadyPrefs`), not as another device of the person's changed it meanwhile.
+  const prefs = useSteadyPrefs();
   const start = async (session: NewSession, text: string): Promise<void> => {
     if (sending) return;
     setSending(true);
@@ -36,7 +39,7 @@ export function useStartSession(attachments: ReturnType<typeof useAttachments>) 
       // A server makes a session's empty folder on this computer, or on an SSH host reached from it: the person allows that here.
       if (session.scratch?.sshHost) await lendSsh(session.scratch.sshHost);
       else if (session.scratch && !(await lendScratch())) return;
-      sessionId = (await rpc().call('sessions.create', session)).id;
+      sessionId = (await rpc().call('sessions.create', { ...(prefs ? { thinking: prefs.thinking } : {}), ...session })).id;
       const parts: Part[] = [...attachments.parts(), ...(text ? [{ type: 'text' as const, text }] : [])];
       await rpc().call('chat.send', { sessionId, parts });
       attachments.clear();

@@ -1,6 +1,9 @@
+import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { appError, type WorkspaceSummary } from '@atelier/protocol';
+import { appError, defaultUserPrefs, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { keys, usePrefs, useSetPref } from '../../lib/queries.ts';
 import { backend, callsTo, resetBackend } from '../settings/test-backend.ts';
 import { TrustWorkspaceHost } from '../workspaces/trust.tsx';
 import { useStartSession } from './start-session.ts';
@@ -11,6 +14,9 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
+
+let client: QueryClient;
+const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 
 const attachments = { parts: () => [], clear: vi.fn() } as unknown as Parameters<typeof useStartSession>[0];
 
@@ -28,6 +34,7 @@ const folder = (id: string, extra: Partial<WorkspaceSummary> = {}): WorkspaceSum
 });
 
 beforeEach(() => {
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   navigate.mockReset();
   resetBackend({
     'sessions.create': () => ({ id: 's1' }),
@@ -40,7 +47,7 @@ beforeEach(() => {
 
 describe('useStartSession', () => {
   it('creates the session, sends the message and opens it in its mode', async () => {
-    const { result } = renderHook(() => useStartSession(attachments));
+    const { result } = renderHook(() => useStartSession(attachments), { wrapper });
     await act(() => result.current.start({ mode: 'work', workspaceId: 'w1' }, 'Write the report'));
     expect(callsTo('chat.send')).toEqual([{ sessionId: 's1', parts: [{ type: 'text', text: 'Write the report' }] }]);
     expect(navigate).toHaveBeenCalledWith({ to: '/work/$sessionId', params: { sessionId: 's1' } });
@@ -50,7 +57,7 @@ describe('useStartSession', () => {
   it('asks Trust this workspace? before a session starts in a folder the backend does not trust, and starts none without a yes', async () => {
     backend.handlers['workspaces.list'] = () => [folder('w1', { trusted: false })];
     render(<TrustWorkspaceHost />);
-    const { result } = renderHook(() => useStartSession(attachments));
+    const { result } = renderHook(() => useStartSession(attachments), { wrapper });
     let started!: Promise<void>;
     act(() => {
       started = result.current.start({ mode: 'code', workspaceId: 'w1' }, 'Run the tests');
@@ -80,7 +87,7 @@ describe('useStartSession', () => {
 
   it('does not ask about a folder that is trusted', async () => {
     render(<TrustWorkspaceHost />);
-    const { result } = renderHook(() => useStartSession(attachments));
+    const { result } = renderHook(() => useStartSession(attachments), { wrapper });
     await act(() => result.current.start({ mode: 'code', workspaceId: 'w1' }, 'Run the tests'));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(callsTo('workspaces.trust')).toEqual([]);
@@ -91,10 +98,29 @@ describe('useStartSession', () => {
     backend.handlers['chat.send'] = () => {
       throw appError('no_model', 'Add a model provider to start chatting.');
     };
-    const { result } = renderHook(() => useStartSession(attachments));
+    const { result } = renderHook(() => useStartSession(attachments), { wrapper });
     await act(() => result.current.start({ mode: 'chat' }, 'hello'));
     expect(callsTo('sessions.delete')).toEqual([{ id: 's1' }]);
     expect(navigate).not.toHaveBeenCalled();
     expect(result.current.sending).toBe(false);
+  });
+
+  it("starts with thinking as the screen first had it: another device's change doesn't apply, one made here does", async () => {
+    const prefs = (thinking: boolean): UserPrefs => ({ ...defaultUserPrefs(), thinking });
+    let stored = prefs(true);
+    backend.handlers['prefs.get'] = () => stored;
+    const { result } = renderHook(() => ({ start: useStartSession(attachments), setPref: useSetPref(), live: usePrefs().prefs }), { wrapper });
+    await waitFor(() => expect(result.current.live?.thinking).toBe(true));
+    // Another of the person's devices switched thinking off: the account's preferences change, this screen doesn't.
+    stored = prefs(false);
+    await act(() => client.invalidateQueries({ queryKey: keys.prefs }));
+    await waitFor(() => expect(result.current.live?.thinking).toBe(false));
+    await act(() => result.current.start.start({ mode: 'chat' }, 'hello'));
+    expect(callsTo('sessions.create')).toEqual([expect.objectContaining({ thinking: true })]);
+    // Switched off here, it applies at once.
+    backend.handlers['prefs.set'] = () => prefs(false);
+    await act(() => result.current.setPref.mutateAsync({ path: ['thinking'], value: false }));
+    await act(() => result.current.start.start({ mode: 'chat' }, 'again'));
+    expect(callsTo('sessions.create')[1]).toMatchObject({ thinking: false });
   });
 });

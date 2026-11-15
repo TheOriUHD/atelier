@@ -1,5 +1,5 @@
 /** TanStack Query hooks over the RPC contract; backend events keep caches fresh without polling. */
-import { useEffect } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { defaultUserPrefs, type AppInfo, type DiffCompare, type ImageModelInfo, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
 import { setPath } from './json-path.ts';
@@ -204,12 +204,44 @@ export function usePrefs() {
   return { ...q, prefs: q.data };
 }
 
+/** How many preference changes this window made (`useSetPref`, `useResetPref`), for `useSteadyPrefs`. */
+let ownPrefChanges = 0;
+const ownPrefListeners = new Set<() => void>();
+const changedPrefsHere = () => {
+  ownPrefChanges++;
+  for (const listener of ownPrefListeners) listener();
+};
+const onOwnPrefChange = (listener: () => void) => {
+  ownPrefListeners.add(listener);
+  return () => void ownPrefListeners.delete(listener);
+};
+
+/**
+ * The person's preferences as a screen first had them, for the picks of a conversation about to start (its model,
+ * thinking): they don't move while the screen is open when another of the person's devices changes the account's
+ * preferences (picking a model on a laptop that remote-controls this computer). A change made in this window applies
+ * at once; the next screen starts from the preferences as they are then.
+ */
+export function useSteadyPrefs(): UserPrefs | undefined {
+  const { prefs } = usePrefs();
+  const own = useSyncExternalStore(onOwnPrefChange, () => ownPrefChanges);
+  const [held, setHeld] = useState<{ own: number; prefs: UserPrefs } | null>(null);
+  if (prefs && (!held || held.own !== own)) {
+    setHeld({ own, prefs });
+    return prefs;
+  }
+  return held?.prefs ?? prefs;
+}
+
 /** Writes one preference. The cache shows it before the backend answers; the answer replaces it. */
 export function useSetPref() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { path: SettingsPath; value: unknown }) => rpc().call('prefs.set', input),
-    onMutate: ({ path, value }) => qc.setQueryData<UserPrefs>(keys.prefs, (prefs) => prefs && setPath(prefs, path, value)),
+    onMutate: ({ path, value }) => {
+      qc.setQueryData<UserPrefs>(keys.prefs, (prefs) => prefs && setPath(prefs, path, value));
+      changedPrefsHere();
+    },
     onSuccess: (prefs) => qc.setQueryData(keys.prefs, prefs),
     onError: () => void qc.invalidateQueries({ queryKey: keys.prefs }),
   });
@@ -220,7 +252,10 @@ export function useResetPref() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { path: SettingsPath }) => rpc().call('prefs.reset', input),
-    onSuccess: (prefs) => qc.setQueryData(keys.prefs, prefs),
+    onSuccess: (prefs) => {
+      qc.setQueryData(keys.prefs, prefs);
+      changedPrefsHere();
+    },
   });
 }
 

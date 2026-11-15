@@ -104,6 +104,9 @@ desktop app has its own. Consequences:
 They are independent. Switching the account's remote control off does not take away the **Remote Control** environment,
 and using that environment does not need the account switch to be on. A Code session you run in a folder on your desktop
 from a browser is a conversation like any other: whether *other* devices can open it follows the switches above, while
-the work still happens on the desktop through its own link. How that link works, and why trusting a folder
+the work still happens on the desktop through its own link. Everything the session does runs on that computer, whichever
+device you write from: its commands and files, its home folder's config, and [computer use](/computer-use/), which uses
+that computer's screen and asks on that computer's desktop app. Picks you make on a new session's screen (the model,
+thinking) are for the session you start there: another device's screen keeps its own. How that link works, and why trusting a folder
 lets a server's sessions run commands as you on that computer, is in [Run a server](/self-hosting/#connecting-browsers-and-desktop-apps)
 and [Code](/code/).

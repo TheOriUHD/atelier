@@ -113,6 +113,12 @@ export class WorkspaceManager {
     return rows.map((r) => this.summary(r));
   }
 
+  /** The computer a folder of the person's is on or reached through (on a server); null for one on this backend's machine, or none. */
+  async deviceOf(userId: string, id: string): Promise<string | null> {
+    const row = await this.deps.db.select({ deviceId: workspaces.deviceId }).from(workspaces).where(and(eq(workspaces.userId, userId), eq(workspaces.id, id))).get();
+    return row?.deviceId ?? null;
+  }
+
   /**
    * Trusts a folder; inside a git repository the repository's top level becomes the root. The folder is on
    * this backend's machine, or (on a server) on `deviceId`, the desktop the request came from.
