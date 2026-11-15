@@ -38,6 +38,28 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.9.2',
+    intro: 'Remote Control works on the computer you control.',
+    highlights: [
+      {
+        icon: Monitor,
+        title: 'Everything runs where the folder is',
+        body: 'A session in a folder on another of your computers now uses that computer for computer use too, wherever you write from. Its computer use cards are allowed in the desktop app on that computer.',
+      },
+      {
+        icon: SlidersHorizontal,
+        title: 'Each screen keeps its picks',
+        body: 'Picking a model or switching thinking on one device no longer changes a new-session screen open on another.',
+      },
+    ],
+    also: [
+      'Switching Normal, Thinking and Verbose keeps your place in a Code session.',
+      'Messages between agents are steps of the work around them.',
+      'A connector whose server starts later connects without pressing Test.',
+      'localhost added in the desktop app on a server means your computer.',
+    ],
+  },
+  {
     version: '0.9.1',
     intro: 'Reporting a problem is one click away.',
     highlights: [

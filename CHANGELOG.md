@@ -4,6 +4,9 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Remote Control runs on the computer you control.** A session in a folder on another of your computers used computer use on the computer you last wrote from: started from a laptop, it worked the laptop's screen while its commands ran on the other one. Now everything such a session does happens on the computer its folder is on, computer use included, wherever you write from. Its cards (which apps it may use, taking over the mouse) can only be allowed in the desktop app on that computer, and say so elsewhere; while computer use is off there, the session has none.
+- **A new session's screen keeps its picks.** Picking a model or switching thinking on one device changed the open new-session screen on your other devices at once (the model is remembered for your account). Now a screen keeps the picks it started with until you change them there; the next new screen starts from your latest picks.
+
 - **Messages between agents join the work they belong to.** "Received a message from a sub-agent", "Messaged a sub-agent" and "Background agent finished" were rows of their own that split the work into many small groups. They are now steps of the work group around them, and its summary counts them ("Read 3 files, messaged a sub-agent, 4 messages from sub-agents"); opening the group shows each one as before.
 
 - **Connectors notice a server that comes up later.** A connector that failed (an app's local MCP server that wasn't running yet) was tried again on a backoff of up to 5 minutes, so it stayed "Not connected" until someone pressed Test connection. Now it is tried again the moment its status is looked at (the message box's Connectors menu, the Connectors page) or a conversation starts, and in the background at least once a minute.
