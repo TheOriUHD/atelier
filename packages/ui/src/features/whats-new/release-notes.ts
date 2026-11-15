@@ -38,6 +38,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.9.3',
+    intro: 'Answer computer use cards from wherever you are.',
+    highlights: [
+      {
+        icon: Monitor,
+        title: 'Allow it from the device you write from',
+        body: 'With Remote Control, the cards of a session on your other computer (which apps it may use, taking over the mouse and keyboard) are answered on the device you write from. That computer’s desktop app allows what you pick, and only what the card offered.',
+      },
+    ],
+    also: ['Always allow works from there too: the apps are remembered on that computer.'],
+  },
+  {
     version: '0.9.2',
     intro: 'Remote Control works on the computer you control.',
     highlights: [

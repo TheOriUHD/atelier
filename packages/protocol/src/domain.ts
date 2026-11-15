@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AppTier } from './computer.ts';
 import { Participant } from './coop.ts';
 import { ImageProgress } from './images.ts';
 import { EditPlace, Message, MessageError, Part, Usage } from './messages.ts';
@@ -125,6 +126,17 @@ export const PermissionAnswer = z.object({
   mode: z.enum(['auto', 'default', 'acceptEdits']).optional(),
   /** Approving a ChangeDirectory: the folder to move to (the person may have corrected or picked it). */
   path: z.string().max(4096).optional(),
+  /**
+   * Allowing a computer use card for another of the person's computers (Remote Control): what that computer's desktop
+   * app allows, as its own card would. `grants`: the apps and what it may do in each (ComputerAccess); `always`: for good
+   * there (or, for FullControl, switching it to Full control).
+   */
+  computer: z
+    .object({
+      grants: z.array(z.object({ id: z.string().max(500), tier: AppTier })).max(20).optional(),
+      always: z.boolean(),
+    })
+    .optional(),
 });
 export type PermissionAnswer = z.infer<typeof PermissionAnswer>;
 

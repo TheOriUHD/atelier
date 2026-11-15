@@ -631,6 +631,36 @@ describe('apps the person asked for', () => {
   });
 });
 
+describe('a card answered on another of the person’s devices (Remote Control)', () => {
+  const server = (method: keyof ControllerMethods, params: unknown, sessionId = 's1') => controller.handle('https://atelier.example', sessionId, method as never, params as never);
+
+  it('allows only the apps the session’s card offered, at most at the tier offered, for the session or always', async () => {
+    // Nothing was asked for yet: nothing can be allowed.
+    expect(await server('access.grant', { grants: [{ id: 'com.apple.TextEdit', tier: 'full' }], always: false })).toEqual({ allowed: [] });
+    await server('access.prepare', { names: ['TextEdit', 'Terminal', '1Password'] });
+    // Terminal offers clicks at most, 1Password is denied, Notes wasn't on the card.
+    const answer = { grants: [{ id: 'com.apple.TextEdit', tier: 'full' }, { id: 'com.apple.Terminal', tier: 'full' }, { id: 'com.1password.1password', tier: 'full' }, { id: 'com.apple.Notes', tier: 'full' }], always: true };
+    expect(await server('access.grant', answer)).toEqual({ allowed: ['com.apple.TextEdit', 'com.apple.Terminal'] });
+    expect(((await server('access.state', {})) as { apps: unknown }).apps).toEqual([
+      { app: { id: 'com.apple.TextEdit', name: 'TextEdit' }, tier: 'full' },
+      { app: { id: 'com.apple.Terminal', name: 'Terminal' }, tier: 'click' },
+    ]);
+    // Always: for that server's sessions on this computer, as on its own card.
+    expect((await controller.status()).settings.always['https://atelier.example']?.map((g) => g.app.id)).toEqual(['com.apple.TextEdit', 'com.apple.Terminal']);
+    // What it allowed is used up: the same answer again allows nothing new.
+    expect(await server('access.grant', answer)).toEqual({ allowed: [] });
+  });
+
+  it('lets it take the mouse and keyboard only after it asked', async () => {
+    await expect(server('control.allow', { always: false })).rejects.toThrow('wasn’t asked for');
+    await controller.grant('https://atelier.example', 's1', [{ id: 'com.apple.TextEdit', tier: 'full' }], false);
+    expect(await server('control.request', {})).toEqual({ granted: false, reason: 'ask' });
+    await server('control.allow', { always: false });
+    expect(await server('control.request', {})).toEqual({ granted: true });
+    await expect(server('control.allow', { always: false })).rejects.toThrow('wasn’t asked for');
+  });
+});
+
 describe('on Windows', () => {
   it('lets alt+tab and the Windows key switch apps while Atelier has the keyboard, and reads cmd as ctrl', async () => {
     const windows = new ComputerController({

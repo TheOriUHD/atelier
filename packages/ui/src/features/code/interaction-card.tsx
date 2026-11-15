@@ -662,11 +662,16 @@ function ConnectorRequest({ request, sending, respond }: { request: PermissionRe
   );
 }
 
-/** Where a computer-use card can be allowed when not in this window: the desktop app on the computer it is for. */
-function allowWhere(input: unknown): string {
+/** A computer use card that only the desktop app running the session can allow (no other computer named). */
+const NOT_HERE = `Allow this in the ${APP.name} desktop app on the computer running this session.`;
+
+/** The other computer of the person's a card is for (Remote Control: the session runs there); null for this one or none named. */
+function remoteComputer(input: unknown): { deviceId: string; name: string } | null {
   const target = cardComputer(input);
-  return target ? `This session uses ${target.name}: allow this in the ${APP.name} desktop app there.` : `Allow this in the ${APP.name} desktop app on the computer running this session.`;
+  return target && target.deviceId !== desktop?.device.id ? target : null;
 }
+
+const remoteNote = (computer: { name: string }) => `For ${computer.name}, where this session runs: its ${APP.name} desktop app allows what you pick here.`;
 
 const TIER_LABEL: Record<AppTier, string> = { view: 'See only', click: 'See and click', full: 'Full use' };
 const TIER_ORDER: AppTier[] = ['view', 'click', 'full'];
@@ -703,24 +708,30 @@ function ComputerPermissions() {
 /**
  * ComputerAccess: the assistant wants to use apps on this computer. Each app comes with the most it may do (browsers
  * see only, terminals and editors see and click, unless the person picks otherwise); allowed for this session or for
- * good on this computer. Only the desktop app running the session can allow anything: elsewhere the card can only decline.
+ * good on that computer. The desktop app running the session allows it; for a session on another of the person's
+ * computers (Remote Control) the answer goes there, and its desktop app allows what was picked. Elsewhere (no computer
+ * named) the card can only decline.
  */
 function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessionId: string; request: PermissionRequest; sending: boolean; respond: Respond }) {
   const input = asRecord(request.input);
   const apps = (Array.isArray(input.apps) ? input.apps : []) as PreparedApp[];
   const reason = str(input.reason);
   const here = useComputerHere(input);
-  const elsewhere = allowWhere(input);
+  const remote = remoteComputer(input);
+  // Here, or for another of the person's computers (Remote Control), whose desktop app then allows what is picked here.
+  const can = !!here || !!remote;
   const status = useComputerStatus();
   const background = status?.settings.mode === 'background' && status.background;
   const [tiers, setTiers] = useState<Record<string, AppTier>>(() => Object.fromEntries(apps.map((a) => [a.app.id, a.tier ?? 'view'])));
   const [allowing, setAllowing] = useState(false);
   const busy = sending || allowing;
   const allow = async (always: boolean) => {
-    if (busy || !here) return;
+    if (busy || !can) return;
+    const grants = apps.map((a) => ({ id: a.app.id, tier: tiers[a.app.id] ?? 'view' }));
+    if (!here) return respond({ behavior: 'allow', computer: { grants, always } });
     setAllowing(true);
     try {
-      await desktop!.computer!.grant({ backend: here, sessionId, grants: apps.map((a) => ({ id: a.app.id, tier: tiers[a.app.id] ?? 'view' })), always });
+      await desktop!.computer!.grant({ backend: here, sessionId, grants, always });
       respond({ behavior: 'allow' });
     } catch (e) {
       toast.error(describeError(e).message);
@@ -736,9 +747,9 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
       title={title}
       keys={withReason(why, {
         escape: deny,
-        mod: here ? () => void allow(false) : undefined,
-        modShift: here ? () => void allow(true) : undefined,
-        digit: (n) => (n === 1 ? deny() : !here ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
+        mod: can ? () => void allow(false) : undefined,
+        modShift: can ? () => void allow(true) : undefined,
+        digit: (n) => (n === 1 ? deny() : !can ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
       })}
     >
       {reason && <p className="text-body text-fg-secondary">{reason}</p>}
@@ -750,7 +761,7 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
           return (
             <li key={a.app.id} className="flex items-center justify-between gap-3 px-3 py-1.5">
               <span className="min-w-0 truncate text-body text-fg">{a.app.name}</span>
-              {here ? (
+              {can ? (
                 <Select
                   variant="ghost"
                   aria-label={`What ${APP.name} may do in ${a.app.name}`}
@@ -771,7 +782,9 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
           ? background
             ? `${APP.name} works in these apps in the background, one at a time, without your mouse and keyboard, and sees only their windows.`
             : `${APP.name} sees only these apps in its screenshots. Taking over your mouse and keyboard asks again, unless Settings › System says otherwise.`
-          : elsewhere}
+          : remote
+            ? remoteNote(remote)
+            : NOT_HERE}
       </p>
       {why.open && <ReasonField why={why} sending={busy} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
@@ -779,7 +792,7 @@ function ComputerAccessRequest({ sessionId, request, sending, respond }: { sessi
           <Action label="Don’t allow" caps={['1', 'Esc']} disabled={busy} onClick={deny} />
           <SayWhy why={why} disabled={busy} />
         </div>
-        {here && (
+        {can && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Action label="Always allow" caps={['2', SHIFT, MOD, ENTER]} disabled={busy} onClick={() => void allow(true)} />
             <Action primary label="Allow for this session" caps={['3', MOD, ENTER]} disabled={busy} onClick={() => void allow(false)} />
@@ -799,10 +812,13 @@ function FullControlRequest({ sessionId, request, sending, respond }: { sessionI
   const apps = (Array.isArray(input.apps) ? input.apps : []) as AppGrant[];
   const reason = str(input.reason);
   const here = useComputerHere(input);
+  const remote = remoteComputer(input);
+  const can = !!here || !!remote;
   const [allowing, setAllowing] = useState(false);
   const busy = sending || allowing;
   const allow = async (always: boolean) => {
-    if (busy || !here) return;
+    if (busy || !can) return;
+    if (!here) return respond({ behavior: 'allow', computer: { always } });
     setAllowing(true);
     try {
       await desktop!.computer!.allowControl({ backend: here, sessionId, always });
@@ -820,9 +836,9 @@ function FullControlRequest({ sessionId, request, sending, respond }: { sessionI
       title={`Let ${APP.name} take over your mouse and keyboard?`}
       keys={withReason(why, {
         escape: keep,
-        mod: here ? () => void allow(false) : undefined,
-        modShift: here ? () => void allow(true) : undefined,
-        digit: (n) => (n === 1 ? keep() : !here ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
+        mod: can ? () => void allow(false) : undefined,
+        modShift: can ? () => void allow(true) : undefined,
+        digit: (n) => (n === 1 ? keep() : !can ? undefined : n === 2 ? void allow(true) : n === 3 ? void allow(false) : undefined),
       })}
     >
       {reason && <p className="text-body text-fg-secondary">{reason}</p>}
@@ -831,14 +847,14 @@ function FullControlRequest({ sessionId, request, sending, respond }: { sessionI
         {apps.length ? `It works in ${apps.map((g) => g.app.name).join(', ')}; other apps are hidden meanwhile. ` : 'Other apps are hidden meanwhile. '}
         Hold <Kbd>Esc</Kbd> for a second to take your computer back.
       </p>
-      {!here && <p className="text-footnote text-fg-muted">{allowWhere(input)}</p>}
+      {!here && <p className="text-footnote text-fg-muted">{remote ? remoteNote(remote) : NOT_HERE}</p>}
       {why.open && <ReasonField why={why} sending={busy} />}
       <div className="@container flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Action label="Keep control" caps={['1', 'Esc']} disabled={busy} onClick={keep} />
           <SayWhy why={why} disabled={busy} />
         </div>
-        {here && (
+        {can && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Action label="Always allow" caps={['2', SHIFT, MOD, ENTER]} disabled={busy} onClick={() => void allow(true)} />
             <Action primary label="Allow" caps={['3', MOD, ENTER]} disabled={busy} onClick={() => void allow(false)} />

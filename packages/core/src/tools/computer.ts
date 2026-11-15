@@ -99,6 +99,14 @@ function describeAction({ tier }: DescribeContext): string {
   ].join('\n');
 }
 
+/** An answer passed on to the computer: one whose desktop app predates answers from other devices says so. */
+async function relayed<T>(call: Promise<T>): Promise<T> {
+  return call.catch((e: unknown) => {
+    if (errorText(e).startsWith('Unknown computer use request')) throw new Error('The desktop app on that computer is too old to take an answer given on another device: update it there, or answer the card in it.', { cause: e });
+    throw e;
+  });
+}
+
 export function createComputerTools(deps: ComputerToolDeps): Tool[] {
   /** The card's `computer`: the one it is for, when the server says (Remote Control: the computer the session runs on). */
   const onComputer = async (sessionId: string) => {
@@ -117,6 +125,8 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
       signal,
     );
     if (answer.behavior === 'deny') return answer.message ? `The person kept control and said: ${answer.message}` : 'The person kept control of their computer. Go on without it, or ask them.';
+    // Allowed in another of the person's apps (Remote Control): that computer's desktop app lets it, as its own card would.
+    if (answer.computer) await relayed(deps.call(sessionId, 'control.allow', { always: answer.computer.always }));
     const again = await deps.call(sessionId, 'control.request', {});
     return again.granted ? null : (again.reason ?? 'The computer refused.');
   };
@@ -152,6 +162,8 @@ export function createComputerTools(deps: ComputerToolDeps): Tool[] {
         ctx.signal,
       );
       if (answer.behavior === 'deny') return { refused: answer.message ? `The person didn't allow it and said: ${answer.message}` : "The person didn't allow those apps. Go on without them, or ask why.", notes, ids: [] };
+      // Allowed in another of the person's apps (Remote Control): that computer's desktop app allows them, as its own card would.
+      if (answer.computer?.grants?.length) await relayed(deps.call(ctx.sessionId, 'access.grant', { grants: answer.computer.grants, always: answer.computer.always }));
     }
     return { refused: null, notes, ids: prepared.apps.filter((p) => !p.denied && p.tier !== null).map((p) => p.app.id) };
   };

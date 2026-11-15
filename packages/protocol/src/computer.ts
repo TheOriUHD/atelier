@@ -534,6 +534,12 @@ export interface ControllerMethods {
    * apps it allowed.
    */
   'access.allow': { params: { ids: string[] }; result: { allowed: string[] } };
+  /**
+   * The person allowed apps on the card in another of their apps (Remote Control: the session runs on this computer while
+   * they write from another device), relayed by the server: granted as on this computer's own card, but only apps the
+   * session's latest `access.prepare` offered, and at most at the tier offered. `allowed`: the apps it allowed.
+   */
+  'access.grant': { params: { grants: { id: string; tier: AppTier }[]; always: boolean }; result: { allowed: string[] } };
   'apps.open': { params: { id: string }; result: Record<string, never> };
   /**
    * Full control: the display (the screen as the person sees it, but for their denied apps). Background: `app`'s window
@@ -542,6 +548,8 @@ export interface ControllerMethods {
   screenshot: { params: { display?: string; app?: string; size: ScreenshotSize }; result: ComputerScreenshot & { display: string; note?: string; elements?: ScreenshotElement[] } };
   /** Takes the mouse and keyboard, once the person agreed on this computer (or always lets it). */
   'control.request': { params: Record<string, never>; result: { granted: boolean; reason?: string } };
+  /** The person let it take the mouse and keyboard on the card in another of their apps, after `control.request` asked. */
+  'control.allow': { params: { always: boolean }; result: Record<string, never> };
   'control.batch': { params: { actions: ComputerActionItem[]; size: ScreenshotSize }; result: { results: ComputerActionResult[] } };
   'control.release': { params: Record<string, never>; result: Record<string, never> };
   /** The turn ended: control ends. */

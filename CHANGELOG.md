@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Computer use cards for another computer are answered where you are.** With Remote Control, the cards of a session on your other computer (which apps it may use, taking over the mouse and keyboard) could only be allowed in the desktop app on that computer. Now you answer them on the device you write from, with the same choices; your answer goes through the server to that computer's desktop app, which allows only the apps the card offered, at most with what it offered for each, for the session or always.
+
 ## [0.9.2] — 2026-11-15
 
 - **Remote Control runs on the computer you control.** A session in a folder on another of your computers used computer use on the computer you last wrote from: started from a laptop, it worked the laptop's screen while its commands ran on the other one. Now everything such a session does happens on the computer its folder is on, computer use included, wherever you write from. Its cards (which apps it may use, taking over the mouse) can only be allowed in the desktop app on that computer, and say so elsewhere; while computer use is off there, the session has none.

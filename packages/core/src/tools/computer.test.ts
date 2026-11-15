@@ -54,6 +54,36 @@ const state = (apps: AppGrant[], control = false, mode: 'background' | 'full' = 
 const textEdit: AppGrant = { app: { id: 'com.example.TextEdit', name: 'TextEdit' }, tier: 'full' };
 
 describe('ComputerAccess', () => {
+  it("passes an answer given on another device to the session's computer, as its own card would allow it", async () => {
+    const grants = [{ id: 'com.example.TextEdit', tier: 'click' as const }];
+    const { tool, calls } = setup([{ behavior: 'allow', computer: { grants, always: true } }, { behavior: 'allow', computer: { always: false } }], {
+      'access.prepare': () => ({ apps: [prepared('TextEdit')], unknown: [] }),
+      'access.grant': () => ({ allowed: ['com.example.TextEdit'] }),
+      'access.state': () => state([textEdit]),
+      'control.request': () => ({ granted: calls.some((c) => c.method === 'control.allow'), reason: 'ask' }),
+      'control.allow': () => ({}),
+    });
+    await tool('ComputerAccess').run({ apps: ['TextEdit'], reason: 'Write notes.' }, ctx);
+    const out = await tool('FullControl').run({ action: 'request', reason: 'Play a level.' }, ctx);
+    expect(out.isError).toBeUndefined();
+    expect(calls.filter((c) => c.method === 'access.grant' || c.method === 'control.allow')).toEqual([
+      { method: 'access.grant', params: { grants, always: true } },
+      { method: 'control.allow', params: { always: false } },
+    ]);
+  });
+
+  it("says so when that computer's desktop app is too old to take such an answer", async () => {
+    const { tool } = setup([{ behavior: 'allow', computer: { grants: [{ id: 'com.example.TextEdit', tier: 'full' }], always: false } }], {
+      'access.prepare': () => ({ apps: [prepared('TextEdit')], unknown: [] }),
+      'access.grant': () => {
+        throw new Error('Unknown computer use request access.grant.');
+      },
+    });
+    const out = await tool('ComputerAccess').run({ apps: ['TextEdit'], reason: 'Write notes.' }, ctx);
+    expect(out.isError).toBe(true);
+    expect(text(out)).toContain('too old to take an answer given on another device');
+  });
+
   it('names the computer on its cards when the session uses another one (Remote Control: only that one can allow them)', async () => {
     const pc = { deviceId: 'd-pc', name: 'Gaming PC' };
     const { tool, asked } = setup(

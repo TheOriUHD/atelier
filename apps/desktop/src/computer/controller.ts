@@ -104,6 +104,10 @@ interface SessionState {
   opened?: { id: string; at: number };
   /** Background (macOS): where the software cursor last went, in that window; typing keeps it there. */
   pointer?: { window: string; x: number; y: number };
+  /** The apps its latest card offered and the most each may get: all a card answered elsewhere can allow (`access.grant`). */
+  offered?: Map<string, AppTier>;
+  /** `control.request` asked the person: a card answered elsewhere may let it take the mouse and keyboard (`control.allow`). */
+  controlAsked?: boolean;
 }
 
 /** Digits and arithmetic signs only, with a digit: what a model sends as a `key` when it means to type a number or a sum. */
@@ -284,8 +288,11 @@ export class ComputerController {
     return next;
   }
 
-  /** The person allowed apps on a card in this computer's window (only there: a backend can't allow anything). */
-  async grant(backend: string, sessionId: string, grants: { id: string; tier: AppTier }[], always: boolean): Promise<void> {
+  /**
+   * The person allowed apps on a card: in this computer's window, or in another of their apps (`access.grant`, relayed
+   * by the server, for the apps the card offered). The apps it allowed.
+   */
+  async grant(backend: string, sessionId: string, grants: { id: string; tier: AppTier }[], always: boolean): Promise<AppGrant[]> {
     const settings = await readComputerSettings(this.deps.settingsPath);
     const installed = await this.appList();
     const state = this.session(backend, sessionId);
@@ -302,6 +309,7 @@ export class ComputerController {
       await this.settings((s) => ({ ...s, always: { ...s.always, [backend]: [...(s.always[backend] ?? []).filter((g) => !allowed.some((a) => a.app.id === g.app.id)), ...allowed] } }));
     }
     this.deps.changed();
+    return allowed;
   }
 
   /** The person let a session take the mouse and keyboard: for the session, or always (the Full control mode). */
@@ -369,10 +377,22 @@ export class ComputerController {
             granted: policy.tier(app.id),
           });
         }
+        // What a card answered on another of the person's apps may allow: these apps, at most at their top tier.
+        state().offered = new Map(apps.flatMap((p) => (!p.denied && p.maxTier ? [[p.app.id, p.maxTier] as const] : [])));
         return { apps, unknown };
       },
+      'access.grant': async ({ grants, always }: ControllerMethods['access.grant']['params']): Promise<ControllerMethods['access.grant']['result']> => {
+        const offered = state().offered ?? new Map<string, AppTier>();
+        const asked = grants.flatMap((g) => {
+          const top = offered.get(g.id);
+          return top ? [{ id: g.id, tier: atLeast(top, g.tier) ? g.tier : top }] : [];
+        });
+        const allowed = await this.grant(backend, sessionId, asked, always);
+        for (const g of allowed) offered.delete(g.app.id);
+        return { allowed: allowed.map((g) => g.app.id) };
+      },
       'access.allow': async ({ ids }: ControllerMethods['access.allow']['params']): Promise<ControllerMethods['access.allow']['result']> => {
-        // A server can't allow anything here: only the person can, on the card in this computer's window.
+        // Named apps are allowed without a card only for this computer's own backend; a server's sessions ask on a card (here, or answered on another of the person's devices: `access.grant`).
         if (backend !== 'local') return { allowed: [] };
         const installed = await this.appList();
         const allowed: string[] = [];
@@ -427,11 +447,20 @@ export class ComputerController {
         if (this.control?.key === key) return { granted: true };
         if (this.control) return { granted: false, reason: 'Another conversation is using the mouse and keyboard right now.' };
         if (!policy.full && !policy.grants.length) return { granted: false, reason: 'You may use no apps yet: ask with ComputerAccess first.' };
-        if (settings.mode !== 'full' && !state().control) return { granted: false, reason: 'ask' };
+        if (settings.mode !== 'full' && !state().control) {
+          state().controlAsked = true;
+          return { granted: false, reason: 'ask' };
+        }
         const permissions = await this.permissions();
         if (!permissions.accessibility) return { granted: false, reason: 'Atelier needs the Accessibility permission to use the mouse and keyboard: the person turns it on in Settings › Computer use.' };
         await this.begin(backend, sessionId, settings);
         return { granted: true };
+      },
+      'control.allow': async ({ always }: ControllerMethods['control.allow']['params']): Promise<ControllerMethods['control.allow']['result']> => {
+        if (!state().controlAsked) throw new Error('Taking over the mouse and keyboard wasn’t asked for.');
+        state().controlAsked = false;
+        await this.allowControl(backend, sessionId, always);
+        return {};
       },
       'control.batch': async ({ actions, size }: ControllerMethods['control.batch']['params']): Promise<ControllerMethods['control.batch']['result']> => {
         const control = this.control;
