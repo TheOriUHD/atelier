@@ -5,6 +5,8 @@
 import { randomUUID } from 'node:crypto';
 import { DICTATION_CHUNK_MAX_BYTES, DICTATION_MAX_MS, type DictationStart, type DictationStatus, type DictationUpdate, type ImageProviderConfig, type ProviderConfig } from '@atelier/protocol';
 import type { ProviderFetch } from '../providers/types.ts';
+import type { BuiltinSpeech, BuiltinState } from './builtin/builtin.ts';
+import { SPEECH_MODEL_LANGUAGES } from './builtin/manifest.ts';
 import { connectWebSocket, type DictationConnect, type DictationEngine } from './engine.ts';
 import { openMistralRealtime } from './mistral-realtime.ts';
 import { openPhrases } from './phrases.ts';
@@ -19,13 +21,17 @@ export interface DictationDeps {
   fetch: ProviderFetch;
   connect?: DictationConnect;
   log?(message: string): void;
+  /** Atelier's own model on this backend; none leaves only providers. */
+  builtin?: BuiltinSpeech | null;
+  /** Where the own model runs, as the settings name it ("on this server"). */
+  builtinWhere?: string;
   /** For tests. */
   limits?: { idleMs?: number; maxMs?: number };
 }
 
 export class DictationError extends Error {
   constructor(
-    readonly code: 'unavailable' | 'not_found' | 'too_many',
+    readonly code: 'unavailable' | 'not_found' | 'too_many' | 'preparing',
     message: string,
   ) {
     super(message);
@@ -61,21 +67,35 @@ export class DictationService<Owner> {
 
   private choices(): DictationChoice[] {
     const s = this.deps.settings();
-    return dictationChoices(s.text, s.media);
+    const own = this.deps.builtin && this.deps.builtin.state().state !== 'unsupported' ? { label: this.deps.builtin.label, where: this.deps.builtinWhere ?? 'Atelier' } : null;
+    return dictationChoices(s.text, s.media, own);
   }
 
   status(admin: boolean): DictationStatus {
     const s = this.deps.settings();
     const all = this.choices();
     const picked = s.enabled ? pickDictation(all, s.source) : null;
-    return { enabled: s.enabled, source: picked?.source ?? null, sources: admin ? all.map((c) => c.source) : [], chosen: admin ? (s.source ?? null) : null };
+    const builtin = this.deps.builtin ? toStatus(this.deps.builtin.state()) : undefined;
+    return { enabled: s.enabled, source: picked?.source ?? null, sources: admin ? all.map((c) => c.source) : [], chosen: admin ? (s.source ?? null) : null, ...(builtin ? { builtin } : {}) };
+  }
+
+  /** Gets the own model ready when dictation would use it (fetching it the first time); answers at once. */
+  prepare(admin: boolean): DictationStatus {
+    const s = this.deps.settings();
+    const picked = s.enabled ? pickDictation(this.choices(), s.source) : null;
+    // An admin's "Download now" fetches it whatever dictation uses now; anyone's dictation when it would use it.
+    if (this.deps.builtin && (admin || picked?.dialect === 'builtin')) void this.deps.builtin.prepare().catch(() => undefined);
+    return this.status(admin);
   }
 
   /** Starts one for this window (ending one it had), with the service that dictating uses now. */
   async start(owner: Owner, userId: string, input: DictationStart, emit: (update: DictationUpdate) => void): Promise<{ id: string; live: boolean }> {
     const s = this.deps.settings();
     if (!s.enabled) throw new DictationError('unavailable', 'Dictation is turned off on this server. An admin can turn it on in Settings › General › Dictation.');
-    const choice = pickDictation(this.choices(), s.source);
+    const all = this.choices();
+    let choice = pickDictation(all, s.source);
+    // A language Atelier's model wasn't trained on goes to a provider that may know it, unless an admin chose the model.
+    if (choice?.dialect === 'builtin' && !s.source && input.language !== 'auto' && !SPEECH_MODEL_LANGUAGES[input.language]) choice = all.find((c) => c.dialect !== 'builtin') ?? choice;
     if (!choice)
       throw new DictationError(
         'unavailable',
@@ -118,11 +138,20 @@ export class DictationService<Owner> {
         this.drop(session);
       },
     };
+    if (choice.dialect === 'builtin') {
+      const own = this.deps.builtin;
+      if (!own || own.state().state !== 'ready') {
+        this.drop(session);
+        void own?.prepare().catch(() => undefined);
+        throw new DictationError('preparing', 'Dictation is getting ready: its speech model is being downloaded.');
+      }
+    }
     try {
-      const { apiKey, headers } = await this.deps.credentials(choice.provider);
+      const { apiKey, headers } = choice.dialect === 'builtin' ? { apiKey: undefined, headers: {} } : await this.deps.credentials(choice.provider);
       const name = choice.source.provider;
-      session.engine =
-        choice.dialect === 'mistral-realtime'
+      session.engine = choice.dialect === 'builtin'
+        ? await this.deps.builtin!.open(language, events)
+        : choice.dialect === 'mistral-realtime'
           ? await openMistralRealtime({ baseUrl: choice.baseUrl, apiKey, headers, model: choice.model, language, hints, name, connect: this.deps.connect ?? connectWebSocket, ...events })
           : openPhrases({
               ...events,
@@ -227,5 +256,18 @@ export class DictationService<Owner> {
 
   dispose(): void {
     for (const session of [...this.sessions.values()]) this.drop(session);
+  }
+}
+
+function toStatus(state: BuiltinState): DictationStatus['builtin'] {
+  switch (state.state) {
+    case 'downloading':
+      return { state: 'downloading', received: state.received, total: state.total };
+    case 'missing':
+      return { state: 'missing', bytes: state.bytes };
+    case 'failed':
+      return { state: 'failed', error: state.error, bytes: state.bytes };
+    default:
+      return { state: state.state };
   }
 }

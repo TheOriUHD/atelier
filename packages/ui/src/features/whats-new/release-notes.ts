@@ -39,7 +39,7 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.10.0',
-    intro: 'Speak instead of typing.',
+    intro: 'Speak instead of typing, with nothing to set up.',
     highlights: [
       {
         icon: Mic,
@@ -47,13 +47,18 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         body: 'Click the microphone and speak: your words appear where the cursor was as you say them, and a waveform follows your voice. Click again to keep them, Enter to send, Esc to drop them. Hold the button, or ⇧⌘Space, to record until you let go.',
       },
       {
+        icon: ShieldCheck,
+        title: 'On your computer or your server',
+        body: 'On a Mac, the Mac’s own speech recognition hears you, and nothing leaves it. Elsewhere Atelier’s own speech model runs on your server or your computer, downloaded once the first time you dictate.',
+      },
+      {
         icon: SlidersHorizontal,
         title: 'Your microphone and language',
-        body: 'The arrow beside the microphone picks which microphone to use, the language you speak (or Auto) and Hold to record. The same settings are in Settings › General › Dictation.',
+        body: 'The arrow beside the microphone picks the microphone, the language you speak (or Auto) and Hold to record. The same settings are in Settings › General › Dictation.',
       },
     ],
     also: [
-      'It uses the providers already set up: Mistral’s Voxtral Realtime writes while you speak; OpenAI, Groq, ElevenLabs, Deepgram and local Whisper servers a phrase at a time.',
+      'Admins can use a provider’s speech-to-text instead (Mistral Voxtral Realtime, OpenAI, Groq, ElevenLabs, Deepgram, a local Whisper server), or turn dictation off.',
       'On a Mac, macOS asks once whether Atelier may use the microphone.',
     ],
   },

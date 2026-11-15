@@ -28,7 +28,8 @@ see are hidden in the app.
 | **Default music model** *(only where it works)* | What makes your songs and background music, unless you name another when you ask. |
 | **Default sound effects model** *(only where it works)* | What makes your sound effects and ambience, unless you name another when you ask. |
 | **Dictation** *(admins only, only where it works)* | The microphone in the message box: speech turns into text as people speak, with a speech-to-text service of the providers set up here. |
-| **Speech-to-text service** *(admins only, only where it works)* | Automatic takes live transcription (Mistral’s Voxtral Realtime) first, then a local Whisper server, then OpenAI, Groq, ElevenLabs or Deepgram. |
+| **Speech-to-text service** *(admins only, only where it works)* | Automatic uses Atelier’s own speech model. A provider can take its place: Mistral’s Voxtral Realtime (live), a local Whisper server, OpenAI, Groq, ElevenLabs or Deepgram. |
+| **Atelier’s speech model** *(admins only, only where it works)* | Nemotron 3.5 ASR from NVIDIA, run by Atelier itself: live words in about 30 languages, with nothing to set up. It is downloaded the first time someone dictates (about 715 MB) and kept. |
 | **Dictation language** *(only where it works)* | The language you speak. Auto lets the service hear it; naming it helps with short phrases and names. |
 | **Hold to record** *(only where it works)* | Holding the microphone button or the dictate shortcut records until you let go. A click still starts and stops dictating. |
 | **Microphone** *(only where it works)* | Which microphone dictation uses on this computer. |
@@ -364,4 +365,5 @@ Admins only. Admins only. These are diagnostic tools.
 |---|---|
 | **Record provider requests** | Lists the requests sent to model providers: address, status, timing and headers with credentials masked. Prompts and replies are never recorded. |
 | **Connector logs** | What each connector printed, and its connections and failures. Credentials are masked. |
+| **Dictate with Atelier’s speech model on this Mac** *(only where it works)* | This Mac dictates with its own speech recognition. On, it uses Atelier’s speech model instead: the server’s when connected to one, else this computer’s. This Mac only. |
 | **Reload connectors and extensions** | Reconnects every connector and reads skills, commands, agents and plugins again. |

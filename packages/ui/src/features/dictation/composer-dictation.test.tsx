@@ -262,6 +262,24 @@ describe('dictating into the message box', () => {
     expect(screen.getByRole('alert').textContent).toContain('The microphone was disconnected.');
   });
 
+  it('fetches Atelier’s speech model the first time, shows how far it got, and says when it is ready', async () => {
+    const { RpcError, RpcErrorCode } = await import('@atelier/protocol');
+    backend.handlers['dictation.start'] = () => {
+      throw new RpcError(RpcErrorCode.Application, 'Dictation is getting ready: its speech model is being downloaded.', { code: 'preparing' });
+    };
+    backend.handlers['dictation.prepare'] = () => status({ builtin: { state: 'downloading', received: 0, total: 715_000_000 } });
+    const input = box();
+    fireEvent.click(await micButton());
+    await waitFor(() => expect(callsTo('dictation.prepare')).toHaveLength(1));
+    // The microphone isn't kept open meanwhile, and the box is the person's again.
+    expect(mic.stopped).toBeGreaterThan(0);
+    expect(input.readOnly).toBe(false);
+    act(() => emit('dictation.changed', status({ builtin: { state: 'downloading', received: 357_000_000, total: 715_000_000 } })));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('357 of 715 MB'));
+    act(() => emit('dictation.changed', status({ builtin: { state: 'ready' } })));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Dictation is ready'));
+  });
+
   it('speaks the language chosen, and says so to the backend', async () => {
     backend.handlers['prefs.get'] = () => ({ ...defaultUserPrefs(), dictation: { language: 'de', holdToRecord: false } });
     const input = box();

@@ -75,3 +75,30 @@ test('desktop: the microphone dictates into the message box live, the words stay
     await app.close();
   }
 });
+
+test('desktop on a Mac: the Mac’s own speech recognition listens through the app and stops cleanly', async () => {
+  test.skip(process.platform !== 'darwin', 'the Mac’s own recognition');
+  test.setTimeout(90_000);
+  const configDir = await tempConfigDir();
+  // The real helper (native/bin, `pnpm computer:build`), hearing Chromium's beeps: no words, but a whole dictation.
+  const app = await launchDesktop(configDir, { ATELIER_SPEECH_HELPER: join(process.cwd(), 'native', 'bin', 'atelier-speech-darwin') }, ['--use-fake-device-for-media-stream']);
+  try {
+    const page = await app.firstWindow();
+    await setUpLocal(page);
+    const box = page.getByRole('textbox', { name: 'Message', exact: true });
+    // The first screen settles (the window loads once more after setup) before the microphone is pressed.
+    await expect(page.getByRole('button', { name: 'Dictate', exact: true })).toBeVisible({ timeout: 20_000 });
+    await page.waitForLoadState('load');
+    await box.fill('Kept');
+    await page.getByRole('button', { name: 'Dictate', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop dictation' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('img', { name: 'Listening' })).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(2000);
+    await page.getByRole('button', { name: 'Stop dictation' }).click();
+    await expect(page.getByRole('button', { name: 'Dictate', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(box).toHaveValue(/^Kept/);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});

@@ -1284,32 +1284,47 @@ One format (`packages/protocol/src/reports.ts`) is shared by the app, the termin
 
 ## 27. Dictation
 
-The message box's microphone turns speech into text as the person speaks. The window records; the backend transcribes
-with a provider set up there, so keys never leave it and a server's people dictate with its providers.
+The message box's microphone turns speech into text as the person speaks, with nothing to set up. The window records;
+the words come from the Mac's own recognition, from Atelier's own speech model on the backend, or from a provider an
+admin chose.
 
 - **The window** (`packages/ui/src/features/dictation`):
   - `capture.ts` opens the microphone (the one picked in the mic menu, kept per window in local storage) with echo
     cancellation, noise suppression and gain control.
   - An audio worklet (`pcm-worklet.js`, a file of its own because the CSP allows scripts from `'self'` only) mixes it to
     one channel, brings it to 16 kHz and posts 16-bit PCM 50 ms at a time with its loudness for the waveform.
-  - `use-dictation.ts` sends 100 ms per `dictation.audio` call, numbered (`seq`), and shows `dictation.update`s.
+  - `transports.ts`: the desktop app on a Mac (macOS 26+) dictates through main (`speech:*` IPC) unless Settings ›
+    Developer says Atelier's model; everything else through the backend (`dictation.*` RPC, numbered audio, 100 ms a
+    call). A language the Mac doesn't know, or the Mac failing to start, falls back to the backend.
+  - `use-dictation.ts` runs one dictation: the microphone first, then the service; one shared stop; the model being
+    fetched (`dictation.prepare`, `dictation.changed`) shows as a notice with its progress.
   - The composer keeps where the caret was, draws what is heard in italics there (a mirror over the transparent,
     read-only box), and puts the final words in on stop: Enter stops and sends, Escape drops them, typing ends it.
   - The button records while held with "Hold to record" (prefs `dictation.holdToRecord`), else a press toggles; the
     `dictate` shortcut (⇧⌘Space) does the same. Language: prefs `dictation.language` (`auto` or ISO 639-1).
+- **The Mac** (`native/computer-macos/Sources/atelier-speech`, shipped as `atelier-speech-darwin` beside the computer use
+  helper; `apps/desktop/src/speech.ts`): one helper per dictation, JSON lines over stdio; Speech's `SpeechAnalyzer` with
+  a `SpeechTranscriber` (volatile and fast results) for the picked language (the Mac's own region first), `AssetInventory`
+  fetching a missing language. It needs no permission of its own (checked on macOS 27); the app's Info.plist still
+  describes speech recognition.
 - **The backend** (`packages/core/src/dictation`):
-  - `sources.ts` finds the speech-to-text services in the providers already set up, by address: Mistral (text or Media,
-    `mistral-vibe` included) gives Voxtral Realtime; OpenAI gives GPT-4o (mini) Transcribe; Groq and Together Whisper;
-    ElevenLabs Scribe; Deepgram Nova-3; a local OpenAI-style speech server (Speaches, LocalAI, KoboldCpp, vLLM) a model
-    with a speech-to-text name typed in. Live ones come first, then local, then hosted; an admin can pick one
-    (settings `dictation.source`) or turn dictation off (`dictation.enabled`).
-  - `mistral-realtime.ts` streams to Mistral's WebSocket (the key on the handshake; words return about half a second
-    after they are said).
-  - `phrases.ts` serves the services that transcribe recordings: it cuts at pauses of 0.7 s (25 s at most), sends no
-    silence, transcribes the phrase being said again every one to two and a half seconds so words still appear, then
-    once for good; phrases join in order, the earlier words as OpenAI's `prompt`.
-  - `service.ts` keeps one dictation per connection, puts overtaken audio back in order, ends one after 20 s without
-    audio or after 10 minutes, and when the connection closes.
+  - `builtin/`: Atelier's own model, NVIDIA Nemotron 3.5 ASR Streaming 0.6B int8 (OpenMDW-1.1; a cache-aware streaming
+    transducer, 560 ms chunks, ~30 languages, punctuation), run by sherpa-onnx's native Node addon (Apache-2.0) in a
+    worker thread. Neither ships with Atelier: `install.ts` fetches the addon tarball from npm and the model's files from
+    Hugging Face at a pinned revision, into `<data>/speech`, and keeps them only if npm's integrity value and the
+    files' SHA-256 match `manifest.ts`. One loaded model serves every dictation (a stream each); it is let go after 15
+    minutes without one. Checked on macOS arm64, Linux x64 (bare and in `node:24-bookworm-slim`), Windows x64 and
+    under Electron's Node. `ATELIER_DICTATION_BUILTIN=off` leaves only providers (the end-to-end tests).
+  - `sources.ts` lists the own model first, then the providers' speech-to-text services, by address: Mistral (text or
+    Media, `mistral-vibe` included) gives Voxtral Realtime; OpenAI GPT-4o (mini) Transcribe; Groq and Together Whisper;
+    ElevenLabs Scribe; Deepgram Nova-3; a local OpenAI-style speech server a model with a speech-to-text name typed in.
+    An admin can pick one (settings `dictation.source`) or turn dictation off (`dictation.enabled`).
+  - `mistral-realtime.ts` streams to Mistral's WebSocket (the key on the handshake). `phrases.ts` serves the services
+    that transcribe recordings: cut at pauses of 0.7 s (25 s at most), no silence sent, the phrase being said
+    transcribed again every one to two and a half seconds, then once for good, rate limits waited out.
+  - `service.ts` keeps one dictation per connection (a second ends the first, saying so), puts overtaken audio back in
+    order, ends one after 20 s without audio or after 10 minutes, and when the connection closes; one that would use
+    the own model before it is here answers `preparing` and starts its download.
 - **The desktop app** allows `media` only for its own pages' main frame and sound only (never an artifact or the Browser
   pane), asks macOS once (`microphone:ask`, the `com.apple.security.device.audio-input` entitlement and
   `NSMicrophoneUsageDescription`), and links to the system's microphone privacy page when it is refused. A browser needs

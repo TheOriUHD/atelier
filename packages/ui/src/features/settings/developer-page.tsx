@@ -10,6 +10,7 @@ import { describeError, rpc } from '../../lib/rpc.ts';
 import { Cell, DataTable, TableRow } from './data-table.tsx';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useSetting } from './use-setting.ts';
+import { setPrefersAtelierModel, useMacSpeech, usePrefersAtelierModel } from '../dictation/transports.ts';
 
 const REQUESTS = ['developer', 'requests'] as const;
 const KEEP = 100;
@@ -19,6 +20,7 @@ export function DeveloperPage() {
     <>
       <InspectorSection />
       <ConnectorLogs />
+      <MacDictationSection />
       <SettingsSection title="Reload">
         <SettingRow id="developer.reload">
           <Button
@@ -163,4 +165,18 @@ function shortUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** A Mac dictates with its own speech recognition; this switches this Mac to Atelier's model (the server's, or this computer's). */
+function MacDictationSection() {
+  const mac = useMacSpeech();
+  const atelier = usePrefersAtelierModel();
+  if (!mac) return null;
+  return (
+    <SettingsSection title="Dictation">
+      <SettingRow id="developer.dictationEngine">
+        {(label) => <Switch {...label} checked={atelier} onCheckedChange={(on) => setPrefersAtelierModel(on)} />}
+      </SettingRow>
+    </SettingsSection>
+  );
 }

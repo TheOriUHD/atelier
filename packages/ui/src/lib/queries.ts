@@ -85,6 +85,7 @@ export function useLiveQueries(): void {
         qc.setQueryData(keys.settings, snapshot);
         void qc.invalidateQueries({ queryKey: keys.dictation });
       }),
+      rpc().on('dictation.changed', (status) => qc.setQueryData(keys.dictation, status)),
       rpc().on('prefs.changed', (prefs) => {
         qc.setQueryData(keys.prefs, prefs);
         void qc.invalidateQueries({ queryKey: keys.ssh });

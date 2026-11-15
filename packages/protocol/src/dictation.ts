@@ -98,6 +98,18 @@ export const DictationSource = z.object({
 });
 export type DictationSource = z.infer<typeof DictationSource>;
 
+/** Atelier's own speech model on this backend: fetched the first time someone dictates, then kept. */
+export const BuiltinSpeechState = z.object({
+  state: z.enum(['unsupported', 'missing', 'downloading', 'ready', 'failed']),
+  /** Downloading: bytes so far, and in all. */
+  received: z.number().optional(),
+  total: z.number().optional(),
+  /** Missing or failed: how much the download is. */
+  bytes: z.number().optional(),
+  error: z.string().optional(),
+});
+export type BuiltinSpeechState = z.infer<typeof BuiltinSpeechState>;
+
 export const DictationStatus = z.object({
   /** An admin can turn dictation off for everyone (Settings › General › Dictation). */
   enabled: z.boolean(),
@@ -107,6 +119,8 @@ export const DictationStatus = z.object({
   sources: z.array(DictationSource),
   /** The admin's choice by id; null picks one by itself. */
   chosen: z.string().nullable(),
+  /** Atelier's own model here; absent from a server before it had one. */
+  builtin: BuiltinSpeechState.optional(),
 });
 export type DictationStatus = z.infer<typeof DictationStatus>;
 

@@ -65,10 +65,16 @@ That includes everything in a long conversation, again on each turn (providers m
 
 ## Dictation
 
-The microphone records only while you [dictate](/dictation/): from the press until you stop. The sound goes from your
-window to your Atelier backend, and from there, with the provider's key, to the speech-to-text service it uses (Mistral,
-OpenAI, Groq, Together, ElevenLabs, Deepgram, or a server of your own). Atelier stores neither the sound nor a
-transcript; what you send is a message like any other.
+The microphone records only while you [dictate](/dictation/): from the press until you stop.
+
+- **On a Mac** with its own speech recognition, the sound never leaves the Mac.
+- **Otherwise** it goes from your window to your Atelier backend, which turns it into text with Atelier's own speech
+  model. If an admin chose a provider instead (Mistral, OpenAI, Groq, Together, ElevenLabs, Deepgram, or a server of
+  your own), the backend sends it on to that service with the provider's key.
+- **The speech model** is downloaded once, the first time someone dictates on that backend: the model from Hugging
+  Face (`huggingface.co`) and its engine from npm (`registry.npmjs.org`). Those requests carry nothing of yours.
+
+Atelier stores neither the sound nor a transcript; what you send is a message like any other.
 
 ## Web search and fetch
 

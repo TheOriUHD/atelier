@@ -3,11 +3,12 @@
  * the words back as `dictation.update`. The box shows `heard` while it runs and takes the final words from `stop`.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { RpcError, RpcErrorCode } from '@atelier/protocol';
+import { RpcError, RpcErrorCode, type DictationStatus } from '@atelier/protocol';
 import { desktop } from '../../lib/platform.ts';
 import { describeError, errorCode, rpc } from '../../lib/rpc.ts';
 import { MicrophoneError, startCapture, type Capture } from './capture.ts';
 import { savedMicrophone } from './microphones.ts';
+import { backendTransport, macTransport, MacCantHear, type DictationTransport, type TransportUpdate } from './transports.ts';
 
 export type DictationPhase = 'idle' | 'starting' | 'listening' | 'finishing';
 
@@ -16,6 +17,8 @@ export interface DictationProblem {
   /** What helps: the system's microphone settings, Atelier's settings (`fix` is the page), or nothing. */
   help: 'microphone-settings' | 'settings' | null;
   fix?: string;
+  /** `info`: good news (the speech model is ready), not a failure. */
+  tone?: 'info';
 }
 
 /** The last few moments' loudness, newest last, for the waveform. */
@@ -57,13 +60,6 @@ const SEND_SAMPLES = 1600;
 /** A backlog goes a second at a time (a call takes two at most, `DICTATION_CHUNK_MAX_BYTES`). */
 const MAX_SEND_SAMPLES = 16_000;
 
-function base64(samples: Int16Array): string {
-  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
-}
-
 function joinSamples(parts: readonly Int16Array[]): Int16Array {
   const out = new Int16Array(parts.reduce((n, p) => n + p.length, 0));
   let at = 0;
@@ -85,6 +81,7 @@ export function problemOf(error: unknown): DictationProblem {
 }
 
 interface Run {
+  transport: DictationTransport;
   id: string | null;
   capture: Capture | null;
   seq: number;
@@ -92,10 +89,21 @@ interface Run {
   pendingSamples: number;
   heard: string;
   over: boolean;
-  /** Settles once the microphone and the backend both answered (or one failed). */
+  /** Settles once the microphone and the speech service both answered (or one failed). */
   ready: Promise<boolean>;
   /** The one stop of this run: every caller (the button, Enter, the shortcut, a lost microphone) waits for the same. */
   stopping: Promise<string> | null;
+}
+
+/** Atelier's own speech model is being fetched (the first dictation here): how far, while the box waits. */
+export interface GettingReady {
+  /** 0 to 1; null before the first progress. */
+  fraction: number | null;
+  /** Megabytes so far and in all, when the backend says. */
+  received?: number;
+  total?: number;
+  /** Whose: the Mac's recognition for a language, or Atelier's model on the backend. */
+  kind: 'mac' | 'backend';
 }
 
 export interface DictationOptions {
@@ -103,6 +111,8 @@ export interface DictationOptions {
   language: string;
   /** Words to spell as given. */
   hints?: readonly string[];
+  /** Dictate with the Mac's own speech recognition (the desktop app on a Mac, unless Settings › Developer says otherwise). */
+  mac?: boolean;
   /** The dictation ended by itself (the service failed, the microphone went away, time ran out): its words so far. */
   onEnded?(heard: string): void;
 }
@@ -114,6 +124,8 @@ export interface Dictation {
   /** Words appear while speaking (otherwise a phrase at a time). */
   live: boolean;
   problem: DictationProblem | null;
+  /** Atelier's speech model (or the Mac's, for a language) is being fetched. */
+  gettingReady: GettingReady | null;
   clearProblem(): void;
   levels: Levels;
   /** Starts listening; false when it couldn't (the problem says why). */
@@ -129,6 +141,7 @@ export function useDictation(options: DictationOptions): Dictation {
   const [heard, setHeard] = useState('');
   const [live, setLive] = useState(true);
   const [problem, setProblem] = useState<DictationProblem | null>(null);
+  const [gettingReady, setGettingReady] = useState<GettingReady | null>(null);
   const [levels] = useState(levelStore);
   const run = useRef<Run | null>(null);
   const opts = useRef(options);
@@ -149,7 +162,7 @@ export function useDictation(options: DictationOptions): Dictation {
     [levels],
   );
 
-  /** It ended by itself (the backend dropped it): the words so far go to the box, and why it ended shows. */
+  /** It ended by itself (the service dropped it): the words so far go to the box, and why it ended shows. */
   const endWith = useCallback(
     (r: Run, why: DictationProblem) => {
       if (r.over) return;
@@ -172,17 +185,15 @@ export function useDictation(options: DictationOptions): Dictation {
         r.pending = rest.length ? [rest] : [];
         r.pendingSamples = rest.length;
         const id = r.id;
-        void rpc()
-          .call('dictation.audio', { id, seq: r.seq++, pcm: base64(samples.subarray(0, take)) })
-          .catch((e: unknown) => {
-            if (run.current !== r || r.over) return;
-            // Gone on the backend: it said why in an update, unless the connection itself dropped.
-            if (errorCode(e) === 'not_found') endWith(r, { message: 'Dictation stopped: the connection to Atelier was interrupted.', help: null });
-            else {
-              void rpc().call('dictation.cancel', { id }).catch(() => undefined);
-              endWith(r, problemOf(e));
-            }
-          });
+        void r.transport.audio(id, r.seq++, samples.subarray(0, take)).catch((e: unknown) => {
+          if (run.current !== r || r.over) return;
+          // Gone on the backend: it said why in an update, unless the connection itself dropped.
+          if (errorCode(e) === 'not_found') endWith(r, { message: 'Dictation stopped: the connection to Atelier was interrupted.', help: null });
+          else {
+            r.transport.cancel(id);
+            endWith(r, problemOf(e));
+          }
+        });
       }
     },
     [endWith],
@@ -197,7 +208,7 @@ export function useDictation(options: DictationOptions): Dictation {
         r.capture?.stop();
         send(r, true);
         try {
-          return (await rpc().call('dictation.stop', { id: r.id })).text;
+          return await r.transport.stop(r.id);
         } catch (e) {
           // What came already is kept; why the rest didn't shows.
           if (!r.over) setProblem(problemOf(e));
@@ -209,36 +220,73 @@ export function useDictation(options: DictationOptions): Dictation {
     [send],
   );
 
-  // Updates that come before `dictation.start` has answered (a service that fails at once) wait for the id.
-  const early = useRef(new Map<string, { text: string; error?: string | undefined }>());
+  // Updates that come before the service has answered the start (one that fails at once) wait for the id.
+  const early = useRef(new Map<string, TransportUpdate>());
   const apply = useCallback(
-    (r: Run, update: { text: string; error?: string | undefined }) => {
+    (r: Run, update: TransportUpdate) => {
       if (r.over) return;
-      r.heard = update.text;
-      setHeard(update.text);
+      if (update.text !== undefined) {
+        r.heard = update.text;
+        setHeard(update.text);
+      }
       if (update.error) endWith(r, { message: update.error, help: null });
     },
     [endWith],
   );
-  useEffect(
-    () =>
-      rpc().on('dictation.update', (update) => {
+  useEffect(() => {
+    const transports = [backendTransport, macTransport()].filter((t): t is DictationTransport => !!t);
+    const offs = transports.map((t) =>
+      t.subscribe((update) => {
         const r = run.current;
-        if (r && r.id === update.id) apply(r, update);
-        else if (r && !r.id) {
-          early.current.set(update.id, update);
-          if (early.current.size > 20) early.current.delete(early.current.keys().next().value!);
+        if (!r || r.transport.kind !== t.kind) return;
+        if (r.id === update.id) apply(r, update);
+        else if (!r.id) {
+          // The Mac fetching its model for the language, before it listens.
+          if (update.preparing !== undefined) setGettingReady({ fraction: update.preparing, kind: 'mac' });
+          else {
+            early.current.set(update.id, update);
+            if (early.current.size > 20) early.current.delete(early.current.keys().next().value!);
+          }
         }
       }),
-    [apply],
-  );
+    );
+    return () => offs.forEach((off) => off());
+  }, [apply]);
+
+  // Atelier's own model being fetched: its progress, and its being ready (`dictation.changed`, and a look every few
+  // seconds, so a missed event or a backend that restarted meanwhile doesn't leave the notice standing).
+  const onStatus = useCallback((status: DictationStatus) => {
+    const own = status.builtin;
+    if (!own) return;
+    setGettingReady((now) => {
+      if (!now || now.kind !== 'backend') return now;
+      if (own.state === 'downloading') return { kind: 'backend', fraction: own.total ? (own.received ?? 0) / own.total : null, received: own.received ?? 0, total: own.total ?? 0 };
+      if (own.state === 'ready') {
+        queueMicrotask(() => setProblem({ message: 'Dictation is ready. Click the microphone and speak.', help: null, tone: 'info' }));
+        return null;
+      }
+      if (own.state === 'failed' || own.state === 'missing' || own.state === 'unsupported') {
+        const why = own.state === 'failed' ? own.error ?? 'unknown error' : own.state === 'missing' ? 'the download stopped' : 'it doesn’t run here';
+        queueMicrotask(() => setProblem({ message: `Dictation’s speech model couldn’t be downloaded: ${why}. Click the microphone to try again.`, help: null }));
+        return null;
+      }
+      return now;
+    });
+  }, []);
+  useEffect(() => rpc().on('dictation.changed', onStatus), [onStatus]);
+  const waitingForModel = gettingReady?.kind === 'backend';
+  useEffect(() => {
+    if (!waitingForModel) return;
+    const timer = setInterval(() => void rpc().call('dictation.status', {}).then(onStatus, () => undefined), 3000);
+    return () => clearInterval(timer);
+  }, [waitingForModel, onStatus]);
 
   // A box that goes away takes its dictation with it (it kept the words: `onEnded` isn't for this).
   useEffect(
     () => () => {
       const r = run.current;
       if (!r) return;
-      if (r.id) void rpc().call('dictation.cancel', { id: r.id }).catch(() => undefined);
+      if (r.id) r.transport.cancel(r.id);
       r.over = true;
       r.capture?.stop();
       run.current = null;
@@ -249,14 +297,29 @@ export function useDictation(options: DictationOptions): Dictation {
   const start = useCallback(async (): Promise<boolean> => {
     if (run.current) return false;
     let settle: (ok: boolean) => void = () => {};
-    const r: Run = { id: null, capture: null, seq: 0, pending: [], pendingSamples: 0, heard: '', over: false, ready: new Promise((resolve) => (settle = resolve)), stopping: null };
+    const mac = opts.current.mac ? macTransport() : null;
+    const r: Run = {
+      transport: mac ?? backendTransport,
+      id: null,
+      capture: null,
+      seq: 0,
+      pending: [],
+      pendingSamples: 0,
+      heard: '',
+      over: false,
+      ready: new Promise((resolve) => (settle = resolve)),
+      stopping: null,
+    };
     run.current = r;
     early.current.clear();
     setProblem(null);
+    setGettingReady(null);
     setHeard('');
     setPhase('starting');
     levels.reset();
     const fail = (error: unknown) => {
+      r.capture?.stop();
+      setGettingReady(null);
       if (!r.over) endWith(r, problemOf(error));
       settle(false);
       return false;
@@ -264,7 +327,7 @@ export function useDictation(options: DictationOptions): Dictation {
     // macOS asks once for the app; the browser asks for the page in getUserMedia.
     if (desktop?.microphone && !(await desktop.microphone.ask().catch(() => true))) return fail(new MicrophoneError('denied', 'Atelier isn’t allowed to use the microphone.'));
     if (r.over) return fail(null);
-    // The microphone first: however long the person takes to allow it, the backend's session doesn't wait idle meanwhile.
+    // The microphone first: however long the person takes to allow it, no speech service waits idle meanwhile.
     try {
       r.capture = await startCapture({
         deviceId: savedMicrophone(),
@@ -297,27 +360,61 @@ export function useDictation(options: DictationOptions): Dictation {
     const { language, hints = [] } = opts.current;
     let answer: { id: string; live: boolean };
     try {
-      answer = await rpc().call('dictation.start', { language, ...(hints.length ? { hints: [...hints] } : {}) });
+      answer = await r.transport.start(language, hints);
     } catch (e) {
-      r.capture.stop();
-      return fail(e);
+      if (e instanceof MacCantHear && !r.over) {
+        // The Mac doesn't know the language: Atelier's backend takes it, with what the microphone heard meanwhile.
+        r.transport = backendTransport;
+        setGettingReady(null);
+        try {
+          answer = await r.transport.start(language, hints);
+        } catch (again) {
+          return startFailed(r, again);
+        }
+      } else return startFailed(r, e);
     }
+    setGettingReady(null);
     r.id = answer.id;
     if (r.over) {
       r.capture.stop();
-      void rpc().call('dictation.cancel', { id: r.id }).catch(() => undefined);
+      r.transport.cancel(r.id);
       settle(false);
       return false;
     }
     setLive(answer.live);
     setPhase('listening');
-    // What the microphone heard while the backend connected goes first, then whatever the service said meanwhile.
+    // What the microphone heard while the service connected goes first, then whatever it said meanwhile.
     send(r);
     settle(true);
     const waiting = early.current.get(r.id);
     early.current.clear();
     if (waiting) apply(r, waiting);
     return true;
+
+    /** Atelier's own model isn't here yet: it is fetched now and the box says how far; anything else is a problem. */
+    function startFailed(at: Run, error: unknown): false {
+      if (errorCode(error) !== 'preparing') return fail(error) as false;
+      at.capture?.stop();
+      finish(at);
+      settle(false);
+      // The box is the person's again meanwhile.
+      opts.current.onEnded?.('');
+      setGettingReady({ kind: 'backend', fraction: null });
+      void rpc()
+        .call('dictation.prepare', {})
+        .then((status) => {
+          if (status.builtin?.state === 'downloading') setGettingReady({ kind: 'backend', fraction: status.builtin.total ? (status.builtin.received ?? 0) / status.builtin.total : null, received: status.builtin.received ?? 0, total: status.builtin.total ?? 0 });
+          if (status.builtin?.state === 'ready') {
+            setGettingReady(null);
+            setProblem({ message: 'Dictation is ready. Click the microphone and speak.', help: null, tone: 'info' });
+          }
+        })
+        .catch((e: unknown) => {
+          setGettingReady(null);
+          setProblem(problemOf(e));
+        });
+      return false;
+    }
   }, [apply, endWith, finalize, finish, levels, send]);
 
   const stop = useCallback(async (): Promise<string> => {
@@ -334,9 +431,10 @@ export function useDictation(options: DictationOptions): Dictation {
     if (!r) return;
     const id = r.id;
     finish(r);
-    if (id) void rpc().call('dictation.cancel', { id }).catch(() => undefined);
-    // Still starting: the backend's answer is cancelled when it comes (`r.over`).
+    setGettingReady(null);
+    if (id) r.transport.cancel(id);
+    // Still starting: the service's answer is cancelled when it comes (`r.over`).
   }, [finish]);
 
-  return { phase, heard, live, problem, clearProblem: useCallback(() => setProblem(null), []), levels, start, stop, cancel };
+  return { phase, heard, live, problem, gettingReady, clearProblem: useCallback(() => setProblem(null), []), levels, start, stop, cancel };
 }

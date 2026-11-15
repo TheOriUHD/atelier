@@ -2,9 +2,11 @@
  * Settings › General › Dictation (ARCHITECTURE §27): everyone's language, "Hold to record" and this computer's
  * microphone; for admins, whether dictation is on and which speech-to-text service it uses.
  */
-import { DICTATION_LANGUAGES } from '@atelier/protocol';
-import { Select, Switch } from '../../components/ui/index.ts';
+import { useState } from 'react';
+import { DICTATION_LANGUAGES, type BuiltinSpeechState } from '@atelier/protocol';
+import { Button, ProgressBar, Select, Switch } from '../../components/ui/index.ts';
 import { useAccount, useDictationStatus } from '../../lib/queries.ts';
+import { describeError, rpc } from '../../lib/rpc.ts';
 import { saveMicrophone, useMicrophones, useSavedMicrophone } from '../dictation/microphones.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { usePref, useSetting } from './use-setting.ts';
@@ -21,6 +23,7 @@ export function DictationSection() {
     <SettingsSection title="Dictation">
       {admin && <EnabledRow />}
       {admin && status.enabled && <SourceRow sources={status.sources} chosen={status.chosen} />}
+      {admin && status.enabled && status.builtin && status.builtin.state !== 'unsupported' && <ModelRow state={status.builtin} />}
       {status.enabled && (
         <>
           <LanguageRow />
@@ -97,6 +100,39 @@ function MicrophoneRow() {
   return (
     <SettingRow id="dictation.microphone" detail={unnamed ? 'Their names show once you have dictated here once.' : undefined}>
       {(label) => <Select {...label} className="max-w-72" options={options} value={value} onValueChange={(v) => saveMicrophone(v === 'system' ? null : v)} />}
+    </SettingRow>
+  );
+}
+
+/** Admins: whether Atelier's own model is here yet, its download, and a button to fetch it before anyone dictates. */
+function ModelRow({ state }: { state: BuiltinSpeechState }) {
+  const [error, setError] = useState<string | null>(null);
+  const mb = (n: number | undefined) => `${Math.round((n ?? 0) / 1e6)} MB`;
+  const detail =
+    state.state === 'ready'
+      ? 'Downloaded. It runs here, for everyone who dictates.'
+      : state.state === 'downloading'
+        ? `Downloading: ${mb(state.received)} of ${mb(state.total)}.`
+        : state.state === 'failed'
+          ? null
+          : `Not downloaded yet (${mb(state.bytes)}). The first dictation downloads it, or download it now.`;
+  return (
+    <SettingRow id="dictation.model" detail={detail ?? undefined} error={state.state === 'failed' ? `The download failed: ${state.error ?? 'unknown error'}` : error}>
+      {state.state === 'downloading' ? (
+        <ProgressBar className="w-40" value={state.total ? (state.received ?? 0) / state.total : 0} aria-label="Download progress" />
+      ) : state.state === 'ready' ? null : (
+        <Button
+          size="sm"
+          onClick={() => {
+            setError(null);
+            rpc()
+              .call('dictation.prepare', {})
+              .catch((e: unknown) => setError(describeError(e).message));
+          }}
+        >
+          {state.state === 'failed' ? 'Try again' : 'Download now'}
+        </Button>
+      )}
     </SettingRow>
   );
 }

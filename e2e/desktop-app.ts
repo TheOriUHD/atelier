@@ -15,7 +15,16 @@ export function launchDesktop(configDir: string, env: Record<string, string> = {
     ...(packaged ? { executablePath: packaged } : {}),
     args: [...(packaged ? [] : ['apps/desktop/dist/main.mjs']), `--user-data-dir=${join(configDir, 'chromium')}`, '--use-mock-keychain', ...args],
     // The window stays hidden: a test run mustn't take the screen or focus from whoever is working here.
-    env: { ...process.env, ATELIER_UPDATE_FEED: 'off', ATELIER_CONFIG_DIR: configDir, ATELIER_HIDE_WINDOW: process.env.ATELIER_SHOW_WINDOW ? '' : '1', ...env },
+    // Dictation: never the 715 MB speech model, nor the Mac's own recognition, unless a spec asks for it.
+    env: {
+      ...process.env,
+      ATELIER_UPDATE_FEED: 'off',
+      ATELIER_CONFIG_DIR: configDir,
+      ATELIER_HIDE_WINDOW: process.env.ATELIER_SHOW_WINDOW ? '' : '1',
+      ATELIER_DICTATION_BUILTIN: 'off',
+      ATELIER_SPEECH_HELPER: join(configDir, 'no-speech-helper'),
+      ...env,
+    },
   });
 }
 

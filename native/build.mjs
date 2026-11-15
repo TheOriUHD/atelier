@@ -39,7 +39,7 @@ const size = (file) => `${(statSync(file).size / 1024 / 1024).toFixed(1)} MB`;
 // macOS: the Swift helper.
 if (process.platform === 'darwin') {
   run('sh', [join(native, 'computer-macos', 'build.sh')]);
-  built.push(join(bin, 'atelier-computer-darwin'));
+  built.push(join(bin, 'atelier-computer-darwin'), join(bin, 'atelier-speech-darwin'));
 } else {
   skipped.push('atelier-computer-darwin: the macOS helper builds on macOS only');
 }

@@ -144,6 +144,18 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     ask: () => ipcRenderer.invoke('microphone:ask'),
     openSettings: () => ipcRenderer.invoke('microphone:openSettings'),
   },
+  speech: {
+    available: () => ipcRenderer.invoke('speech:available'),
+    start: (language: string) => ipcRenderer.invoke('speech:start', language),
+    audio: (id: number, pcm: Uint8Array) => ipcRenderer.send('speech:audio', id, pcm),
+    stop: (id: number) => ipcRenderer.invoke('speech:stop', id),
+    cancel: (id: number) => ipcRenderer.send('speech:cancel', id),
+    onUpdate: (listener: (update: unknown) => void) => {
+      const handler = (_event: unknown, update: unknown) => listener(update);
+      ipcRenderer.on('speech:update', handler);
+      return () => ipcRenderer.off('speech:update', handler);
+    },
+  },
   browserExtension: {
     status: () => ipcRenderer.invoke('browserExtension:status'),
     reveal: () => ipcRenderer.invoke('browserExtension:reveal'),

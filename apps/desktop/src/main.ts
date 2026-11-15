@@ -3,6 +3,7 @@
  * All application logic runs in a utility process: the embedded backend (backend.ts), or in server mode
  * a relay to the Atelier server (remote.ts).
  */
+import { MacSpeech } from './speech.ts';
 import { app, BrowserWindow, dialog, ipcMain, Menu, MessageChannelMain, net, Notification, powerSaveBlocker, protocol, safeStorage, screen, session, shell, systemPreferences, utilityProcess, webContents, type UtilityProcess, type WebContents } from 'electron';
 import { AppWindows } from './app-windows.ts';
 import { shortcutIcon, windowIconOption } from './app-icon.ts';
@@ -233,6 +234,14 @@ const computerHelperPath = (() => {
   if (!name) return null;
   return app.isPackaged ? join(process.resourcesPath, 'computer', name) : join(import.meta.dirname, '..', '..', '..', 'native', 'bin', name);
 })();
+
+/** The Mac's own dictation (speech.ts): next to the computer use helper, as `atelier-speech-darwin`. */
+const speechHelperPath = (() => {
+  if (process.env.ATELIER_SPEECH_HELPER) return process.env.ATELIER_SPEECH_HELPER;
+  if (process.platform !== 'darwin') return null;
+  return app.isPackaged ? join(process.resourcesPath, 'computer', 'atelier-speech-darwin') : join(import.meta.dirname, '..', '..', '..', 'native', 'bin', 'atelier-speech-darwin');
+})();
+const macSpeech = new MacSpeech(speechHelperPath, (owner, update) => webContents.fromId(owner)?.send('speech:update', update));
 
 /**
  * Linux: the kind of desktop session, and whether there is an X server to talk to at all. The helper speaks X11 only: a
@@ -792,6 +801,42 @@ const MICROPHONE_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
   win32: 'ms-settings:privacy-microphone',
 };
 
+/** Dictation with the Mac's own speech recognition (speech.ts): one helper per dictation, for the window that asked. */
+function registerSpeechIpc(): void {
+  const watched = new Set<number>();
+  ipcMain.handle('speech:available', () => macSpeech.available());
+  // A result, not a throw: the window needs the helper's code (`unsupported`: dictate through the backend instead).
+  ipcMain.handle('speech:start', async (event, input: unknown) => {
+    const language = z.string().regex(/^(auto|[a-z]{2,3})$/).parse(input);
+    const owner = event.sender.id;
+    if (!watched.has(owner)) {
+      watched.add(owner);
+      const sender = event.sender;
+      // A page that goes (closed, reloaded, crashed) takes its dictations with it.
+      sender.once('destroyed', () => {
+        watched.delete(owner);
+        macSpeech.closeOwner(owner);
+      });
+      sender.on('did-start-navigation', (details) => {
+        if (details.isMainFrame && !details.isSameDocument) macSpeech.closeOwner(owner);
+      });
+      sender.on('render-process-gone', () => macSpeech.closeOwner(owner));
+    }
+    try {
+      return { ok: true as const, ...(await macSpeech.start(owner, language)) };
+    } catch (e) {
+      return { ok: false as const, code: (e as { code?: string }).code ?? 'failed', message: e instanceof Error ? e.message : 'The Mac’s dictation failed.' };
+    }
+  });
+  ipcMain.on('speech:audio', (event, id: unknown, pcm: unknown) => {
+    if (typeof id === 'number' && pcm instanceof Uint8Array && pcm.byteLength <= 64_000) macSpeech.audio(event.sender.id, id, pcm);
+  });
+  ipcMain.handle('speech:stop', (event, id: unknown) => (typeof id === 'number' ? macSpeech.stop(event.sender.id, id) : ''));
+  ipcMain.on('speech:cancel', (event, id: unknown) => {
+    if (typeof id === 'number') macSpeech.cancel(event.sender.id, id);
+  });
+}
+
 /** Dictation's microphone (ARCHITECTURE §27): macOS asks the person once, for Atelier; Windows has a switch per app. */
 function registerMicrophoneIpc(): void {
   ipcMain.handle('microphone:ask', async () => {
@@ -816,6 +861,7 @@ function registerIpc(): void {
   registeredIpc = true;
   registerComputerIpc();
   registerMicrophoneIpc();
+  registerSpeechIpc();
   ipcMain.on('connect-backend', (event) => connectRenderer(event.sender));
   // Settings › Keyboard shortcuts changed (or a window opened): the menu takes the page's bindings. Each window's are
   // kept, so that a window closed while it recorded a shortcut (its menu keys let go) hands the menu back to another's.
@@ -1294,5 +1340,6 @@ app.on('before-quit', () => {
   keepAwake.stop();
   // Gives back the mouse and keyboard and shows the apps it hid.
   void computer.dispose();
+  macSpeech.closeAll();
   post({ kind: 'shutdown' });
 });

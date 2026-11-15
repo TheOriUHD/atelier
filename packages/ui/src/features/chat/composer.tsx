@@ -1,5 +1,5 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react';
-import { ArrowUp, Bot, CircleAlert, CornerDownLeft, FileText, Paperclip, Square, Telescope, TriangleAlert, X } from 'lucide-react';
+import { ArrowUp, Bot, CircleAlert, CornerDownLeft, FileText, Mic, Paperclip, Square, Telescope, TriangleAlert, X } from 'lucide-react';
 import type { McpServerStatus, ModelInfo } from '@atelier/protocol';
 import { Badge, Button, Dialog, DialogContent, Icon, Lightbox, Spinner, Tooltip, cn } from '../../components/ui/index.ts';
 import { blobUrl, saveBlob } from '../../lib/platform.ts';
@@ -19,7 +19,8 @@ import { useOpenSettings } from '../../app/navigation.ts';
 import { DictateButton, HOLD_MS } from '../dictation/dictate-button.tsx';
 import { Waveform } from '../dictation/waveform.tsx';
 import '../dictation/dictation.css';
-import { useDictation, type DictationProblem } from '../dictation/use-dictation.ts';
+import { useDictation, type DictationProblem, type GettingReady } from '../dictation/use-dictation.ts';
+import { useMacSpeech, usePrefersAtelierModel } from '../dictation/transports.ts';
 
 export interface ComposerHandle {
   /** Replaces the draft (e.g. with a message rewound to) and focuses the box. */
@@ -186,8 +187,13 @@ export function Composer({
   const setPref = useSetPref();
   const { account } = useAccount();
   const dictationStatus = useDictationStatus({ enabled: !readOnly });
-  // Admins see it without a service to use, to learn how to add one; everyone else once there is one.
-  const canDictate = !readOnly && !!dictationStatus.data?.enabled && (!!dictationStatus.data.source || account?.role === 'admin');
+  // The desktop app on a Mac hears on its own (unless Settings › Developer says Atelier's model); otherwise the backend
+  // does, with its own speech model or a provider. Admins see it without a service to use, to learn how to add one.
+  const macSpeech = useMacSpeech();
+  const atelierModel = usePrefersAtelierModel();
+  const onMac = macSpeech && !atelierModel;
+  const canDictate =
+    !readOnly && dictationStatus.data?.enabled !== false && (onMac || (!!dictationStatus.data?.enabled && (!!dictationStatus.data.source || account?.role === 'admin')));
   const dictationPrefs = prefs?.dictation ?? { language: 'auto', holdToRecord: true };
   const [spoken, setSpoken] = useState<SpokenPlace | null>(null);
   const spokenRef = useRef<SpokenPlace | null>(null);
@@ -208,7 +214,7 @@ export function Composer({
     else input.current?.focus();
     then?.(value, caret);
   };
-  const dictation = useDictation({ language: dictationPrefs.language, onEnded: (heard) => keepSpoken(heard) });
+  const dictation = useDictation({ language: dictationPrefs.language, mac: onMac, onEnded: (heard) => keepSpoken(heard) });
   const dictating = spoken !== null;
   const shownText = spoken ? placeWords(spoken, dictation.heard).value : text;
   const canSend = sendable(shownText);
@@ -405,7 +411,7 @@ export function Composer({
   return (
     <div className={cn('relative mx-auto w-full', variant === 'new' ? 'max-w-(--at-layout-composer-width-new-chat)' : 'max-w-(--at-layout-composer-width-chat)')}>
       {above && <div className="pointer-events-none absolute inset-x-0 bottom-full px-3 pb-1.5">{above}</div>}
-      {dictation.problem && <DictationNotice problem={dictation.problem} onClose={dictation.clearProblem} />}
+      {dictation.gettingReady ? <GettingReadyNotice ready={dictation.gettingReady} /> : dictation.problem && <DictationNotice problem={dictation.problem} onClose={dictation.clearProblem} />}
       {menu.menu}
       <div
         data-temporary={temporary || undefined}
@@ -793,11 +799,35 @@ function placeWords(place: SpokenPlace, words: string): { value: string; caret: 
   return { value: parts.before + parts.words + parts.after, caret: (parts.before + parts.words).length };
 }
 
-/** Why dictation stopped or didn't start, above the box, with what helps. */
-function DictationNotice({ problem, onClose }: { problem: DictationProblem; onClose(): void }) {
+/** The first dictation fetches the speech model: how far it got, above the box. */
+function GettingReadyNotice({ ready }: { ready: GettingReady }) {
+  const percent = ready.fraction === null ? null : Math.round(ready.fraction * 100);
+  const mb = (n: number) => Math.round(n / 1e6);
   return (
-    <div role="alert" className="mb-2 flex items-start gap-2 rounded-lg bg-danger-subtle px-3 py-2 text-body text-danger-text">
-      <Icon icon={CircleAlert} size="sm" className="mt-0.5 shrink-0" />
+    <div role="status" className="mb-2 flex items-center gap-2 rounded-lg bg-interactive-subtle px-3 py-2 text-body text-interactive-text">
+      <Spinner size="sm" className="shrink-0" />
+      <span className="min-w-0 flex-1">
+        {ready.kind === 'mac'
+          ? `Getting the Mac’s speech recognition for this language ready${percent === null ? '' : `: ${percent} %`}…`
+          : `Dictation is getting ready: downloading its speech model${ready.total ? ` (${mb(ready.received ?? 0)} of ${mb(ready.total)} MB)` : ''}. After that it works on its own.`}
+      </span>
+    </div>
+  );
+}
+
+/** Why dictation stopped or didn't start, above the box, with what helps; good news fades after a few seconds. */
+function DictationNotice({ problem, onClose }: { problem: DictationProblem; onClose(): void }) {
+  useEffect(() => {
+    if (problem.tone !== 'info') return;
+    const timer = setTimeout(onClose, 6000);
+    return () => clearTimeout(timer);
+  }, [problem, onClose]);
+  return (
+    <div
+      role={problem.tone === 'info' ? 'status' : 'alert'}
+      className={cn('mb-2 flex items-start gap-2 rounded-lg px-3 py-2 text-body', problem.tone === 'info' ? 'bg-interactive-subtle text-interactive-text' : 'bg-danger-subtle text-danger-text')}
+    >
+      <Icon icon={problem.tone === 'info' ? Mic : CircleAlert} size="sm" className="mt-0.5 shrink-0" />
       <span className="min-w-0 flex-1">
         {problem.message}{' '}
         {problem.help === 'microphone-settings' && desktop?.microphone && (

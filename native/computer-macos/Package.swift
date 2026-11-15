@@ -6,11 +6,16 @@ import PackageDescription
 let package = Package(
   name: "AtelierComputer",
   platforms: [.macOS(.v14)],
-  products: [.executable(name: "atelier-computer", targets: ["atelier-computer"])],
+  products: [
+    .executable(name: "atelier-computer", targets: ["atelier-computer"]),
+    // Dictation with the Mac's own speech recognition (ARCHITECTURE §27), started by main once per dictation.
+    .executable(name: "atelier-speech", targets: ["atelier-speech"]),
+  ],
   targets: [
     // Everything but the entry point, so the tests can reach it.
     .target(name: "AtelierComputer"),
     .executableTarget(name: "atelier-computer", dependencies: ["AtelierComputer"]),
+    .executableTarget(name: "atelier-speech", swiftSettings: [.swiftLanguageMode(.v5)]),
     .testTarget(name: "AtelierComputerTests", dependencies: ["AtelierComputer"]),
   ]
 )

@@ -129,6 +129,19 @@ interface DesktopBridge {
     ask(): Promise<boolean>;
     openSettings(): Promise<void>;
   };
+  /**
+   * Dictation with the Mac's own speech recognition (apps/desktop/src/speech.ts): `available` says whether this Mac can
+   * (macOS 26 or later); `start` answers once it listens, or why not (`unsupported`: the Mac doesn't know the language).
+   * Absent outside a Mac and in desktop shells older than the UI bundle.
+   */
+  speech?: {
+    available(): Promise<{ available: boolean; locales: string[] }>;
+    start(language: string): Promise<{ ok: true; id: number; locale: string } | { ok: false; code: string; message: string }>;
+    audio(id: number, pcm: Uint8Array): void;
+    stop(id: number): Promise<string>;
+    cancel(id: number): void;
+    onUpdate(listener: (update: unknown) => void): () => void;
+  };
   /** Atelier for Chrome (ARCHITECTURE §22): whether the extension is connected, and its folder for "Load unpacked". */
   browserExtension?: {
     status(): Promise<BrowserStatus & { extensionDir: string }>;

@@ -1,6 +1,7 @@
 #!/bin/sh
-# Builds atelier-computer, the macOS computer-use helper, as a universal (arm64 + x86_64) release binary and copies
-# it to native/bin/atelier-computer-darwin. `pnpm computer:build`; then `node native/computer-macos/smoke.mjs`.
+# Builds atelier-computer, the macOS computer-use helper, and atelier-speech, dictation with the Mac's own speech
+# recognition, as universal (arm64 + x86_64) release binaries, and copies them to native/bin/atelier-computer-darwin
+# and native/bin/atelier-speech-darwin. `pnpm computer:build`; then `node native/computer-macos/smoke.mjs`.
 set -eu
 
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -19,3 +20,6 @@ mkdir -p "$out"
 cp "$bin/atelier-computer" "$out/atelier-computer-darwin"
 chmod 755 "$out/atelier-computer-darwin"
 echo "built $out/atelier-computer-darwin ($(lipo -archs "$out/atelier-computer-darwin"))"
+cp "$bin/atelier-speech" "$out/atelier-speech-darwin"
+chmod 755 "$out/atelier-speech-darwin"
+echo "built $out/atelier-speech-darwin ($(lipo -archs "$out/atelier-speech-darwin"))"

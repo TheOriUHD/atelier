@@ -833,6 +833,8 @@ export const contract = {
     },
     /** Dictation (ARCHITECTURE §27): whether it works for this person, and with which service. */
     'dictation.status': { input: Empty, output: DictationStatus },
+    /** Gets Atelier's own speech model ready (it is fetched the first time); progress comes as `dictation.changed`. */
+    'dictation.prepare': { input: Empty, output: DictationStatus },
     /** Starts listening; the words come to this connection as `dictation.update`. One at a time per connection. */
     'dictation.start': { input: DictationStart, output: z.object({ id: z.string(), live: z.boolean() }) },
     'dictation.audio': { input: DictationAudio, output: Ok },
@@ -879,6 +881,8 @@ export const contract = {
     'terminals.exit': z.object({ terminalId: z.string(), code: z.number().nullable() }),
     /** Dictation's words so far, only to the connection that dictates. */
     'dictation.update': DictationUpdate,
+    /** Dictation's status changed here (the speech model's download, a provider added): `dictation.status` again. */
+    'dictation.changed': DictationStatus,
   },
 } as const satisfies Contract;
 

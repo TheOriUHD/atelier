@@ -31,6 +31,7 @@ mac:
   extendInfo:
     NSLocalNetworkUsageDescription: Atelier connects to your local model servers, SSH hosts, and self-hosted services on your network.
     NSMicrophoneUsageDescription: Atelier uses the microphone while you dictate a message.
+    NSSpeechRecognitionUsageDescription: Atelier turns what you dictate into text with the Mac’s own speech recognition; the sound stays on this Mac.
   # Runner builds (`pnpm runner:build`): this machine's for local folders, Linux and macOS ones (with their
   # checksums) to upload to SSH hosts.
   extraResources:
@@ -43,10 +44,11 @@ mac:
     - from: ../../runner/bin
       to: runner
       filter: ['atelier-runner-darwin-*', 'atelier-runner-linux-*', 'checksums.json']
-    # The computer use helper (`pnpm computer:build`), started by main so macOS asks for its permissions as Atelier.
+    # The computer use helper (`pnpm computer:build`), started by main so macOS asks for its permissions as Atelier, and
+    # the dictation helper (the Mac's own speech recognition).
     - from: ../../native/bin
       to: computer
-      filter: ['atelier-computer-darwin']
+      filter: ['atelier-computer-darwin', 'atelier-speech-darwin']
     - from: ../../THIRD_PARTY_NOTICES.md
       to: THIRD_PARTY_NOTICES.md
     # On Windows and Linux electron-builder puts these beside the app itself; on macOS it leaves them out.

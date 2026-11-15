@@ -7,6 +7,8 @@ import type { DictationSource, ImageProviderConfig, ProviderConfig } from '@atel
 
 /** How the backend talks to the service. */
 export type DictationDialect =
+  /** Atelier's own model on this backend (builtin/): live words, nothing to set up. */
+  | 'builtin'
   /** Mistral's WebSocket: words stream back while the person speaks. */
   | 'mistral-realtime'
   /** OpenAI's `/v1/audio/transcriptions` (and every server that copies it): a phrase at a time. */
@@ -84,12 +86,18 @@ function choices(kind: 'text' | 'media', provider: { id: string; name: string; b
   }));
 }
 
+/** The id of Atelier's own model among the choices. */
+export const BUILTIN_SOURCE = 'builtin';
+
 /**
- * Every service, best first: live words (Mistral) before a phrase at a time, then a local server someone set up for it,
- * then the hosted ones. The same service reached through two providers (a Mistral text provider and Mistral Voxtral
- * under Media) is listed once, through the first.
+ * Every service, best first: Atelier's own model (when it runs on this backend's platform), then live words (Mistral)
+ * before a phrase at a time, a local server someone set up for it, then the hosted ones. The same service reached
+ * through two providers (a Mistral text provider and Mistral Voxtral under Media) is listed once, through the first.
  */
-export function dictationChoices(text: readonly ProviderConfig[], media: readonly ImageProviderConfig[]): DictationChoice[] {
+export function dictationChoices(text: readonly ProviderConfig[], media: readonly ImageProviderConfig[], builtin?: { label: string; where: string } | null): DictationChoice[] {
+  const own: DictationChoice[] = builtin
+    ? [{ source: { id: BUILTIN_SOURCE, label: builtin.label, provider: builtin.where, live: true }, dialect: 'builtin', baseUrl: '', model: BUILTIN_SOURCE, provider: { kind: 'text', id: BUILTIN_SOURCE } }]
+    : [];
   const live: DictationChoice[] = [];
   const local: DictationChoice[] = [];
   const cloud: DictationChoice[] = [];
@@ -115,7 +123,8 @@ export function dictationChoices(text: readonly ProviderConfig[], media: readonl
     add(local, choices('media', p, { dialect: 'openai', models: models.map((id) => ({ id, label: humanName(id) })) }));
   }
   const seen = new Set<string>();
-  return [...live, ...local, ...cloud].filter((c) => {
+  return [...own, ...live, ...local, ...cloud].filter((c) => {
+    if (c.dialect === 'builtin') return true;
     // Two providers on one hosted service are the same choice; two local servers on one host are not (other ports).
     const unique = hosted(c.baseUrl) ? `${c.dialect}|${hostOf(c.baseUrl)}|${c.model}` : `${c.dialect}|${c.baseUrl}|${c.model}`;
     if (seen.has(unique)) return false;

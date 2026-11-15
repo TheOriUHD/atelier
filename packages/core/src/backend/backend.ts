@@ -168,7 +168,7 @@ import { isNull } from 'drizzle-orm';
 import { newId } from '../util/ids.ts';
 import { getAt, leafPaths } from '../util/json-path.ts';
 import { interpolate, secretRefs } from '../util/interpolate.ts';
-import { DictationError, DictationService } from '../dictation/index.ts';
+import { BuiltinSpeech, DictationError, DictationService } from '../dictation/index.ts';
 
 export interface Logger {
   info(message: string, data?: Record<string, unknown>): void;
@@ -666,8 +666,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         }
       : {}),
   });
-  // Dictation (ARCHITECTURE §27): speech-to-text with a provider set up here, the words to the window that dictates.
+  // Dictation (ARCHITECTURE §27): Atelier's own speech model on this backend (fetched the first time someone dictates)
+  // or a provider set up here; the words go to the window that dictates. ATELIER_DICTATION_BUILTIN=off leaves providers.
+  const builtinSpeech = platform.env.ATELIER_DICTATION_BUILTIN === 'off' ? null : new BuiltinSpeech({ dir: join(platform.dataDir, 'speech'), log: (message) => platform.logger.info(message) });
   const dictation = new DictationService<Connection>({
+    builtin: builtinSpeech,
+    builtinWhere: platform.surface === 'web' ? 'Atelier, on this server' : 'Atelier, on this computer',
     settings: () => {
       const e = settings.effective;
       return { enabled: e.dictation.enabled, source: e.dictation.source, text: e.providers, media: e.imageProviders };
@@ -675,6 +679,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     credentials: async (provider) => (await (provider.kind === 'text' ? registry : imageRegistry).credentials(provider.id)) ?? { headers: {} },
     fetch: inspector.wrap(platform.fetch ?? plainHttpFetch(httpFetch, { idleMs: 60_000 })),
     log: (message) => platform.logger.info(message),
+  });
+  // Its download's progress, and its being ready, to every window (each sees the status as its person may).
+  builtinSpeech?.on('state', () => {
+    for (const c of connections) if (c.auth) c.rpc.emit('dictation.changed', dictation.status(isAdmin(c)));
   });
   /** Dictation's refusals as the window shows them; one that needs an admin points at the settings that fix it. */
   const dictationErrors = async <T>(run: () => Promise<T> | T): Promise<T> => {
@@ -3537,6 +3545,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'memory.import': ({ text, model }, ctx) => memoryErrors(async () => ({ changes: await memory.import(me(ctx).id, text, model ? { model } : {}) })),
 
     'dictation.status': (_input, ctx) => dictation.status(me(ctx).role === 'admin'),
+    'dictation.prepare': (_input, ctx) => dictation.prepare(me(ctx).role === 'admin'),
     'dictation.start': (input, ctx) => {
       const connection = ctx.connection();
       return dictationErrors(() => dictation.start(connection, me(ctx).id, input, (update) => connection.rpc.emit('dictation.update', update)));
@@ -3693,6 +3702,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       memory.dispose();
       await terminals.closeAll();
       dictation.dispose();
+      builtinSpeech?.dispose();
       await mcp.close();
       await personal.close();
       await workspaceManager.disposeAll();
