@@ -486,6 +486,14 @@ export const UserPrefs = z.object({
   shortcuts: ShortcutPrefs.default({}),
   /** This person's own connectors, without their values; written only through `connectors.*`, never `prefs.set`. */
   connectors: z.array(PersonalConnector).max(50).default([]),
+  /**
+   * Dictation (the message box's microphone): the language spoken (`auto`: the service hears it), and whether holding
+   * the button or the shortcut records until it is let go (a click still starts and stops). The microphone is this
+   * computer's own choice, kept in the window.
+   */
+  dictation: z
+    .object({ language: z.string().regex(/^(auto|[a-z]{2})$/).default('auto'), holdToRecord: z.boolean().default(true) })
+    .default({ language: 'auto', holdToRecord: true }),
   /** Claude Code plugins on this person's computers they switched on or off, over the admin's `enabledPlugins`. */
   plugins: z.object({ enabled: z.record(z.string(), z.boolean()).default({}) }).default({ enabled: {} }),
 });

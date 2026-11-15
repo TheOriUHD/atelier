@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the RPC contract; backend events keep caches fresh without polling. */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { defaultUserPrefs, type AppInfo, type DiffCompare, type ImageModelInfo, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { defaultUserPrefs, type AppInfo, type DictationStatus, type DiffCompare, type ImageModelInfo, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
 import { setPath } from './json-path.ts';
 import { rpc } from './rpc.ts';
 
@@ -70,6 +70,8 @@ export const keys = {
   memory: ['memory'] as const,
   /** Everything read from one workspace (files, git); invalidated after the agent's tool calls. */
   workspace: (id: string) => ['workspace', id] as const,
+  /** Whether dictation works and with which service: read again when settings or providers change. */
+  dictation: ['dictation'] as const,
 };
 
 /** Wires backend events into the query cache once, at app start. */
@@ -79,7 +81,10 @@ export function useLiveQueries(): void {
     // Folders read again for a session that named them, once each: a removed folder's sessions keep naming it.
     const rechecked = new Set<string>();
     const offs = [
-      rpc().on('settings.changed', (snapshot) => qc.setQueryData(keys.settings, snapshot)),
+      rpc().on('settings.changed', (snapshot) => {
+        qc.setQueryData(keys.settings, snapshot);
+        void qc.invalidateQueries({ queryKey: keys.dictation });
+      }),
       rpc().on('prefs.changed', (prefs) => {
         qc.setQueryData(keys.prefs, prefs);
         void qc.invalidateQueries({ queryKey: keys.ssh });
@@ -89,12 +94,18 @@ export function useLiveQueries(): void {
         qc.setQueryData(keys.models, models);
         void qc.invalidateQueries({ queryKey: keys.personalProviders });
       }),
-      rpc().on('providers.changed', (status) => qc.setQueryData(keys.providers, status)),
+      rpc().on('providers.changed', (status) => {
+        qc.setQueryData(keys.providers, status);
+        void qc.invalidateQueries({ queryKey: keys.dictation });
+      }),
       rpc().on('imageModels.changed', (models) => {
         qc.setQueryData(keys.imageModels, models);
         void qc.invalidateQueries({ queryKey: keys.personalImageProviders });
       }),
-      rpc().on('imageProviders.changed', (status) => qc.setQueryData(keys.imageProviders, status)),
+      rpc().on('imageProviders.changed', (status) => {
+        qc.setQueryData(keys.imageProviders, status);
+        void qc.invalidateQueries({ queryKey: keys.dictation });
+      }),
       rpc().on('sessions.changed', (summary) => {
         qc.setQueriesData<SessionSummary[]>({ queryKey: ['sessions'] }, (list) => {
           if (!list) return list;
@@ -199,6 +210,14 @@ export function useSidebarView(): { view: SidebarView; set(patch: Partial<Sideba
 }
 
 /** The signed-in person's preferences (appearance, how to be addressed, instructions, preferred models). */
+/**
+ * Whether dictation works for this person and with which service (ARCHITECTURE §27). An error means a server from
+ * before dictation.
+ */
+export function useDictationStatus({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: keys.dictation, queryFn: () => rpc().call('dictation.status', {}), retry: false, staleTime: 60_000, enabled });
+}
+
 export function usePrefs() {
   const q = useQuery({ queryKey: keys.prefs, queryFn: () => rpc().call('prefs.get', {}) });
   return { ...q, prefs: q.data };
@@ -295,6 +314,8 @@ export function useAppInfo() {
   return useQuery({ queryKey: keys.appInfo, queryFn: () => rpc().call('app.info', {}) });
 }
 
+/** For code outside React (Settings search): null before dictation's status was read (or on a server without it), else whether it is on. */
+export const dictationOffered = (): boolean | null => queryClient.getQueryData<DictationStatus>(keys.dictation)?.enabled ?? null;
 /** For code outside React (the Settings page list). A newer app on an older server hides image generation; something must have asked `useAppInfo`. */
 export const imageGenerationOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.imageGeneration;
 /** Plan mode answered by the Auto reviewer: a server from before it knows only Plan. */

@@ -514,6 +514,14 @@ export class ImageProviderRegistry extends EventEmitter<{ status: [ProviderStatu
     this.emit('personalModels', userId);
   }
 
+  /** A provider's key and headers as they are, for its speech-to-text (dictation, ARCHITECTURE §27). */
+  async credentials(id: string): Promise<{ apiKey?: string; headers: Record<string, string> } | undefined> {
+    const config = this.providers.find((p) => p.id === id);
+    if (!config) return undefined;
+    const { apiKey, headers } = await this.instance(config);
+    return { ...(apiKey ? { apiKey } : {}), headers };
+  }
+
   /** Whether a provider's name for a model reads well: `preset` first, for the Settings list. */
   label(config: ImageProviderConfig): string {
     return config.name || imagePreset(config.preset)?.label || config.id;

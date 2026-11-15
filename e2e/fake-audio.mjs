@@ -9,6 +9,9 @@
  *   "broken"    → the server answers 500           "garbage"   → what comes back is not a sound
  *   anything else → about half a second
  *
+ * Dictation: OpenAI's `/v1/audio/transcriptions` (multipart) hears every recording as the words in TRANSCRIPT, and
+ * logs { route: 'transcription', model, language, bytes }.
+ *
  * GET /__log lists the requests it saw, oldest first: { route, model, text, voice, seconds, lyrics, instrumental, speed }.
  * POST /__reset forgets them.
  *
@@ -21,6 +24,25 @@ const port = Number(process.argv[2] ?? 11630);
 const VOICE = readFileSync(new URL('./assets/voice.mp3', import.meta.url));
 const SONG = readFileSync(new URL('./assets/song.mp3', import.meta.url));
 const log = [];
+
+/** What every recording sent for transcription "says". */
+const TRANSCRIPT = 'Testing dictation in Atelier.';
+
+/** A multipart form's text fields, and how many bytes its file had. */
+function form(bytes, contentType) {
+  const boundary = /boundary=([^;]+)/.exec(contentType ?? '')?.[1];
+  const fields = {};
+  let file = 0;
+  if (!boundary) return { fields, file };
+  for (const part of bytes.toString('latin1').split(`--${boundary}`)) {
+    const head = /name="([^"]+)"(; filename="[^"]*")?/.exec(part);
+    if (!head) continue;
+    const value = part.slice(part.indexOf('\r\n\r\n') + 4).replace(/\r\n$/, '');
+    if (head[2]) file = value.length;
+    else fields[head[1]] = value;
+  }
+  return { fields, file };
+}
 
 const json = (res, value, status = 200) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
 const body = (req) =>
@@ -51,6 +73,14 @@ createServer(async (req, res) => {
     return json(res, { data: [{ model: 'fake-kokoro', voices: ['af_heart', 'bm_george', 'af_sky'] }].filter((d) => !model || d.model === model) });
   }
 
+  if (req.method === 'POST' && url.pathname === '/v1/audio/transcriptions') {
+    const parts = [];
+    for await (const chunk of req) parts.push(chunk);
+    const { fields, file } = form(Buffer.concat(parts), req.headers['content-type']);
+    log.push({ route: 'transcription', model: fields.model ?? null, language: fields.language ?? null, bytes: file });
+    await wait(150);
+    return json(res, { text: TRANSCRIPT });
+  }
   if (req.method === 'POST' && url.pathname === '/v1/audio/speech') {
     const input = await body(req);
     log.push({ route: 'speech', model: input.model ?? null, text: String(input.input ?? ''), voice: input.voice ?? null, speed: input.speed ?? null, format: input.response_format ?? null });

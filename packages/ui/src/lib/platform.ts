@@ -120,6 +120,15 @@ interface DesktopBridge {
    * Computer use on this computer (ARCHITECTURE §22): its settings, and what the person allows on the cards. Only these
    * windows change it; `backend` is `local` for this computer's own sessions. Absent in desktop shells older than the UI.
    */
+  /**
+   * Dictation's microphone (ARCHITECTURE §27): the system's permission for this app. `ask` asks once where the system
+   * asks apps (macOS) and says whether the app may use it; `openSettings` opens the system's microphone privacy page.
+   * Absent in desktop shells older than the UI bundle.
+   */
+  microphone?: {
+    ask(): Promise<boolean>;
+    openSettings(): Promise<void>;
+  };
   /** Atelier for Chrome (ARCHITECTURE §22): whether the extension is connected, and its folder for "Load unpacked". */
   browserExtension?: {
     status(): Promise<BrowserStatus & { extensionDir: string }>;

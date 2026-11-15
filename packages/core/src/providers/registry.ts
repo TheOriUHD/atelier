@@ -371,6 +371,14 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     return config ? (await this.instance(config)).apiKey : undefined;
   }
 
+  /** A provider's key and headers as they are, for its speech-to-text (dictation, ARCHITECTURE §27). */
+  async credentials(id: string): Promise<{ apiKey?: string; headers: Record<string, string> } | undefined> {
+    const config = this.providers.find((p) => p.id === id);
+    if (!config) return undefined;
+    const { apiKey, headers } = await this.instance(config);
+    return { ...(apiKey ? { apiKey } : {}), headers };
+  }
+
   /**
    * A subscription provider's allowance as it reports it (Mistral Vibe), null where it doesn't. Read for the context
    * popover and the Usage tool, so a reading is kept for half a minute rather than asked for on every look.

@@ -8,8 +8,8 @@ short version of the first two tables inside the app, with the keys you set.
 
 ## Changing a shortcut
 
-**Settings › Shortcuts** changes the keys of the shortcuts in the first table and of **Upload or add files**
-and **Change effort**. **Change** waits for the new combination (Esc cancels), **Turn off** removes a shortcut and
+**Settings › Shortcuts** changes the keys of the shortcuts in the first table and of **Upload or add files**,
+**Change effort** and **Dictate**. **Change** waits for the new combination (Esc cancels), **Turn off** removes a shortcut and
 **Reset** brings back its default; **Reset all** does that for every one. A shortcut needs ⌘ or ⌃ (Ctrl on Windows and
 Linux), unless it is a function key such as F6. Atelier refuses a combination another of its shortcuts already has
 and one the system or the text box uses (⌘C, ⌘V, ⌘Z, ⌘Q, ⌘W and the like), and says why. Send, new line, Stop, `/`,
@@ -47,6 +47,7 @@ These work in the message box of Chat and Code (and project chats).
 | Stop the reply | Esc | Esc | Only while the box is empty. |
 | Upload or add files | ⌘U | Ctrl+U | Opens the file picker. In a split view, acts in the active session only. |
 | Change effort | ⇧⌘E | Ctrl+Shift+E | Opens the effort popover on models that have it. In a split view, the active session. |
+| Dictate | ⇧⌘Space | Ctrl+Shift+Space | Starts and stops [dictation](/dictation/); held, records until you let go (with Hold to record on). While dictating, ↵ sends and Esc drops what was said. |
 | Switch permission mode | ⇧Tab | Shift+Tab | **Code only**, only while the box is empty. Cycles **Auto → Ask → Accept edits → Plan**; **Bypass** is chosen from the menu only. |
 | Start a slash command or skill | `/` | `/` | As the first character; see below. |
 | Mention a file | `@` | `@` | **Code** (a session with a folder). See below. |

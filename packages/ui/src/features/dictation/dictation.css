@@ -1,0 +1,25 @@
+/* Dictation: the caret after the words being heard blinks like a text caret; it stays put under reduced motion. */
+@keyframes at-dictation-caret {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.dictation-caret {
+  animation: at-dictation-caret 1.06s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictation-caret {
+    animation: none;
+  }
+}
+
+:root[data-motion='reduced'] .dictation-caret {
+  animation: none;
+}

@@ -7,7 +7,7 @@ import { ULTRACODE_MAX_SUBAGENTS } from '@atelier/protocol';
 import { passkeysAvailable } from '../auth/passkeys.ts';
 import { identityProvidersOffered } from '../auth/sign-in.ts';
 import { desktop, isMac } from '../../lib/platform.ts';
-import { audioGenerationOffered, auditLogOffered, imageGenerationOffered, usageLimitsOffered, videoGenerationOffered } from '../../lib/queries.ts';
+import { audioGenerationOffered, auditLogOffered, dictationOffered, imageGenerationOffered, usageLimitsOffered, videoGenerationOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, visiblePages, type SettingsPageId } from './pages.ts';
 
@@ -112,6 +112,48 @@ export const SETTINGS_INDEX = [
     description: 'What makes your sound effects and ambience, unless you name another when you ask.',
     keywords: ['sound effects', 'sfx', 'foley', 'ambience', 'server default'],
     available: () => audioGenerationOffered(),
+  },
+  {
+    id: 'dictation.enabled',
+    page: 'general',
+    label: 'Dictation',
+    description: 'The microphone in the message box: speech turns into text as people speak, with a speech-to-text service of the providers set up here.',
+    keywords: ['voice', 'speech to text', 'microphone', 'transcription', 'stt', 'talk'],
+    admin: true,
+    available: () => dictationOffered() !== null,
+  },
+  {
+    id: 'dictation.source',
+    page: 'general',
+    label: 'Speech-to-text service',
+    description: 'Automatic takes live transcription (Mistral’s Voxtral Realtime) first, then a local Whisper server, then OpenAI, Groq, ElevenLabs or Deepgram.',
+    keywords: ['voxtral', 'whisper', 'transcribe', 'gpt-4o-transcribe', 'scribe', 'deepgram', 'groq', 'speech to text', 'stt'],
+    admin: true,
+    available: () => dictationOffered() !== null,
+  },
+  {
+    id: 'prefs.dictation.language',
+    page: 'general',
+    label: 'Dictation language',
+    description: 'The language you speak. Auto lets the service hear it; naming it helps with short phrases and names.',
+    keywords: ['voice', 'speech', 'microphone', 'transcription', 'spoken language'],
+    available: () => dictationOffered() === true,
+  },
+  {
+    id: 'prefs.dictation.holdToRecord',
+    page: 'general',
+    label: 'Hold to record',
+    description: 'Holding the microphone button or the dictate shortcut records until you let go. A click still starts and stops dictating.',
+    keywords: ['push to talk', 'press and hold', 'voice', 'microphone', 'dictation'],
+    available: () => dictationOffered() === true,
+  },
+  {
+    id: 'dictation.microphone',
+    page: 'general',
+    label: 'Microphone',
+    description: 'Which microphone dictation uses on this computer.',
+    keywords: ['input device', 'headset', 'audio input', 'voice', 'dictation'],
+    available: () => dictationOffered() === true,
   },
   {
     id: 'notifications.taskFinished',

@@ -4,6 +4,7 @@ import type { AudioKind, UserPrefs } from '@atelier/protocol';
 import { SegmentedControl, Select, Switch, type SegmentedControlItem } from '../../components/ui/index.ts';
 import { makesAudio, makesPictures, makesVideo, useAudioGeneration, useImageGeneration, useImageModels, useModels, useSettings, useVideoGeneration } from '../../lib/queries.ts';
 import { notificationsBlocked } from '../work/notifications.ts';
+import { DictationSection } from './dictation-section.tsx';
 import { isUnavailable, ModelSelect } from './model-select.tsx';
 import type { SettingId } from './search-index.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
@@ -79,6 +80,7 @@ export function GeneralPage() {
           </>
         )}
       </SettingsSection>
+      <DictationSection />
       <SettingsSection title="Notifications">
         <NotificationRow id="notifications.taskFinished" field="taskFinished" />
         <NotificationRow id="notifications.permissionNeeded" field="permissionNeeded" />

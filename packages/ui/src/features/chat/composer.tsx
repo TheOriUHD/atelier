@@ -1,5 +1,5 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react';
-import { ArrowUp, Bot, CornerDownLeft, FileText, Paperclip, Square, Telescope, TriangleAlert, X } from 'lucide-react';
+import { ArrowUp, Bot, CircleAlert, CornerDownLeft, FileText, Paperclip, Square, Telescope, TriangleAlert, X } from 'lucide-react';
 import type { McpServerStatus, ModelInfo } from '@atelier/protocol';
 import { Badge, Button, Dialog, DialogContent, Icon, Lightbox, Spinner, Tooltip, cn } from '../../components/ui/index.ts';
 import { blobUrl, saveBlob } from '../../lib/platform.ts';
@@ -13,6 +13,13 @@ import { QuoteTile } from './quote.tsx';
 import { isImage, isText, type Attachment, type Attachments } from './use-attachments.ts';
 import { useIsActiveCell } from '../../lib/split-cell.tsx';
 import { useDraft } from '../../lib/drafts.ts';
+import { desktop } from '../../lib/platform.ts';
+import { useAccount, useDictationStatus, usePrefs, useSetPref } from '../../lib/queries.ts';
+import { useOpenSettings } from '../../app/navigation.ts';
+import { DictateButton, HOLD_MS } from '../dictation/dictate-button.tsx';
+import { Waveform } from '../dictation/waveform.tsx';
+import '../dictation/dictation.css';
+import { useDictation, type DictationProblem } from '../dictation/use-dictation.ts';
 
 export interface ComposerHandle {
   /** Replaces the draft (e.g. with a message rewound to) and focuses the box. */
@@ -148,16 +155,6 @@ export function Composer({
   }));
   const menu = useComposerMenu({ text, caret, commands, workspaceId, ...(answerModels?.length ? { models: answerModels, onModel: setAnswerWith } : {}), onChange: replace });
 
-  useLayoutEffect(() => {
-    const el = input.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 384)}px`;
-    if (placeCaret.current !== null) {
-      el.setSelectionRange(placeCaret.current, placeCaret.current);
-      placeCaret.current = null;
-    }
-  }, [text]);
 
   useEffect(() => {
     if (autoFocus) input.current?.focus();
@@ -182,21 +179,179 @@ export function Composer({
   const mirror = useRef<HTMLDivElement>(null);
   const command = /^\/(\S+)\s*([\s\S]*)$/.exec(text);
   const builtIn = command ? commands.find((c) => c.run && c.name === command[1]) : undefined;
-  const canSend = (!!model || anyModel) && !attachments.uploading && (text.trim().length > 0 || attachments.items.some((a) => a.status === 'ready'));
+  const sendable = (value: string) => (!!model || anyModel) && !attachments.uploading && (value.trim().length > 0 || attachments.items.some((a) => a.status === 'ready'));
 
-  const submit = () => {
-    if (builtIn) {
+  // Dictation (ARCHITECTURE §27): the words go where the caret was, shown as they are heard and kept once it stops.
+  const { prefs } = usePrefs();
+  const setPref = useSetPref();
+  const { account } = useAccount();
+  const dictationStatus = useDictationStatus({ enabled: !readOnly });
+  // Admins see it without a service to use, to learn how to add one; everyone else once there is one.
+  const canDictate = !readOnly && !!dictationStatus.data?.enabled && (!!dictationStatus.data.source || account?.role === 'admin');
+  const dictationPrefs = prefs?.dictation ?? { language: 'auto', holdToRecord: true };
+  const [spoken, setSpoken] = useState<SpokenPlace | null>(null);
+  const spokenRef = useRef<SpokenPlace | null>(null);
+  const textRef = useRef(text);
+  useLayoutEffect(() => {
+    textRef.current = text;
+  });
+  /** Puts the words in the place they were spoken for; `then` gets the message and where the caret went. */
+  const keepSpoken = (words: string, then?: (value: string, caret: number) => void) => {
+    const place = spokenRef.current;
+    if (!place) return;
+    spokenRef.current = null;
+    setSpoken(null);
+    // The box changed meanwhile (a message put back): the words go after what is there now.
+    const at = textRef.current === place.original ? place : { original: textRef.current, before: textRef.current, after: '', caret: textRef.current.length };
+    const { value, caret } = placeWords(at, words);
+    if (value !== textRef.current) replace(value, caret);
+    else input.current?.focus();
+    then?.(value, caret);
+  };
+  const dictation = useDictation({ language: dictationPrefs.language, onEnded: (heard) => keepSpoken(heard) });
+  const dictating = spoken !== null;
+  const shownText = spoken ? placeWords(spoken, dictation.heard).value : text;
+  const canSend = sendable(shownText);
+
+  const submit = (value: string = text) => {
+    const lead = /^\/(\S+)\s*([\s\S]*)$/.exec(value);
+    const run = lead ? commands.find((c) => c.run && c.name === lead[1]) : undefined;
+    if (run) {
       setText('');
-      builtIn.run!(command![2]!.trim());
+      run.run!(lead![2]!.trim());
       return;
     }
     // While the agent works the message is sent all the same: it waits for the agent's next step (or Send now).
-    if (!canSend) return;
-    if (answerWith) onSubmit(text.trim(), { answerWith: answerWith.value });
-    else onSubmit(text.trim());
+    if (!sendable(value)) return;
+    if (answerWith) onSubmit(value.trim(), { answerWith: answerWith.value });
+    else onSubmit(value.trim());
     setText('');
     setAnswerWith(null);
   };
+
+  const startDictation = () => {
+    if (!canDictate || spokenRef.current || dictation.phase !== 'idle') return;
+    const el = input.current;
+    const from = el ? el.selectionStart : text.length;
+    const to = el ? el.selectionEnd : text.length;
+    const place: SpokenPlace = { original: text, before: text.slice(0, from), after: text.slice(to), caret: from };
+    spokenRef.current = place;
+    setSpoken(place);
+    el?.focus();
+    void dictation.start();
+  };
+  /** What was asked for while the last words were on their way (keys typed, Enter): applied once they are in. */
+  const afterStop = useRef<{ send: boolean; typed: string } | null>(null);
+  /** Stops listening; `send` sends the message with the words, `typed` is a key pressed meanwhile, typed after them. */
+  const stopDictation = async (options: { send?: boolean; typed?: string } = {}) => {
+    if (!spokenRef.current) return;
+    const pending = afterStop.current;
+    if (pending) {
+      pending.send ||= !!options.send;
+      pending.typed += options.typed ?? '';
+      return;
+    }
+    const after = { send: !!options.send, typed: options.typed ?? '' };
+    afterStop.current = after;
+    try {
+      const words = await dictation.stop();
+      keepSpoken(words, (value, caret) => {
+        const message = after.typed ? value.slice(0, caret) + after.typed + value.slice(caret) : value;
+        if (after.typed) replace(message, caret + after.typed.length);
+        if (after.send) submit(message);
+      });
+    } finally {
+      if (afterStop.current === after) afterStop.current = null;
+    }
+  };
+  const cancelDictation = () => {
+    dictation.cancel();
+    afterStop.current = null;
+    spokenRef.current = null;
+    setSpoken(null);
+    input.current?.focus();
+  };
+  // Leaving with words heard keeps them in the draft.
+  const leaving = useRef(() => {});
+  useLayoutEffect(() => {
+    leaving.current = () => {
+      const place = spokenRef.current;
+      if (place && dictation.heard.trim()) setText(placeWords(place, dictation.heard).value);
+    };
+  });
+  useEffect(() => () => leaving.current(), []);
+
+  // The dictate shortcut: pressed, it starts or stops; held (with "Hold to record"), it records until let go.
+  const dictateKey = useShortcut('dictate');
+  const dictateNow = useRef({ start: startDictation, stop: stopDictation, hold: dictationPrefs.holdToRecord, busy: false });
+  useLayoutEffect(() => {
+    dictateNow.current = { start: startDictation, stop: stopDictation, hold: dictationPrefs.holdToRecord, busy: dictation.phase !== 'idle' || dictating };
+  });
+  useEffect(() => {
+    if (!activeCell || !dictateKey || !canDictate) return;
+    let downAt: number | null = null;
+    /** With two boxes on the page (a conversation and its side chat), the one with the focus, else the first of the cell. */
+    const mine = () => {
+      const box = input.current;
+      if (!box) return false;
+      const focused = document.activeElement;
+      if (focused instanceof HTMLTextAreaElement && focused.getAttribute('aria-label') === 'Message') return focused === box;
+      return (box.closest('[data-split-cell="active"]') ?? document).querySelector('textarea[aria-label="Message"]') === box;
+    };
+    const onDown = (e: globalThis.KeyboardEvent) => {
+      if (!pressIs(dictateKey, e)) return;
+      e.preventDefault();
+      if (e.repeat || (!dictateNow.current.busy && !mine())) return;
+      if (dictateNow.current.busy) void dictateNow.current.stop();
+      else {
+        downAt = performance.now();
+        dictateNow.current.start();
+      }
+    };
+    const onUp = () => {
+      if (downAt === null) return;
+      const held = performance.now() - downAt;
+      downAt = null;
+      if (dictateNow.current.hold && held >= HOLD_MS) void dictateNow.current.stop();
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+    };
+  }, [activeCell, dictateKey, canDictate]);
+
+  const dictateButton = canDictate && (
+    <DictateButton
+      phase={dictating && dictation.phase === 'idle' ? 'starting' : dictation.phase}
+      holdToRecord={dictationPrefs.holdToRecord}
+      shortcut={dictateKey}
+      onStart={startDictation}
+      onStop={() => void stopDictation()}
+      language={dictationPrefs.language}
+      onLanguage={(code) => setPref.mutate({ path: ['dictation', 'language'], value: code })}
+      onHoldToRecord={(on) => setPref.mutate({ path: ['dictation', 'holdToRecord'], value: on })}
+    />
+  );
+  const onSend = dictating ? () => void stopDictation({ send: true }) : () => submit();
+
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    // While dictating the words are drawn by the mirror, in italics: the box is as tall as the taller of the two.
+    const mirrored = spoken && mirror.current ? mirror.current.scrollHeight : 0;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, mirrored), 384)}px`;
+    if (spoken) {
+      el.scrollTop = el.scrollHeight;
+      if (mirror.current) mirror.current.scrollTop = mirror.current.scrollHeight;
+    }
+    if (placeCaret.current !== null) {
+      el.setSelectionRange(placeCaret.current, placeCaret.current);
+      placeCaret.current = null;
+    }
+  }, [text, spoken, dictation.heard]);
 
   const attachButton = (
     <>
@@ -250,6 +405,7 @@ export function Composer({
   return (
     <div className={cn('relative mx-auto w-full', variant === 'new' ? 'max-w-(--at-layout-composer-width-new-chat)' : 'max-w-(--at-layout-composer-width-chat)')}>
       {above && <div className="pointer-events-none absolute inset-x-0 bottom-full px-3 pb-1.5">{above}</div>}
+      {dictation.problem && <DictationNotice problem={dictation.problem} onClose={dictation.clearProblem} />}
       {menu.menu}
       <div
         data-temporary={temporary || undefined}
@@ -291,7 +447,7 @@ export function Composer({
         <div className="flex items-end gap-1">
           <div className="relative flex min-w-0 flex-1">
           {/* The command the message starts with is blue: a mirror of the text sits under the (then transparent) box. */}
-          {lead && (
+          {lead && !spoken && (
             <div
               ref={mirror}
               aria-hidden
@@ -305,15 +461,36 @@ export function Composer({
               {'\n'}
             </div>
           )}
+          {/* While dictating, what is heard is drawn in italics where it will go, with a caret after it. */}
+          {spoken && (
+            <div
+              ref={mirror}
+              aria-hidden
+              data-dictation=""
+              className={cn(
+                'pointer-events-none absolute inset-0 max-h-96 overflow-hidden break-words whitespace-pre-wrap text-composer text-fg',
+                variant === 'new' ? 'mt-[5px] ml-2 min-h-[42px]' : 'ml-2 min-h-8 py-[5.5px]',
+              )}
+            >
+              {spokenParts(spoken, dictation.heard).before}
+              <span className="text-fg-secondary italic">{spokenParts(spoken, dictation.heard).words}</span>
+              <span className="dictation-caret ml-px inline-block h-[1.1em] w-[1.5px] translate-y-[0.15em] bg-fg align-baseline" />
+              {!dictation.heard && dictation.phase !== 'finishing' && <span className="text-fg-muted">{spoken.before || spoken.after ? '' : 'Listening…'}</span>}
+              {spokenParts(spoken, dictation.heard).after}
+              {'\n'}
+            </div>
+          )}
           <textarea
             ref={input}
             rows={1}
-            value={text}
+            value={shownText}
+            readOnly={dictating}
             aria-label="Message"
             {...menu.inputProps}
-            placeholder={suggested ?? placeholder ?? (variant === 'new' ? 'How can I help you today?' : 'Reply')}
+            placeholder={spoken ? '' : (suggested ?? placeholder ?? (variant === 'new' ? 'How can I help you today?' : 'Reply'))}
             {...(suggested ? { 'aria-description': `Suggested: ${suggested}. Press Tab to use it.` } : {})}
             onChange={(e) => {
+              if (spokenRef.current) return;
               setText(e.target.value);
               setCaret(e.target.selectionStart);
               if (e.target.value.trim()) onTyping?.();
@@ -330,6 +507,21 @@ export function Composer({
               }
             }}
             onKeyDown={(e) => {
+              // While dictating: Escape drops what was said, Enter sends it, typing ends it and goes on from there.
+              if (spokenRef.current) {
+                if (e.nativeEvent.isComposing || pressIs(dictateKey, e)) return;
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelDictation();
+                } else if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void stopDictation({ send: true });
+                } else if ((e.key.length === 1 && !e.metaKey && !e.ctrlKey) || e.key === 'Backspace' || e.key === 'Delete') {
+                  e.preventDefault();
+                  void stopDictation(e.key.length === 1 ? { typed: e.key } : {});
+                }
+                return;
+              }
               onKeyDown?.(e);
               if (e.defaultPrevented) return;
               // Tab takes the suggestion as the person's own text, to send, change or delete.
@@ -355,18 +547,21 @@ export function Composer({
             className={cn(
               'relative max-h-96 min-w-0 flex-1 resize-none bg-transparent text-composer text-fg outline-none placeholder:text-fg-muted',
               lead && 'text-transparent caret-fg selection:bg-interactive/30 selection:text-transparent',
+              spoken && 'text-transparent caret-transparent selection:bg-transparent',
               // Insets: text starts 16px in, 13px down (new) or centered in 48px (reply).
               variant === 'new' ? 'mt-[5px] ml-2 min-h-[42px]' : 'ml-2 min-h-8 py-[5.5px]',
             )}
           />
           </div>
-          {variant === 'reply' && <SendOrStop streaming={streaming} canSend={canSend || !!builtIn} onSend={submit} onStop={onStop} idleHint code={compact} />}
+          {variant === 'reply' && dictateButton}
+          {variant === 'reply' && <SendOrStop streaming={streaming} canSend={canSend || !!builtIn} onSend={onSend} onStop={onStop} idleHint code={compact} />}
         </div>
         {variant === 'new' && (
           <div className="mt-2 flex items-center gap-1">
             {attachButton}
             <span className="flex-1" />
-            <SendOrStop streaming={streaming} canSend={canSend || !!builtIn} onSend={submit} onStop={onStop} code={compact} />
+            {dictateButton}
+            <SendOrStop streaming={streaming} canSend={canSend || !!builtIn} onSend={onSend} onStop={onStop} code={compact} />
           </div>
         )}
         </div>
@@ -378,7 +573,10 @@ export function Composer({
           {footerStart}
         </div>
         <div className="min-w-0 truncate text-caption text-fg-muted max-md:hidden">{footerCenter}</div>
-        <div className="flex min-w-0 items-center justify-end gap-1">{footerEnd}</div>
+        <div className="flex min-w-0 items-center justify-end gap-1">
+          {(dictation.phase === 'listening' || dictation.phase === 'starting') && <Waveform levels={dictation.levels} className="mr-1" />}
+          {footerEnd}
+        </div>
       </div>
     </div>
   );
@@ -566,5 +764,61 @@ export function FileDropZone({ onFiles, label = 'Drop files to attach', children
         </div>
       )}
     </div>
+  );
+}
+
+/** Where dictated words go: the message as it was, split at the caret (a selection is replaced by them). */
+interface SpokenPlace {
+  original: string;
+  before: string;
+  after: string;
+  caret: number;
+}
+
+/** The text before the words (with a space before them where needed), the words, and the rest. */
+function spokenParts(place: SpokenPlace, words: string): { before: string; words: string; after: string } {
+  const w = words.trim();
+  if (!w) return { before: place.before, words: '', after: place.after };
+  return {
+    before: place.before && !/\s$/.test(place.before) ? `${place.before} ` : place.before,
+    words: w,
+    after: place.after && !/^\s/.test(place.after) ? ` ${place.after}` : place.after,
+  };
+}
+
+/** The message with the words in it, and where the caret goes (after them); no words leave it as it was. */
+function placeWords(place: SpokenPlace, words: string): { value: string; caret: number } {
+  if (!words.trim()) return { value: place.original, caret: place.caret };
+  const parts = spokenParts(place, words);
+  return { value: parts.before + parts.words + parts.after, caret: (parts.before + parts.words).length };
+}
+
+/** Why dictation stopped or didn't start, above the box, with what helps. */
+function DictationNotice({ problem, onClose }: { problem: DictationProblem; onClose(): void }) {
+  return (
+    <div role="alert" className="mb-2 flex items-start gap-2 rounded-lg bg-danger-subtle px-3 py-2 text-body text-danger-text">
+      <Icon icon={CircleAlert} size="sm" className="mt-0.5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        {problem.message}{' '}
+        {problem.help === 'microphone-settings' && desktop?.microphone && (
+          <button type="button" onClick={() => void desktop?.microphone?.openSettings()} className="rounded-xs font-medium underline-offset-2 outline-none hover:underline focus-ring">
+            Open microphone settings
+          </button>
+        )}
+        {problem.help === 'settings' && problem.fix && <FixInSettings page={problem.fix.replace(/^settings\//, '')} />}
+      </span>
+      <button type="button" aria-label="Dismiss" onClick={onClose} className="flex size-5 shrink-0 items-center justify-center rounded-xs outline-none hover:bg-danger/15 focus-ring">
+        <Icon icon={X} size="sm" className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function FixInSettings({ page }: { page: string }) {
+  const openSettings = useOpenSettings();
+  return (
+    <button type="button" onClick={() => openSettings(page, 'dictation.source')} className="rounded-xs font-medium underline-offset-2 outline-none hover:underline focus-ring">
+      Fix in Settings
+    </button>
   );
 }

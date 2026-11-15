@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 
-export const SHORTCUT_IDS = ['new-chat', 'new-temporary-chat', 'search', 'settings', 'toggle-sidebar', 'lock', 'report-issue', 'upload', 'effort'] as const;
+export const SHORTCUT_IDS = ['new-chat', 'new-temporary-chat', 'search', 'settings', 'toggle-sidebar', 'lock', 'report-issue', 'upload', 'effort', 'dictate'] as const;
 export type ShortcutId = (typeof SHORTCUT_IDS)[number];
 
 export interface ShortcutInfo {
@@ -28,6 +28,8 @@ export const SHORTCUTS: readonly ShortcutInfo[] = [
   { id: 'report-issue', label: 'Report an issue, with a screenshot', group: 'App', binding: 'F1' },
   { id: 'upload', label: 'Upload or add files', group: 'Message box', binding: 'Mod+U' },
   { id: 'effort', label: 'Change effort', group: 'Message box', binding: 'Mod+Shift+E' },
+  // Held: records until it is let go, with "Hold to record" on; pressed: starts or stops dictating.
+  { id: 'dictate', label: 'Dictate', group: 'Message box', binding: 'Mod+Shift+Space' },
 ];
 
 type Modifier = 'Mod' | 'Ctrl' | 'Alt' | 'Shift';
@@ -66,6 +68,7 @@ export const ShortcutPrefs = z.object({
   'report-issue': changed,
   upload: changed,
   effort: changed,
+  dictate: changed,
 });
 export type ShortcutPrefs = z.infer<typeof ShortcutPrefs>;
 

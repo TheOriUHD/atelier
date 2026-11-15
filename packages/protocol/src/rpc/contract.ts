@@ -45,6 +45,7 @@ import { REPORT_LIMITS, ReportApp, ReportChat, ReportDiagnostics, ReportImageTyp
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, PlanUsage, ProviderStatus, ProviderType } from '../models.ts';
 import { CoopSettings, CoopState, CoopTrack, ModelsChoice } from '../coop.ts';
+import { DictationAudio, DictationId, DictationStart, DictationStatus, DictationUpdate } from '../dictation.ts';
 import { AudioKind, DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
 import { Mode, PermissionMode, ProviderConfig, SettingsLayer, SettingsPath } from '../settings.ts';
@@ -830,6 +831,15 @@ export const contract = {
       input: z.object({ text: z.string().trim().min(1).max(200_000), model: z.string().min(1).optional() }),
       output: z.object({ changes: z.array(MemoryChange) }),
     },
+    /** Dictation (ARCHITECTURE §27): whether it works for this person, and with which service. */
+    'dictation.status': { input: Empty, output: DictationStatus },
+    /** Starts listening; the words come to this connection as `dictation.update`. One at a time per connection. */
+    'dictation.start': { input: DictationStart, output: z.object({ id: z.string(), live: z.boolean() }) },
+    'dictation.audio': { input: DictationAudio, output: Ok },
+    /** Stops listening and answers with everything said, once the service has heard the rest. */
+    'dictation.stop': { input: z.object({ id: DictationId }), output: z.object({ text: z.string() }) },
+    /** Stops listening and keeps nothing. */
+    'dictation.cancel': { input: z.object({ id: DictationId }), output: Ok },
   },
   events: {
     /** The person's memory changed (a chat saved something, a background update, another window). */
@@ -867,6 +877,8 @@ export const contract = {
     /** Terminal output, only to the connection that opened the terminal. */
     'terminals.data': z.object({ terminalId: z.string(), data: z.string() }),
     'terminals.exit': z.object({ terminalId: z.string(), code: z.number().nullable() }),
+    /** Dictation's words so far, only to the connection that dictates. */
+    'dictation.update': DictationUpdate,
   },
 } as const satisfies Contract;
 

@@ -25,8 +25,12 @@ publish:
   channel: latest
 mac:
   category: public.app-category.productivity
+  # Dictation's microphone needs its entitlement under the hardened runtime (the signed build); the helpers get it too.
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
   extendInfo:
     NSLocalNetworkUsageDescription: Atelier connects to your local model servers, SSH hosts, and self-hosted services on your network.
+    NSMicrophoneUsageDescription: Atelier uses the microphone while you dictate a message.
   # Runner builds (`pnpm runner:build`): this machine's for local folders, Linux and macOS ones (with their
   # checksums) to upload to SSH hosts.
   extraResources:

@@ -63,6 +63,13 @@ That includes everything in a long conversation, again on each turn (providers m
   chat's own) writes titles and compaction summaries, runs memory updates and answers questions about fetched pages; Auto
   mode's reviewer is the session's own model, or the small model when the session runs on ChatGPT Chat.
 
+## Dictation
+
+The microphone records only while you [dictate](/dictation/): from the press until you stop. The sound goes from your
+window to your Atelier backend, and from there, with the provider's key, to the speech-to-text service it uses (Mistral,
+OpenAI, Groq, Together, ElevenLabs, Deepgram, or a server of your own). Atelier stores neither the sound nor a
+transcript; what you send is a message like any other.
+
 ## Web search and fetch
 
 - Built-in search sends the query to the web engines (DuckDuckGo, Brave, Bing) "as a browser would": on the desktop through

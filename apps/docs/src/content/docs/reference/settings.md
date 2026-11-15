@@ -27,6 +27,11 @@ see are hidden in the app.
 | **Default speech model** *(only where it works)* | What reads text aloud for you, unless you name another when you ask. Each model has its own voices. |
 | **Default music model** *(only where it works)* | What makes your songs and background music, unless you name another when you ask. |
 | **Default sound effects model** *(only where it works)* | What makes your sound effects and ambience, unless you name another when you ask. |
+| **Dictation** *(admins only, only where it works)* | The microphone in the message box: speech turns into text as people speak, with a speech-to-text service of the providers set up here. |
+| **Speech-to-text service** *(admins only, only where it works)* | Automatic takes live transcription (Mistral’s Voxtral Realtime) first, then a local Whisper server, then OpenAI, Groq, ElevenLabs or Deepgram. |
+| **Dictation language** *(only where it works)* | The language you speak. Auto lets the service hear it; naming it helps with short phrases and names. |
+| **Hold to record** *(only where it works)* | Holding the microphone button or the dictate shortcut records until you let go. A click still starts and stops dictating. |
+| **Microphone** *(only where it works)* | Which microphone dictation uses on this computer. |
 | **Notify me when a task finishes** | A system notification when a chat’s task ends while you’re in another window or app. |
 | **Notify me when a task needs me** | A system notification when a chat’s task waits for your answer or permission. |
 

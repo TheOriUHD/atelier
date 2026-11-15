@@ -182,6 +182,11 @@ export const SettingsSchema = z.object({
       maxAudioSpendPerUserPerDayUsd: z.number().positive().optional(),
     })
     .default({ enabled: true, maxImagesPerTurn: 8, videoEnabled: true, maxVideosPerTurn: 2 }),
+  /**
+   * Dictation in the message box (ARCHITECTURE §27). `source` is a `DictationSource` id; absent, the backend picks the
+   * best speech-to-text service among the providers set up here.
+   */
+  dictation: z.object({ enabled: z.boolean().default(true), source: z.string().max(400).optional() }).default({ enabled: true }),
   /** Per-person limits on text models for a shared server (ARCHITECTURE §8); none until an admin sets one. */
   limits: LimitsSettings.default({}),
   context: z

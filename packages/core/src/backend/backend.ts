@@ -168,6 +168,7 @@ import { isNull } from 'drizzle-orm';
 import { newId } from '../util/ids.ts';
 import { getAt, leafPaths } from '../util/json-path.ts';
 import { interpolate, secretRefs } from '../util/interpolate.ts';
+import { DictationError, DictationService } from '../dictation/index.ts';
 
 export interface Logger {
   info(message: string, data?: Record<string, unknown>): void;
@@ -665,6 +666,25 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         }
       : {}),
   });
+  // Dictation (ARCHITECTURE §27): speech-to-text with a provider set up here, the words to the window that dictates.
+  const dictation = new DictationService<Connection>({
+    settings: () => {
+      const e = settings.effective;
+      return { enabled: e.dictation.enabled, source: e.dictation.source, text: e.providers, media: e.imageProviders };
+    },
+    credentials: async (provider) => (await (provider.kind === 'text' ? registry : imageRegistry).credentials(provider.id)) ?? { headers: {} },
+    fetch: inspector.wrap(platform.fetch ?? plainHttpFetch(httpFetch, { idleMs: 60_000 })),
+    log: (message) => platform.logger.info(message),
+  });
+  /** Dictation's refusals as the window shows them; one that needs an admin points at the settings that fix it. */
+  const dictationErrors = async <T>(run: () => Promise<T> | T): Promise<T> => {
+    try {
+      return await run();
+    } catch (e) {
+      if (e instanceof DictationError) throw appError(e.code, e.message, e.code === 'unavailable' ? { fix: 'settings/general' } : undefined);
+      throw appError('unavailable', e instanceof Error ? e.message : 'Dictation failed.');
+    }
+  };
   imageRegistry.on('status', (s) => emitWhere(isAdmin, 'imageProviders.changed', s));
   registry.on('status', (s) => emitWhere(isAdmin, 'providers.changed', s));
   // Everyone gets the shared models with their own after them; a change to a person's own models goes to them only.
@@ -3515,6 +3535,22 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       memoryErrors(async () => ({ changes: await memory.instruct(me(ctx).id, text, { ...(entryId ? { entryId } : {}), ...(section ? { section } : {}) }, model ? { model } : {}) })),
     'memory.update': ({ id, section, ...patch }, ctx) => memoryErrors(() => memory.edit(me(ctx).id, { ...(id ? { id } : {}), ...(section ? { section } : {}) }, patch)),
     'memory.import': ({ text, model }, ctx) => memoryErrors(async () => ({ changes: await memory.import(me(ctx).id, text, model ? { model } : {}) })),
+
+    'dictation.status': (_input, ctx) => dictation.status(me(ctx).role === 'admin'),
+    'dictation.start': (input, ctx) => {
+      const connection = ctx.connection();
+      return dictationErrors(() => dictation.start(connection, me(ctx).id, input, (update) => connection.rpc.emit('dictation.update', update)));
+    },
+    'dictation.audio': ({ id, seq, pcm }, ctx) =>
+      dictationErrors(() => {
+        dictation.audio(ctx.connection(), id, seq, new Uint8Array(Buffer.from(pcm, 'base64')));
+        return { ok: true as const };
+      }),
+    'dictation.stop': ({ id }, ctx) => dictationErrors(() => dictation.stop(ctx.connection(), id)),
+    'dictation.cancel': ({ id }, ctx) => {
+      dictation.cancel(ctx.connection(), id);
+      return { ok: true as const };
+    },
   };
 
   /** What an activity log rule may look at (audit-rules.ts). */
@@ -3606,6 +3642,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         });
         // Its terminals wait a few minutes for the same person to attach them again (a reload, a dropped socket).
         terminals.detachAll(connection);
+        dictation.dropAll(connection);
       };
     },
     async logout(sessionId) {
@@ -3655,6 +3692,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       coopGateway?.shutdown();
       memory.dispose();
       await terminals.closeAll();
+      dictation.dispose();
       await mcp.close();
       await personal.close();
       await workspaceManager.disposeAll();

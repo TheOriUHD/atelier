@@ -140,6 +140,10 @@ contextBridge.exposeInMainWorld('atelierDesktop', {
     change: (change: unknown) => ipcRenderer.invoke('lending:change', change),
     allowImport: () => ipcRenderer.invoke('lending:allowImport'),
   },
+  microphone: {
+    ask: () => ipcRenderer.invoke('microphone:ask'),
+    openSettings: () => ipcRenderer.invoke('microphone:openSettings'),
+  },
   browserExtension: {
     status: () => ipcRenderer.invoke('browserExtension:status'),
     reveal: () => ipcRenderer.invoke('browserExtension:reveal'),

@@ -717,6 +717,21 @@ const ConnectingProvider = z.object({ id: z.string().min(1).max(100), name: z.st
 const SaveBlob = z.object({ sha256: z.string().regex(/^[0-9a-f]{64}$/), name: z.string().min(1).max(255) });
 
 const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'notifications']);
+/**
+ * Dictation's microphone: sound only (never the camera), for Atelier's own pages in their main frame, never an
+ * artifact's frame or a page in the Browser pane (its own session refuses everything).
+ */
+function dictationMicrophone(request: Electron.MediaAccessPermissionRequest): boolean {
+  const types = request.mediaTypes ?? [];
+  if (!types.length || types.some((t) => t !== 'audio') || request.isMainFrame === false) return false;
+  try {
+    // `origin` is "null" for a scheme the URL standard doesn't know, such as app:.
+    const url = new URL(request.requestingUrl);
+    return (url.protocol === 'app:' && url.host === 'ui') || (!!DEV_URL && url.origin === new URL(DEV_URL).origin);
+  } catch {
+    return false;
+  }
+}
 const SessionIds = z.array(z.string().min(1).max(100)).max(1000);
 const WorkspaceId = z.string().min(1).max(200);
 // base64 of the backend's 16 MiB cap, with room for padding.
@@ -771,11 +786,36 @@ function registerComputerIpc(): void {
   });
 }
 
+/** System Settings' and Windows Settings' microphone privacy pages. */
+const MICROPHONE_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  win32: 'ms-settings:privacy-microphone',
+};
+
+/** Dictation's microphone (ARCHITECTURE §27): macOS asks the person once, for Atelier; Windows has a switch per app. */
+function registerMicrophoneIpc(): void {
+  ipcMain.handle('microphone:ask', async () => {
+    // Chromium's made-up microphone (tests) never touches the real one, so there is nothing to ask the system.
+    if (process.platform !== 'darwin' && process.platform !== 'win32') return true;
+    if (app.commandLine.hasSwitch('use-fake-device-for-media-stream')) return true;
+    const status = systemPreferences.getMediaAccessStatus('microphone');
+    if (status === 'granted') return true;
+    if (process.platform === 'darwin' && status === 'not-determined') return systemPreferences.askForMediaAccess('microphone');
+    // Windows reports "denied" when microphone access is off for desktop apps; anything else lets Chromium try.
+    return status !== 'denied' && status !== 'restricted';
+  });
+  ipcMain.handle('microphone:openSettings', () => {
+    const url = MICROPHONE_SETTINGS[process.platform];
+    if (url) void shell.openExternal(url);
+  });
+}
+
 let registeredIpc = false;
 
 function registerIpc(): void {
   registeredIpc = true;
   registerComputerIpc();
+  registerMicrophoneIpc();
   ipcMain.on('connect-backend', (event) => connectRenderer(event.sender));
   // Settings › Keyboard shortcuts changed (or a window opened): the menu takes the page's bindings. Each window's are
   // kept, so that a window closed while it recorded a shortcut (its menu keys let go) hands the menu back to another's.
@@ -1159,7 +1199,9 @@ async function startApp(): Promise<void> {
   registerProtocols();
   buildMenu();
   startBrowser();
-  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
+  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) =>
+    callback(permission === 'media' ? dictationMicrophone(details as Electron.MediaAccessPermissionRequest) : ALLOWED_PERMISSIONS.has(permission)),
+  );
   prepareBrowserSession(session.fromPartition(BROWSER_PARTITION), browserEvents);
   session.fromPartition(BROWSER_PARTITION).protocol.handle(PAGES_SCHEME, (request) => workspacePages.handle(request));
   [device, connection, hourCycle] = await Promise.all([

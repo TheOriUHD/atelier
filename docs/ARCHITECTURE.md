@@ -1282,6 +1282,39 @@ One format (`packages/protocol/src/reports.ts`) is shared by the app, the termin
   - zips of one or many reports;
   - download counts the update feed records per day, file, version, platform and country.
 
+## 27. Dictation
+
+The message box's microphone turns speech into text as the person speaks. The window records; the backend transcribes
+with a provider set up there, so keys never leave it and a server's people dictate with its providers.
+
+- **The window** (`packages/ui/src/features/dictation`):
+  - `capture.ts` opens the microphone (the one picked in the mic menu, kept per window in local storage) with echo
+    cancellation, noise suppression and gain control.
+  - An audio worklet (`pcm-worklet.js`, a file of its own because the CSP allows scripts from `'self'` only) mixes it to
+    one channel, brings it to 16 kHz and posts 16-bit PCM 50 ms at a time with its loudness for the waveform.
+  - `use-dictation.ts` sends 100 ms per `dictation.audio` call, numbered (`seq`), and shows `dictation.update`s.
+  - The composer keeps where the caret was, draws what is heard in italics there (a mirror over the transparent,
+    read-only box), and puts the final words in on stop: Enter stops and sends, Escape drops them, typing ends it.
+  - The button records while held with "Hold to record" (prefs `dictation.holdToRecord`), else a press toggles; the
+    `dictate` shortcut (⇧⌘Space) does the same. Language: prefs `dictation.language` (`auto` or ISO 639-1).
+- **The backend** (`packages/core/src/dictation`):
+  - `sources.ts` finds the speech-to-text services in the providers already set up, by address: Mistral (text or Media,
+    `mistral-vibe` included) gives Voxtral Realtime; OpenAI gives GPT-4o (mini) Transcribe; Groq and Together Whisper;
+    ElevenLabs Scribe; Deepgram Nova-3; a local OpenAI-style speech server (Speaches, LocalAI, KoboldCpp, vLLM) a model
+    with a speech-to-text name typed in. Live ones come first, then local, then hosted; an admin can pick one
+    (settings `dictation.source`) or turn dictation off (`dictation.enabled`).
+  - `mistral-realtime.ts` streams to Mistral's WebSocket (the key on the handshake; words return about half a second
+    after they are said).
+  - `phrases.ts` serves the services that transcribe recordings: it cuts at pauses of 0.7 s (25 s at most), sends no
+    silence, transcribes the phrase being said again every one to two and a half seconds so words still appear, then
+    once for good; phrases join in order, the earlier words as OpenAI's `prompt`.
+  - `service.ts` keeps one dictation per connection, puts overtaken audio back in order, ends one after 20 s without
+    audio or after 10 minutes, and when the connection closes.
+- **The desktop app** allows `media` only for its own pages' main frame and sound only (never an artifact or the Browser
+  pane), asks macOS once (`microphone:ask`, the `com.apple.security.device.audio-input` entitlement and
+  `NSMicrophoneUsageDescription`), and links to the system's microphone privacy page when it is refused. A browser needs
+  a secure page (https or localhost) for the microphone.
+
 ## 20. Decisions
 
 - **Q1 Repo, CI and updates.** The source is a GitHub repository; releases are published from it.

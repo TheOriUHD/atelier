@@ -74,7 +74,10 @@ export const AUDIO_SETTINGS = {
 
 /** What the fake sound server was asked to do, oldest first. */
 export interface FakeAudioRequest {
-  route: 'speech' | 'sound';
+  route: 'speech' | 'sound' | 'transcription';
+  /** Dictation: the language asked for, and the size of the recording. */
+  language?: string | null;
+  bytes?: number;
   model: string | null;
   text: string;
   voice?: string | null;

@@ -9,11 +9,11 @@ export const PASSWORD = 'correct horse battery staple';
  * test tokens out of the real one. ATELIER_E2E_APP points at a packaged executable instead
  * (e.g. release/mac-arm64/Atelier.app/Contents/MacOS/Atelier).
  */
-export function launchDesktop(configDir: string, env: Record<string, string> = {}): Promise<ElectronApplication> {
+export function launchDesktop(configDir: string, env: Record<string, string> = {}, args: readonly string[] = []): Promise<ElectronApplication> {
   const packaged = process.env.ATELIER_E2E_APP;
   return electron.launch({
     ...(packaged ? { executablePath: packaged } : {}),
-    args: [...(packaged ? [] : ['apps/desktop/dist/main.mjs']), `--user-data-dir=${join(configDir, 'chromium')}`, '--use-mock-keychain'],
+    args: [...(packaged ? [] : ['apps/desktop/dist/main.mjs']), `--user-data-dir=${join(configDir, 'chromium')}`, '--use-mock-keychain', ...args],
     // The window stays hidden: a test run mustn't take the screen or focus from whoever is working here.
     env: { ...process.env, ATELIER_UPDATE_FEED: 'off', ATELIER_CONFIG_DIR: configDir, ATELIER_HIDE_WINDOW: process.env.ATELIER_SHOW_WINDOW ? '' : '1', ...env },
   });
