@@ -43,9 +43,12 @@ test('desktop Code: a background sub-agent works while the turn ends, then its e
     await expect(running.getByRole('listitem')).toHaveText([/Survey the repo\s*Agent·Background·\d+s/]);
     await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeHidden();
 
-    // When it ends, its report reaches the idle session as one row, and the model carries on by itself.
-    const notice = page.getByText(/^Background agent finished ·/);
-    await expect(notice).toHaveText('Background agent finished · Survey the repo', { timeout: 30_000 });
+    // When it ends, its report reaches the idle session as a step of the work that follows (its summary says so), and
+    // the model carries on by itself; opening the work shows the step.
+    const ended = page.getByRole('button', { name: /background agent finished/i });
+    await expect(ended).toBeVisible({ timeout: 30_000 });
+    await ended.click();
+    await expect(page.getByText(/^Background agent finished ·/)).toHaveText('Background agent finished · Survey the repo');
     await expect(page.getByText(/^Heard back from Survey the repo: A long answer, streamed a little/)).toBeVisible();
     await expect(card).toContainText('Done');
     await expect(running).toBeHidden();
