@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-11-15
+
 - **Remote Control runs on the computer you control.** A session in a folder on another of your computers used computer use on the computer you last wrote from: started from a laptop, it worked the laptop's screen while its commands ran on the other one. Now everything such a session does happens on the computer its folder is on, computer use included, wherever you write from. Its cards (which apps it may use, taking over the mouse) can only be allowed in the desktop app on that computer, and say so elsewhere; while computer use is off there, the session has none.
 - **A new session's screen keeps its picks.** Picking a model or switching thinking on one device changed the open new-session screen on your other devices at once (the model is remembered for your account). Now a screen keeps the picks it started with until you change them there; the next new screen starts from your latest picks.
 
