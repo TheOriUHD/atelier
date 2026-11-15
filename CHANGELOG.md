@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.9.3] — 2026-11-15
+
 - **Computer use cards for another computer are answered where you are.** With Remote Control, the cards of a session on your other computer (which apps it may use, taking over the mouse and keyboard) could only be allowed in the desktop app on that computer. Now you answer them on the device you write from, with the same choices; your answer goes through the server to that computer's desktop app, which allows only the apps the card offered, at most with what it offered for each, for the session or always.
 
 ## [0.9.2] — 2026-11-15
