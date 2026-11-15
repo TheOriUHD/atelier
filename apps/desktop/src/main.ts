@@ -804,6 +804,8 @@ const MICROPHONE_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
 /** Dictation with the Mac's own speech recognition (speech.ts): one helper per dictation, for the window that asked. */
 function registerSpeechIpc(): void {
   const watched = new Set<number>();
+  // Asked once at launch (loading the Speech framework takes a moment), so the first press needn't wait for it.
+  void macSpeech.available();
   ipcMain.handle('speech:available', () => macSpeech.available());
   // A result, not a throw: the window needs the helper's code (`unsupported`: dictate through the backend instead).
   ipcMain.handle('speech:start', async (event, input: unknown) => {

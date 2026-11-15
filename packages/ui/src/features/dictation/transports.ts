@@ -104,8 +104,18 @@ export function usePrefersAtelierModel(): boolean {
   );
 }
 
-/** Whether this Mac can dictate on its own (the desktop app on macOS 26 or later); false everywhere else. */
-export function useMacSpeech(): boolean {
-  const { data } = useQuery({ queryKey: ['macSpeech'], queryFn: () => desktop!.speech!.available(), enabled: !!desktop?.speech, staleTime: Infinity, retry: false });
-  return !!data?.available;
+/** Whether this Mac can dictate on its own (macOS 26 or later), asked of main once per window. */
+let macProbe: Promise<boolean> | null = null;
+export function macCanHear(): Promise<boolean> {
+  const speech = desktop?.speech;
+  if (!speech) return Promise.resolve(false);
+  macProbe ??= speech.available().then((a) => a.available, () => false);
+  return macProbe;
+}
+
+/** The same for rendering: false everywhere else; undefined on a Mac until main has answered (a moment after launch). */
+export function useMacSpeech(): boolean | undefined {
+  const { data } = useQuery({ queryKey: ['macSpeech'], queryFn: macCanHear, enabled: !!desktop?.speech, staleTime: Infinity, retry: false });
+  if (!desktop?.speech) return false;
+  return data;
 }

@@ -39,9 +39,9 @@ test('desktop: the microphone dictates into the message box live, the words stay
     // 16 kHz mono 16-bit, a second or more at a time: about 32 KB a second.
     expect(Math.min(...heard.map((r) => r.bytes!))).toBeGreaterThan(16_000);
 
-    // The arrow beside the microphone: the microphone, the language (searchable) and Hold to record.
-    await page.getByRole('button', { name: 'Dictation settings' }).click();
-    const menu = page.getByRole('menu');
+    // A right-click on the microphone: the microphone, the language (searchable) and Hold to record.
+    await page.getByRole('button', { name: 'Dictate', exact: true }).click({ button: 'right' });
+    const menu = page.getByRole('menu', { name: 'Dictation settings' });
     // The system's own first (Chromium names it), then every input.
     await expect(menu.getByRole('menuitemradio').first()).toBeChecked();
     await expect(menu.getByRole('menuitemradio', { name: 'Fake Audio Input 1' })).toBeVisible();
@@ -102,3 +102,29 @@ test('desktop on a Mac: the Mac’s own speech recognition listens through the a
     await app.close();
   }
 });
+
+for (const route of ['mac', 'atelier'] as const) {
+  test(`desktop: dictation stops at once, however soon after it started (${route === 'mac' ? 'the Mac’s own recognition' : 'the backend'})`, async () => {
+    test.skip(route === 'mac' && process.platform !== 'darwin', 'the Mac’s own recognition');
+    test.setTimeout(120_000);
+    const configDir = await tempConfigDir({ ...AUDIO_SETTINGS, dictation: { source: 'media:fake-audio:whisper-1' } });
+    const env: Record<string, string> = route === 'mac' ? { ATELIER_SPEECH_HELPER: join(process.cwd(), 'native', 'bin', 'atelier-speech-darwin') } : {};
+    const app = await launchDesktop(configDir, env, ['--use-fake-device-for-media-stream']);
+    try {
+      const page = await app.firstWindow();
+      await setUpLocal(page);
+      const mic = page.getByRole('button', { name: 'Dictate', exact: true });
+      await expect(mic).toBeVisible({ timeout: 20_000 });
+      await page.waitForLoadState('load');
+      // Stopped before any sound reached the recognizer, just after, and well into it: each stop is done within moments.
+      for (const wait of [0, 30, 300, 0, 1200, 0]) {
+        await mic.click();
+        await page.waitForTimeout(wait);
+        await page.getByRole('button', { name: 'Stop dictation' }).click();
+        await expect(mic).toBeVisible({ timeout: 3000 });
+      }
+    } finally {
+      await app.close();
+    }
+  });
+}

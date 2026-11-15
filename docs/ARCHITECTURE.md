@@ -1300,8 +1300,10 @@ admin chose.
     fetched (`dictation.prepare`, `dictation.changed`) shows as a notice with its progress.
   - The composer keeps where the caret was, draws what is heard in italics there (a mirror over the transparent,
     read-only box), and puts the final words in on stop: Enter stops and sends, Escape drops them, typing ends it.
-  - The button records while held with "Hold to record" (prefs `dictation.holdToRecord`), else a press toggles; the
-    `dictate` shortcut (⇧⌘Space) does the same. Language: prefs `dictation.language` (`auto` or ISO 639-1).
+  - The button, the box's last control, records while held with "Hold to record" (prefs `dictation.holdToRecord`), else
+    a press toggles; the `dictate` shortcut (⇧⌘Space) does the same; a right-click opens the microphone, language and
+    Hold to record menu. Language: prefs `dictation.language` (`auto` or ISO 639-1). A stop never waits more than 5 s
+    for the last words (a second press stops waiting), and Escape cancels wherever the focus is.
 - **The Mac** (`native/computer-macos/Sources/atelier-speech`, shipped as `atelier-speech-darwin` beside the computer use
   helper; `apps/desktop/src/speech.ts`): one helper per dictation, JSON lines over stdio; Speech's `SpeechAnalyzer` with
   a `SpeechTranscriber` (volatile and fast results) for the picked language (the Mac's own region first), `AssetInventory`

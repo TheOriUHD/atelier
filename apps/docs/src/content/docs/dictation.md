@@ -3,7 +3,7 @@ title: Dictation
 description: "Speak instead of typing: the microphone in the message box turns your words into text as you say them, on your own computer or your own server, with nothing to set up."
 ---
 
-The microphone in the message box turns speech into text while you speak. The words appear where the cursor was, in
+The microphone at the right end of the message box turns speech into text while you speak. The words appear where the cursor was, in
 italics until you stop, and stay in the box to edit or send. Below the box a waveform moves with your voice.
 
 It works in Chat and Code, in the desktop app and in a browser, in conversations and on the new-conversation screen.
@@ -11,7 +11,8 @@ It needs no provider and no key.
 
 ## Dictate
 
-- **Click the microphone** to start, and click it again to stop. The words stay in the box.
+- **Click the microphone** to start, and click it again to stop. The words stay in the box. If the last words are still
+  on their way, a second click stops waiting for them.
 - **Hold it** to record until you let go, with **Hold to record** on (it is by default). A quick click still starts and
   stops.
 - **⇧⌘Space** (Ctrl+Shift+Space on Windows and Linux) does the same from the keyboard: press it to start and stop, or
@@ -25,7 +26,7 @@ microphone goes away.
 
 ## Microphone, language and Hold to record
 
-The small arrow next to the microphone opens a menu:
+Right-click the microphone (or press the context-menu key while it has the focus) for a menu:
 
 - **Microphone**: the system's default, or any other input. The choice is kept on this computer.
 - **Language**: **Auto** hears which language you speak. Choosing yours helps with short phrases and names. Type to

@@ -38,6 +38,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.1',
+    intro: 'Dictation stops when you say so.',
+    highlights: [
+      {
+        icon: Mic,
+        title: 'Stop is instant',
+        body: 'Clicking the microphone again ends a dictation at once, also right after you started it. A second click stops waiting for the last words, and Esc drops it wherever you are.',
+      },
+      {
+        icon: MousePointerClick,
+        title: 'Right-click for its settings',
+        body: 'The microphone sits at the right end of the box. Right-click it for the microphone, the language and Hold to record.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.10.0',
     intro: 'Speak instead of typing, with nothing to set up.',
     highlights: [
@@ -54,7 +71,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       {
         icon: SlidersHorizontal,
         title: 'Your microphone and language',
-        body: 'The arrow beside the microphone picks the microphone, the language you speak (or Auto) and Hold to record. The same settings are in Settings › General › Dictation.',
+        body: 'Right-click the microphone for which microphone to use, the language you speak (or Auto) and Hold to record. The same settings are in Settings › General › Dictation.',
       },
     ],
     also: [

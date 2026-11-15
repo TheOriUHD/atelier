@@ -8,7 +8,7 @@ import { desktop } from '../../lib/platform.ts';
 import { describeError, errorCode, rpc } from '../../lib/rpc.ts';
 import { MicrophoneError, startCapture, type Capture } from './capture.ts';
 import { savedMicrophone } from './microphones.ts';
-import { backendTransport, macTransport, MacCantHear, type DictationTransport, type TransportUpdate } from './transports.ts';
+import { backendTransport, macCanHear, macTransport, MacCantHear, prefersAtelierModel, type DictationTransport, type TransportUpdate } from './transports.ts';
 
 export type DictationPhase = 'idle' | 'starting' | 'listening' | 'finishing';
 
@@ -55,6 +55,9 @@ export function useLevels(levels: Levels): readonly number[] {
   return useSyncExternalStore(levels.subscribe, levels.get, levels.get);
 }
 
+/** The longest a stop waits for the service's last words before it keeps what came. */
+const STOP_WAIT_MS = 5000;
+
 /** 100 ms of audio per call: ten calls a second. */
 const SEND_SAMPLES = 1600;
 /** A backlog goes a second at a time (a call takes two at most, `DICTATION_CHUNK_MAX_BYTES`). */
@@ -93,6 +96,8 @@ interface Run {
   ready: Promise<boolean>;
   /** The one stop of this run: every caller (the button, Enter, the shortcut, a lost microphone) waits for the same. */
   stopping: Promise<string> | null;
+  /** While a stop waits for the last words: stops waiting, keeping what came. */
+  giveUp?: () => void;
 }
 
 /** Atelier's own speech model is being fetched (the first dictation here): how far, while the box waits. */
@@ -111,8 +116,11 @@ export interface DictationOptions {
   language: string;
   /** Words to spell as given. */
   hints?: readonly string[];
-  /** Dictate with the Mac's own speech recognition (the desktop app on a Mac, unless Settings › Developer says otherwise). */
-  mac?: boolean;
+  /**
+   * Dictate with the Mac's own speech recognition (the desktop app on a Mac, unless Settings › Developer says otherwise);
+   * undefined while it isn't known yet whether this Mac can: the start waits for main's answer.
+   */
+  mac?: boolean | undefined;
   /** The dictation ended by itself (the service failed, the microphone went away, time ran out): its words so far. */
   onEnded?(heard: string): void;
 }
@@ -297,9 +305,8 @@ export function useDictation(options: DictationOptions): Dictation {
   const start = useCallback(async (): Promise<boolean> => {
     if (run.current) return false;
     let settle: (ok: boolean) => void = () => {};
-    const mac = opts.current.mac ? macTransport() : null;
     const r: Run = {
-      transport: mac ?? backendTransport,
+      transport: backendTransport,
       id: null,
       capture: null,
       seq: 0,
@@ -317,6 +324,14 @@ export function useDictation(options: DictationOptions): Dictation {
     setHeard('');
     setPhase('starting');
     levels.reset();
+    // The Mac's own recognition, or Atelier's backend: a moment after launch main may still be finding out which.
+    const wantsMac = opts.current.mac ?? (desktop?.speech && !prefersAtelierModel() ? await macCanHear() : false);
+    const mac = wantsMac ? macTransport() : null;
+    if (mac) r.transport = mac;
+    if (r.over) {
+      settle(false);
+      return false;
+    }
     const fail = (error: unknown) => {
       r.capture?.stop();
       setGettingReady(null);
@@ -417,11 +432,33 @@ export function useDictation(options: DictationOptions): Dictation {
     }
   }, [apply, endWith, finalize, finish, levels, send]);
 
+  /**
+   * Stops listening and resolves with the final words. It never hangs: after STOP_WAIT_MS, or when asked a second time
+   * (the button pressed again), it stops waiting and keeps what was heard.
+   */
   const stop = useCallback(async (): Promise<string> => {
     const r = run.current;
     if (!r || r.over) return '';
+    if (r.giveUp) {
+      r.giveUp();
+      return r.heard;
+    }
     setPhase('finishing');
-    const words = await finalize(r);
+    let gaveUp = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<string>((resolve) => {
+      const keep = () => {
+        clearTimeout(timer);
+        gaveUp = true;
+        resolve(r.heard);
+      };
+      r.giveUp = keep;
+      timer = setTimeout(keep, STOP_WAIT_MS);
+    });
+    const words = await Promise.race([finalize(r), waited]);
+    clearTimeout(timer);
+    r.giveUp = undefined;
+    if (gaveUp && r.id) r.transport.cancel(r.id);
     finish(r);
     return words;
   }, [finalize, finish]);

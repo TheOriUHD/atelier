@@ -280,6 +280,44 @@ describe('dictating into the message box', () => {
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Dictation is ready'));
   });
 
+  it('never stays stuck stopping: a second press keeps what was heard and is done', async () => {
+    backend.handlers['dictation.stop'] = () => new Promise(() => {});
+    const input = box();
+    await dictateInto(input, 'Start');
+    heard('stuck words');
+    const button = screen.getByRole('button', { name: 'Stop dictation' });
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1 });
+    await waitFor(() => expect(callsTo('dictation.stop')).toHaveLength(1));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Stop dictation' }), { button: 0, pointerId: 2 });
+    await waitFor(() => expect(input.value).toBe('Start stuck words'));
+    expect(screen.getByRole('button', { name: 'Dictate' })).toBeTruthy();
+    expect(callsTo('dictation.cancel')).toEqual([{ id: 'd1' }]);
+    // And the next dictation starts and stops as usual.
+    backend.handlers['dictation.stop'] = () => ({ text: 'Again.' });
+    fireEvent.click(screen.getByRole('button', { name: 'Dictate' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop dictation' })).toBeTruthy());
+    await waitFor(() => expect(callsTo('dictation.start')).toHaveLength(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+    await waitFor(() => expect(input.value).toBe('Start stuck words Again.'));
+  });
+
+  it('drops what is being said with Escape, wherever the focus is', async () => {
+    const input = box();
+    await dictateInto(input, 'Keep');
+    heard('drop');
+    input.blur();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(input.value).toBe('Keep'));
+    expect(callsTo('dictation.cancel')).toEqual([{ id: 'd1' }]);
+  });
+
+  it('opens its settings with a right-click', async () => {
+    box();
+    fireEvent.contextMenu(await micButton());
+    await waitFor(() => expect(screen.getByRole('menu', { name: 'Dictation settings' })).toBeTruthy());
+    expect(screen.getByText('Hold to record')).toBeTruthy();
+  });
+
   it('speaks the language chosen, and says so to the backend', async () => {
     backend.handlers['prefs.get'] = () => ({ ...defaultUserPrefs(), dictation: { language: 'de', holdToRecord: false } });
     const input = box();

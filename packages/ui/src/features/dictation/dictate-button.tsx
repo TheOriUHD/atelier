@@ -1,11 +1,11 @@
 /**
- * The message box's microphone (ARCHITECTURE §27): a click starts and stops dictating; with "Hold to record" on, holding
- * it records until it is let go. The arrow beside it opens the microphone, the language and that switch.
+ * The message box's microphone (ARCHITECTURE §27), at its right end: a click starts and stops dictating; with "Hold to
+ * record" on, holding it records until it is let go. A right-click opens the microphone, the language and that switch.
  */
-import { useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { ChevronDown, Mic, Search } from 'lucide-react';
+import { useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { Mic, Search } from 'lucide-react';
 import { DICTATION_LANGUAGES, dictationLanguageLabel } from '@atelier/protocol';
-import { Icon, Menu, MenuContent, MenuGroup, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSubmenu, MenuSwitchItem, MenuTrigger, Spinner, Tooltip, cn } from '../../components/ui/index.ts';
+import { Icon, Menu, MenuContent, MenuGroup, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSubmenu, MenuSwitchItem, Spinner, Tooltip, cn } from '../../components/ui/index.ts';
 import { shortcutText } from '../../lib/shortcuts.ts';
 import { saveMicrophone, useMicrophones, useSavedMicrophone } from './microphones.ts';
 import type { DictationPhase } from './use-dictation.ts';
@@ -28,6 +28,8 @@ export interface DictateButtonProps {
 export function DictateButton({ phase, holdToRecord, shortcut, onStart, onStop, language, onLanguage, onHoldToRecord }: DictateButtonProps) {
   const active = phase !== 'idle';
   const keys = shortcutText(shortcut);
+  const button = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState(false);
   // Read when a press ends, which may be after this render: the latest values.
   const now = useRef({ holdToRecord, onStop });
   useLayoutEffect(() => {
@@ -36,15 +38,16 @@ export function DictateButton({ phase, holdToRecord, shortcut, onStart, onStop, 
 
   /**
    * The mouse and touch work on the press itself, not the click: starting re-renders the button, after which a browser
-   * may never send the click. Pressed while it runs, it stops; pressed to start, it records until let go if that took
-   * long enough ("Hold to record"), else it keeps listening until the next press.
+   * may never send the click. Pressed while it runs, it stops (pressed while the last words come, it stops waiting for
+   * them); pressed to start, it records until let go if that took long enough ("Hold to record"), else it keeps
+   * listening until the next press.
    */
   const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
     // The focus stays in the message box, where Enter sends and Escape cancels.
     e.preventDefault();
     if (phase !== 'idle') {
-      if (phase === 'listening' || phase === 'starting') onStop();
+      onStop();
       return;
     }
     const pressedAt = performance.now();
@@ -61,49 +64,77 @@ export function DictateButton({ phase, holdToRecord, shortcut, onStart, onStop, 
   const onClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
     if (e.detail !== 0) return;
     if (phase === 'idle') onStart();
-    else if (phase === 'listening' || phase === 'starting') onStop();
+    else onStop();
   };
 
-  const label = active ? 'Stop dictation' : 'Dictate';
-  const tip = active ? 'Stop dictation' : holdToRecord ? 'Dictate: click, or hold to talk' : 'Dictate';
+  const title = active ? 'Stop dictation' : holdToRecord ? 'Press and hold to record' : 'Click to dictate';
   return (
-    <span className="group/dictate flex shrink-0 items-center">
-      <Tooltip content={keys ? `${tip}  ${keys}` : tip}>
+    <>
+      <Tooltip
+        disabled={menu}
+        // Two lines, kept inside the window: the button is the box's last control.
+        align="end"
+        className="h-auto py-1.5"
+        content={
+          <span className="flex flex-col gap-0.5">
+            <span>
+              {title}
+              {keys && <span className="ml-2 opacity-60">{keys}</span>}
+            </span>
+            {!active && <span className="opacity-60">Right-click for microphone settings</span>}
+          </span>
+        }
+      >
         <button
+          ref={button}
           type="button"
-          aria-label={label}
+          aria-label={active ? 'Stop dictation' : 'Dictate'}
           aria-pressed={active}
+          aria-haspopup="menu"
           onPointerDown={onPointerDown}
           onClick={onClick}
+          // Right-click (or the context menu key): the microphone, the language and Hold to record.
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu(true);
+          }}
           className={cn(
-            'flex size-8 shrink-0 items-center justify-center rounded-full outline-none transition-colors duration-(--at-duration-fast) focus-ring',
-            active ? 'bg-interactive text-on-interactive hover:bg-interactive-hover' : 'text-fg-secondary hover:bg-fill-ghost-hover hover:text-fg',
+            'flex size-8 shrink-0 items-center justify-center rounded-lg outline-none transition-colors duration-(--at-duration-fast) focus-ring',
+            active ? 'bg-interactive text-on-interactive hover:bg-interactive-hover' : 'text-fg-secondary hover:bg-fill-ghost-hover hover:text-fg data-[menu]:bg-fill-ghost-hover',
           )}
+          {...(menu ? { 'data-menu': '' } : {})}
         >
           {phase === 'starting' || phase === 'finishing' ? <Spinner size="sm" className="text-current" /> : <Icon icon={Mic} size="sm" />}
         </button>
       </Tooltip>
-      <DictationMenu language={language} onLanguage={onLanguage} holdToRecord={holdToRecord} onHoldToRecord={onHoldToRecord} />
-    </span>
+      <DictationMenu open={menu} onOpenChange={setMenu} anchor={button} language={language} onLanguage={onLanguage} holdToRecord={holdToRecord} onHoldToRecord={onHoldToRecord} />
+    </>
   );
 }
 
-function DictationMenu({ language, onLanguage, holdToRecord, onHoldToRecord }: { language: string; onLanguage(code: string): void; holdToRecord: boolean; onHoldToRecord(on: boolean): void }) {
-  const [open, setOpen] = useState(false);
+function DictationMenu({
+  open,
+  onOpenChange,
+  anchor,
+  language,
+  onLanguage,
+  holdToRecord,
+  onHoldToRecord,
+}: {
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  anchor: RefObject<HTMLButtonElement | null>;
+  language: string;
+  onLanguage(code: string): void;
+  holdToRecord: boolean;
+  onHoldToRecord(on: boolean): void;
+}) {
   const microphones = useMicrophones(open);
   const saved = useSavedMicrophone();
   const chosen = saved && microphones.list.some((m) => m.id === saved) ? saved : '';
   return (
-    <Menu open={open} onOpenChange={setOpen}>
-      <Tooltip content="Microphone and language" disabled={open}>
-        <MenuTrigger
-          aria-label="Dictation settings"
-          className="flex h-8 w-4 shrink-0 items-center justify-center rounded-sm text-fg-muted opacity-0 outline-none transition-opacity duration-(--at-duration-fast) group-hover/dictate:opacity-100 hover:text-fg focus-visible:opacity-100 focus-ring data-popup-open:opacity-100"
-        >
-          <Icon icon={ChevronDown} size="sm" className="size-3" />
-        </MenuTrigger>
-      </Tooltip>
-      <MenuContent side="top" align="end" className="w-72">
+    <Menu open={open} onOpenChange={onOpenChange}>
+      <MenuContent side="top" align="end" anchor={anchor} className="w-72" aria-label="Dictation settings">
         <MenuRadioGroup value={chosen} onValueChange={(value: string) => saveMicrophone(value || null)}>
           <MenuLabel>Microphone</MenuLabel>
           <MenuRadioItem value="" closeOnClick={false}>

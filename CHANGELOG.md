@@ -4,6 +4,9 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Dictation always stops.** On a Mac, stopping a dictation right after starting it (before any sound reached the Mac's recognition) waited ten seconds with a spinner, and clicks did nothing meanwhile; pressed in the first second after launch, the microphone could go the wrong way (to the server, which may have no speech service) and be hard to stop. Now a stop is done at once, never takes longer than five seconds, a second click while the last words come stops waiting for them, Esc drops a dictation wherever the focus is, and a press right after launch waits for the Mac's answer.
+- **The microphone is the box's last control, as in other apps.** It sits at the right end, after send. The arrow beside it is gone: right-click it for the microphone, the language and Hold to record; its tooltip says so.
+
 ## [0.10.0] — 2026-11-15
 
 - **Dictation.** The message box has a microphone: click it and speak, and your words appear where the cursor was as you say them, in italics until you stop; a waveform under the box follows your voice. Click again to keep the words, press Enter to send them, Esc to drop them, or just start typing. With **Hold to record** (on by default) holding the button records until you let go, and **⇧⌘Space** (Ctrl+Shift+Space) does the same from the keyboard. The arrow beside the microphone picks the microphone, the language (Auto or one of 48, with a search) and Hold to record; the same settings are in **Settings › General › Dictation**.

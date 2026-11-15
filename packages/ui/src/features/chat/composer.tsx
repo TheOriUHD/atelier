@@ -191,9 +191,10 @@ export function Composer({
   // does, with its own speech model or a provider. Admins see it without a service to use, to learn how to add one.
   const macSpeech = useMacSpeech();
   const atelierModel = usePrefersAtelierModel();
-  const onMac = macSpeech && !atelierModel;
+  // Unknown for a moment after launch: the start then waits for main's answer instead of guessing.
+  const onMac = atelierModel ? false : macSpeech;
   const canDictate =
-    !readOnly && dictationStatus.data?.enabled !== false && (onMac || (!!dictationStatus.data?.enabled && (!!dictationStatus.data.source || account?.role === 'admin')));
+    !readOnly && dictationStatus.data?.enabled !== false && (onMac !== false || (!!dictationStatus.data?.enabled && (!!dictationStatus.data.source || account?.role === 'admin')));
   const dictationPrefs = prefs?.dictation ?? { language: 'auto', holdToRecord: true };
   const [spoken, setSpoken] = useState<SpokenPlace | null>(null);
   const spokenRef = useRef<SpokenPlace | null>(null);
@@ -248,13 +249,21 @@ export function Composer({
   };
   /** What was asked for while the last words were on their way (keys typed, Enter): applied once they are in. */
   const afterStop = useRef<{ send: boolean; typed: string } | null>(null);
-  /** Stops listening; `send` sends the message with the words, `typed` is a key pressed meanwhile, typed after them. */
-  const stopDictation = async (options: { send?: boolean; typed?: string } = {}) => {
-    if (!spokenRef.current) return;
+  /**
+   * Stops listening; `send` sends the message with the words, `typed` is a key pressed meanwhile, typed after them.
+   * `force` (the button or the shortcut pressed again while the last words come) stops waiting for them.
+   */
+  const stopDictation = async (options: { send?: boolean; typed?: string; force?: boolean } = {}) => {
+    // Never a microphone left on that nothing can stop: one running without its place in the box is dropped.
+    if (!spokenRef.current) {
+      if (dictation.phase !== 'idle') dictation.cancel();
+      return;
+    }
     const pending = afterStop.current;
     if (pending) {
       pending.send ||= !!options.send;
       pending.typed += options.typed ?? '';
+      if (options.force) void dictation.stop();
       return;
     }
     const after = { send: !!options.send, typed: options.typed ?? '' };
@@ -287,6 +296,20 @@ export function Composer({
   });
   useEffect(() => () => leaving.current(), []);
 
+  // Escape drops what is being dictated wherever the focus is (the box hands it on to its own keys otherwise).
+  useEffect(() => {
+    if (!dictating) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || e.target === input.current) return;
+      // Escape in an open menu or dialog closes that.
+      if (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]')) return;
+      e.preventDefault();
+      cancelDictation();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   // The dictate shortcut: pressed, it starts or stops; held (with "Hold to record"), it records until let go.
   const dictateKey = useShortcut('dictate');
   const dictateNow = useRef({ start: startDictation, stop: stopDictation, hold: dictationPrefs.holdToRecord, busy: false });
@@ -308,7 +331,7 @@ export function Composer({
       if (!pressIs(dictateKey, e)) return;
       e.preventDefault();
       if (e.repeat || (!dictateNow.current.busy && !mine())) return;
-      if (dictateNow.current.busy) void dictateNow.current.stop();
+      if (dictateNow.current.busy) void dictateNow.current.stop({ force: true });
       else {
         downAt = performance.now();
         dictateNow.current.start();
@@ -334,7 +357,7 @@ export function Composer({
       holdToRecord={dictationPrefs.holdToRecord}
       shortcut={dictateKey}
       onStart={startDictation}
-      onStop={() => void stopDictation()}
+      onStop={() => void stopDictation({ force: true })}
       language={dictationPrefs.language}
       onLanguage={(code) => setPref.mutate({ path: ['dictation', 'language'], value: code })}
       onHoldToRecord={(on) => setPref.mutate({ path: ['dictation', 'holdToRecord'], value: on })}
@@ -559,15 +582,15 @@ export function Composer({
             )}
           />
           </div>
-          {variant === 'reply' && dictateButton}
           {variant === 'reply' && <SendOrStop streaming={streaming} canSend={canSend || !!builtIn} onSend={onSend} onStop={onStop} idleHint code={compact} />}
+          {variant === 'reply' && dictateButton}
         </div>
         {variant === 'new' && (
           <div className="mt-2 flex items-center gap-1">
             {attachButton}
             <span className="flex-1" />
-            {dictateButton}
             <SendOrStop streaming={streaming} canSend={canSend || !!builtIn} onSend={onSend} onStop={onStop} code={compact} />
+            {dictateButton}
           </div>
         )}
         </div>

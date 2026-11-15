@@ -65,6 +65,8 @@ final class Session: @unchecked Sendable {
   private let lock = NSLock()
   private var finalized = ""
   private var volatile = ""
+  /** Whether any sound reached the analyzer: finalizing one that heard nothing never returns. */
+  private var fed = false
   private var results: Task<Void, Error>?
 
   init(locale: Locale) async throws {
@@ -110,6 +112,7 @@ final class Session: @unchecked Sendable {
   func feed(_ pcm: Data) {
     let frames = AVAudioFrameCount(pcm.count / 2)
     guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: frames) else { return }
+    lock.withLock { fed = true }
     buffer.frameLength = frames
     pcm.withUnsafeBytes { raw in
       if let base = raw.baseAddress { memcpy(buffer.int16ChannelData![0], base, Int(frames) * 2) }
@@ -134,11 +137,36 @@ final class Session: @unchecked Sendable {
     if error == nil, out.frameLength > 0 { input.yield(AnalyzerInput(buffer: out)) }
   }
 
+  /** What was heard, finalized or not. */
+  private func heard() -> String {
+    lock.withLock { (finalized + volatile).trimmingCharacters(in: .whitespacesAndNewlines) }
+  }
+
+  /** The last words, then done: at most about three seconds, and at once when no sound came at all. */
   func finish() async -> String {
     input.finish()
+    if !lock.withLock({ fed }) {
+      await analyzer.cancelAndFinishNow()
+      results?.cancel()
+      return ""
+    }
+    let analyzer = self.analyzer
+    let giveUp = Task {
+      try await Task.sleep(nanoseconds: 3_000_000_000)
+      await analyzer.cancelAndFinishNow()
+    }
     try? await analyzer.finalizeAndFinishThroughEndOfInput()
-    _ = try? await results?.value
-    return lock.withLock { (finalized + volatile).trimmingCharacters(in: .whitespacesAndNewlines) }
+    giveUp.cancel()
+    // The results end with the analyzer; if they don't within a second, what came is the answer.
+    let results = self.results
+    let waited = Task { _ = try? await results?.value }
+    let timeout = Task {
+      try await Task.sleep(nanoseconds: 1_000_000_000)
+      results?.cancel()
+    }
+    await waited.value
+    timeout.cancel()
+    return heard()
   }
 }
 

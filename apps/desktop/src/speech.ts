@@ -130,10 +130,11 @@ export class MacSpeech {
       return Promise.resolve(run.text);
     }
     return new Promise((resolve) => {
+      // The helper gives the last words within about four seconds; past six it is ended and what came is the answer.
       const timer = setTimeout(() => {
         run.child.kill();
         resolve(run.text);
-      }, 10_000);
+      }, 6000);
       run.final = (text) => {
         clearTimeout(timer);
         resolve(text);
