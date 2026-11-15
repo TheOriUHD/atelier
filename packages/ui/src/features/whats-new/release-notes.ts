@@ -2,7 +2,7 @@ import { compareVersions } from '@atelier/protocol';
 // Clips are recorded from the real apps on throwaway data: apps/cli/scripts/record-clip.ts (see media/README.md).
 import cliClip from './media/atelier-cli.mp4';
 import cliPoster from './media/atelier-cli.jpg';
-import { AppWindow, Blocks, Bug, Lightbulb, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
+import { AppWindow, Blocks, Bug, Lightbulb, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, Mic, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /**
  * A clip or picture that shows a larger feature off: it takes the dialog's full width above the feature's title. Clips are
@@ -37,6 +37,26 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.10.0',
+    intro: 'Speak instead of typing.',
+    highlights: [
+      {
+        icon: Mic,
+        title: 'Dictation in the message box',
+        body: 'Click the microphone and speak: your words appear where the cursor was as you say them, and a waveform follows your voice. Click again to keep them, Enter to send, Esc to drop them. Hold the button, or ⇧⌘Space, to record until you let go.',
+      },
+      {
+        icon: SlidersHorizontal,
+        title: 'Your microphone and language',
+        body: 'The arrow beside the microphone picks which microphone to use, the language you speak (or Auto) and Hold to record. The same settings are in Settings › General › Dictation.',
+      },
+    ],
+    also: [
+      'It uses the providers already set up: Mistral’s Voxtral Realtime writes while you speak; OpenAI, Groq, ElevenLabs, Deepgram and local Whisper servers a phrase at a time.',
+      'On a Mac, macOS asks once whether Atelier may use the microphone.',
+    ],
+  },
   {
     version: '0.9.3',
     intro: 'Answer computer use cards from wherever you are.',

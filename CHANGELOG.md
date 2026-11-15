@@ -4,6 +4,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Dictation.** The message box has a microphone: click it and speak, and your words appear where the cursor was as you say them, in italics until you stop; a waveform under the box follows your voice. Click again to keep the words, press Enter to send them, Esc to drop them, or just start typing. With **Hold to record** (on by default) holding the button records until you let go, and **⇧⌘Space** (Ctrl+Shift+Space) does the same from the keyboard. The arrow beside the microphone picks the microphone, the language (Auto or one of 48, with a search) and Hold to record; the same settings are in **Settings › General › Dictation**.
+  - **No setup.** It uses a speech-to-text service of the providers already there: a Mistral or Mistral Vibe key gives Voxtral Realtime, with words about half a second behind you (checked live); OpenAI, Groq, Together, ElevenLabs, Deepgram or a local Whisper server (Speaches, LocalAI, KoboldCpp, vLLM) transcribe a phrase at a time, cut at your pauses and shown while you speak. Admins choose the service or turn dictation off under **Settings › General › Dictation**.
+  - **Private by design.** The sound goes from your window to your Atelier backend, which sends it on with the provider's key; nothing is stored. On a Mac, macOS asks once whether Atelier may use the microphone. In a browser it needs https or localhost.
+
 ## [0.9.3] — 2026-11-15
 
 - **Computer use cards for another computer are answered where you are.** With Remote Control, the cards of a session on your other computer (which apps it may use, taking over the mouse and keyboard) could only be allowed in the desktop app on that computer. Now you answer them on the device you write from, with the same choices; your answer goes through the server to that computer's desktop app, which allows only the apps the card offered, at most with what it offered for each, for the session or always.
