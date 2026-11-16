@@ -4,6 +4,11 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **The website and the docs are easier to find, for search engines and for AI agents.**
+  - **Comparison pages.** Plain, sourced comparisons of Atelier with Open WebUI, LibreChat, LM Studio and AnythingLLM (and a table with Jan and Msty) at atelierhq.dev/compare/, with the facts, the sources and the date they were checked.
+  - **For agents.** `llms.txt` on the website and on the docs, the guides in one file (`llms-full.txt`), and every docs page also as Markdown at its address plus `.md`.
+  - **Search.** Structured data on the website and the docs, dated sitemaps, a `robots.txt` for the docs, the raw system-prompt text files out of search results, and IndexNow: each release tells Bing and the other IndexNow engines which pages changed. The README and the repository's description are up to date.
+
 - **Dictation always stops.** On a Mac, stopping a dictation right after starting it (before any sound reached the Mac's recognition) waited ten seconds with a spinner, and clicks did nothing meanwhile; pressed in the first second after launch, the microphone could go the wrong way (to the server, which may have no speech service) and be hard to stop. Now a stop is done at once, never takes longer than five seconds, a second click while the last words come stops waiting for them, Esc drops a dictation wherever the focus is, and a press right after launch waits for the Mac's answer.
 - **The microphone is the box's last control, as in other apps.** It sits at the right end, after send. The arrow beside it is gone: right-click it for the microphone, the language and Hold to record; its tooltip says so.
 
