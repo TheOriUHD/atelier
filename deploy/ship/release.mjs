@@ -24,7 +24,7 @@
  * question before "publish": the git push, the GitHub release, the update feed, the website and the docs.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { copyFileSync, createWriteStream, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, createWriteStream, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -56,6 +56,7 @@ import {
 } from './lib.mjs';
 import { ARCHS, macPlan, macProgress } from '../../apps/desktop/scripts/mac-lib.mjs';
 import { onFeed } from '../../apps/site/scripts/kinds.mjs';
+import { indexNow } from './indexnow.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -303,6 +304,16 @@ async function main() {
       once('site', 'website download list and deploy', () => deploySite({ tag, version, trailer, log: log('site') })),
       ...(skipped('docs') ? [] : [once('docs', 'documentation deploy', () => deployDocs({ log: log('docs') }))]),
     ]);
+    // Bing and the other IndexNow engines hear about the pages that changed since the release before; never a reason to fail.
+    await once('indexnow', 'tell search engines what changed (IndexNow)', async () => {
+      let since = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+      try {
+        since = git('log', '-1', '--format=%cs', git('describe', '--tags', '--abbrev=0', `${tag}^`)) || since;
+      } catch {
+        // the first release: the last week
+      }
+      await indexNow({ since, log: (line) => appendFileSync(log('indexnow'), `${line}\n`) }).catch(() => undefined);
+    });
   }
 
   // 9. Look at what is live --------------------------------------------------------------------------------------------
@@ -796,13 +807,15 @@ async function githubRelease({ tag, version, repo, prerelease: pre, publish, not
 
 async function deploySite({ tag, version, trailer, log }) {
   await exec('node', ['apps/site/scripts/releases.mjs', tag], { log });
+  // The sitemap carries the release's date for the download page (and the comparison pages, comparing what is here).
+  await exec('node', ['apps/site/scripts/seo.mjs'], { log });
   const list = JSON.parse(readFileSync(join(ROOT, 'apps/site/public/releases.json'), 'utf8'));
   // The macOS disk images link to the GitHub release; everything else must be on the feed.
   const unmirrored = Object.entries(list.assets).filter(([kind, a]) => onFeed(kind) && !a.url.startsWith(CONFIG.feed)).map(([, a]) => a);
   if (unmirrored.length) throw new Error(`The download list still points at GitHub for ${unmirrored.map((a) => a.name).join(', ')}: the feed copy is missing or a different size.`);
   await exec('npx', ['--yes', 'wrangler@4', 'deploy', '-c', 'apps/site/wrangler.jsonc'], { log });
-  if (git('status', '--porcelain', 'apps/site/public/releases.json')) {
-    git('add', 'apps/site/public/releases.json');
+  if (git('status', '--porcelain', 'apps/site/public/releases.json', 'apps/site/public/sitemap.xml')) {
+    git('add', 'apps/site/public/releases.json', 'apps/site/public/sitemap.xml');
     git('commit', '-m', `site: the download list shows ${version} [skip ci]${trailer}`);
     await exec('git', ['push', 'origin', 'main'], { log });
   }

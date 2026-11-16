@@ -9,7 +9,8 @@ const hashes = new Set();
 for (const file of await readdir(dist, { recursive: true })) {
   if (!file.endsWith('.html')) continue;
   const html = await readFile(join(dist, file), 'utf8');
-  for (const [, body] of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
+  // Structured data (`application/ld+json`) is data, not code: the browser never runs it, so it needs no hash.
+  for (const [, body] of html.matchAll(/<script(?![^>]*\bsrc=)(?![^>]*application\/ld\+json)[^>]*>([\s\S]*?)<\/script>/g)) {
     hashes.add(`'sha256-${createHash('sha256').update(body).digest('base64')}'`);
   }
 }
@@ -45,6 +46,14 @@ await writeFile(
 
 /img/*
   Cache-Control: public, max-age=86400
+
+# The assembled system prompts are plain text files, not pages: they stay reachable but out of search results.
+/prompts/assembled/*
+  X-Robots-Tag: noindex
+
+# The Markdown copies (scripts/seo.mjs) are for agents; the pages link to them with rel="alternate".
+/*.md
+  Content-Type: text/markdown; charset=utf-8
 `,
 );
 console.log(`_headers: ${hashes.size} inline script hashes`);

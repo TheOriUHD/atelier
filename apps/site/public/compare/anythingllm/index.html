@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atelier vs AnythingLLM · Atelier</title>
+<meta name="description" content="How Atelier and AnythingLLM differ: documents versus coding, licence, telemetry, desktop and Docker. Facts checked on 16 November 2026.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://atelierhq.dev/compare/anythingllm/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Atelier vs AnythingLLM">
+<meta property="og:description" content="How Atelier and AnythingLLM differ: documents versus coding, licence, telemetry, desktop and Docker. Facts checked on 16 November 2026.">
+<meta property="og:url" content="https://atelierhq.dev/compare/anythingllm/">
+<meta property="og:image" content="https://atelierhq.dev/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/source-serif-4-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://atelierhq.dev/compare/anythingllm/","url":"https://atelierhq.dev/compare/anythingllm/","name":"Atelier vs AnythingLLM","description":"How Atelier and AnythingLLM differ: documents versus coding, licence, telemetry, desktop and Docker. Facts checked on 16 November 2026.","dateModified":"2026-11-16","isPartOf":{"@id":"https://atelierhq.dev/#website"},"about":{"@id":"https://atelierhq.dev/#app"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Atelier","item":"https://atelierhq.dev/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://atelierhq.dev/compare/"},{"@type":"ListItem","position":3,"name":"Atelier vs AnythingLLM","item":"https://atelierhq.dev/compare/anythingllm/"}]}]}</script>
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/styles.css?v=0.10.0">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7.5 10 3 2.5-3 2.5M12.5 15.5h4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+</svg>
+
+<header class="site-header" id="top">
+  <div class="wrap bar">
+    <a class="brand" href="/" aria-label="Atelier, home"><img src="/icon.svg" width="30" height="30" alt="">Atelier</a>
+    <nav class="nav" aria-label="Main">
+      <a href="/#work">Features</a>
+      <a href="/#models">Models</a>
+      <a href="/#self-host">Self-hosting</a>
+      <a href="/#faq">FAQ</a>
+      <a href="/compare/">Compare</a>
+      <a href="https://docs.atelierhq.dev/">Docs</a>
+    </nav>
+    <div class="bar-end">
+      <button class="icon-btn" id="theme" type="button" aria-label="Switch theme">
+        <svg class="icon i-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="icon i-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/TheOriUHD/atelier" aria-label="Atelier on GitHub"><svg class="icon icon-fill" aria-hidden="true"><use href="#i-github"/></svg></a>
+      <a class="btn btn-primary btn-sm" href="/download/">Download</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="section">
+  <div class="wrap compare">
+    <p class="crumbs"><a href="/compare/">Compare</a> / Atelier vs AnythingLLM</p>
+    <h1>Atelier vs AnythingLLM</h1>
+    <p class="lead">AnythingLLM is an MIT-licensed all-in-one app built around your documents: it runs as a desktop app or in Docker, with a choice of vector databases, agents with skills and MCP. Atelier is built around conversations and coding in project folders, with desktop apps, a server and no telemetry, under a noncommercial licence.</p>
+    <p class="fine">Facts about AnythingLLM checked on 16 November 2026, from its own pages (listed at the end). Spotted a mistake? <a href="https://github.com/TheOriUHD/atelier/issues/new">Tell us</a>.</p>
+    <p>AnythingLLM calls itself the all-in-one AI application: documents in, answers out, with agents on top. It has about 68,000 stars on GitHub, and v1.19.0 was the latest release when this page was checked.</p>
+
+    <h2>At a glance</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col"><span class="visually-hidden">Feature</span></th><th scope="col">Atelier</th><th scope="col">AnythingLLM</th></tr></thead>
+        <tbody>
+        <tr><th scope="row">Licence</th><td>PolyForm Noncommercial 1.0.0: source-available, free for noncommercial use. Commercial use needs a license from the author. Not open source.</td><td>MIT.</td></tr>
+        <tr><th scope="row">Ways to run it</th><td>Desktop apps for macOS, Windows and Linux, a web app you host with Docker, and a terminal app, all on one backend.</td><td>Desktop apps for macOS, Windows and Linux, Docker, a bare-metal install, one-click cloud templates, a mobile app and a hosted instance.</td></tr>
+        <tr><th scope="row">Local models</th><td>Ollama, llama.cpp, LM Studio or any OpenAI-compatible server.</td><td>Any llama.cpp-compatible model, Ollama, LM Studio, LocalAI and KoboldCPP.</td></tr>
+        <tr><th scope="row">Hosted models</th><td>Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, OpenCode Zen, a ChatGPT or Mistral Vibe plan, or any OpenAI-compatible endpoint.</td><td>OpenAI, Anthropic, Azure, Bedrock, Gemini and others.</td></tr>
+        <tr><th scope="row">Tools and MCP</th><td>MCP connectors, skills, sub-agents and hooks; it reads existing agent skills, commands and hooks where they already live.</td><td>Agents with skills (web browsing, file system, SQL), no-code agent flows, scheduled jobs and MCP compatibility. Documents use RAG with LanceDB by default and many other vector databases.</td></tr>
+        <tr><th scope="row">Coding in a project folder</th><td>Code is a built-in mode: agentic sessions in a project folder, with permission rules, diffs and git.</td><td>A file-system agent skill; a project-folder coding mode is not described in its README.</td></tr>
+        <tr><th scope="row">Voice</th><td>Dictation in the message box (since 0.10.0): the Mac’s own speech recognition on a Mac, Atelier’s own speech model elsewhere. It also generates speech, music and sound.</td><td>Speech-to-text (built in or OpenAI) and text-to-speech (browser, Piper, OpenAI, ElevenLabs).</td></tr>
+        <tr><th scope="row">Accounts and teams</th><td>Server mode has accounts, roles, invites and sign-in through an identity provider (OIDC). The desktop app runs on its own with no account.</td><td>Multi-user and white-labelling in the Docker version only.</td></tr>
+        <tr><th scope="row">Telemetry</th><td>None. The desktop app checks for new versions, and a report goes out only when you press Send.</td><td>It has an anonymous telemetry feature (PostHog) that you can turn off with DISABLE_TELEMETRY or in the app’s privacy settings.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Where AnythingLLM is stronger</h2>
+    <ul>
+      <li>An MIT licence that allows commercial use.</li>
+      <li>Documents are the centre: a choice of vector databases, and a ready-made path from files to answers.</li>
+      <li>A mobile app and one-click cloud templates.</li>
+    </ul>
+
+    <h2>Where Atelier is different</h2>
+    <ul>
+      <li>Code mode for project folders, with permission rules, diffs and git.</li>
+      <li>Desktop and server share one backend, so the desktop app can also be the server.</li>
+      <li>No telemetry at all, and every system prompt published in the docs.</li>
+    </ul>
+
+    <h2>Choose AnythingLLM if</h2>
+    <ul>
+      <li>Chatting with your own documents is the main job.</li>
+      <li>You need a permissive licence, a mobile app or a hosted instance.</li>
+    </ul>
+
+    <h2>Choose Atelier if</h2>
+    <ul>
+      <li>Coding in project folders is a main job next to chat.</li>
+      <li>You want no telemetry and a desktop app that can also serve a team.</li>
+    </ul>
+    <p><a class="btn btn-primary" href="/download/">Download Atelier</a> <a class="btn btn-quiet" href="https://docs.atelierhq.dev/getting-started/">Get started</a></p>
+
+    <h2>Sources</h2>
+    <p class="fine">Read on 16 November 2026. Atelier’s side is from its <a href="https://docs.atelierhq.dev/">documentation</a>.</p>
+    <ul class="sources">
+      <li><a href="https://github.com/Mintplex-Labs/anything-llm">AnythingLLM on GitHub</a></li>
+      <li><a href="https://raw.githubusercontent.com/Mintplex-Labs/anything-llm/master/LICENSE">AnythingLLM licence</a></li>
+      <li><a href="https://docs.anythingllm.com/">AnythingLLM documentation</a></li>
+      <li><a href="https://anythingllm.com/">AnythingLLM website</a></li>
+      <li><a href="https://github.com/Mintplex-Labs/anything-llm/releases/latest">AnythingLLM latest release</a></li>
+    </ul>
+    <p>More comparisons: <a href="/compare/">all of them</a>, <a href="/compare/open-webui/">Open WebUI</a>, <a href="/compare/librechat/">LibreChat</a>, <a href="/compare/lm-studio/">LM Studio</a>.</p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <a class="brand" href="/" aria-label="Atelier, home"><img src="/icon.svg" width="30" height="30" alt="">Atelier</a>
+        <p class="tagline">A self-hosted AI workspace with Chat and Code, on the model you choose.</p>
+      </div>
+      <div>
+        <h3>Product</h3>
+        <ul>
+          <li><a href="/#work">Features</a></li>
+          <li><a href="/#models">Models</a></li>
+          <li><a href="/download/">Download</a></li>
+          <li><a href="/compare/">Compare</a></li>
+          <li><a href="/#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Resources</h3>
+        <ul>
+          <li><a href="https://docs.atelierhq.dev/">Documentation</a></li>
+          <li><a href="https://github.com/TheOriUHD/atelier">GitHub</a></li>
+          <li><a href="https://github.com/TheOriUHD/atelier/releases">Releases</a></li>
+          <li><a href="https://github.com/TheOriUHD/atelier/blob/main/LICENSE">License</a></li>
+          <li><a href="/impressum/">Impressum</a></li>
+          <li><a href="/datenschutz/">Datenschutz</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="legal">© 2026 TheOriUHD. Atelier is an independent project and is not affiliated with or endorsed by any model provider. Source-available under the PolyForm Noncommercial license.</p>
+  </div>
+</footer>
+
+<script src="/site.js" defer></script>
+</body>
+</html>

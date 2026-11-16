@@ -21,7 +21,7 @@ One backend, two ways in: a desktop app and a web app you host yourself.
 
 <br>
 
-**[Docs](https://docs.atelierhq.dev)** &nbsp;·&nbsp; **[Features](#features)** &nbsp;·&nbsp; **[Install](#install)** &nbsp;·&nbsp; **[First run](#first-run)** &nbsp;·&nbsp; **[Models](#models-and-providers)** &nbsp;·&nbsp; **[Self-hosting](#self-hosting)** &nbsp;·&nbsp; **[Prompts](#how-it-talks-to-models)** &nbsp;·&nbsp; **[Architecture](#architecture)** &nbsp;·&nbsp; **[Development](#development)** &nbsp;·&nbsp; **[FAQ](#faq)**
+**[Website](https://atelierhq.dev)** &nbsp;·&nbsp; **[Docs](https://docs.atelierhq.dev)** &nbsp;·&nbsp; **[Compare](https://atelierhq.dev/compare/)** &nbsp;·&nbsp; **[Features](#features)** &nbsp;·&nbsp; **[Install](#install)** &nbsp;·&nbsp; **[First run](#first-run)** &nbsp;·&nbsp; **[Models](#models-and-providers)** &nbsp;·&nbsp; **[Self-hosting](#self-hosting)** &nbsp;·&nbsp; **[Prompts](#how-it-talks-to-models)** &nbsp;·&nbsp; **[Architecture](#architecture)** &nbsp;·&nbsp; **[Development](#development)** &nbsp;·&nbsp; **[FAQ](#faq)**
 
 <br>
 
@@ -44,6 +44,8 @@ Atelier is a workspace for language models. Two modes share one conversation mod
 - **Code** for agentic sessions in a folder. Tool names and permission rules follow Claude Code's, so rules, hooks and skills written for it mostly carry over.
 
 It runs on the models *you* choose, keeps everything in a data folder you control, and reads Claude Code's skills, plugins, commands, agents, hooks and `CLAUDE.md` where they already are, and can import its MCP config.
+
+Not sure whether it is the right one? There are plain, sourced comparisons with [Open WebUI](https://atelierhq.dev/compare/open-webui/), [LibreChat](https://atelierhq.dev/compare/librechat/), [LM Studio](https://atelierhq.dev/compare/lm-studio/) and [AnythingLLM](https://atelierhq.dev/compare/anythingllm/) on the website.
 
 > **About the project.** Atelier is an independent project, not affiliated with or endorsed by Anthropic or OpenAI.
 

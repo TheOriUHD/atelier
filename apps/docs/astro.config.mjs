@@ -1,5 +1,6 @@
 import { defineConfig, passthroughImageService } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { SIDEBAR } from './src/sidebar.mjs';
 
 export default defineConfig({
   site: 'https://docs.atelierhq.dev',
@@ -19,33 +20,29 @@ export default defineConfig({
       editLink: { baseUrl: 'https://github.com/TheOriUHD/atelier/edit/main/apps/docs/' },
       lastUpdated: true,
       credits: false,
-      sidebar: [
+      // Search and social previews: the site's picture, and what the site is, for engines that read structured data.
+      head: [
+        { tag: 'meta', attrs: { property: 'og:image', content: 'https://atelierhq.dev/og.jpg' } },
+        { tag: 'meta', attrs: { property: 'og:site_name', content: 'Atelier Docs' } },
+        { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://atelierhq.dev/og.jpg' } },
         {
-          label: 'Start here',
-          items: ['getting-started', 'install', 'cli', 'providers', 'models', 'what-works-where', 'local-models', 'chatgpt'],
+          tag: 'script',
+          attrs: { type: 'application/ld+json' },
+          content: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            '@id': 'https://docs.atelierhq.dev/#website',
+            url: 'https://docs.atelierhq.dev/',
+            name: 'Atelier Docs',
+            description: 'The documentation of Atelier, a self-hosted AI workspace with Chat and Code on the models you choose.',
+            inLanguage: 'en',
+            publisher: { '@id': 'https://atelierhq.dev/#org' },
+          }),
         },
-        {
-          label: 'Using Atelier',
-          items: ['chat', 'dictation', 'artifacts', 'image-generation', 'video-generation', 'audio-generation', 'projects', 'code', 'permissions', 'co-op', 'computer-use', 'effort', 'sessions', 'loops', 'shortcuts', 'web-search', 'memory'],
-        },
-        {
-          label: 'Extend',
-          items: ['customize', 'connectors', 'hooks-and-plugins', 'claude-code-compatibility'],
-        },
-        {
-          label: 'Running it',
-          items: ['self-hosting', 'accounts', 'remote-control', 'security', 'privacy', 'data-and-files', 'environment-variables', 'updates', 'troubleshooting', 'reporting-issues'],
-        },
-        {
-          label: 'System prompts',
-          items: ['prompts', 'prompts/chat', 'prompts/code', 'prompts/shared', 'prompts/side-prompts', 'prompts/context-updates', 'prompts/assembled', 'prompts/design'],
-        },
-        {
-          label: 'Under the hood',
-          items: ['how-it-works', 'reference/tools', 'reference/settings', 'reference/cli'],
-        },
-        { label: 'About', items: ['faq', 'license'] },
       ],
+      // Per page: a Markdown copy for agents (scripts/seo.mjs writes it) and the article's structured data.
+      routeMiddleware: './src/route-data.ts',
+      sidebar: SIDEBAR,
     }),
   ],
 });

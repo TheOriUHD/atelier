@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/headers.mjs",
+    "build": "astro build && node scripts/seo.mjs && node scripts/headers.mjs",
     "check": "node scripts/check-links.mjs",
     "preview": "npx wrangler@4 dev --local",
     "deploy": "pnpm run build && npx wrangler@4 deploy"

@@ -16,11 +16,12 @@
 <meta property="og:url" content="https://atelierhq.dev/">
 <meta property="og:image" content="https://atelierhq.dev/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://atelierhq.dev/#website","url":"https://atelierhq.dev/","name":"Atelier","description":"A self-hosted AI workspace with Chat and Code, on the models you choose.","inLanguage":"en","publisher":{"@id":"https://atelierhq.dev/#org"}},{"@type":"Organization","@id":"https://atelierhq.dev/#org","name":"Atelier","url":"https://atelierhq.dev/","logo":"https://atelierhq.dev/icon.svg","sameAs":["https://github.com/TheOriUHD/atelier"]},{"@type":"SoftwareApplication","@id":"https://atelierhq.dev/#app","name":"Atelier","url":"https://atelierhq.dev/","description":"A self-hosted AI workspace with Chat and Code on the models you choose, local (Ollama, llama.cpp) or hosted. Desktop apps for macOS, Windows and Linux, a web app you host with Docker, and a terminal app. Source-available, no telemetry.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Windows, Linux","downloadUrl":"https://atelierhq.dev/download/","softwareHelp":{"@type":"CreativeWork","url":"https://docs.atelierhq.dev/"},"license":"https://polyformproject.org/licenses/noncommercial/1.0.0","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD","description":"Free for noncommercial use"},"codeRepository":"https://github.com/TheOriUHD/atelier","image":"https://atelierhq.dev/og.jpg","screenshot":["https://atelierhq.dev/img/code-2560.webp","https://atelierhq.dev/img/chat-2560.webp"],"publisher":{"@id":"https://atelierhq.dev/#org"}},{"@type":"FAQPage","@id":"https://atelierhq.dev/#faq","mainEntity":[{"@type":"Question","name":"Is it free?","acceptedAnswer":{"@type":"Answer","text":"For personal and other noncommercial use, yes; commercial use needs a license from the author. There is no paid tier and no account with us, co-op included. You pay only for the hosted models you choose to use."}},{"@type":"Question","name":"Which models can I use?","acceptedAnswer":{"@type":"Answer","text":"Local models through Ollama, llama.cpp or LM Studio, hosted ones through Anthropic, OpenAI or Mistral keys, GitHub Copilot, OpenRouter, OpenCode Zen or any OpenAI-compatible endpoint, or a ChatGPT or Mistral Vibe plan. ChatGPT Chat is an experimental extra: it drives a signed-in ChatGPT browser window, which OpenAI doesn’t officially support, so Atelier shows a warning first."}},{"@type":"Question","name":"Does anything leave my machine?","acceptedAnswer":{"@type":"Answer","text":"Requests go to the model providers and connectors you set up, to the search engines and pages web search and fetch reach, and the desktop app checks for new versions every five minutes. Co-op between two computers goes through an encrypted relay at coop.atelierhq.dev, which can’t read it; no account. There is no telemetry. Nothing of yours is stored with us, unless you send a bug report or feature request from the app, which shows you everything it sends first."}},{"@type":"Question","name":"Can I bring my existing skills, plugins and hooks?","acceptedAnswer":{"@type":"Answer","text":"Mostly. Atelier reads agent skills, commands, sub-agents and hooks where they already live, lists plugins you installed for other agents so you can switch them on or off, and can import MCP config. A few things differ, and the compatibility page lists them."}},{"@type":"Question","name":"Can I see the prompts Atelier sends to the model?","acceptedAnswer":{"@type":"Answer","text":"Yes, all of them. Every system prompt, note and tool description is published verbatim in the documentation and lives in the repository, where you can also override them."}},{"@type":"Question","name":"Which platforms are supported?","acceptedAnswer":{"@type":"Answer","text":"Desktop apps for macOS, Windows and Linux, and a web app you host with Docker. macOS is the most used. The Windows and Linux builds exist but have had less testing."}},{"@type":"Question","name":"Why does my system warn about the installer?","acceptedAnswer":{"@type":"Answer","text":"macOS builds are signed with a Developer ID and notarized, so they open normally. Windows builds aren’t code-signed yet: choose More info, then Run anyway. Linux packages are unsigned."}}]}]}</script>
 <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/source-serif-4-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" as="image" href="/img/code-2560.webp" imagesrcset="/img/code-1280.webp 1280w, /img/code-2560.webp 2560w, /img/code-3840.webp 3840w" imagesizes="(min-width: 1240px) 1192px, calc(100vw - 48px)" fetchpriority="high">
 <script src="/theme.js"></script>
-<link rel="stylesheet" href="/styles.css?v=0.6.0">
+<link rel="stylesheet" href="/styles.css?v=0.10.0">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -50,6 +51,7 @@
       <a href="#models">Models</a>
       <a href="#self-host">Self-hosting</a>
       <a href="#faq">FAQ</a>
+      <a href="/compare/">Compare</a>
       <a href="https://docs.atelierhq.dev/">Docs</a>
     </nav>
     <div class="bar-end">
@@ -282,6 +284,7 @@
           <li><a href="#work">Features</a></li>
           <li><a href="#models">Models</a></li>
           <li><a href="/download/">Download</a></li>
+          <li><a href="/compare/">Compare</a></li>
           <li><a href="#self-host">Self-hosting</a></li>
           <li><a href="#faq">FAQ</a></li>
         </ul>

@@ -1,0 +1,27 @@
+# Atelier
+
+> Atelier is a self-hosted AI workspace with Chat and Code, on the models you choose: local (Ollama, llama.cpp, LM Studio) or hosted (Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, any OpenAI-compatible endpoint). It runs as desktop apps for macOS, Windows and Linux, as a web app you host with Docker, and as a terminal app, all on one backend. Source-available under the PolyForm Noncommercial license (free for noncommercial use). No telemetry.
+
+Atelier is an independent project, not affiliated with any model provider. The website is atelierhq.dev, the documentation docs.atelierhq.dev and the source github.com/TheOriUHD/atelier.
+
+## Start here
+- [Download](https://atelierhq.dev/download/): desktop apps, the terminal app and the Docker server
+- [Get started](https://docs.atelierhq.dev/getting-started/): install, connect a model, first conversation
+- [Documentation](https://docs.atelierhq.dev/): every feature, the settings and the self-hosting guide
+- [Documentation for language models](https://docs.atelierhq.dev/llms.txt): an index of the documentation pages in Markdown, and [the whole documentation in one file](https://docs.atelierhq.dev/llms-full.txt)
+
+## Compared with other apps
+- [All comparisons](https://atelierhq.dev/compare/): Atelier next to Open WebUI, LibreChat, LM Studio, AnythingLLM, Jan and Msty
+- [Atelier vs Open WebUI](https://atelierhq.dev/compare/open-webui/): How Atelier and Open WebUI differ: licence, desktop apps, coding mode, accounts and models.
+- [Atelier vs LibreChat](https://atelierhq.dev/compare/librechat/): How Atelier and LibreChat differ: licence, desktop apps, agents, code execution and accounts.
+- [Atelier vs LM Studio](https://atelierhq.dev/compare/lm-studio/): How Atelier and LM Studio differ: running models versus using them, licence, servers and coding mode.
+- [Atelier vs AnythingLLM](https://atelierhq.dev/compare/anythingllm/): How Atelier and AnythingLLM differ: documents versus coding, licence, telemetry, desktop and Docker.
+
+## Source and releases
+- [GitHub](https://github.com/TheOriUHD/atelier): source, issues and releases
+- [Releases](https://github.com/TheOriUHD/atelier/releases): the changelog of every version
+- [System prompts](https://docs.atelierhq.dev/prompts/): every prompt Atelier sends to a model, published as it is
+
+## Optional
+- [Privacy](https://docs.atelierhq.dev/privacy/): what leaves your computer and when
+- [FAQ](https://docs.atelierhq.dev/faq/): short answers about cost, models, privacy and platforms
