@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-11-16
+
 - **The website and the docs are easier to find, for search engines and for AI agents.**
   - **Comparison pages.** Plain, sourced comparisons of Atelier with Open WebUI, LibreChat, LM Studio and AnythingLLM (and a table with Jan and Msty) at atelierhq.dev/compare/, with the facts, the sources and the date they were checked.
   - **For agents.** `llms.txt` on the website and on the docs, the guides in one file (`llms-full.txt`), and every docs page also as Markdown at its address plus `.md`.
