@@ -4,9 +4,9 @@
 
 # Atelier
 
-**A self-hosted AI workspace with Chat and Code, on the models you choose.**
+**An AI workspace that is easy to start and still powerful: Chat and Code on the models you choose.**
 
-Run it on your own machine with Ollama or llama.cpp, or use Anthropic, OpenAI, Mistral, GitHub Copilot, a ChatGPT or Mistral Vibe plan, OpenRouter or any OpenAI-compatible endpoint.<br>
+Download the app, open it and type your name: no Docker, config files or account. It finds the Ollama, llama.cpp or LM Studio you already run, or uses Anthropic, OpenAI, Mistral, GitHub Copilot, a ChatGPT or Mistral Vibe plan, OpenRouter or any OpenAI-compatible endpoint.<br>
 One backend, two ways in: a desktop app and a web app you host yourself.
 
 <br>
@@ -498,6 +498,6 @@ Built on [Electron](https://www.electronjs.org), [React](https://react.dev), [Vi
 
 <br>
 
-<sub>Atelier · a self-hosted AI workspace · Chat and Code on the model you choose</sub>
+<sub>Atelier · an AI workspace that is easy to start and still powerful · Chat and Code on the model you choose</sub>
 
 </div>

@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Atelier vs Open WebUI · Atelier</title>
-<meta name="description" content="How Atelier and Open WebUI differ: licence, desktop apps, coding mode, accounts and models. Facts checked on 16 November 2026.">
+<title>Atelier vs Open WebUI: an Open WebUI alternative that is easy to start · Atelier</title>
+<meta name="description" content="Atelier vs Open WebUI: both are powerful, but Atelier starts with a download, not Docker and config files. Setup, updates and licence compared. Facts checked on 16 November 2026.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://atelierhq.dev/compare/open-webui/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Atelier vs Open WebUI">
-<meta property="og:description" content="How Atelier and Open WebUI differ: licence, desktop apps, coding mode, accounts and models. Facts checked on 16 November 2026.">
+<meta property="og:title" content="Atelier vs Open WebUI: an Open WebUI alternative that is easy to start">
+<meta property="og:description" content="Atelier vs Open WebUI: both are powerful, but Atelier starts with a download, not Docker and config files. Setup, updates and licence compared. Facts checked on 16 November 2026.">
 <meta property="og:url" content="https://atelierhq.dev/compare/open-webui/">
 <meta property="og:image" content="https://atelierhq.dev/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/source-serif-4-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://atelierhq.dev/compare/open-webui/","url":"https://atelierhq.dev/compare/open-webui/","name":"Atelier vs Open WebUI","description":"How Atelier and Open WebUI differ: licence, desktop apps, coding mode, accounts and models. Facts checked on 16 November 2026.","dateModified":"2026-11-16","isPartOf":{"@id":"https://atelierhq.dev/#website"},"about":{"@id":"https://atelierhq.dev/#app"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Atelier","item":"https://atelierhq.dev/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://atelierhq.dev/compare/"},{"@type":"ListItem","position":3,"name":"Atelier vs Open WebUI","item":"https://atelierhq.dev/compare/open-webui/"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://atelierhq.dev/compare/open-webui/","url":"https://atelierhq.dev/compare/open-webui/","name":"Atelier vs Open WebUI: an Open WebUI alternative that is easy to start","description":"Atelier vs Open WebUI: both are powerful, but Atelier starts with a download, not Docker and config files. Setup, updates and licence compared. Facts checked on 16 November 2026.","dateModified":"2026-11-16","isPartOf":{"@id":"https://atelierhq.dev/#website"},"about":{"@id":"https://atelierhq.dev/#app"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Atelier","item":"https://atelierhq.dev/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://atelierhq.dev/compare/"},{"@type":"ListItem","position":3,"name":"Atelier vs Open WebUI","item":"https://atelierhq.dev/compare/open-webui/"}]}]}</script>
 <script src="/theme.js"></script>
 <link rel="stylesheet" href="/styles.css?v=0.10.0">
 </head>
@@ -64,15 +64,19 @@
   <div class="wrap compare">
     <p class="crumbs"><a href="/compare/">Compare</a> / Atelier vs Open WebUI</p>
     <h1>Atelier vs Open WebUI</h1>
-    <p class="lead">Open WebUI is a web platform for chat, documents and tools that you host with Docker or pip, with single sign-on, roles and a large plugin ecosystem. Atelier is a desktop-first workspace where Chat and Code share one backend, and Code works in a project folder. Both run local and hosted models.</p>
+    <p class="lead">Both are powerful and both run local and hosted models. The difference is the effort around them. Atelier installs like any app, with no Docker, config files or account, finds Ollama, llama.cpp and LM Studio by itself and downloads its own updates. Open WebUI is built to be hosted: Docker or pip, then connections and settings, with a large ecosystem behind it.</p>
     <p class="fine">Facts about Open WebUI checked on 16 November 2026, from its own pages (listed at the end). Spotted a mistake? <a href="https://github.com/TheOriUHD/atelier/issues/new">Tell us</a>.</p>
-    <p>Open WebUI describes itself as an extensible, self-hosted platform built to run entirely offline. It is far bigger than Atelier in community and ecosystem: about 159,000 stars on GitHub, with v0.13.3 the latest release when this page was checked.</p>
+    <p>Open WebUI describes itself as an extensible, self-hosted platform built to run entirely offline. It is far bigger than Atelier in community and ecosystem: about 159,000 stars on GitHub, with v0.13.3 the latest release when this page was checked. It also has a desktop app, which installs Open WebUI on your computer and starts it for you.</p>
 
     <h2>At a glance</h2>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col"><span class="visually-hidden">Feature</span></th><th scope="col">Atelier</th><th scope="col">Open WebUI</th></tr></thead>
         <tbody>
+        <tr><th scope="row">Getting started</th><td>Download the app and open it: choose “Run on this computer” and type your name. No Docker, no config files, no account. The macOS app is signed and notarized, so it opens like any other app.</td><td>Docker: make a secret key with openssl, then run one docker run command (port, host mapping, data volume, secret key, image). Or pip install with Python 3.11 or 3.12. Or its desktop app, which needs an internet connection and 5 GB or more of disk.</td></tr>
+        <tr><th scope="row">Connecting your models</th><td>It finds Ollama, llama.cpp and LM Studio on their usual ports, and API keys set in the environment. Set up opens the provider form already filled in.</td><td>It tries to connect to Ollama itself. From Docker the address is host.docker.internal, or you use --network=host, and Ollama on the host must listen beyond 127.0.0.1 (OLLAMA_HOST=0.0.0.0). Other providers go in Settings › Connections with a URL and a key.</td></tr>
+        <tr><th scope="row">Updating</th><td>The desktop app downloads new versions by itself and installs them when you restart it. A server updates when an admin presses Update server, or with docker compose pull.</td><td>Docker: remove the container, pull the image and run the command again. pip: pip install -U. The desktop app updates on quit once you turn automatic updates on. Its docs say to back up first, because migrations are one-way.</td></tr>
+        <tr><th scope="row">When something goes wrong</th><td>A troubleshooting page, Copy diagnostics in Settings, and a report button (F1) that sends a screenshot and diagnostics only when you press Send.</td><td>Thirteen troubleshooting guides in its docs: connection errors, Docker startup, audio, RAG, SSO, web search, performance and more.</td></tr>
         <tr><th scope="row">Licence</th><td>PolyForm Noncommercial 1.0.0: source-available, free for noncommercial use. Commercial use needs a license from the author. Not open source.</td><td>The Open WebUI License: BSD-3-style, plus a clause that bars removing its branding unless you have 50 or fewer users in 30 days, written permission or an enterprise licence. Its docs say versions since v0.6.6 are not OSI-approved open source.</td></tr>
         <tr><th scope="row">Ways to run it</th><td>Desktop apps for macOS, Windows and Linux, a web app you host with Docker, and a terminal app, all on one backend.</td><td>pip install, a Docker image, and desktop apps for macOS, Windows and Linux.</td></tr>
         <tr><th scope="row">Local models</th><td>Ollama, llama.cpp, LM Studio or any OpenAI-compatible server.</td><td>Ollama and OpenAI-compatible servers.</td></tr>
@@ -86,31 +90,41 @@
       </table>
     </div>
 
+    <h2>Easy to start, and nothing you give up</h2>
+    <p>Atelier asks little at the start. It is also a lot of app: this is what you have once it is running.</p>
+    <ul>
+      <li>Chat and Code in one app: artifacts, projects, memory, web research, tasks that run in the background and sub-agents, and Code sessions in your project folders with permission rules, diffs and git.</li>
+      <li>MCP connectors, skills, hooks and plugins, and it reads existing agent skills, commands and hooks where they already live.</li>
+      <li>Image, video and audio generation, and dictation (the Mac’s own recognition on a Mac, Atelier’s own speech model elsewhere).</li>
+      <li>Computer use, co-op sessions with other people, Remote Control of a session on another of your computers, and a terminal app.</li>
+      <li>One backend for all of it: the desktop app can be the server for a team, with accounts, roles and sign-in through your identity provider.</li>
+    </ul>
+
     <h2>Where Open WebUI is stronger</h2>
     <ul>
       <li>The ecosystem: a very large community, many extensions and a documents pipeline with a choice of 13 vector databases.</li>
       <li>Enterprise identity: LDAP, SCIM, multi-factor sign-in and an enterprise licence option.</li>
-      <li>Built for the browser first, so a team can use it without installing anything.</li>
     </ul>
 
     <h2>Where Atelier is different</h2>
     <ul>
-      <li>Code is a mode of the app, with permission rules, diffs and git in one window, rather than a separate project you connect.</li>
-      <li>Desktop-first: Atelier runs on its own on your computer, and the same backend can be shared on a server later.</li>
-      <li>Source-available under a plain, standard licence (PolyForm Noncommercial) with no branding condition.</li>
+      <li>Nothing to host to start: download, open, type your name. No Docker, no Python, no config files, no account.</li>
+      <li>It finds the models you already run and fills in the provider form for you.</li>
+      <li>It looks after itself: the desktop app downloads its own updates, and Settings can copy diagnostics or send a report with a screenshot when you press Send.</li>
+      <li>Code is a built-in mode, with permission rules, diffs and git, rather than a separate project you connect.</li>
       <li>No telemetry, and every system prompt published in the docs.</li>
     </ul>
 
     <h2>Choose Open WebUI if</h2>
     <ul>
-      <li>You want a large, web-first platform for a team, with SSO, LDAP and many integrations.</li>
-      <li>Documents and retrieval are the main job.</li>
+      <li>You want a large platform to host for a team, with SSO, LDAP and many integrations.</li>
+      <li>You are comfortable running Docker or Python and configuring it, and documents and retrieval are the main job.</li>
     </ul>
 
     <h2>Choose Atelier if</h2>
     <ul>
-      <li>You want one app for conversations and for coding in your project folders.</li>
-      <li>You want a desktop app that also works as a server.</li>
+      <li>You want it working in minutes without administering anything.</li>
+      <li>You want conversations and coding in project folders in one app, and a server later if you need one.</li>
     </ul>
     <p><a class="btn btn-primary" href="/download/">Download Atelier</a> <a class="btn btn-quiet" href="https://docs.atelierhq.dev/getting-started/">Get started</a></p>
 
@@ -118,6 +132,12 @@
     <p class="fine">Read on 16 November 2026. Atelier’s side is from its <a href="https://docs.atelierhq.dev/">documentation</a>.</p>
     <ul class="sources">
       <li><a href="https://github.com/open-webui/open-webui">Open WebUI on GitHub</a></li>
+      <li><a href="https://docs.openwebui.com/getting-started/quick-start/">Open WebUI quick start</a></li>
+      <li><a href="https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-ollama">Open WebUI: starting with Ollama</a></li>
+      <li><a href="https://docs.openwebui.com/troubleshooting/connection-error">Open WebUI: connection errors</a></li>
+      <li><a href="https://docs.openwebui.com/troubleshooting/">Open WebUI: troubleshooting guides</a></li>
+      <li><a href="https://docs.openwebui.com/getting-started/updating">Open WebUI: updating</a></li>
+      <li><a href="https://github.com/open-webui/desktop">Open WebUI desktop app</a></li>
       <li><a href="https://raw.githubusercontent.com/open-webui/open-webui/main/LICENSE">Open WebUI License</a></li>
       <li><a href="https://docs.openwebui.com/license">Open WebUI licence documentation</a></li>
       <li><a href="https://docs.openwebui.com/features/">Open WebUI features</a></li>

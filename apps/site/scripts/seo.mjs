@@ -15,7 +15,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ATELIER, CHECKED, CHECKED_TEXT, HUB, HUB_SOURCES, PAGES, ROW_LABELS, ROW_ORDER, SITE } from './compare-data.mjs';
+import { ATELIER, CHECKED, CHECKED_TEXT, HUB, HUB_SOURCES, PAGES, POWER, ROW_LABELS, ROW_ORDER, SITE } from './compare-data.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const PUBLIC = join(here, '../public');
@@ -91,7 +91,9 @@ const link = ([label, href]) => `<a href="${esc(href)}">${esc(label)}</a>`;
 const list = (items) => `<ul>\n${items.map((i) => `      <li>${esc(i)}</li>`).join('\n')}\n    </ul>`;
 
 function comparePage(p) {
-  const rows = ROW_ORDER.map((key) => `        <tr><th scope="row">${esc(ROW_LABELS[key])}</th><td>${esc(ATELIER[key])}</td><td>${esc(p.facts[key])}</td></tr>`).join('\n');
+  // A row appears where the page we read said something; what it didn't say is left out, not guessed.
+  const rows = ROW_ORDER.filter((key) => p.facts[key]).map((key) => `        <tr><th scope="row">${esc(ROW_LABELS[key])}</th><td>${esc(ATELIER[key])}</td><td>${esc(p.facts[key])}</td></tr>`).join('\n');
+  const metaTitle = p.metaTitle ?? p.title;
   const others = PAGES.filter((o) => o.slug !== p.slug).map((o) => `<a href="/compare/${o.slug}/">${esc(o.name)}</a>`).join(', ');
   const body = `    <p class="crumbs"><a href="/compare/">Compare</a> / Atelier vs ${esc(p.name)}</p>
     <h1>${esc(p.title)}</h1>
@@ -108,6 +110,10 @@ ${rows}
         </tbody>
       </table>
     </div>
+
+    <h2>Easy to start, and nothing you give up</h2>
+    <p>Atelier asks little at the start. It is also a lot of app: this is what you have once it is running.</p>
+    ${list(POWER)}
 
     <h2>Where ${esc(p.name)} is stronger</h2>
     ${list(p.strongerThem)}
@@ -130,11 +136,11 @@ ${p.sources.map((s) => `      <li>${link(s)}</li>`).join('\n')}
     <p>More comparisons: <a href="/compare/">all of them</a>, ${others}.</p>`;
   return layout({
     path: `/compare/${p.slug}/`,
-    title: p.title,
+    title: metaTitle,
     description: p.description,
     body,
     graph: [
-      { '@type': 'WebPage', '@id': `${SITE}/compare/${p.slug}/`, url: `${SITE}/compare/${p.slug}/`, name: p.title, description: p.description, dateModified: CHECKED, isPartOf: { '@id': `${SITE}/#website` }, about: { '@id': `${SITE}/#app` } },
+      { '@type': 'WebPage', '@id': `${SITE}/compare/${p.slug}/`, url: `${SITE}/compare/${p.slug}/`, name: metaTitle, description: p.description, dateModified: CHECKED, isPartOf: { '@id': `${SITE}/#website` }, about: { '@id': `${SITE}/#app` } },
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
@@ -148,20 +154,20 @@ ${p.sources.map((s) => `      <li>${link(s)}</li>`).join('\n')}
 }
 
 function hubPage() {
-  const title = 'Atelier compared with other self-hosted and local AI apps';
-  const description = 'Atelier next to Open WebUI, LibreChat, LM Studio, AnythingLLM, Jan and Msty: licence, how each runs, coding agents, accounts and telemetry. Checked on 16 November 2026.';
+  const title = 'Atelier vs Open WebUI, LibreChat, LM Studio and more: easy to start, still powerful';
+  const description = 'Atelier next to Open WebUI, LibreChat, LM Studio, AnythingLLM, Jan and Msty: how much setup each asks for, licence, coding agents, accounts and telemetry. Checked on 16 November 2026.';
   const cell = (h) => (h.slug ? `<a href="/compare/${h.slug}/">${esc(h.name)}</a>` : esc(h.name));
   const rows = HUB.map(
-    (h) => `        <tr><th scope="row">${cell(h)}</th><td>${esc(h.licence)}</td><td>${esc(h.run)}</td><td>${esc(h.agent)}</td><td>${esc(h.accounts)}</td><td>${esc(h.telemetry)}</td></tr>`,
+    (h) => `        <tr><th scope="row">${cell(h)}</th><td>${esc(h.start)}</td><td>${esc(h.licence)}</td><td>${esc(h.run)}</td><td>${esc(h.agent)}</td><td>${esc(h.accounts)}</td><td>${esc(h.telemetry)}</td></tr>`,
   ).join('\n');
   const body = `    <h1>Atelier compared with other self-hosted and local AI apps</h1>
-    <p class="lead">There are good ways to run AI on your own computer or server, and they differ in what they are built for. This is a plain comparison, from each project’s own pages, of Atelier with six of them.</p>
+    <p class="lead">Atelier is meant to be easy to start and still powerful. There are good ways to run AI on your own computer or server, and some ask a lot of you before the first message: containers, config files, networking. This is a plain comparison, from each project’s own pages, of how much each asks at the start and what it can do, next to six others.</p>
     <p class="fine">Facts checked on ${CHECKED_TEXT}. Spotted a mistake? <a href="${ISSUES}">Tell us</a>.</p>
 
     <h2>At a glance</h2>
     <div class="table-wrap">
       <table class="wide">
-        <thead><tr><th scope="col">App</th><th scope="col">Licence</th><th scope="col">Runs as</th><th scope="col">Agents and coding</th><th scope="col">Accounts</th><th scope="col">Telemetry</th></tr></thead>
+        <thead><tr><th scope="col">App</th><th scope="col">Getting started</th><th scope="col">Licence</th><th scope="col">Runs as</th><th scope="col">Agents and coding</th><th scope="col">Accounts</th><th scope="col">Telemetry</th></tr></thead>
         <tbody>
 ${rows}
         </tbody>
@@ -170,11 +176,15 @@ ${rows}
 
     <h2>Side by side</h2>
     <ul>
-${PAGES.map((p) => `      <li><a href="/compare/${p.slug}/">${esc(p.title)}</a>: ${esc(p.short.split('. ')[0])}.</li>`).join('\n')}
+${PAGES.map((p) => `      <li><a href="/compare/${p.slug}/">${esc(p.title)}</a>: ${esc(p.hubLine)}</li>`).join('\n')}
     </ul>
 
-    <h2>What Atelier is</h2>
-    <p>${esc(ATELIER.run)} ${esc(ATELIER.coding)} ${esc(ATELIER.telemetry)}</p>
+    <h2>Easy to start</h2>
+    <p>${esc(ATELIER.start)} ${esc(ATELIER.connect)} ${esc(ATELIER.updates)}</p>
+
+    <h2>And nothing you give up</h2>
+    ${list(POWER)}
+    <p>${esc(ATELIER.run)} ${esc(ATELIER.telemetry)}</p>
     <p><a class="btn btn-primary" href="/download/">Download Atelier</a> <a class="btn btn-quiet" href="https://docs.atelierhq.dev/getting-started/">Get started</a></p>
 
     <h2>Sources</h2>
@@ -203,7 +213,7 @@ ${HUB_SOURCES.map((s) => `      <li>${link(s)}</li>`).join('\n')}
 function llmsTxt() {
   return `# Atelier
 
-> Atelier is a self-hosted AI workspace with Chat and Code, on the models you choose: local (Ollama, llama.cpp, LM Studio) or hosted (Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, any OpenAI-compatible endpoint). It runs as desktop apps for macOS, Windows and Linux, as a web app you host with Docker, and as a terminal app, all on one backend. Source-available under the PolyForm Noncommercial license (free for noncommercial use). No telemetry.
+> Atelier is an AI workspace that is easy to start and still powerful: Chat and Code on the models you choose, local (Ollama, llama.cpp, LM Studio) or hosted (Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, any OpenAI-compatible endpoint). Download the app, open it and type your name: no Docker, config files or account. It finds the models you already run, updates itself, and has MCP, skills, image, video and audio generation, dictation, computer use and a server mode with accounts. Desktop apps for macOS, Windows and Linux, a web app you host with Docker and a terminal app share one backend. Source-available under the PolyForm Noncommercial license (free for noncommercial use). No telemetry.
 
 Atelier is an independent project, not affiliated with any model provider. The website is atelierhq.dev, the documentation docs.atelierhq.dev and the source github.com/TheOriUHD/atelier.
 
@@ -214,7 +224,7 @@ Atelier is an independent project, not affiliated with any model provider. The w
 - [Documentation for language models](https://docs.atelierhq.dev/llms.txt): an index of the documentation pages in Markdown, and [the whole documentation in one file](https://docs.atelierhq.dev/llms-full.txt)
 
 ## Compared with other apps
-- [All comparisons](${SITE}/compare/): Atelier next to Open WebUI, LibreChat, LM Studio, AnythingLLM, Jan and Msty
+- [All comparisons](${SITE}/compare/): Atelier next to Open WebUI, LibreChat, LM Studio, AnythingLLM, Jan and Msty, with how much setup each asks for
 ${PAGES.map((p) => `- [${p.title}](${SITE}/compare/${p.slug}/): ${p.description.replace(/ Facts checked.*$/, '')}`).join('\n')}
 
 ## Source and releases

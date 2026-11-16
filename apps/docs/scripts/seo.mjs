@@ -71,7 +71,7 @@ for (const p of everything.map(page).filter(Boolean)) {
 }
 
 const summary =
-  'Atelier is a self-hosted AI workspace with Chat and Code, on the models you choose: local (Ollama, llama.cpp, LM Studio) or hosted. Desktop apps for macOS, Windows and Linux, a web app you host with Docker and a terminal app share one backend. Source-available (PolyForm Noncommercial), no telemetry.';
+  'Atelier is an AI workspace that is easy to start and still powerful: Chat and Code on the models you choose, local (Ollama, llama.cpp, LM Studio) or hosted. Download the app, open it and type your name; there is no Docker, config file or account to set up first. Desktop apps for macOS, Windows and Linux, a web app you host with Docker and a terminal app share one backend. Source-available (PolyForm Noncommercial), no telemetry.';
 
 const index = [
   '# Atelier documentation',

@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Atelier vs LM Studio · Atelier</title>
-<meta name="description" content="How Atelier and LM Studio differ: running models versus using them, licence, servers and coding mode. Facts checked on 16 November 2026.">
+<title>Atelier vs LM Studio: the workspace on top of your local models · Atelier</title>
+<meta name="description" content="Atelier vs LM Studio: LM Studio runs models, Atelier is the easy, powerful workspace on top of them. Setup, licence, servers and coding mode. Facts checked on 16 November 2026.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://atelierhq.dev/compare/lm-studio/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Atelier vs LM Studio">
-<meta property="og:description" content="How Atelier and LM Studio differ: running models versus using them, licence, servers and coding mode. Facts checked on 16 November 2026.">
+<meta property="og:title" content="Atelier vs LM Studio: the workspace on top of your local models">
+<meta property="og:description" content="Atelier vs LM Studio: LM Studio runs models, Atelier is the easy, powerful workspace on top of them. Setup, licence, servers and coding mode. Facts checked on 16 November 2026.">
 <meta property="og:url" content="https://atelierhq.dev/compare/lm-studio/">
 <meta property="og:image" content="https://atelierhq.dev/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/source-serif-4-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://atelierhq.dev/compare/lm-studio/","url":"https://atelierhq.dev/compare/lm-studio/","name":"Atelier vs LM Studio","description":"How Atelier and LM Studio differ: running models versus using them, licence, servers and coding mode. Facts checked on 16 November 2026.","dateModified":"2026-11-16","isPartOf":{"@id":"https://atelierhq.dev/#website"},"about":{"@id":"https://atelierhq.dev/#app"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Atelier","item":"https://atelierhq.dev/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://atelierhq.dev/compare/"},{"@type":"ListItem","position":3,"name":"Atelier vs LM Studio","item":"https://atelierhq.dev/compare/lm-studio/"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://atelierhq.dev/compare/lm-studio/","url":"https://atelierhq.dev/compare/lm-studio/","name":"Atelier vs LM Studio: the workspace on top of your local models","description":"Atelier vs LM Studio: LM Studio runs models, Atelier is the easy, powerful workspace on top of them. Setup, licence, servers and coding mode. Facts checked on 16 November 2026.","dateModified":"2026-11-16","isPartOf":{"@id":"https://atelierhq.dev/#website"},"about":{"@id":"https://atelierhq.dev/#app"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Atelier","item":"https://atelierhq.dev/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://atelierhq.dev/compare/"},{"@type":"ListItem","position":3,"name":"Atelier vs LM Studio","item":"https://atelierhq.dev/compare/lm-studio/"}]}]}</script>
 <script src="/theme.js"></script>
 <link rel="stylesheet" href="/styles.css?v=0.10.0">
 </head>
@@ -64,15 +64,16 @@
   <div class="wrap compare">
     <p class="crumbs"><a href="/compare/">Compare</a> / Atelier vs LM Studio</p>
     <h1>Atelier vs LM Studio</h1>
-    <p class="lead">LM Studio is a proprietary desktop app that downloads and runs local models itself, with chat, document upload, MCP and a local API server. Atelier does not run models; it connects to the ones you already run, such as LM Studio, Ollama or llama.cpp, or to hosted providers, and adds Chat and Code in one workspace that can also run as a shared server.</p>
+    <p class="lead">LM Studio is a proprietary desktop app that downloads and runs local models itself, with chat, document upload, MCP and a local API server. Atelier does not run models; it is the workspace on top of the ones you already run, LM Studio’s included. It finds LM Studio by itself, and adds Chat and Code in one app that can also be a shared server.</p>
     <p class="fine">Facts about LM Studio checked on 16 November 2026, from its own pages (listed at the end). Spotted a mistake? <a href="https://github.com/TheOriUHD/atelier/issues/new">Tell us</a>.</p>
-    <p>LM Studio is a model runner first: its site says it is powered by its own runtime, with MLX and llama.cpp under the hood. The two are often used together, since Atelier can talk to LM Studio’s local server.</p>
+    <p>LM Studio is a model runner first: its site says it is powered by its own runtime, with MLX and llama.cpp under the hood. The two are often used together, since Atelier detects LM Studio’s local server on its default port.</p>
 
     <h2>At a glance</h2>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col"><span class="visually-hidden">Feature</span></th><th scope="col">Atelier</th><th scope="col">LM Studio</th></tr></thead>
         <tbody>
+        <tr><th scope="row">Getting started</th><td>Download the app and open it: choose “Run on this computer” and type your name. No Docker, no config files, no account. The macOS app is signed and notarized, so it opens like any other app.</td><td>A desktop app that downloads and runs models itself.</td></tr>
         <tr><th scope="row">Licence</th><td>PolyForm Noncommercial 1.0.0: source-available, free for noncommercial use. Commercial use needs a license from the author. Not open source.</td><td>Proprietary. Its terms grant a license for personal or internal business use.</td></tr>
         <tr><th scope="row">Ways to run it</th><td>Desktop apps for macOS, Windows and Linux, a web app you host with Docker, and a terminal app, all on one backend.</td><td>Desktop apps for macOS (Apple silicon only, macOS 14 or newer), Windows (x64 and ARM) and Linux (x64 and ARM64). A headless daemon, llmster, can run on a Linux server, and a local API server listens on localhost:1234.</td></tr>
         <tr><th scope="row">Local models</th><td>Ollama, llama.cpp, LM Studio or any OpenAI-compatible server.</td><td>It downloads and runs models itself, with llama.cpp and MLX.</td></tr>
@@ -86,6 +87,16 @@
       </table>
     </div>
 
+    <h2>Easy to start, and nothing you give up</h2>
+    <p>Atelier asks little at the start. It is also a lot of app: this is what you have once it is running.</p>
+    <ul>
+      <li>Chat and Code in one app: artifacts, projects, memory, web research, tasks that run in the background and sub-agents, and Code sessions in your project folders with permission rules, diffs and git.</li>
+      <li>MCP connectors, skills, hooks and plugins, and it reads existing agent skills, commands and hooks where they already live.</li>
+      <li>Image, video and audio generation, and dictation (the Mac’s own recognition on a Mac, Atelier’s own speech model elsewhere).</li>
+      <li>Computer use, co-op sessions with other people, Remote Control of a session on another of your computers, and a terminal app.</li>
+      <li>One backend for all of it: the desktop app can be the server for a team, with accounts, roles and sign-in through your identity provider.</li>
+    </ul>
+
     <h2>Where LM Studio is stronger</h2>
     <ul>
       <li>It runs the models itself: download, load and tune them in one place, including MLX on Apple silicon.</li>
@@ -94,7 +105,8 @@
 
     <h2>Where Atelier is different</h2>
     <ul>
-      <li>Atelier works with any model server, hosted or local, and with several at once.</li>
+      <li>It is a workspace, not a model runner: it works with any model server, hosted or local, and with several at once.</li>
+      <li>It finds LM Studio, Ollama and llama.cpp by itself and fills in the provider form.</li>
       <li>Code mode for project folders, and a server mode with accounts for sharing one setup with a team.</li>
       <li>Source-available, so you can read what it does; every system prompt is published.</li>
       <li>It runs on Intel Macs, which LM Studio does not support.</li>
@@ -108,7 +120,7 @@
 
     <h2>Choose Atelier if</h2>
     <ul>
-      <li>You already run models in Ollama, llama.cpp or LM Studio and want a better workspace on top.</li>
+      <li>You already run models in Ollama, llama.cpp or LM Studio and want an easy, more powerful workspace on top.</li>
       <li>You want to mix local and hosted models, or share the setup with a team.</li>
     </ul>
     <p><a class="btn btn-primary" href="/download/">Download Atelier</a> <a class="btn btn-quiet" href="https://docs.atelierhq.dev/getting-started/">Get started</a></p>

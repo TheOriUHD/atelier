@@ -36,7 +36,7 @@ export default defineConfig({
             '@id': 'https://docs.atelierhq.dev/#website',
             url: 'https://docs.atelierhq.dev/',
             name: 'Atelier Docs',
-            description: 'The documentation of Atelier, a self-hosted AI workspace with Chat and Code on the models you choose.',
+            description: 'The documentation of Atelier, an AI workspace that is easy to start and still powerful, with Chat and Code on the models you choose.',
             inLanguage: 'en',
             publisher: { '@id': 'https://atelierhq.dev/#org' },
           }),

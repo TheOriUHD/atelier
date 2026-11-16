@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Atelier vs LibreChat · Atelier</title>
-<meta name="description" content="How Atelier and LibreChat differ: licence, desktop apps, agents, code execution and accounts. Facts checked on 16 November 2026.">
+<title>Atelier vs LibreChat: a LibreChat alternative that is easy to start · Atelier</title>
+<meta name="description" content="Atelier vs LibreChat: both are powerful, but Atelier starts with a download, not Docker, .env and YAML files. Setup, updates and licence compared. Facts checked on 16 November 2026.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151515" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="canonical" href="https://atelierhq.dev/compare/librechat/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Atelier vs LibreChat">
-<meta property="og:description" content="How Atelier and LibreChat differ: licence, desktop apps, agents, code execution and accounts. Facts checked on 16 November 2026.">
+<meta property="og:title" content="Atelier vs LibreChat: a LibreChat alternative that is easy to start">
+<meta property="og:description" content="Atelier vs LibreChat: both are powerful, but Atelier starts with a download, not Docker, .env and YAML files. Setup, updates and licence compared. Facts checked on 16 November 2026.">
 <meta property="og:url" content="https://atelierhq.dev/compare/librechat/">
 <meta property="og:image" content="https://atelierhq.dev/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/source-serif-4-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://atelierhq.dev/compare/librechat/","url":"https://atelierhq.dev/compare/librechat/","name":"Atelier vs LibreChat","description":"How Atelier and LibreChat differ: licence, desktop apps, agents, code execution and accounts. Facts checked on 16 November 2026.","dateModified":"2026-11-16","isPartOf":{"@id":"https://atelierhq.dev/#website"},"about":{"@id":"https://atelierhq.dev/#app"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Atelier","item":"https://atelierhq.dev/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://atelierhq.dev/compare/"},{"@type":"ListItem","position":3,"name":"Atelier vs LibreChat","item":"https://atelierhq.dev/compare/librechat/"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://atelierhq.dev/compare/librechat/","url":"https://atelierhq.dev/compare/librechat/","name":"Atelier vs LibreChat: a LibreChat alternative that is easy to start","description":"Atelier vs LibreChat: both are powerful, but Atelier starts with a download, not Docker, .env and YAML files. Setup, updates and licence compared. Facts checked on 16 November 2026.","dateModified":"2026-11-16","isPartOf":{"@id":"https://atelierhq.dev/#website"},"about":{"@id":"https://atelierhq.dev/#app"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Atelier","item":"https://atelierhq.dev/"},{"@type":"ListItem","position":2,"name":"Compare","item":"https://atelierhq.dev/compare/"},{"@type":"ListItem","position":3,"name":"Atelier vs LibreChat","item":"https://atelierhq.dev/compare/librechat/"}]}]}</script>
 <script src="/theme.js"></script>
 <link rel="stylesheet" href="/styles.css?v=0.10.0">
 </head>
@@ -64,20 +64,24 @@
   <div class="wrap compare">
     <p class="crumbs"><a href="/compare/">Compare</a> / Atelier vs LibreChat</p>
     <h1>Atelier vs LibreChat</h1>
-    <p class="lead">LibreChat is an MIT-licensed web app that brings many AI providers into one chat interface, with agents, MCP, a sandboxed code interpreter and an admin panel. It has no desktop app. Atelier adds desktop apps for macOS, Windows and Linux and a Code mode that works in a project folder, under a noncommercial licence.</p>
+    <p class="lead">Both are powerful and both connect to many models. Atelier installs like any app, with no Docker, config files or account, and finds your local models by itself. LibreChat is an MIT-licensed web app you host with Docker, configured through .env and librechat.yaml, with agents, MCP, a sandboxed code interpreter and an admin panel.</p>
     <p class="fine">Facts about LibreChat checked on 16 November 2026, from its own pages (listed at the end). Spotted a mistake? <a href="https://github.com/TheOriUHD/atelier/issues/new">Tell us</a>.</p>
-    <p>LibreChat describes itself as an enhanced ChatGPT clone and brings all your AI conversations into one customizable interface. It has about 47,000 stars on GitHub; its newest releases (v0.8.8 and v0.8.9-rc1) were marked as pre-releases when this page was checked.</p>
+    <p>LibreChat describes itself as an enhanced ChatGPT clone and brings all your AI conversations into one customizable interface. It has about 47,000 stars on GitHub; its newest releases (v0.8.8 and v0.8.9-rc1) were marked as pre-releases when this page was checked. It has no desktop app.</p>
 
     <h2>At a glance</h2>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col"><span class="visually-hidden">Feature</span></th><th scope="col">Atelier</th><th scope="col">LibreChat</th></tr></thead>
         <tbody>
+        <tr><th scope="row">Getting started</th><td>Download the app and open it: choose “Run on this computer” and type your name. No Docker, no config files, no account. The macOS app is signed and notarized, so it opens like any other app.</td><td>Install Git and Docker, clone the repository, copy .env.example to .env and run docker compose up. Then open localhost:3080 and register; the first account becomes admin. Its docs say the stack needs at least 1 GiB of RAM and runs MongoDB, Meilisearch and a RAG API with PostgreSQL.</td></tr>
+        <tr><th scope="row">Connecting your models</th><td>It finds Ollama, llama.cpp and LM Studio on their usual ports, and API keys set in the environment. Set up opens the provider form already filled in.</td><td>API keys go in .env, or each user enters their own. A custom endpoint such as Ollama needs librechat.yaml, .env and a docker-compose.override.yml, and from Docker the address is host.docker.internal or the host’s network address. An endpoint missing a required field is dropped without an error.</td></tr>
+        <tr><th scope="row">Updating</th><td>The desktop app downloads new versions by itself and installs them when you restart it. A server updates when an admin presses Update server, or with docker compose pull.</td><td>Its docs give manual steps for Docker: stop the stack, remove the images, git pull, docker compose pull and start again. The README says to read the changelog for breaking changes first.</td></tr>
+        <tr><th scope="row">When something goes wrong</th><td>A troubleshooting page, Copy diagnostics in Settings, and a report button (F1) that sends a screenshot and diagnostics only when you press Send.</td><td>Docs sections for port conflicts, containers that crash on startup, missing environment variables, endpoints that don’t appear and an empty Ollama model list.</td></tr>
         <tr><th scope="row">Licence</th><td>PolyForm Noncommercial 1.0.0: source-available, free for noncommercial use. Commercial use needs a license from the author. Not open source.</td><td>MIT.</td></tr>
         <tr><th scope="row">Ways to run it</th><td>Desktop apps for macOS, Windows and Linux, a web app you host with Docker, and a terminal app, all on one backend.</td><td>Docker, npm and a Helm chart. It is a self-hosted web application, not a desktop app.</td></tr>
         <tr><th scope="row">Local models</th><td>Ollama, llama.cpp, LM Studio or any OpenAI-compatible server.</td><td>Ollama, Apple MLX, koboldcpp and other local servers it lists.</td></tr>
         <tr><th scope="row">Hosted models</th><td>Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, OpenCode Zen, a ChatGPT or Mistral Vibe plan, or any OpenAI-compatible endpoint.</td><td>Anthropic, AWS Bedrock, OpenAI, Azure OpenAI, Google, Vertex AI, Mistral, Groq, OpenRouter and custom OpenAI-compatible endpoints.</td></tr>
-        <tr><th scope="row">Tools and MCP</th><td>MCP connectors, skills, sub-agents and hooks; it reads existing agent skills, commands and hooks where they already live.</td><td>Agents, MCP, skills, sub-agents, a sandboxed Code Interpreter API (Python, JavaScript, Go, Rust and more), web search and artifacts.</td></tr>
+        <tr><th scope="row">Tools and MCP</th><td>MCP connectors, skills, sub-agents and hooks; it reads existing agent skills, commands and hooks where they already live.</td><td>Agents, MCP, skills, sub-agents, a sandboxed Code Interpreter API (Python, JavaScript, Go, Rust and more; its docs say an admin must deploy a separate service for it), web search and artifacts.</td></tr>
         <tr><th scope="row">Coding in a project folder</th><td>Code is a built-in mode: agentic sessions in a project folder, with permission rules, diffs and git.</td><td>Attached workspaces, which it labels highly experimental, let agents read, search and edit files and run commands, with Ask, Allow or Deny for writes and commands.</td></tr>
         <tr><th scope="row">Voice</th><td>Dictation in the message box (since 0.10.0): the Mac’s own speech recognition on a Mac, Atelier’s own speech model elsewhere. It also generates speech, music and sound.</td><td>Speech-to-text and text-to-speech through OpenAI, Azure OpenAI and ElevenLabs.</td></tr>
         <tr><th scope="row">Accounts and teams</th><td>Server mode has accounts, roles, invites and sign-in through an identity provider (OIDC). The desktop app runs on its own with no account.</td><td>An admin panel with users, groups and roles; OAuth2, LDAP and email sign-in; its site also lists SAML and two-factor sign-in.</td></tr>
@@ -85,6 +89,16 @@
         </tbody>
       </table>
     </div>
+
+    <h2>Easy to start, and nothing you give up</h2>
+    <p>Atelier asks little at the start. It is also a lot of app: this is what you have once it is running.</p>
+    <ul>
+      <li>Chat and Code in one app: artifacts, projects, memory, web research, tasks that run in the background and sub-agents, and Code sessions in your project folders with permission rules, diffs and git.</li>
+      <li>MCP connectors, skills, hooks and plugins, and it reads existing agent skills, commands and hooks where they already live.</li>
+      <li>Image, video and audio generation, and dictation (the Mac’s own recognition on a Mac, Atelier’s own speech model elsewhere).</li>
+      <li>Computer use, co-op sessions with other people, Remote Control of a session on another of your computers, and a terminal app.</li>
+      <li>One backend for all of it: the desktop app can be the server for a team, with accounts, roles and sign-in through your identity provider.</li>
+    </ul>
 
     <h2>Where LibreChat is stronger</h2>
     <ul>
@@ -95,22 +109,23 @@
 
     <h2>Where Atelier is different</h2>
     <ul>
-      <li>Native desktop apps for macOS, Windows and Linux, and a terminal app, besides the web app.</li>
-      <li>Code mode for project folders is a built-in part of the app, not an experimental add-on.</li>
-      <li>One backend serves the desktop app and the server, so a conversation can start on your laptop and move to a shared server.</li>
+      <li>Nothing to host to start: download, open, type your name. No Docker, no .env, no YAML, no account.</li>
+      <li>It finds Ollama, llama.cpp and LM Studio by itself and fills in the provider form. No override files, no container networking.</li>
+      <li>The desktop app downloads its own updates instead of a list of manual steps.</li>
+      <li>Code is a built-in mode for project folders, not an experimental add-on, and the same backend can be shared on a server later.</li>
       <li>No telemetry, and every system prompt published in the docs.</li>
     </ul>
 
     <h2>Choose LibreChat if</h2>
     <ul>
       <li>You need a permissive licence, or you plan commercial use.</li>
-      <li>You want a web-only deployment with a large provider list and a sandboxed code interpreter.</li>
+      <li>You want a web-only deployment with a large provider list and a sandboxed code interpreter, and you are happy to run Docker.</li>
     </ul>
 
     <h2>Choose Atelier if</h2>
     <ul>
-      <li>You want desktop apps as well as a server.</li>
-      <li>You want an agent that works in your project folders as a normal part of the app.</li>
+      <li>You want it working in minutes without administering anything.</li>
+      <li>You want desktop apps as well as a server, and an agent that works in your project folders as a normal part of the app.</li>
     </ul>
     <p><a class="btn btn-primary" href="/download/">Download Atelier</a> <a class="btn btn-quiet" href="https://docs.atelierhq.dev/getting-started/">Get started</a></p>
 
@@ -118,6 +133,11 @@
     <p class="fine">Read on 16 November 2026. Atelier’s side is from its <a href="https://docs.atelierhq.dev/">documentation</a>.</p>
     <ul class="sources">
       <li><a href="https://github.com/LibreChat-AI/LibreChat">LibreChat on GitHub</a></li>
+      <li><a href="https://www.librechat.ai/docs/local/docker">LibreChat: Docker install</a></li>
+      <li><a href="https://www.librechat.ai/docs/quick_start/first_chat">LibreChat: first chat</a></li>
+      <li><a href="https://www.librechat.ai/docs/quick_start/custom_endpoints">LibreChat: custom endpoints</a></li>
+      <li><a href="https://www.librechat.ai/docs/configuration/librechat_yaml/ai_endpoints/ollama">LibreChat: Ollama</a></li>
+      <li><a href="https://www.librechat.ai/docs/features/code_interpreter">LibreChat: code interpreter</a></li>
       <li><a href="https://raw.githubusercontent.com/danny-avila/LibreChat/main/LICENSE">LibreChat licence</a></li>
       <li><a href="https://www.librechat.ai/docs">LibreChat documentation</a></li>
       <li><a href="https://librechat.ai/">LibreChat website</a></li>

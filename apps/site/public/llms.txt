@@ -1,6 +1,6 @@
 # Atelier
 
-> Atelier is a self-hosted AI workspace with Chat and Code, on the models you choose: local (Ollama, llama.cpp, LM Studio) or hosted (Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, any OpenAI-compatible endpoint). It runs as desktop apps for macOS, Windows and Linux, as a web app you host with Docker, and as a terminal app, all on one backend. Source-available under the PolyForm Noncommercial license (free for noncommercial use). No telemetry.
+> Atelier is an AI workspace that is easy to start and still powerful: Chat and Code on the models you choose, local (Ollama, llama.cpp, LM Studio) or hosted (Anthropic, OpenAI, Mistral, GitHub Copilot, OpenRouter, any OpenAI-compatible endpoint). Download the app, open it and type your name: no Docker, config files or account. It finds the models you already run, updates itself, and has MCP, skills, image, video and audio generation, dictation, computer use and a server mode with accounts. Desktop apps for macOS, Windows and Linux, a web app you host with Docker and a terminal app share one backend. Source-available under the PolyForm Noncommercial license (free for noncommercial use). No telemetry.
 
 Atelier is an independent project, not affiliated with any model provider. The website is atelierhq.dev, the documentation docs.atelierhq.dev and the source github.com/TheOriUHD/atelier.
 
@@ -11,11 +11,11 @@ Atelier is an independent project, not affiliated with any model provider. The w
 - [Documentation for language models](https://docs.atelierhq.dev/llms.txt): an index of the documentation pages in Markdown, and [the whole documentation in one file](https://docs.atelierhq.dev/llms-full.txt)
 
 ## Compared with other apps
-- [All comparisons](https://atelierhq.dev/compare/): Atelier next to Open WebUI, LibreChat, LM Studio, AnythingLLM, Jan and Msty
-- [Atelier vs Open WebUI](https://atelierhq.dev/compare/open-webui/): How Atelier and Open WebUI differ: licence, desktop apps, coding mode, accounts and models.
-- [Atelier vs LibreChat](https://atelierhq.dev/compare/librechat/): How Atelier and LibreChat differ: licence, desktop apps, agents, code execution and accounts.
-- [Atelier vs LM Studio](https://atelierhq.dev/compare/lm-studio/): How Atelier and LM Studio differ: running models versus using them, licence, servers and coding mode.
-- [Atelier vs AnythingLLM](https://atelierhq.dev/compare/anythingllm/): How Atelier and AnythingLLM differ: documents versus coding, licence, telemetry, desktop and Docker.
+- [All comparisons](https://atelierhq.dev/compare/): Atelier next to Open WebUI, LibreChat, LM Studio, AnythingLLM, Jan and Msty, with how much setup each asks for
+- [Atelier vs Open WebUI](https://atelierhq.dev/compare/open-webui/): Atelier vs Open WebUI: both are powerful, but Atelier starts with a download, not Docker and config files. Setup, updates and licence compared.
+- [Atelier vs LibreChat](https://atelierhq.dev/compare/librechat/): Atelier vs LibreChat: both are powerful, but Atelier starts with a download, not Docker, .env and YAML files. Setup, updates and licence compared.
+- [Atelier vs LM Studio](https://atelierhq.dev/compare/lm-studio/): Atelier vs LM Studio: LM Studio runs models, Atelier is the easy, powerful workspace on top of them. Setup, licence, servers and coding mode.
+- [Atelier vs AnythingLLM](https://atelierhq.dev/compare/anythingllm/): Atelier vs AnythingLLM: both start from a desktop app; Atelier adds Code mode, no telemetry and a shared server. Setup, licence and telemetry compared.
 
 ## Source and releases
 - [GitHub](https://github.com/TheOriUHD/atelier): source, issues and releases
