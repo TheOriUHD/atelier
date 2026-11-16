@@ -25,6 +25,8 @@ export default defineConfig({
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://atelierhq.dev/og.jpg' } },
         { tag: 'meta', attrs: { property: 'og:site_name', content: 'Atelier Docs' } },
         { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://atelierhq.dev/og.jpg' } },
+        // Bing Webmaster Tools' proof that this site is ours (the same tag is on the website).
+        { tag: 'meta', attrs: { name: 'msvalidate.01', content: '41F426E82A86E297684709193B1CF189' } },
         {
           tag: 'script',
           attrs: { type: 'application/ld+json' },
