@@ -20,6 +20,9 @@ struct ChatSidebar: View {
     @Bindable var store: AppStore
     @Binding var mode: HomeMode
     let actions: ChatSidebarActions
+    /// What the detail column shows next to the list. The open conversation is marked in the list only when it is on
+    /// screen beside it: on a phone the list is the whole screen, so nothing is "open" there.
+    var route: ChatRoute = .conversation
     @Environment(\.horizontalSizeClass) private var sizeClass
     @AppStorage("chat.grouping") private var chatGrouping = ChatGrouping.date.rawValue
     @AppStorage("chat.sorting") private var chatSorting = ChatSorting.activity.rawValue
@@ -249,9 +252,13 @@ struct ChatSidebar: View {
 
     // MARK: rows
 
+    private func isOpen(_ session: Conversation) -> Bool {
+        sizeClass == .regular && route == .conversation && store.selected == session.id
+    }
+
     private func row(_ session: Conversation) -> some View {
-        ChatSessionRow(store: store, session: session, selected: store.selected == session.id) { actions.open(session.id) }
-            .listRowBackground(store.selected == session.id ? Theme.fill : Color.clear)
+        ChatSessionRow(store: store, session: session, selected: isOpen(session)) { actions.open(session.id) }
+            .listRowBackground(isOpen(session) ? Theme.fill : Color.clear)
             .listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18))
             .listRowSeparator(.hidden)
             .swipeActions(edge: .leading) {
@@ -282,8 +289,8 @@ struct ChatSidebar: View {
 
     @ViewBuilder private var searchRows: some View {
         ForEach(results.items) { session in
-            ChatSessionRow(store: store, session: session, selected: store.selected == session.id, showsArchived: true) { actions.open(session.id) }
-                .listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18)).listRowSeparator(.hidden)
+            ChatSessionRow(store: store, session: session, selected: isOpen(session), showsArchived: true) { actions.open(session.id) }
+                .listRowBackground(isOpen(session) ? Theme.fill : Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18)).listRowSeparator(.hidden)
         }
     }
 }

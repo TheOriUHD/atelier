@@ -44,7 +44,7 @@ struct RootView: View {
     var body: some View {
         if store.signedIn, !needsNewPassword {
             NavigationSplitView(columnVisibility: $column, preferredCompactColumn: $compactColumn) {
-                ChatSidebar(store: store, mode: $mode, actions: sidebarActions)
+                ChatSidebar(store: store, mode: $mode, actions: sidebarActions, route: route)
                     .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 420)
             } detail: {
                 detail
