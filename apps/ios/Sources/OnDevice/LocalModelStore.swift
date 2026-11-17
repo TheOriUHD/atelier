@@ -69,7 +69,7 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
         super.init()
         makeSession()
         for spec in LocalModelSpec.catalog { states[spec.id] = FileManager.default.fileExists(atPath: Self.marker(spec.id).path) ? .installed : .notInstalled }
-        #if DEBUG
+        #if DEBUG || E2E
         // `--fake-models lfm2.5-1.2b,qwen3-1.7b`: those count as downloaded (for the simulator, which runs no model).
         if let list = Launch.value("--fake-models") {
             for id in list.split(separator: ",").map(String.init) where LocalModelSpec.spec(id) != nil {

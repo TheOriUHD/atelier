@@ -144,7 +144,10 @@ import UniformTypeIdentifiers
         UserDefaults.standard.set(userName, forKey: "userName")
         connectionNote = nil
         authStatus = status
-        info = (try? await rpc.call("app.info")) ?? .null
+        // What the server offers decides what the app shows: asked twice, since one lost answer would hide features until the next sign-in.
+        var offered = try? await rpc.call("app.info")
+        if offered == nil { offered = try? await rpc.call("app.info") }
+        info = offered ?? .null
         signedIn = true; connected = true
         needsCheck = false
         DeveloperOptions.shared.noteAttempt(reset: true)

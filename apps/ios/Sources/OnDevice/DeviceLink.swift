@@ -69,6 +69,8 @@ import UIKit
                 return
             } catch {
                 failures += 1
+                NSLog("DEVICELINK failed (%d in a row): %@, close code %d", failures, error.localizedDescription, task?.closeCode.rawValue ?? -1)
+                print("DEVICELINK failed (\(failures) in a row): \(error.localizedDescription), close code \(task?.closeCode.rawValue ?? -1)")
             }
             close()
             let delays: [Double] = [1, 2, 4, 8, 10]
@@ -82,6 +84,7 @@ import UIKit
         parts.scheme = base.scheme == "http" ? "ws" : "wss"
         parts.path = "/api/devices/link"
         var request = URLRequest(url: parts.url!)
+        request.timeoutInterval = 15
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(identity.deviceID, forHTTPHeaderField: "x-atelier-device-id")
         request.setValue(identity.name, forHTTPHeaderField: "x-atelier-device-name")
@@ -93,7 +96,9 @@ import UIKit
         task.maximumMessageSize = 64 * 1024 * 1024
         task.resume()
         lastHeard = Date()
+        NSLog("DEVICELINK connecting to %@", parts.url?.absoluteString ?? "")
         try await send(hello())
+        NSLog("DEVICELINK hello sent")
         // The server pings every ten seconds; two missed pings and the link is taken for dead.
         watchdog?.cancel()
         watchdog = Task { [weak self] in

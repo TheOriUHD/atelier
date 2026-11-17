@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import CryptoKit
 
 /// Ties the models on this phone to the server the person is signed in to: the phone is registered as a device, lends its
 /// models over the device link, and the server lists them as the person's own models on this phone only. The conversation
@@ -24,19 +25,38 @@ import UIKit
     private var working = false
     private var again = false
 
-    private static let defaults = UserDefaults.standard
+    /// What the hub is doing, for trying it on a device (`--e2e-send` builds print it).
+    private func trace(_ text: String) {
+        #if DEBUG || E2E
+        NSLog("HUB %@", text)
+        print("HUB \(text)")
+        #endif
+    }
 
-    /// This device's own id and the id its models' provider has on the server: made once, kept.
+    /// This device's own id and the id its models' provider has on the server. The id is kept in the Keychain, which
+    /// survives deleting and installing the app again, and the provider's id comes from it: the same phone is the same
+    /// device to the server, and no model list is left behind from an earlier install.
     private var identity: DeviceLink.Identity {
-        let device = Self.defaults.string(forKey: "onDeviceID") ?? UUID().uuidString.lowercased()
-        Self.defaults.set(device, forKey: "onDeviceID")
-        var provider = Self.defaults.string(forKey: "onDeviceProvider")
-        if provider == nil {
-            let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
-            provider = "u-" + String((0..<10).map { _ in alphabet.randomElement()! })
-            Self.defaults.set(provider, forKey: "onDeviceProvider")
-        }
-        return DeviceLink.Identity(deviceID: device, name: UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone", providerID: provider!)
+        let device = Self.stableDeviceID()
+        let digest = SHA256.hash(data: Data(device.utf8))
+        let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789")
+        let provider = "u-" + String(digest.prefix(10).map { alphabet[Int($0) % alphabet.count] })
+        return DeviceLink.Identity(deviceID: device, name: UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone", providerID: provider)
+    }
+
+    private static func stableDeviceID() -> String {
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.atelier.mobile.device", kSecAttrAccount as String: "id"]
+        var query = base
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var found: CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary, &found) == errSecSuccess, let data = found as? Data, let id = String(data: data, encoding: .utf8), UUID(uuidString: id) != nil { return id }
+        let id = UUID().uuidString.lowercased()
+        var add = base
+        add[kSecValueData as String] = Data(id.utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+        return id
     }
 
     var providerID: String { identity.providerID }
@@ -54,7 +74,11 @@ import UIKit
     }
 
     private func syncOnce(_ store: AppStore) async {
+        trace("sync: signedIn \(store.signedIn), connected \(store.connected), info \(store.info != .null), registered \(registered)")
         guard store.signedIn, store.connected else { registered = false; status = .idle; stopLink(); return }
+        // What the server offers arrives just after the connection: until then there is nothing to decide.
+        if store.info == .null, let fresh = try? await store.rpc.call("app.info") { store.info = fresh }
+        guard store.info != .null else { status = .connecting; return }
         guard store.offers("deviceOnlyModels") else {
             status = store.authStatus["local"].bool ? .needsRealServer : .needsNewerServer
             stopLink()
@@ -67,7 +91,8 @@ import UIKit
             do {
                 _ = try await store.rpc.call("devices.register", ["id": .string(identity.deviceID), "name": .string(identity.name), "platform": .string("ios")])
                 registered = true
-            } catch { status = .failed(error.localizedDescription); return }
+                trace("registered as a device")
+            } catch { trace("register failed: \(error)"); status = .failed(error.localizedDescription); return }
         }
         if installed.isEmpty {
             // Nothing to lend: the provider goes from the server's lists, and the link closes.
@@ -87,7 +112,7 @@ import UIKit
         }
         // The server must have heard the link's hello before it takes the provider.
         var saved = false
-        for attempt in 0..<12 {
+        for attempt in 0..<50 {
             if link?.connected == true {
                 do {
                     _ = try await store.rpc.call("personalProviders.save", [
@@ -95,9 +120,11 @@ import UIKit
                         "baseUrl": .string(DeviceLink.lentBaseURL), "enabled": .bool(true), "parallelRequests": .number(1),
                     ])
                     saved = true
+                    trace("provider saved")
                     break
                 } catch {
-                    if attempt == 11 { status = .failed(error.localizedDescription); return }
+                    trace("save attempt \(attempt) failed: \(error)")
+                    if attempt == 49 { status = .failed(error.localizedDescription); return }
                 }
             }
             try? await Task.sleep(for: .milliseconds(500))
@@ -113,7 +140,8 @@ import UIKit
 
     private func linkChanged(_ store: AppStore) {
         // The link coming back after a break: the server needs the provider checked again.
-        if link?.connected == true, status == .ready || status == .connecting { Task { await sync(store) } }
+        trace("link is \(link?.connected == true ? "up" : "down"), status \(status)")
+        if link?.connected == true, status != .ready { Task { await sync(store) } }
     }
 
     func stopLink() {

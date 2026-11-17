@@ -10,12 +10,16 @@ enum OnDeviceDebug {
         // Signed in? (An autologin that failed says why.)
         for _ in 0..<40 where !(store.signedIn && store.connected) { try? await Task.sleep(for: .milliseconds(500)) }
         guard store.signedIn, store.connected else { say("not signed in or not connected: \(store.error ?? "no error")"); return }
-        say("signed in; device status \(OnDeviceHub.shared.status)")
+        say("signed in; device status \(OnDeviceHub.shared.status); info \(store.info == .null ? "missing" : "\(store.info.pretty.count) characters")")
+        if store.info == .null { do { let fresh = try await store.rpc.call("app.info"); say("app.info answered now: deviceOnlyModels \(fresh["deviceOnlyModels"])") } catch { say("app.info failed: \(error)") } }
         // Wait for the link, the provider and the model list.
         var reference: String?
         for _ in 0..<80 {
             if OnDeviceHub.shared.status == .ready, let models = try? await store.rpc.call("models.list", [:]) {
-                reference = models.array.first { $0["personal"]["exclusive"].bool && $0["available"] != .bool(false) }?["ref"].stringOrNil
+                let wanted = Launch.value("--e2e-model")
+                reference = models.array.first { model in
+                    model["personal"]["exclusive"].bool && model["available"] != .bool(false) && (wanted.map { model["ref"].string.hasSuffix("/" + $0) } ?? true)
+                }?["ref"].stringOrNil
                 if reference != nil { break }
             }
             try? await Task.sleep(for: .milliseconds(500))

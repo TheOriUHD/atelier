@@ -53,7 +53,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                     guard let link = PairingLink.parse(url.absoluteString) else { return }
                     store.perform { try await store.signIn(pairing: link) }
                 }
-                .task(id: "\(store.signedIn)|\(store.connected)") {
+                .task(id: "\(store.signedIn)|\(store.connected)|\(store.info != .null)") {
                     guard !demo else { return }
                     LocalModelStore.shared.onChange = { Task { await OnDeviceHub.shared.sync(store) } }
                     await OnDeviceHub.shared.sync(store)
