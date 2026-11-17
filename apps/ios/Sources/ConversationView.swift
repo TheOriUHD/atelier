@@ -11,7 +11,10 @@ struct ConversationView: View {
     @State private var modelPicker = false
     @State private var showArtifacts = false
     @State private var sheet: ChatSheet?
+    /// Whether the page follows the newest text. It stops when the person scrolls away and starts again when they are back at the end.
     @State private var follow = true
+    @State private var nearBottom = true
+    @State private var scrolling = false
     @State private var prompt = ChatSessionPrompt()
     @State private var wholeFile: JSON?
     @State private var editing: Turn?
@@ -208,14 +211,31 @@ struct ConversationView: View {
             .scrollDismissesKeyboard(.interactively)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             .scrollEdgeEffectStyle(.hard, for: .top)
-            .onScrollPhaseChange { _, phase in if phase == .interacting { follow = false } }
+            .onScrollPhaseChange { _, phase in
+                scrolling = phase == .interacting
+                if phase == .interacting { follow = false } else if phase == .idle { follow = nearBottom }
+            }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentSize.height - geometry.visibleRect.maxY < 56
+            } action: { _, atEnd in
+                nearBottom = atEnd
+                if atEnd, !scrolling { follow = true }
+            }
             .onChange(of: store.transcript.seq) { _, _ in if follow { proxy.scrollTo("bottom", anchor: .bottom) } }
-            .overlay(alignment: .bottomTrailing) {
+            .overlay(alignment: .bottom) {
                 if !follow {
-                    Button { follow = true; withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } } label: {
-                        HStack(spacing: 6) { Image(systemName: "arrow.down").font(.system(size: 15, weight: .semibold)); if running { ProgressView().controlSize(.mini) } }.frame(minWidth: 40, minHeight: 40).padding(.horizontal, running ? 8 : 0)
+                    Button { follow = true; withAnimation(.snappy) { proxy.scrollTo("bottom", anchor: .bottom) } } label: {
+                        Image(systemName: "arrow.down").font(.system(size: 15, weight: .regular)).foregroundStyle(Theme.ink)
+                            .frame(width: 38, height: 38)
+                            .background(Theme.surface, in: Circle())
+                            .overlay(Circle().stroke(Theme.hairline, lineWidth: 0.5))
+                            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                            .contentShape(Circle())
                     }
-                    .buttonStyle(.glass).clipShape(Capsule()).padding(16).transition(.scale.combined(with: .opacity)).accessibilityLabel(running ? "Scroll to the end, still working" : "Scroll to the end")
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 12)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+                    .accessibilityLabel(running ? "Scroll to the end, still working" : "Scroll to the end")
                 }
             }
             .animation(.snappy, value: follow)

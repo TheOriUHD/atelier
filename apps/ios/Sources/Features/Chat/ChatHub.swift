@@ -82,6 +82,7 @@ import UniformTypeIdentifiers
         case "projects.changed": Task { await reloadProjects() }
         case "sideChats.changed": sideChatTick[value["sessionId"].string, default: 0] += 1
         case "session.event": return sessionEvent(value)
+        case "dictation.update": dictationListener?(value)
         default: break
         }
         return value
@@ -212,6 +213,8 @@ import UniformTypeIdentifiers
     var uploading: [String] = []
     /// Whether dictation has a speech service on this server (the microphone is hidden when it has none).
     var dictationOn = true
+    /// Where the words the server hears while someone dictates are delivered (the dictation in progress sets it).
+    @ObservationIgnored var dictationListener: ((JSON) -> Void)?
 
     func clearCaches() {
         thumbnails = [:]

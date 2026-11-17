@@ -26,7 +26,6 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations: 'UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown'
         INFOPLIST_KEY_NSCameraUsageDescription: Take a photo to attach to your conversation.
         INFOPLIST_KEY_NSMicrophoneUsageDescription: Dictate a message to your Atelier server.
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Attach a photo to your conversation.
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Save pictures from your conversations to your photo library.
         MARKETING_VERSION: '0.1.0'
         CURRENT_PROJECT_VERSION: '1'

@@ -156,7 +156,10 @@ struct ChatComposer: View {
     @State private var photos: [PhotosPickerItem] = []
     @State private var photoPicker = false
     @State private var dictation = Dictation()
-    @State private var transcribing = false
+    /// What was in the box when dictation began: the words heard are added after it.
+    @State private var voiceBase = ""
+    @State private var addSheet = false
+    @State private var afterAdd: ChatAddChoice?
     @State private var sending = false
     /// Skills and commands of the Code session's folder (the server lists them per folder).
     @State private var folderSlash: [JSON]?
@@ -201,8 +204,9 @@ struct ChatComposer: View {
     private var box: some View {
         VStack(alignment: .leading, spacing: 4) {
             attachmentRow
-            TextField(placeholder, text: $store.draft, axis: .vertical)
+            TextField(dictation.active ? "Listening…" : placeholder, text: $store.draft, axis: .vertical)
                 .lineLimit(1...8).focused($focused).font(.system(.body))
+                .allowsHitTesting(!dictation.active)
                 .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 4)
                 .submitLabel(.send)
                 .onKeyPress(.return, phases: .down) { press in
@@ -213,9 +217,13 @@ struct ChatComposer: View {
                 }
                 .onChange(of: store.draft) { _, _ in store.saveDraft() }
                 .accessibilityLabel("Message")
-            controls
+            if dictation.active { voiceControls.transition(.opacity) } else { controls.transition(.opacity) }
         }
+        .animation(.snappy(duration: 0.2), value: dictation.active)
         .glassEffect(.regular, in: .rect(cornerRadius: 28, style: .continuous))
+        .sheet(isPresented: $addSheet, onDismiss: runAfterAdd) {
+            ChatAddSheet(store: store, hub: hub, mode: mode, folderSlash: folderSlash, choose: { afterAdd = $0 }, upload: { data, name, mime in await uploadData(data, name: name, mime: mime) })
+        }
         .fullScreenCover(isPresented: $camera) { CameraView { data in upload(data, name: "Camera.jpg", mime: "image/jpeg") } }
         .fileImporter(isPresented: $filePicker, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             switch result {
@@ -223,9 +231,21 @@ struct ChatComposer: View {
             case .failure(let error): store.error = error.localizedDescription
             }
         }
-        .photosPicker(isPresented: $photoPicker, selection: $photos, maxSelectionCount: 6, matching: .images)
+        .photosPicker(isPresented: $photoPicker, selection: $photos, maxSelectionCount: 20, matching: .images)
         .onChange(of: photos) { _, items in loadPhotos(items) }
-        .onChange(of: phase) { _, value in if value != .active { dictation.cancel() } }
+        .onChange(of: phase) { _, value in if value != .active { cancelDictation() } }
+        .onChange(of: dictation.heard) { _, words in if dictation.active { store.draft = Self.join(voiceBase, words) } }
+        .onAppear {
+            dictation.onFailure = { message in store.draft = voiceBase; store.error = message }
+            #if DEBUG
+            switch Launch.route("conversation") {
+            case "add", "add-large": addSheet = true
+            case "voice": voiceBase = ""; dictation.demo(words: "Hello, this is an example voice")
+            case "listening": voiceBase = ""; dictation.demo(words: "")
+            default: break
+            }
+            #endif
+        }
         .onDisappear { dictation.cancel() }
         .dropDestination(for: URL.self) { urls, _ in
             for url in urls { Task { await upload(url) } }
@@ -239,7 +259,7 @@ struct ChatComposer: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     modelChip
-                    if let effortLabel { effortChip(effortLabel) }
+                    if let effortLabel, let current { EffortMenu(store: store, model: current, mode: mode, label: effortLabel) }
                     if hub.webSearchOn, mode != "code", session?.research ?? hub.newOptions.research { researchChip }
                     if mode == "code", session != nil { PermissionModeChip(store: store) }
                 }
@@ -263,12 +283,6 @@ struct ChatComposer: View {
         }
     }
 
-    private func effortChip(_ label: String) -> some View {
-        Button { modelPicker = true } label: {
-            Text(label).font(.subheadline).foregroundStyle(Theme.inkSecondary).padding(.horizontal, 12).frame(minHeight: 36).background(Theme.fill, in: Capsule())
-        }.buttonStyle(.plain).hoverEffect(.highlight).accessibilityLabel("Effort: \(label)").accessibilityHint("Opens the effort settings")
-    }
-
     private var researchChip: some View {
         Button { setResearch(false) } label: {
             HStack(spacing: 6) { Image(systemName: "binoculars").font(.system(size: 12)); Text("Research").font(.subheadline); Image(systemName: "xmark").font(.system(size: 9, weight: .bold)) }
@@ -279,62 +293,25 @@ struct ChatComposer: View {
     // MARK: the + menu
 
     private var plusMenu: some View {
-        Menu {
-            if UIImagePickerController.isSourceTypeAvailable(.camera) { Button("Take a photo", systemImage: "camera") { camera = true } }
-            Button("Photo library", systemImage: "photo") { photoPicker = true }
-            Button("Choose a file", systemImage: "doc") { filePicker = true }
-            let skills = (folderSlash ?? hub.slash).filter { $0["kind"].string == "skill" }
-            if !skills.isEmpty {
-                Menu {
-                    ForEach(skills, id: \.self) { skill in Button { store.draft = "/\(skill["name"].string) " } label: { Text(skill["name"].string); Text(skill["description"].string) } }
-                } label: { Label("Skills", systemImage: "text.book.closed") }
-            }
-            connectorsMenu
-            if store.isAdmin { Button("Add plugins", systemImage: "puzzlepiece.extension") { openSettings(.plugins) } }
-            if hub.webSearchOn, mode != "code" { researchToggle }
-            if hub.imageGenerationOn, mode != "code", hub.pictureModels.count >= 2 {
-                ImageModelMenu(store: store, hub: hub, current: session?.imageModel ?? hub.newOptions.imageModel) { ref in setImageModel(ref) }
-            }
-        } label: {
+        Button { focused = false; addSheet = true } label: {
             Image(systemName: "plus").font(.system(size: 16, weight: .medium)).foregroundStyle(Theme.inkSecondary).frame(width: 36, height: 36).background(Theme.fill, in: Circle())
-        }.hoverEffect(.highlight).accessibilityLabel("Add files and more")
+        }.buttonStyle(.plain).hoverEffect(.highlight).accessibilityLabel("Add files and more")
     }
 
-    @ViewBuilder private var connectorsMenu: some View {
-        let list = hub.mcp
-        if !list.isEmpty {
-            let off = session?.connectorsOff ?? hub.newOptions.connectorsOff
-            Menu {
-                ForEach(list, id: \.self) { connector in
-                    let name = connector["name"].string
-                    let state = connector["state"].string
-                    Toggle(isOn: Binding(get: { !off.contains(name) }, set: { setConnector(name, on: $0, off: off) })) {
-                        Text(name)
-                        if state == "error" { Text("Not connected") } else if state == "disabled" { Text("Switched off by an admin") }
-                    }.disabled(state == "disabled")
-                }
-            } label: { Label("Connectors, \(list.count - off.filter { name in list.contains { $0["name"].string == name } }.count) on", systemImage: "powerplug") }
+    /// What the + sheet asked for that needs the screen to itself (the camera, the file list, the photo library).
+    private func runAfterAdd() {
+        guard let choice = afterAdd else { return }
+        afterAdd = nil
+        switch choice {
+        case .camera: camera = true
+        case .files: filePicker = true
+        case .photos: photoPicker = true
         }
-    }
-
-    private var researchToggle: some View {
-        Toggle(isOn: Binding(get: { session?.research ?? hub.newOptions.research }, set: { setResearch($0) })) { Label("Research", systemImage: "binoculars") }
-    }
-
-    private func setConnector(_ name: String, on: Bool, off: [String]) {
-        let next = on ? off.filter { $0 != name } : off + [name]
-        guard let session else { hub.newOptions.connectorsOff = next; return }
-        Task { do { try await ChatActions.update(store, session.id, ["connectorsOff": .array(next.map(JSON.string))]) } catch { store.error = ChatError.text(error) } }
     }
 
     private func setResearch(_ on: Bool) {
         guard let session else { hub.newOptions.research = on; return }
         Task { do { try await ChatActions.update(store, session.id, ["research": .bool(on)]) } catch { store.error = ChatError.text(error) } }
-    }
-
-    private func setImageModel(_ ref: String?) {
-        guard let session else { hub.newOptions.imageModel = ref ?? ""; return }
-        Task { do { try await ChatActions.update(store, session.id, ["imageModel": ref.map(JSON.string) ?? .null]) } catch { store.error = ChatError.text(error) } }
     }
 
     // MARK: send and stop
@@ -383,26 +360,64 @@ struct ChatComposer: View {
     // MARK: dictation
 
     private var micButton: some View {
-        Button { toggleDictation() } label: {
-            ZStack {
-                Circle().fill(dictation.recording ? Theme.danger : Theme.fill)
-                if transcribing { ProgressView() }
-                else { Image(systemName: dictation.recording ? "stop.fill" : "mic").font(.system(size: 15, weight: .medium)).foregroundStyle(dictation.recording ? .white : Theme.inkSecondary) }
-            }.frame(width: 36, height: 36)
-        }.buttonStyle(.plain).disabled(transcribing).accessibilityLabel(dictation.recording ? "Stop dictation" : "Dictate")
+        Button { startDictation() } label: {
+            Image(systemName: "mic").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.inkSecondary).frame(width: 36, height: 36).background(Theme.fill, in: Circle())
+        }.buttonStyle(.plain).disabled(dictation.phase == .starting).accessibilityLabel("Dictate")
     }
 
-    private func toggleDictation() {
+    /// While someone speaks the controls give way to the sound: cancel, the waveform, stop (keep the words to edit), send.
+    private var voiceControls: some View {
+        let finishing = dictation.phase == .finishing
+        return HStack(spacing: 10) {
+            Button { cancelDictation() } label: {
+                Image(systemName: "xmark").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.ink).frame(width: 36, height: 36).background(Theme.fill, in: Circle())
+            }.buttonStyle(.plain).disabled(finishing).accessibilityLabel("Cancel dictation")
+            VoiceWave(levels: dictation.levels).frame(height: 36).frame(maxWidth: .infinity)
+            Button { finishDictation(send: false) } label: {
+                ZStack {
+                    Circle().fill(Theme.fill)
+                    if finishing { ProgressView() } else { Image(systemName: "stop.fill").font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink) }
+                }.frame(width: 36, height: 36)
+            }.buttonStyle(.plain).disabled(finishing).accessibilityLabel("Stop dictation and keep the words")
+            Button { finishDictation(send: true) } label: {
+                Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(.white).frame(width: 36, height: 36).background(Theme.clay, in: Circle())
+            }.buttonStyle(.plain).disabled(finishing || !store.connected).accessibilityLabel("Stop dictation and send")
+        }.padding(.horizontal, 10).padding(.bottom, 10).padding(.top, 2)
+    }
+
+    private func startDictation() {
+        focused = false
+        voiceBase = store.draft
+        Task {
+            do { try await dictation.start(rpc: store.rpc, hub: hub) } catch is CancellationError { return } catch { store.error = ChatError.text(error) }
+        }
+    }
+
+    private func cancelDictation() {
+        guard dictation.active else { return }
+        dictation.cancel()
+        store.draft = voiceBase
+    }
+
+    private func finishDictation(send: Bool) {
         Task {
             do {
-                if dictation.recording {
-                    transcribing = true
-                    defer { transcribing = false }
-                    let text = try await dictation.finish(rpc: store.rpc)
-                    store.draft += (store.draft.isEmpty || text.isEmpty ? "" : " ") + text
-                } else { try await dictation.start() }
-            } catch is CancellationError { return } catch { store.error = ChatError.text(error) }
+                let words = try await dictation.finish()
+                store.draft = Self.join(voiceBase, words)
+                if send { submit() }
+            } catch is CancellationError { return } catch {
+                // What was heard stays in the box.
+                store.error = ChatError.text(error)
+            }
         }
+    }
+
+    /// The words after what was already typed, with one space between.
+    static func join(_ base: String, _ words: String) -> String {
+        let spoken = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !spoken.isEmpty else { return base }
+        guard let last = base.last else { return spoken }
+        return last.isWhitespace ? base + spoken : base + " " + spoken
     }
 
     // MARK: attachments
@@ -428,10 +443,8 @@ struct ChatComposer: View {
         for item in items {
             Task {
                 do {
-                    guard let data = try await item.loadTransferable(type: Data.self) else { return }
-                    let mime = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
-                    let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
-                    await uploadData(data, name: "Photo.\(ext)", mime: mime)
+                    guard let file = try await ChatPhotoFile.load(item) else { store.error = "That photo's format isn't supported."; return }
+                    await uploadData(file.data, name: file.name, mime: file.mime)
                 } catch is CancellationError { return } catch { store.error = ChatError.text(error) }
             }
         }

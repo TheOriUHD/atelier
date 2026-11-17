@@ -449,4 +449,19 @@ import SwiftUI
         XCTAssertEqual(try luminance([painted, erased], x: 50, y: 50), 0, "erasing paints black again")
         XCTAssertEqual(try luminance([painted, erased], x: 57, y: 50), 255)
     }
+
+    // MARK: voice and the effort menu
+
+    func testDictatedWordsJoinWhatWasTypedWithOneSpace() {
+        XCTAssertEqual(ChatComposer.join("", "hello there"), "hello there")
+        XCTAssertEqual(ChatComposer.join("Please", " add tests "), "Please add tests")
+        XCTAssertEqual(ChatComposer.join("Line one\n", "line two"), "Line one\nline two")
+        XCTAssertEqual(ChatComposer.join("Keep this", "  "), "Keep this")
+    }
+
+    func testTheEffortMenuShowsOnlyTheFirstSentenceOfAnExplanation() {
+        XCTAssertEqual(EffortMenu.firstSentence("Fastest replies, fewest tool calls. Quick questions and small edits."), "Fastest replies, fewest tool calls.")
+        XCTAssertEqual(EffortMenu.firstSentence("Max uses about 3.5 times more tokens."), "Max uses about 3.5 times more tokens.")
+        XCTAssertEqual(EffortMenu.symbol("ultracode"), "sparkles")
+    }
 }

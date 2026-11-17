@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Choose the model, and how hard it thinks. In a conversation a change applies from the next message; on a new page it
-/// is what the conversation starts with. A person's pick becomes their model for the next conversations too, as on the desktop.
+/// Choose the model. In a conversation a change applies from the next message; on a new page it is what the conversation
+/// starts with. A person's pick becomes their model for the next conversations too, as on the desktop. (How hard it thinks has its own menu.)
 struct ModelPicker: View {
     @Bindable var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +24,6 @@ struct ModelPicker: View {
                         ForEach(group.models, id: \.self) { model in row(model) }
                     } header: { Text(group.offline ? "\(group.label), not connected" : group.label) }
                 }
-                if let current, query.isEmpty { effortSection(current) }
                 if store.isAdmin, usable > 0, query.isEmpty {
                     Section { Button { dismiss(); openSettings(.providers) } label: { Label("Add a provider", systemImage: "plus.circle").foregroundStyle(Theme.clay) } } footer: { Text("Connect Ollama, llama.cpp, Anthropic, OpenAI or any compatible endpoint.") }
                 }
@@ -87,86 +86,75 @@ struct ModelPicker: View {
         }
         if hub.rememberLastModel { Task { await hub.setPref(["models", mode == "code" ? "code" : "chat"], .string(ref)) } }
     }
-
-    @ViewBuilder private func effortSection(_ model: JSON) -> some View {
-        let levels = ChatEffort.choices(model, mode: mode, ultracode: hub.ultracodeOn)
-        if levels.count > 1 {
-            Section {
-                ChatEffortControl(model: model, mode: mode, effort: store.selectedEffort.isEmpty ? nil : store.selectedEffort, ultracode: hub.ultracodeOn) { level in
-                    store.selectedEffort = level
-                    if store.selected != nil { Task { do { try await store.updateModel() } catch { store.error = ChatError.text(error) } } }
-                }
-                if model["capabilities"]["reasoning"].string == "toggle" {
-                    ThinkingToggle(store: store, model: model)
-                }
-            } header: { Text("How hard it thinks") } footer: { Text(store.selected == nil ? "Applies to this conversation." : "Applies from your next message.") }
-        }
-    }
 }
 
-/// The level of effort: a row of stops from fast to thorough, what the chosen one means, and what it costs.
-struct ChatEffortControl: View {
+/// The effort chip's own small menu: how hard the model thinks, apart from the model list. In a conversation a change
+/// applies from the next message; on a new page it is what the conversation starts with.
+struct EffortMenu: View {
+    @Bindable var store: AppStore
     let model: JSON
     let mode: String
-    let effort: String?
-    var ultracode = true
-    let onChange: (String) -> Void
-
-    var body: some View {
-        let levels = ChatEffort.choices(model, mode: mode, ultracode: ultracode)
-        let shown = ChatEffort.shown(effort, model: model, mode: mode, ultracode: ultracode) ?? levels.first ?? ""
-        let recommended = ChatEffort.recommended(model, mode: mode)
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Faster").font(.footnote).foregroundStyle(Theme.inkMuted)
-                Spacer()
-                Text("Smarter").font(.footnote).foregroundStyle(Theme.inkMuted)
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(levels, id: \.self) { level in
-                        let selected = level == shown
-                        Button { UISelectionFeedbackGenerator().selectionChanged(); onChange(level) } label: {
-                            VStack(spacing: 2) {
-                                Text(ChatEffort.name(level, model: model)).font(.subheadline.weight(.medium))
-                                if level == recommended { Text("Recommended").font(.system(size: 9, weight: .semibold)).textCase(.uppercase).opacity(0.8) }
-                            }
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .foregroundStyle(selected ? .white : Theme.ink)
-                            .background(selected ? AnyShapeStyle(Theme.clay) : AnyShapeStyle(Theme.fill), in: Capsule())
-                        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
-                    }
-                }
-            }
-            Text(ChatEffort.explanation(shown, model: model, mode: mode)).font(.footnote).foregroundStyle(Theme.inkSecondary).fixedSize(horizontal: false, vertical: true)
-            if let warning = ChatEffort.warning(shown, model: model) {
-                Label(warning, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Color(hex: 0xB77800))
-            }
-        }
-        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-    }
-}
-
-/// Thinking on or off, for a model that has only a switch (the levels above Medium always think).
-struct ThinkingToggle: View {
-    let store: AppStore
-    let model: JSON
-    @State private var on = true
+    let label: String
     private var hub: ChatHub { ChatHub.of(store) }
     private var session: Conversation? { store.sessions.first { $0.id == store.selected } }
 
     var body: some View {
-        let always = ["xhigh", "max", "ultracode"].contains(ChatEffort.shown(store.selectedEffort.isEmpty ? nil : store.selectedEffort, model: model, mode: session?.mode ?? "chat", ultracode: hub.ultracodeOn) ?? "")
-        Toggle(isOn: Binding(get: { always || on }, set: { set($0) })) {
-            VStack(alignment: .leading, spacing: 2) { Text("Thinking"); Text(always ? "Always on at this level" : "Recommended").font(.footnote).foregroundStyle(Theme.inkMuted) }
-        }.tint(Theme.clay).disabled(always)
-        .onAppear { on = session?.thinking ?? hub.thinkingDefault }
+        let levels = ChatEffort.choices(model, mode: mode, ultracode: hub.ultracodeOn)
+        let stored = session.map { $0.effort.isEmpty ? nil : $0.effort } ?? (store.selectedEffort.isEmpty ? nil : store.selectedEffort)
+        let shown = ChatEffort.shown(stored, model: model, mode: mode, ultracode: hub.ultracodeOn) ?? levels.first ?? ""
+        let recommended = ChatEffort.recommended(model, mode: mode)
+        Menu {
+            Picker("Effort", selection: Binding(get: { shown }, set: { choose($0) })) {
+                ForEach(levels, id: \.self) { level in
+                    Label {
+                        Text(ChatEffort.name(level, model: model) + (level == recommended ? ", recommended" : ""))
+                        Text(Self.firstSentence(ChatEffort.explanation(level, model: model, mode: mode)))
+                    } icon: { Image(systemName: Self.symbol(level)) }.tag(level)
+                }
+            }
+            if model["capabilities"]["reasoning"].string == "toggle" {
+                let always = ["xhigh", "max", "ultracode"].contains(shown)
+                Divider()
+                Toggle(isOn: Binding(get: { always || (session?.thinking ?? hub.thinkingDefault) }, set: { setThinking($0) })) {
+                    Label { Text("Thinking"); Text(always ? "Always on at this level" : "Recommended") } icon: { Image(systemName: "brain") }
+                }.disabled(always)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(label).font(.subheadline)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(Theme.inkSecondary).padding(.horizontal, 12).frame(minHeight: 36).background(Theme.fill, in: Capsule())
+        }
+        .hoverEffect(.highlight).accessibilityLabel("Effort: \(label)").accessibilityHint("Choose how hard it thinks")
     }
 
-    private func set(_ value: Bool) {
-        on = value
+    private func choose(_ level: String) {
+        UISelectionFeedbackGenerator().selectionChanged()
+        store.selectedEffort = level
+        if store.selected != nil { Task { do { try await store.updateModel() } catch { store.error = ChatError.text(error) } } }
+    }
+
+    private func setThinking(_ value: Bool) {
         if let id = store.selected { Task { do { try await ChatActions.update(store, id, ["thinking": .bool(value)]) } catch { store.error = ChatError.text(error) } } }
         else { Task { await hub.setPref(["thinking"], .bool(value)) } }
+    }
+
+    static func firstSentence(_ text: String) -> String {
+        guard let end = text.range(of: ". ") else { return text }
+        return String(text[..<end.lowerBound]) + "."
+    }
+
+    static func symbol(_ level: String) -> String {
+        switch level {
+        case "low": "hare"
+        case "medium": "gauge.with.dots.needle.33percent"
+        case "high": "gauge.with.dots.needle.50percent"
+        case "xhigh": "gauge.with.dots.needle.67percent"
+        case "max": "gauge.with.dots.needle.100percent"
+        case "ultracode": "sparkles"
+        default: "gauge.with.dots.needle.50percent"
+        }
     }
 }
 
