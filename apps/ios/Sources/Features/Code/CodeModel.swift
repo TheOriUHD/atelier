@@ -41,7 +41,7 @@ struct CodeWorkspace: Identifiable, Hashable, Sendable {
     var label: String {
         if scratch { return "No folder" }
         if kind == .ssh, let host { return "\(host):\(root)" }
-        return name
+        return ChatFolders.short(name)
     }
     /// Where it is, for the second line of a row.
     var location: String {

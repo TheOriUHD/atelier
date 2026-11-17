@@ -476,6 +476,29 @@ import SwiftUI
         XCTAssertEqual(EffortPanel.sentences("A. B", 2), "A. B")
     }
 
+    func testFoldersAreNamedByTheLastPartOfTheirPath() {
+        XCTAssertEqual(ChatFolders.short(#"C:\Users\Philipp\Documents\Vibecoding\NewETS2ModMenu"#), "NewETS2ModMenu")
+        XCTAssertEqual(ChatFolders.short("/Users/philipp/atelier"), "atelier")
+        XCTAssertEqual(ChatFolders.short("QwenTest"), "QwenTest")
+        XCTAssertEqual(ChatFolders.name(nil), "No folder")
+        XCTAssertEqual(ChatFolders.name(json(#"{"id":"w","name":"scratch-2026-11-13-210665","scratch":true}"#)), "No folder")
+        XCTAssertEqual(ChatFolders.name(json(#"{"id":"w","name":"C:\\Users\\Philipp\\Documents\\Mod","scratch":false}"#)), "Mod")
+    }
+
+    func testSessionsWithScratchFoldersShareOneNoFolderGroup() {
+        func session(_ id: String, _ workspace: String?) -> Conversation {
+            Conversation(raw: json(#"{"id":"\#(id)","mode":"code","title":"T","updatedAt":1000,"createdAt":1000,"status":"idle"\#(workspace.map { #","workspaceId":"\#($0)""# } ?? "")}"#))
+        }
+        let workspaces = [
+            json(#"{"id":"a","name":"app","scratch":false}"#),
+            json(#"{"id":"s1","name":"scratch-1","scratch":true}"#),
+            json(#"{"id":"s2","name":"scratch-2","scratch":true}"#),
+        ]
+        let arranged = ChatArrange.arrange([session("1", "a"), session("2", "s1"), session("3", "s2"), session("4", nil)], grouping: .folder, sorting: .activity, groups: [], workspaces: workspaces, showEmptyGroups: false)
+        XCTAssertEqual(arranged.groups.map(\.title), ["app", "No folder"])
+        XCTAssertEqual(arranged.groups.last?.sessions.count, 3)
+    }
+
     func testTheEffortSliderSnapsToTheNearestLevel() {
         // A 300 point track with 22 point ends and five levels: stops every 64 points from 22.
         XCTAssertEqual(EffortSlider.nearest(0, width: 300, inset: 22, count: 5), 0)

@@ -209,17 +209,34 @@ enum ChatArrange {
             var byFolder: [String: [Conversation]] = [:]
             var order: [String] = []
             for session in rest {
-                let key = session.workspaceID ?? ""
+                // Every session without a folder (each with a scratch folder of its own) is one group.
+                let workspace = workspaces.first { $0["id"].string == session.workspaceID }
+                let key = workspace == nil || workspace?["scratch"].bool == true ? "" : (session.workspaceID ?? "")
                 if byFolder[key] == nil { order.append(key) }
                 byFolder[key, default: []].append(session)
             }
             var out = order.map { key -> ChatListGroup in
-                let name = workspaces.first { $0["id"].string == key }?["name"].string ?? "No folder"
-                return ChatListGroup(id: "folder:\(key)", title: name.isEmpty ? "No folder" : name, sessions: byFolder[key] ?? [])
+                let name = ChatFolders.name(workspaces.first { $0["id"].string == key })
+                return ChatListGroup(id: "folder:\(key)", title: name, sessions: byFolder[key] ?? [])
             }
             if sorting == .name { out.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending } }
             return (pinned, out)
         }
+    }
+}
+
+/// How a folder is named in lists.
+enum ChatFolders {
+    /// The last part of a folder's path, whether it is written with / or with \ (the Windows paths a computer reports), and
+    /// "No folder" for a scratch folder or none at all.
+    static func short(_ path: String) -> String {
+        path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
+    }
+
+    static func name(_ workspace: JSON?) -> String {
+        guard let workspace, !workspace["scratch"].bool else { return "No folder" }
+        let name = short(workspace["name"].string)
+        return name.isEmpty ? "No folder" : name
     }
 }
 

@@ -377,8 +377,9 @@ struct ChatSessionRow: View {
 
     /// A Code session's second line: where it works, or that it is waiting for an answer.
     private var codeLine: String {
-        let folder = session.workspaceID.flatMap { id in ChatHub.of(store).workspaces.first { $0["id"].string == id }?["name"].stringOrNil }
-        let place = folder ?? ChatModels.name(session.model, in: store.models)
+        let workspace = session.workspaceID.flatMap { id in ChatHub.of(store).workspaces.first { $0["id"].string == id } }
+        // A session without a folder says which model it uses instead.
+        let place = workspace == nil || workspace?["scratch"].bool == true ? ChatModels.name(session.model, in: store.models) : ChatFolders.name(workspace)
         return session.status == "waiting" ? (place.isEmpty ? "Waiting for you" : "Waiting for you · \(place)") : place
     }
 
