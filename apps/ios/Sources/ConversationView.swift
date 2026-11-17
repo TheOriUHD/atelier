@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The sheets a conversation opens.
 enum ChatSheet: String, Identifiable {
-    case usage, coop, sideChats
+    case usage, coop, sideChats, details
     var id: String { rawValue }
 }
 
@@ -60,6 +60,7 @@ struct ConversationView: View {
             case .usage: UsageView(store: store)
             case .coop: ChatCoopSheet(store: store)
             case .sideChats: ChatSideChatsSheet(store: store) { id in self.sheet = nil; Task { await ChatNav.open(store, id) } }
+            case .details: CodeSessionDetailsSheet(store: store) { openArtifact($0) }
             }
         }
         .sheet(item: Binding(get: { wholeFile.map { ChatFileBox(preview: $0) } }, set: { if $0 == nil { wholeFile = nil } })) { ChatChangeSheet(preview: $0.preview, title: "The file", actions: nil) }
@@ -96,29 +97,35 @@ struct ConversationView: View {
 
     // MARK: toolbar
 
+    /// One button on the right, and one list behind it: everything for this conversation in a single step (several buttons
+    /// side by side collapse into an overflow whose first row is another menu).
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
+        ToolbarItem(placement: .topBarTrailing) {
             if store.selected == nil {
-                Button { hub.newOptions.temporary.toggle(); UISelectionFeedbackGenerator().selectionChanged() } label: { Image(systemName: hub.newOptions.temporary ? "eyeglasses" : "eyeglasses") }
+                Button { hub.newOptions.temporary.toggle(); UISelectionFeedbackGenerator().selectionChanged() } label: { Image(systemName: "eyeglasses") }
                     .tint(hub.newOptions.temporary ? Theme.clay : Theme.inkSecondary).accessibilityLabel("Temporary chat").accessibilityValue(hub.newOptions.temporary ? "On" : "Off")
                     .accessibilityHint("A temporary chat is deleted when you leave it")
             } else {
-                UsageRing(store: store) { sheet = .usage }
-                if shared { Button { sheet = .coop } label: { Image(systemName: "person.2") }.accessibilityLabel("Co-op") }
                 Menu {
                     Button("New conversation", systemImage: "square.and.pencil") { ChatNav.newConversation(store) }
+                    if let session, !session.isTemporary, session.mode == "code" { Button("Session details", systemImage: "info.circle") { sheet = .details } }
                     Button("Context and usage", systemImage: "chart.pie") { sheet = .usage }
                     if !store.artifacts.isEmpty { Button("Artifacts (\(store.artifacts.count))", systemImage: "doc.on.doc") { showArtifacts = true } }
                     if let session, !session.isTemporary {
                         Button("Side chats", systemImage: "bubble.left.and.text.bubble.right") { sheet = .sideChats }
-                        if !shared { Button("Co-op", systemImage: "person.2") { sheet = .coop } }
+                        Button("Co-op", systemImage: "person.2") { sheet = .coop }
                         Button("Summarize the conversation", systemImage: "arrow.down.right.and.arrow.up.left") { Task { do { try await ChatActions.compact(store) } catch { store.error = ChatError.text(error) } } }
                         if !store.authStatus["local"].bool, !session.isGuest {
                             Toggle(isOn: Binding(get: { session.remoteControl && hub.prefs["remoteControl"] != .bool(false) }, set: { value in Task { do { try await ChatActions.update(store, session.id, ["remoteControl": .bool(value)]) } catch { store.error = ChatError.text(error) } } })) { Label(hub.prefs["remoteControl"] == .bool(false) ? "Remote control is off for your account" : "Remote control", systemImage: "antenna.radiowaves.left.and.right") }.disabled(hub.prefs["remoteControl"] == .bool(false))
                         }
                         if session.mode == "code" { CodeToolsMenu(store: store) }
                     }
-                } label: { Image(systemName: "ellipsis") }.accessibilityLabel("Conversation actions")
+                } label: {
+                    HStack(spacing: 6) {
+                        if running { ProgressView().controlSize(.small) }
+                        Image(systemName: "ellipsis")
+                    }
+                }.accessibilityLabel(running ? "Conversation actions, still working" : "Conversation actions")
             }
         }
     }

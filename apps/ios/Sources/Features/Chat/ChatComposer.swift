@@ -159,6 +159,8 @@ struct ChatComposer: View {
     /// What was in the box when dictation began: the words heard are added after it.
     @State private var voiceBase = ""
     @State private var addSheet = false
+    /// The effort panel is open: it covers the box, bottom edges together, until the person taps elsewhere.
+    @State private var effortOpen = false
     @State private var afterAdd: ChatAddChoice?
     @State private var sending = false
     /// Skills and commands of the Code session's folder (the server lists them per folder).
@@ -202,6 +204,28 @@ struct ChatComposer: View {
     // MARK: the box
 
     private var box: some View {
+        composerBox
+            .opacity(effortOpen ? 0 : 1)
+            .allowsHitTesting(!effortOpen)
+            .overlay(alignment: .bottom) {
+                if effortOpen, let current {
+                    EffortPanel(store: store, model: current, mode: mode)
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .glassEffect(.regular, in: .rect(cornerRadius: 28, style: .continuous))
+                        .background(alignment: .bottom) {
+                            // Anywhere else on the screen closes it.
+                            Color.black.opacity(0.18).frame(width: 3000, height: 3000)
+                                .contentShape(Rectangle()).onTapGesture { effortOpen = false }
+                                .accessibilityHidden(true)
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
+                }
+            }
+            .animation(.snappy(duration: 0.22), value: effortOpen)
+    }
+
+    private var composerBox: some View {
         VStack(alignment: .leading, spacing: 4) {
             attachmentRow
             TextField(dictation.active ? "Listening…" : placeholder, text: $store.draft, axis: .vertical)
@@ -242,6 +266,7 @@ struct ChatComposer: View {
             case "add", "add-large", "add-plugins": addSheet = true
             case "voice": voiceBase = ""; dictation.demo(words: "Hello, this is an example voice")
             case "listening": voiceBase = ""; dictation.demo(words: "")
+            case "effort": Task { try? await Task.sleep(for: .seconds(1)); effortOpen = true }
             default: break
             }
             #endif
@@ -259,7 +284,7 @@ struct ChatComposer: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     modelChip
-                    if let effortLabel, let current { EffortChip(store: store, model: current, mode: mode, label: effortLabel) }
+                    if let effortLabel, let current { EffortChip(label: effortLabel) { focused = false; effortOpen = true } }
                     if hub.webSearchOn, mode != "code", session?.research ?? hub.newOptions.research { researchChip }
                     if mode == "code", session != nil { PermissionModeChip(store: store) }
                 }

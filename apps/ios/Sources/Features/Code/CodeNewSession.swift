@@ -23,6 +23,10 @@ struct NewCodeSessionSheet: View {
     @State private var openRepo = false
     @State private var addSsh = false
     @State private var preferredModel: String?
+    /// What the person wants done first; the session starts with it.
+    @State private var prompt = ""
+    @State private var options = false
+    @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
 
     init(store: AppStore, onCreated: @escaping (String) -> Void) {
@@ -40,7 +44,7 @@ struct NewCodeSessionSheet: View {
     private var effectiveMode: CodeMode { CodeMode(rawValue: mode) ?? system.defaultMode }
     private var ready: Bool { (selectedFolder != nil || scratch) && !model.isEmpty && !busy }
 
-    var body: some View {
+    private var optionsSheet: some View {
         NavigationStack {
             List {
                 folderSection
@@ -60,13 +64,28 @@ struct NewCodeSessionSheet: View {
                 if let problem { Section { Text(problem).font(.subheadline).foregroundStyle(Theme.danger).textSelection(.enabled) } }
             }
             .listStyle(.insetGrouped).scrollContentBackground(.hidden).background(Theme.sunken)
-            .navigationTitle("New Code session").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Button { Task { await create() } } label: { Text("Start session") }
-                    .buttonStyle(ClayButtonStyle(busy: busy)).disabled(!ready)
-                    .padding(.horizontal, 20).padding(.vertical, 10).background(.bar)
+            .navigationTitle("Session options").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { options = false } } }
+            .sheet(isPresented: $openRepo) {
+                NavigationStack {
+                    CodeRepositoriesView(store: store) { workspace in Task { await folders.load(devices: true); chosen = workspace.id; scratch = false } }
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { openRepo = false } } }
+                }.tint(Theme.clay)
             }
+            .sheet(isPresented: $addSsh) {
+                CodeAddSshFolderSheet(store: store, connections: []) { workspace in Task { await folders.load(devices: true); chosen = workspace.id; scratch = false } }
+            }
+        }
+        .tint(Theme.clay)
+        .presentationDetents([.large])
+    }
+
+    // MARK: The page
+
+    var body: some View {
+        NavigationStack {
+            startPage
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button(role: .close) { dismiss() }.tint(Theme.ink) } }
             .task {
                 CodeSshPromptCenter.shared.start(store: store)
                 await folders.load(devices: true)
@@ -80,18 +99,94 @@ struct NewCodeSessionSheet: View {
             .onChange(of: chosen) { _, _ in Task { await loadBranch() } }
             .onChange(of: model) { _, _ in if !efforts.contains(effort) { effort = "" } }
             .codeTrustDialog($trust)
-            .sheet(isPresented: $openRepo) {
-                NavigationStack {
-                    CodeRepositoriesView(store: store) { workspace in Task { await folders.load(devices: true); chosen = workspace.id; scratch = false } }
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { openRepo = false } } }
-                }.tint(Theme.clay)
-            }
-            .sheet(isPresented: $addSsh) {
-                CodeAddSshFolderSheet(store: store, connections: []) { workspace in Task { await folders.load(devices: true); chosen = workspace.id; scratch = false } }
-            }
+            .sheet(isPresented: $options) { optionsSheet }
         }
         .tint(Theme.clay)
         .presentationDetents([.large])
+    }
+
+    private var firstName: String { store.userName.split(separator: " ").first.map(String.init) ?? "" }
+
+    /// The greeting, where the session will work, and the box to say what it is for.
+    private var startPage: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VStack(spacing: 18) {
+                AtelierMark(size: 46)
+                Text(firstName.isEmpty ? "What shall we build?" : "Hello, \(firstName)")
+                    .font(.system(size: 32, weight: .regular, design: .serif)).foregroundStyle(Theme.ink)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 12) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        pill(selectedFolder?.label ?? (scratch ? "No folder" : "Choose a folder"), symbol: scratch || selectedFolder == nil ? "folder.badge.questionmark" : (selectedFolder?.kind == .codespace ? "cloud" : selectedFolder?.kind == .ssh ? "server.rack" : "folder")) { options = true }
+                        if let currentBranch, branchKnown { pill(currentBranch, symbol: "arrow.triangle.branch") { options = true } }
+                    }.padding(.horizontal, 2)
+                }
+                box
+            }
+            .padding(.horizontal, 16).padding(.bottom, 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.background)
+        .overlay(alignment: .top) {
+            if let problem { Text(problem).font(.footnote).foregroundStyle(Theme.danger).padding(12).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous)).padding(.horizontal, 16).padding(.top, 8) }
+        }
+    }
+
+    private func pill(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol).font(.system(size: 15))
+                Text(title).font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
+            }
+            .foregroundStyle(Theme.ink).padding(.horizontal, 14).frame(height: 44)
+            .background(Theme.surface, in: Capsule()).overlay(Capsule().stroke(Theme.hairline, lineWidth: 0.5))
+        }.buttonStyle(.plain)
+    }
+
+    private var box: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("Describe a task or ask a question…", text: $prompt, axis: .vertical)
+                .lineLimit(1...8).focused($focused).font(.body)
+                .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 4)
+            HStack(spacing: 8) {
+                Button { options = true } label: {
+                    Image(systemName: "slider.horizontal.3").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.inkSecondary).frame(width: 36, height: 36).background(Theme.fill, in: Circle())
+                }.buttonStyle(.plain).accessibilityLabel("Session options")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Menu {
+                            Picker("Model", selection: $model) { ForEach(store.models.filter { !$0["hidden"].bool }, id: \.self) { Text($0["displayName"].string).tag($0["ref"].string) } }
+                        } label: { chip(chosenModel?["displayName"].string ?? "Choose a model") }
+                        Menu {
+                            Picker("Permission mode", selection: $mode) {
+                                Text("Default · \(system.defaultMode.short)").tag("")
+                                ForEach(modes) { Label($0.title, systemImage: $0.symbol).tag($0.rawValue) }
+                            }
+                        } label: { chip(effectiveMode.short, symbol: effectiveMode.symbol) }
+                    }
+                }.scrollBounceBehavior(.basedOnSize)
+                Spacer(minLength: 0)
+                Button { focused = false; Task { await create() } } label: {
+                    ZStack {
+                        Circle().fill(Theme.clay.opacity(ready ? 1 : 0.35))
+                        if busy { ProgressView().tint(.white) } else { Image(systemName: "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(.white) }
+                    }.frame(width: 36, height: 36)
+                }.buttonStyle(.plain).disabled(!ready).accessibilityLabel("Start session")
+            }.padding(.horizontal, 10).padding(.bottom, 10).padding(.top, 2)
+        }
+        .glassEffect(.regular, in: .rect(cornerRadius: 28, style: .continuous))
+    }
+
+    private func chip(_ title: String, symbol: String? = nil) -> some View {
+        HStack(spacing: 5) {
+            if let symbol { Image(systemName: symbol).font(.system(size: 12, weight: .medium)) }
+            Text(title).font(.subheadline.weight(.medium)).lineLimit(1)
+            Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+        }
+        .foregroundStyle(Theme.inkSecondary).padding(.horizontal, 12).frame(minHeight: 36).background(Theme.fill, in: Capsule())
     }
 
     // MARK: Folder
@@ -182,7 +277,14 @@ struct NewCodeSessionSheet: View {
             if !effort.isEmpty { params["effort"] = .string(effort) }
             let session = try await codeCall(store, "sessions.create", params)
             try? await store.refresh()
-            onCreated(session["id"].string)
+            let id = session["id"].string
+            let first = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !first.isEmpty {
+                try await store.open(id)
+                store.draft = first
+                try await store.send()
+            }
+            onCreated(id)
             dismiss()
         } catch is CancellationError { return } catch { problem = error.localizedDescription }
     }

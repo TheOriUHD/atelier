@@ -459,6 +459,23 @@ import SwiftUI
         XCTAssertEqual(ChatComposer.join("Keep this", "  "), "Keep this")
     }
 
+    func testTheSliderThumbIsHeldOnAStopThenEasesOutToTheFinger() {
+        let inset: CGFloat = 23, width: CGFloat = 300   // five stops, 63.5 points apart
+        let stop = inset + 63.5
+        XCTAssertEqual(EffortSlider.magnet(stop + 10, width: width, inset: inset, count: 5), stop, accuracy: 0.01)
+        let eased = EffortSlider.magnet(stop + 28, width: width, inset: inset, count: 5)
+        XCTAssertGreaterThan(eased, stop)
+        XCTAssertLessThan(eased, stop + 28)
+        XCTAssertEqual(EffortSlider.magnet(-40, width: width, inset: inset, count: 5), inset, accuracy: 0.01)
+        XCTAssertEqual(EffortSlider.magnet(900, width: width, inset: inset, count: 5), width - inset, accuracy: 0.01)
+    }
+
+    func testTheEffortPanelKeepsTheFirstSentencesOfAnExplanation() {
+        XCTAssertEqual(EffortPanel.sentences("One. Two. Three.", 2), "One. Two.")
+        XCTAssertEqual(EffortPanel.sentences("Only one sentence.", 2), "Only one sentence.")
+        XCTAssertEqual(EffortPanel.sentences("A. B", 2), "A. B")
+    }
+
     func testTheEffortSliderSnapsToTheNearestLevel() {
         // A 300 point track with 22 point ends and five levels: stops every 64 points from 22.
         XCTAssertEqual(EffortSlider.nearest(0, width: 300, inset: 22, count: 5), 0)

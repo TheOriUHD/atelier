@@ -33,6 +33,8 @@ struct ChatSidebar: View {
     @State private var managing = false
     @State private var joining = false
     @State private var results = ChatSearchModel()
+    /// The computers linked to this server (Code mode shows them above the sessions).
+    @State private var devices: [JSON] = []
     /// How far the list is pulled down past its top, and whether that is far enough to open search on letting go.
     @State private var pull: CGFloat = 0
     @State private var pullArmed = false
@@ -68,6 +70,11 @@ struct ChatSidebar: View {
         .scrollContentBackground(.hidden)
         .background(Theme.background)
         .overlay { overlay }
+        .task(id: "\(store.connected)\(mode.rawValue)") {
+            guard store.connected, mode == .code else { return }
+            let all = (try? await store.rpc.call("account.devices"))?.array ?? []
+            devices = all.filter { !$0["current"].bool && $0["platform"].string != "ios" }
+        }
         .searchable(text: $search, isPresented: $searching, prompt: mode == .code ? "Search sessions" : "Search conversations")
         .navigationTitle("Atelier")
         .navigationBarTitleDisplayMode(.inline)
@@ -186,6 +193,7 @@ struct ChatSidebar: View {
             navRow("doc.on.doc", "Artifacts", count: nil) { actions.show(.artifacts) }
             if store.offers("imageGeneration") { navRow("photo.on.rectangle", "Images", count: nil) { actions.show(.images) } }
         }
+        if mode == .code, !devices.isEmpty { CodeDevicesStrip(devices: devices) }
         if loading {
             ForEach(Array([190, 150, 230, 170, 210, 140, 200].enumerated()), id: \.offset) { _, width in skeletonRow(width: CGFloat(width)) }
         } else {
@@ -367,6 +375,13 @@ struct ChatSessionRow: View {
     var showsArchived = false
     let open: () -> Void
 
+    /// A Code session's second line: where it works, or that it is waiting for an answer.
+    private var codeLine: String {
+        let folder = session.workspaceID.flatMap { id in ChatHub.of(store).workspaces.first { $0["id"].string == id }?["name"].stringOrNil }
+        let place = folder ?? ChatModels.name(session.model, in: store.models)
+        return session.status == "waiting" ? (place.isEmpty ? "Waiting for you" : "Waiting for you · \(place)") : place
+    }
+
     var body: some View {
         let model = ChatModels.name(session.model, in: store.models)
         Button(action: open) {
@@ -378,6 +393,7 @@ struct ChatSessionRow: View {
                         if session.isShared { Image(systemName: "person.2").font(.system(size: 11)).accessibilityLabel(session.isGuest ? "Co-op with \(session.coopHost)" : "Co-op") }
                         if session.madeSomething { Image(systemName: "doc.text").font(.system(size: 11)).accessibilityLabel("Made an artifact") }
                         if showsArchived, session.archived { Text("Archived") }
+                        else if session.mode == "code" { Text(codeLine).lineLimit(1) }
                         else if !model.isEmpty { Text(model).lineLimit(1) }
                         if session.isGuest, !session.coopHost.isEmpty { Text("· \(session.coopHost)").lineLimit(1) }
                     }.font(.footnote).foregroundStyle(Theme.inkMuted)
@@ -551,4 +567,33 @@ struct ChatArchivedPage: View {
 
 extension Notification.Name {
     static let atelierArchivedChanged = Notification.Name("atelier.archivedChanged")
+}
+
+/// The computers that run Code sessions (the desktop apps linked to this server), each with whether it is online.
+struct CodeDevicesStrip: View {
+    let devices: [JSON]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Devices").font(.footnote.weight(.semibold)).foregroundStyle(Theme.inkMuted)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(devices, id: \.self) { device in
+                        let online = device["online"].bool
+                        HStack(spacing: 9) {
+                            Image(systemName: "laptopcomputer").font(.system(size: 16)).foregroundStyle(Theme.ink)
+                                .overlay(alignment: .topTrailing) { Circle().fill(online ? Theme.success : Theme.inkMuted.opacity(0.6)).frame(width: 8, height: 8).offset(x: 4, y: -3) }
+                            Text(device["name"].string).font(.subheadline.weight(.medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                        }
+                        .padding(.horizontal, 14).frame(height: 40)
+                        .background(Capsule().stroke(Theme.hairline, lineWidth: 1))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(device["name"].string), \(online ? "online" : "offline")")
+                    }
+                }
+            }
+        }
+        .padding(.top, 6)
+        .listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top: 4, leading: 18, bottom: 6, trailing: 0))
+    }
 }

@@ -88,17 +88,13 @@ struct ModelPicker: View {
     }
 }
 
-/// The effort chip: it opens a small panel with a slider that clicks into place at each level, from fast to thorough.
-/// In a conversation a change applies from the next message; on a new page it is what the conversation starts with.
+/// The effort chip: it opens the effort panel, which takes the message box's place until the person taps elsewhere.
 struct EffortChip: View {
-    @Bindable var store: AppStore
-    let model: JSON
-    let mode: String
     let label: String
-    @State private var open = false
+    let open: () -> Void
 
     var body: some View {
-        Button { open = true } label: {
+        Button(action: open) {
             HStack(spacing: 5) {
                 Text(label).font(.subheadline)
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
@@ -107,16 +103,12 @@ struct EffortChip: View {
         }
         .buttonStyle(.plain).hoverEffect(.highlight)
         .accessibilityLabel("Effort: \(label)").accessibilityHint("Choose how hard it thinks")
-        .popover(isPresented: $open, arrowEdge: .bottom) {
-            EffortPanel(store: store, model: model, mode: mode).presentationCompactAdaptation(.popover)
-        }
-        #if DEBUG
-        .onAppear { if Launch.route("conversation") == "effort" { Task { try? await Task.sleep(for: .seconds(1)); open = true } } }
-        #endif
     }
 }
 
-/// What the effort chip opens: the level's name, the slider, what the level means, and Thinking for models with only a switch.
+/// How hard it thinks: the level's name, the slider, what the level means, and Thinking for models with only a switch.
+/// The header and the text keep one height whatever the level, so nothing moves while the slider does. In a conversation a
+/// change applies from the next message; on a new page it is what the conversation starts with.
 struct EffortPanel: View {
     @Bindable var store: AppStore
     let model: JSON
@@ -134,24 +126,28 @@ struct EffortPanel: View {
 
     var body: some View {
         let recommended = ChatEffort.recommended(model, mode: mode)
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(ChatEffort.name(level, model: model)).font(.system(.title3, design: .serif, weight: .medium)).foregroundStyle(Theme.ink)
-                if level == recommended { Text("Recommended").font(.caption2.weight(.semibold)).foregroundStyle(Theme.clay).padding(.horizontal, 7).padding(.vertical, 2).background(Theme.clay.opacity(0.12), in: Capsule()) }
-                Spacer(minLength: 0)
+        let warning = ChatEffort.warning(level, model: model)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(ChatEffort.name(level, model: model)).font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink)
+                Spacer(minLength: 8)
+                if let warning {
+                    Label(warning, systemImage: "exclamationmark.triangle").labelStyle(.titleAndIcon).font(.caption).foregroundStyle(Color(hex: 0xB77800))
+                        .multilineTextAlignment(.trailing).lineLimit(2).minimumScaleFactor(0.85)
+                } else if level == recommended {
+                    Text("Recommended").font(.caption.weight(.semibold)).foregroundStyle(Theme.clay).padding(.horizontal, 8).padding(.vertical, 3).background(Theme.clay.opacity(0.12), in: Capsule())
+                }
             }
+            .frame(height: 36)
             EffortSlider(names: levels.map { ChatEffort.name($0, model: model) }, index: $index, onCommit: commit)
             HStack {
                 Text("Faster")
                 Spacer()
                 Text("Smarter")
             }.font(.caption).foregroundStyle(Theme.inkMuted)
-            Text(ChatEffort.explanation(level, model: model, mode: mode))
-                .font(.footnote).foregroundStyle(Theme.inkSecondary).fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 52, alignment: .topLeading)
-            if let warning = ChatEffort.warning(level, model: model) {
-                Label(warning, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Color(hex: 0xB77800)).fixedSize(horizontal: false, vertical: true)
-            }
+            Text(Self.sentences(ChatEffort.explanation(level, model: model, mode: mode), 2))
+                .font(.footnote).foregroundStyle(Theme.inkSecondary).lineLimit(3)
+                .frame(maxWidth: .infinity, minHeight: 56, maxHeight: 56, alignment: .topLeading)
             if model["capabilities"]["reasoning"].string == "toggle" {
                 let always = ["xhigh", "max", "ultracode"].contains(level)
                 Divider()
@@ -163,13 +159,26 @@ struct EffortPanel: View {
                 }.tint(Theme.clay).disabled(always)
             }
         }
-        .padding(18).frame(width: 300)
+        .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 16)
+        .contentShape(Rectangle())
+        .onTapGesture {}
         .onAppear {
             guard !loaded else { return }
             loaded = true
             let shown = ChatEffort.shown(storedEffort, model: model, mode: mode, ultracode: hub.ultracodeOn) ?? levels.first ?? ""
             index = levels.firstIndex(of: shown) ?? 0
         }
+    }
+
+    /// The first `count` sentences, so a long explanation never grows the panel.
+    static func sentences(_ text: String, _ count: Int) -> String {
+        var result = "", rest = Substring(text)
+        for _ in 0..<count {
+            guard let end = rest.range(of: ". ") else { result += (result.isEmpty ? "" : " ") + rest; return result }
+            result += (result.isEmpty ? "" : " ") + rest[..<end.lowerBound] + "."
+            rest = rest[end.upperBound...]
+        }
+        return result
     }
 
     private func commit(_ chosen: Int) {
@@ -184,21 +193,36 @@ struct EffortPanel: View {
     }
 }
 
-/// A slider whose thumb clicks into place at each level, with a tick of feedback as it crosses from one to the next.
+/// A slider with weight: the thumb follows the finger a beat behind, each level pulls it in and holds it (the finger has
+/// to move a good way to leave), and it locks in with a hard click.
 struct EffortSlider: View {
     let names: [String]
     @Binding var index: Int
     let onCommit: (Int) -> Void
     @State private var dragX: CGFloat?
-    @State private var feedback = UISelectionFeedbackGenerator()
-    private let height: CGFloat = 44
-    private let thumb: CGFloat = 34
+    @State private var click = UIImpactFeedbackGenerator(style: .rigid)
+    private let height: CGFloat = 46
+    private let thumb: CGFloat = 36
 
     /// The level whose stop is nearest to a touch at `x`, on a track `width` wide whose stops start `inset` from each end.
     static func nearest(_ x: CGFloat, width: CGFloat, inset: CGFloat, count: Int) -> Int {
         guard count > 1, width > 2 * inset else { return 0 }
         let fraction = (min(max(x, inset), width - inset) - inset) / (width - 2 * inset)
         return min(max(Int((fraction * CGFloat(count - 1)).rounded()), 0), count - 1)
+    }
+
+    /// Where the thumb is for a finger at `x`: held on the nearest stop while the finger is within `zone` of it, then
+    /// easing out to the finger by the time it is halfway to the next stop.
+    static func magnet(_ x: CGFloat, width: CGFloat, inset: CGFloat, count: Int) -> CGFloat {
+        guard count > 1, width > 2 * inset else { return inset }
+        let clamped = min(max(x, inset), width - inset)
+        let spacing = (width - 2 * inset) / CGFloat(count - 1)
+        let stop = inset + spacing * CGFloat(nearest(clamped, width: width, inset: inset, count: count))
+        let distance = abs(clamped - stop)
+        let zone = spacing * 0.3, edge = spacing / 2
+        guard distance > zone else { return stop }
+        let t = min((distance - zone) / (edge - zone), 1)
+        return stop + (clamped - stop) * (t * t * (3 - 2 * t))
     }
 
     var body: some View {
@@ -208,7 +232,7 @@ struct EffortSlider: View {
             let span = max(width - 2 * inset, 1)
             let stops = max(names.count - 1, 1)
             let resting = inset + span * CGFloat(index) / CGFloat(stops)
-            let x = dragX.map { min(max($0, inset), width - inset) } ?? resting
+            let x = dragX.map { Self.magnet($0, width: width, inset: inset, count: names.count) } ?? resting
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.fill)
                 Capsule().fill(Theme.clay.opacity(0.18)).frame(width: x + inset)
@@ -217,21 +241,28 @@ struct EffortSlider: View {
                         .position(x: inset + span * CGFloat(stop) / CGFloat(stops), y: height / 2)
                 }
                 Circle().fill(Theme.clay).frame(width: thumb, height: thumb)
-                    .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
+                    .shadow(color: .black.opacity(0.2), radius: 5, y: 2)
                     .position(x: x, y: height / 2)
             }
+            .animation(.spring(response: 0.24, dampingFraction: 0.82), value: x)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        if dragX == nil { feedback.prepare() }
+                        if dragX == nil { click.prepare() }
                         dragX = value.location.x
                         let next = Self.nearest(value.location.x, width: width, inset: inset, count: names.count)
-                        if next != index { index = next; feedback.selectionChanged(); feedback.prepare() }
+                        // The click is where the thumb locks onto the stop, not where the finger crosses halfway.
+                        if next != index, abs(Self.magnet(value.location.x, width: width, inset: inset, count: names.count) - (inset + span * CGFloat(next) / CGFloat(stops))) < 0.5 {
+                            index = next
+                            click.impactOccurred(intensity: 1)
+                            click.prepare()
+                        }
                     }
                     .onEnded { value in
                         let next = Self.nearest(value.location.x, width: width, inset: inset, count: names.count)
-                        withAnimation(.snappy(duration: 0.2)) { dragX = nil; index = next }
+                        if next != index { index = next; click.impactOccurred(intensity: 0.8) }
+                        dragX = nil
                         onCommit(next)
                     }
             )
