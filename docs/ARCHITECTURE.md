@@ -752,6 +752,8 @@ User-owned rows are scoped by `user_id`, directly or through their session, and 
 
 Enforced in: `SessionRepo.list` (sidebar, Recents, project pages, palette; `withTemporary` only for account deletion) and its `messages_fts`/title search, project chat counts (`ProjectRepo.list`), `ArtifactRepo.listForUser` (Artifacts page), `exportAll`, `ChatService.systemFor` (fresh mode), `sessions.continueInCowork` (refused). `sessions.create` doesn't broadcast `sessions.changed` for one; the UI's `useSessions` drops any that arrive anyway.
 
+Keeping: `sessions.keep` (owner only; the iPhone and iPad app's **Keep chat**) clears `temporary` on the chat and on its side chats and sub-agents (`SessionRepo.keep`) and broadcasts `sessions.changed`, so it joins the lists, search and memory from then on; a chat that isn't temporary comes back unchanged, and a side chat or sub-agent can't be kept on its own (`invalid_request`). What was frozen in a `fresh` chat's system snapshot stays as it was.
+
 Deletion (everything goes as with `sessions.delete`: run stopped, messages, files, artifacts, checkpoints, children by cascade): `sessions.leave` (the UI's live-session release, 1 s after the last view lets go) deletes it when no other connection is subscribed; a connection that closes or drops schedules the same check for its subscriptions after 60 s (a reload or reconnect resubscribes in time); the backend sweeps hourly and at start for ones idle over `TEMPORARY_MAX_IDLE_MS` (24 h), and 60 s after start for any left from before that no window reopened.
 
 ## 12. Settings schema and layering

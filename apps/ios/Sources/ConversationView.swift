@@ -32,7 +32,6 @@ struct ConversationView: View {
     private var wide: Bool { sizeClass == .regular }
     private var coop: JSON { hub.coop[store.selected ?? ""] ?? .null }
     private var shared: Bool { session?.isShared == true || coop != .null }
-    private var temporary: Bool { session?.isTemporary == true || (store.selected == nil && hub.newOptions.temporary) }
     private var readOnly: String? {
         guard shared else { return nil }
         if coop["ended"].bool { return "Co-op ended. This conversation is read only." }
@@ -48,11 +47,9 @@ struct ConversationView: View {
             KeyboardProbe(height: $keyboard).frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true)
             VStack(spacing: 0) {
                 if !store.connected, hub.linkStage >= 2 || store.connectionNote != nil { offline }
-                if temporary, store.selected != nil { temporaryBar.transition(.move(edge: .top).combined(with: .opacity)) }
                 if let parent = hub.sideChatParent[store.selected ?? ""] { sideChatBar(parent) }
                 content
             }
-            .animation(.smooth(duration: 0.35), value: temporary)
             .safeAreaInset(edge: .bottom, spacing: 0) { if !(isEmpty && wide) { bottom } }
             .padding(.bottom, keyboard)
         }
@@ -93,6 +90,11 @@ struct ConversationView: View {
                 case "sidechats": sheet = .sideChats
                 case "model": modelPicker = true
                 case "temporary": hub.newOptions.temporary = true
+                case "temporary-chat":
+                    if let i = store.sessions.firstIndex(where: { $0.id == store.selected }), case .object(var raw) = store.sessions[i].raw {
+                        raw["temporary"] = .string("private")
+                        store.sessions[i] = Conversation(raw: .object(raw))
+                    }
                 case "artifacts": showArtifacts = true
                 default: break
                 }
@@ -128,6 +130,12 @@ struct ConversationView: View {
                 .accessibilityHint("A temporary chat is deleted when you leave it")
             } else {
                 Menu {
+                    // A temporary chat has no banner: what matters about it is here, first.
+                    if let session, session.isTemporary {
+                        Button("Delete chat now", systemImage: "trash", role: .destructive) { deleteTemporaryNow() }
+                        Button("Keep chat", systemImage: "tray.and.arrow.down") { keepTemporary() }
+                        Divider()
+                    }
                     Button("New conversation", systemImage: "square.and.pencil") { ChatNav.newConversation(store) }
                     if let session, !session.isTemporary, session.mode == "code" { Button("Session details", systemImage: "info.circle") { sheet = .details } }
                     Button("Context and usage", systemImage: "chart.pie") { sheet = .usage }
@@ -174,23 +182,6 @@ struct ConversationView: View {
             } label: { Image(systemName: "xmark.bin") }.accessibilityLabel("Close side chat")
         }
         .tint(Theme.clay).padding(.horizontal, 16).padding(.vertical, 9).background(Theme.fill)
-        .accessibilityElement(children: .contain)
-    }
-
-    /// For a temporary chat that is open: a quiet line under the title, with the way out.
-    private var temporaryBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "circle.dashed").font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.clay)
-            Text("Temporary chat").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
-            Text(hub.temporaryMode == "fresh" ? "Starts fresh. Deleted when you leave." : "Deleted when you leave.").font(.footnote).foregroundStyle(Theme.inkMuted).lineLimit(1)
-            Spacer(minLength: 0)
-            Button { ChatNav.newConversation(store) } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.inkSecondary).frame(width: 26, height: 26).background(Theme.fillStrong, in: Circle()) }
-                .buttonStyle(.plain).accessibilityLabel("Leave temporary chat")
-        }
-        .padding(.leading, 16).padding(.trailing, 10).padding(.vertical, 8)
-        .background(Theme.fill, in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.inkMuted.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
-        .padding(.horizontal, 12).padding(.bottom, 6)
         .accessibilityElement(children: .contain)
     }
 
@@ -426,6 +417,33 @@ struct ConversationView: View {
     }
 
     // MARK: actions
+
+    /// Deletes the temporary chat that is open, now, and leaves it for a new conversation.
+    private func deleteTemporaryNow() {
+        guard let id = store.selected else { return }
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        Task {
+            do {
+                try await ChatActions.delete(store, id)
+                ChatNav.newConversation(store)
+            } catch { store.error = ChatError.text(error) }
+        }
+    }
+
+    /// Makes the temporary chat that is open an ordinary one.
+    private func keepTemporary() {
+        guard let id = store.selected else { return }
+        Task {
+            do {
+                try await ChatActions.keep(store, id)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                store.notify("Chat kept")
+            } catch let MobileError.rpc(code, _, _, _) where code == -32601 {
+                // A server from before this existed doesn't know the call.
+                store.error = "This server needs to be updated before it can keep a temporary chat."
+            } catch { store.error = ChatError.text(error) }
+        }
+    }
 
     private func openArtifact(_ summary: JSON) {
         Task {

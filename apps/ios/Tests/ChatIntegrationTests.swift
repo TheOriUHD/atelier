@@ -100,6 +100,32 @@ import XCTest
         try await admin.logout()
     }
 
+    func testATemporaryChatCanBeKeptOrDeletedNow() async throws {
+        let (address, username, password) = try environment()
+        let store = AppStore()
+        store.address = address
+        try await store.login(username: username, password: password)
+        // Keeping: a temporary chat becomes an ordinary one, in the list, and leaving it no longer deletes it.
+        let kept = try await store.rpc.call("sessions.create", ["mode": "chat", "temporary": true])
+        let keptID = kept["id"].string
+        XCTAssertTrue(Conversation(raw: kept).isTemporary)
+        try await store.open(keptID)
+        try await ChatActions.keep(store, keptID)
+        XCTAssertEqual(store.sessions.first { $0.id == keptID }?.isTemporary, false)
+        XCTAssertEqual(store.transcript.snapshot["session"]["temporary"], .null)
+        let left = try await store.rpc.call("sessions.leave", ["id": .string(keptID)])
+        XCTAssertFalse(left["deleted"].bool)
+        let listed = try await store.rpc.call("sessions.list", ["mode": "chat", "limit": 100]).array
+        XCTAssertTrue(listed.contains { $0["id"].string == keptID })
+        try await ChatActions.delete(store, keptID)
+        // Delete now: the temporary chat is gone at once, even while it is open.
+        let gone = try await store.rpc.call("sessions.create", ["mode": "chat", "temporary": true])
+        try await store.open(gone["id"].string)
+        try await ChatActions.delete(store, gone["id"].string)
+        XCTAssertFalse(store.sessions.contains { $0.id == gone["id"].string })
+        try await store.logout()
+    }
+
     func testTheWholeOfAConversation() async throws {
         let (address, username, password) = try environment()
         let store = AppStore()

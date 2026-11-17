@@ -2,7 +2,7 @@
  * Sessions and their message trees. Edits and retries create siblings; `headMessageId` is the leaf of
  * the active branch. Compaction never deletes: a summary node starts the model-visible history.
  */
-import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { messageText, type Message, type Mode, type Part, type SessionSummary, type TemporaryMode } from '@atelier/protocol';
 import type { Db } from '../store/db.ts';
 import { messageReactions, messages, sessionLanes, sessions } from '../store/schema.ts';
@@ -174,6 +174,14 @@ export class SessionRepo {
     patch: Partial<Pick<SessionRow, 'title' | 'model' | 'effort' | 'projectId' | 'status' | 'pinnedAt' | 'headMessageId' | 'pending' | 'seq' | 'systemSnapshot' | 'toolsSnapshot' | 'overrides' | 'permissionMode' | 'todos' | 'workspaceId'>>,
   ): Promise<SessionSummary> {
     await this.db.update(sessions).set({ ...patch, updatedAt: Date.now() }).where(eq(sessions.id, id));
+    const row = await this.getRow(id);
+    if (!row) throw new Error(`Session ${id} not found`);
+    return toSummary(row);
+  }
+
+  /** Makes a temporary chat an ordinary one, side chats and sub-agents with it: from now on it is listed, searched and kept. */
+  async keep(id: string): Promise<SessionSummary> {
+    await this.db.update(sessions).set({ temporary: null }).where(or(eq(sessions.id, id), eq(sessions.parentSessionId, id)));
     const row = await this.getRow(id);
     if (!row) throw new Error(`Session ${id} not found`);
     return toSummary(row);

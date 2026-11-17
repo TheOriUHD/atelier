@@ -462,6 +462,12 @@ export const contract = {
      * (`deleted`). For other sessions it is the same as `sessions.unsubscribe`.
      */
     'sessions.leave': { input: Id, output: z.object({ deleted: z.boolean() }) },
+    /**
+     * Makes a temporary chat an ordinary one: it is listed, searched and kept like any chat (its side chats with it).
+     * Only the chat's own person may. A chat that is not temporary comes back unchanged; a side chat or sub-agent
+     * follows its parent and answers `invalid_request`.
+     */
+    'sessions.keep': { input: Id, output: SessionSummary },
 
     'chat.send': {
       input: z.object({ sessionId: z.string(), parentId: z.string().nullable().optional(), parts: z.array(Part).min(1), answerWith: z.string().max(300).optional(), clientMutationId: z.string().uuid().optional() }),

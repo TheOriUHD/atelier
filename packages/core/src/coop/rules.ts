@@ -42,6 +42,7 @@ export const COOP_RULES = {
   'sessions.fork': 'owner',
   'sessions.continueInCowork': 'owner',
   'sessions.delete': 'owner',
+  'sessions.keep': 'owner',
   'chat.switchBranch': 'owner',
   'chat.compact': 'owner',
   'checkpoints.rewind': 'owner',

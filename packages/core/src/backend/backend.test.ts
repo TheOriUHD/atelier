@@ -429,6 +429,25 @@ describe('temporary chats', () => {
     other.close();
   });
 
+  it('can be kept: it becomes an ordinary chat that is listed, found and not deleted when left', async () => {
+    const temp = await client.call('sessions.create', { mode: 'chat', temporary: true });
+    await client.call('sessions.update', { id: temp.id, title: 'Worth keeping' });
+    await client.call('sessions.subscribe', { id: temp.id });
+    expect(await client.call('sessions.list', { query: 'Worth' })).toEqual([]);
+
+    const changed: string[] = [];
+    client.on('sessions.changed', (s) => changed.push(s.id));
+    const kept = await client.call('sessions.keep', { id: temp.id });
+    expect(kept.temporary).toBeNull();
+    expect(changed).toContain(temp.id);
+    expect((await client.call('sessions.list', { query: 'Worth' })).map((s) => s.id)).toEqual([temp.id]);
+
+    // Leaving no longer deletes it, and keeping an ordinary chat changes nothing.
+    expect(await client.call('sessions.leave', { id: temp.id })).toEqual({ deleted: false });
+    expect(await exists(client, temp.id)).toBe(true);
+    expect((await client.call('sessions.keep', { id: temp.id })).id).toBe(temp.id);
+  });
+
   it('is deleted a minute after its window closes, unless a window opens it again', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {

@@ -497,6 +497,9 @@ across the top shows that you are in one.
 - It is deleted, with its files and artifacts, when you leave it: open something else, start a new chat, press **×** in
   the strip, or close its window. A window that closes or drops has a minute to come back (a reload keeps the chat).
   Any temporary chat nobody has open and that has been idle for 24 hours is removed too.
+- In the iPhone and iPad app there is no strip: the **⋯** menu of a temporary chat starts with **Delete chat now**, which
+  deletes it and leaves it, and **Keep chat**, which makes it an ordinary chat that stays in your list (from then on it is
+  searched, can be filed in a project and is saved to memory like any other).
 - By default the model still knows your personal instructions and memory. **Settings › Privacy › Temporary chats**
   chooses:
   - **Don't save (default)**: the model may use your memory and instructions; nothing is written.

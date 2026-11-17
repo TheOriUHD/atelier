@@ -376,6 +376,18 @@ enum ChatReactions {
         store.sessions.removeAll { $0.id == id }
     }
 
+    /// Turns a temporary chat into an ordinary one: from now on it is in the list and is not deleted when left.
+    static func keep(_ store: AppStore, _ id: String) async throws {
+        let kept = try await store.rpc.call("sessions.keep", ["id": .string(id)])
+        let session = Conversation(raw: kept)
+        if let index = store.sessions.firstIndex(where: { $0.id == id }) { store.sessions[index] = session } else { store.sessions.insert(session, at: 0) }
+        // The open conversation's own copy says it is ordinary now too (its draft is saved from here on).
+        if store.selected == id, case .object(var snapshot) = store.transcript.snapshot {
+            snapshot["session"] = kept
+            store.transcript.snapshot = .object(snapshot)
+        }
+    }
+
     static func leaveCoop(_ store: AppStore, _ id: String) async throws {
         _ = try await store.rpc.call("coop.leave", ["sessionId": .string(id)])
         store.sessions.removeAll { $0.id == id }

@@ -2912,6 +2912,17 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { deleted: true };
     },
 
+    'sessions.keep': async ({ id }, ctx) => {
+      const row = await sessionOrThrow(id, ctx);
+      const raw = (await sessions.getRow(id))!;
+      if (raw.parentSessionId) throw appError('invalid_request', 'A side chat is kept with the chat it belongs to.');
+      if (!raw.temporary) return row;
+      const kept = await sessions.keep(id);
+      // The chat joins the person's lists now: the sidebar, search and Recents.
+      emitToUser(me(ctx).id, 'sessions.changed', kept);
+      return kept;
+    },
+
     'chat.send': async ({ sessionId, parentId, parts, answerWith, clientMutationId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.send');
       heard(sessionId, ctx.connection().client);
