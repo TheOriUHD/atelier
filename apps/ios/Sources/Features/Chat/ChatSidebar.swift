@@ -149,7 +149,7 @@ struct ChatSidebar: View {
     // MARK: toolbar
 
     /// An iPad's list has a bar at the bottom as Claude's has: the profile and the view options on the left, a new conversation
-    /// on the right; the top is left to the name and the search. A phone keeps its profile, the Chat | Code choice and the
+    /// on the right; the top is left to the name and the search (the Chat | Code choice is on the new-conversation page's top row). A phone keeps its profile, the Chat | Code choice and the
     /// view options at the top.
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
@@ -157,13 +157,19 @@ struct ChatSidebar: View {
         if isPad {
             ToolbarItem(placement: .topBarLeading) { Text("Atelier").font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).fixedSize() }
                 .sharedBackgroundVisibility(.hidden)
+            // Three free-standing icons of one size, with nothing behind them.
             ToolbarItem(placement: .bottomBar) {
-                Button { actions.settings() } label: { Avatar(name: store.userName, size: 34, ring: true) }.buttonStyle(.plain).accessibilityLabel("Settings")
+                Button { actions.settings() } label: { Avatar(name: store.userName, size: 32, ring: true).frame(width: 44, height: 44) }.buttonStyle(.plain).accessibilityLabel("Settings")
             }
             .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .bottomBar) { viewMenu }
+            ToolbarItem(placement: .bottomBar) { viewMenu.font(.system(size: 24, weight: .regular)).frame(width: 44, height: 44) }
+                .sharedBackgroundVisibility(.hidden)
             ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button { actions.compose() } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel(mode == .code ? "New Code session" : "New conversation") }
+            ToolbarItem(placement: .bottomBar) {
+                Button { actions.compose() } label: { Image(systemName: "square.and.pencil").font(.system(size: 24, weight: .regular)).frame(width: 44, height: 44) }
+                    .accessibilityLabel(mode == .code ? "New Code session" : "New conversation")
+            }
+            .sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .topBarLeading) {
                 Button { actions.settings() } label: { Avatar(name: store.userName, size: 34, ring: true) }

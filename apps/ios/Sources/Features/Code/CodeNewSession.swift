@@ -31,6 +31,7 @@ struct NewCodeSessionPage: View {
     @State private var effortOpen = false
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     init(store: AppStore, onCreated: @escaping (String) -> Void) {
         self.store = store
@@ -85,6 +86,7 @@ struct NewCodeSessionPage: View {
         Group {
             startPage
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar { if sizeClass == .regular { ToolbarItem(placement: .principal) { HomeModePicker() } } }
             .task {
                 Task { try? await Task.sleep(for: .milliseconds(450)); focused = true }
                 CodeSshPromptCenter.shared.start(store: store)
@@ -126,7 +128,6 @@ struct NewCodeSessionPage: View {
                     .font(.system(size: 32, weight: .regular, design: .serif)).foregroundStyle(Theme.ink)
             }
             Spacer(minLength: 0)
-            HomeModePicker().padding(.bottom, 14)
             VStack(alignment: .leading, spacing: 12) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {

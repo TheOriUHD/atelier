@@ -21,8 +21,8 @@ extension EnvironmentValues {
     }
 }
 
-/// The Chat | Code choice on an iPad, over the box a new conversation starts from: the box and what it starts depend on it.
-/// A phone keeps it in the list's own bar and shows nothing here.
+/// The Chat | Code choice on an iPad, in the top row of a new conversation's page, centred over its box: the box and what it
+/// starts depend on it. A phone keeps it in the list's own bar and shows nothing here.
 struct HomeModePicker: View {
     @Environment(\.homeMode) private var control
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -32,7 +32,7 @@ struct HomeModePicker: View {
             Picker("Mode", selection: Binding(get: { control.mode }, set: { control.set($0) })) {
                 ForEach(HomeMode.allCases) { Text($0.rawValue).tag($0) }
             }
-            .pickerStyle(.segmented).frame(width: 200).frame(maxWidth: .infinity)
+            .pickerStyle(.segmented).frame(width: 200)
         }
     }
 }

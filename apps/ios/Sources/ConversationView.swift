@@ -62,8 +62,7 @@ struct ConversationView: View {
         .navigationTitle(store.selected == nil ? "" : (session?.displayTitle ?? "Atelier"))
         .navigationSubtitle(store.selected == nil ? "" : modelName)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarTitleMenu { if let session, store.selected != nil { ChatSessionActions(store: store, session: session, prompt: prompt) { id in Task { await ChatNav.open(store, id) } } } }
-        .toolbar { toolbar }
+                .toolbar { toolbar }
         .chatSessionPrompts(store: store, prompt: prompt) { id in if id == store.selected { ChatNav.newConversation(store) } }
         .modifier(ArtifactsPresenter(store: store, shown: $showArtifacts, regular: sizeClass == .regular))
         .sheet(item: $sheet) { sheet in
@@ -117,6 +116,12 @@ struct ConversationView: View {
     /// One button on the right, and one list behind it: everything for this conversation in a single step (several buttons
     /// side by side collapse into an overflow whose first row is another menu).
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        // On an iPad a new conversation has the Chat | Code choice in the top row, in the middle of the page and so of the box.
+        if wide, store.selected == nil { ToolbarItem(placement: .principal) { HomeModePicker() } }
+        // The title's menu (and its little arrow) belongs to a conversation that is open, not to the new-conversation page.
+        if store.selected != nil, let session {
+            ToolbarTitleMenu { ChatSessionActions(store: store, session: session, prompt: prompt) { id in Task { await ChatNav.open(store, id) } } }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             if store.selected == nil {
                 Button {
@@ -333,7 +338,6 @@ struct ConversationView: View {
         VStack(spacing: 30) {
             Spacer(minLength: 0)
             NewConversation(store: store, inline: true)
-            HomeModePicker()
             bottom
             Spacer(minLength: 0)
             Spacer(minLength: 0)
