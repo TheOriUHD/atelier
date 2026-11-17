@@ -31,6 +31,12 @@ import SwiftUI
                 .onAppear { Self.paintWindows() }
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
                 .task {
+                    // `--llm-bench <model id>`: measure a model on this device and print the result (a spike, see OnDeviceSpike).
+                    if let flag = ProcessInfo.processInfo.arguments.firstIndex(of: "--llm-bench"), flag + 1 < ProcessInfo.processInfo.arguments.count {
+                        let target = ProcessInfo.processInfo.arguments[flag + 1]
+                        if target == "apple" { await OnDeviceSpike().runApple() } else { await OnDeviceSpike().run(target) }
+                        return
+                    }
                     guard !demo else { return }
                     if let launch = Launch.autologin {
                         store.address = launch.address

@@ -176,6 +176,10 @@ struct DeveloperSettings: View {
                 ValueRow(title: "Address", value: store.address, mono: true, copyable: true)
             }
 
+            SettingsSection(title: "On-device models") {
+                NavRow(symbol: "cpu", title: "On-device model test")
+                    .overlay { NavigationLink { OnDeviceSpikePage() } label: { Color.clear }.opacity(0) }
+            }
             SettingsSection(title: "Data on this device") {
                 ActionRow(title: "Reload conversations and settings", symbol: "arrow.clockwise", busy: reloading) {
                     reloading = true
