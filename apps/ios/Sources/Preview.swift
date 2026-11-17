@@ -20,9 +20,9 @@ enum Demo {
         if screen == "signin" { return store }
         store.signedIn = true
         store.connected = true
-        store.userName = "Philipp Buss"
+        store.userName = "Maya Lindqvist"
         store.address = "https://atelier.example.com"
-        store.authStatus = .obj(["user": .obj(["id": "u1", "name": "Philipp Buss", "username": "philipp", "role": .string(Launch.role)]), "local": .bool(false), "setupRequired": .bool(false)])
+        store.authStatus = .obj(["user": .obj(["id": "u1", "name": "Maya Lindqvist", "username": "maya", "role": .string(Launch.role)]), "local": .bool(false), "setupRequired": .bool(false)])
         store.info = .obj(["name": "Atelier", "version": "0.10.1", "surface": "web", "imageGeneration": .bool(true), "videoGeneration": .bool(true), "audioGeneration": .bool(true), "auditLog": .bool(true), "usageLimits": .bool(true), "unifiedChat": .bool(true), "planAuto": .bool(true), "terminalSignIn": .bool(true)])
         store.rpc.stub = { method, params in
             let responders: [(String, [String: JSON]) throws -> JSON?] = [ChatDemo.respond, PersonalDemo.respond, CustomizeDemo.respond, CodeDemo.respond, AdminModelsDemo.respond, AdminServerDemo.respond]

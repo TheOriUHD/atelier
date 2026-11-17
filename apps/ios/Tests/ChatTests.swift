@@ -477,12 +477,12 @@ import SwiftUI
     }
 
     func testFoldersAreNamedByTheLastPartOfTheirPath() {
-        XCTAssertEqual(ChatFolders.short(#"C:\Users\Philipp\Documents\Vibecoding\NewETS2ModMenu"#), "NewETS2ModMenu")
+        XCTAssertEqual(ChatFolders.short(#"C:\Users\Maya\Documents\Projects\ModMenu"#), "ModMenu")
         XCTAssertEqual(ChatFolders.short("/Users/philipp/atelier"), "atelier")
         XCTAssertEqual(ChatFolders.short("QwenTest"), "QwenTest")
         XCTAssertEqual(ChatFolders.name(nil), "No folder")
         XCTAssertEqual(ChatFolders.name(json(#"{"id":"w","name":"scratch-2026-11-13-210665","scratch":true}"#)), "No folder")
-        XCTAssertEqual(ChatFolders.name(json(#"{"id":"w","name":"C:\\Users\\Philipp\\Documents\\Mod","scratch":false}"#)), "Mod")
+        XCTAssertEqual(ChatFolders.name(json(#"{"id":"w","name":"C:\\Users\\Maya\\Documents\\Mod","scratch":false}"#)), "Mod")
     }
 
     func testSessionsWithScratchFoldersShareOneNoFolderGroup() {
@@ -497,6 +497,19 @@ import SwiftUI
         let arranged = ChatArrange.arrange([session("1", "a"), session("2", "s1"), session("3", "s2"), session("4", nil)], grouping: .folder, sorting: .activity, groups: [], workspaces: workspaces, showEmptyGroups: false)
         XCTAssertEqual(arranged.groups.map(\.title), ["app", "No folder"])
         XCTAssertEqual(arranged.groups.last?.sessions.count, 3)
+    }
+
+    func testAnUploadsProgressRisesSlowsDownAndFillsWhenTheServerAnswers() {
+        var upload = ChatUpload(name: "Photo.jpg", thumbnail: nil, bytes: 3_000_000)
+        let start = upload.started
+        let early = upload.progress(at: start.addingTimeInterval(0.2))
+        let later = upload.progress(at: start.addingTimeInterval(2))
+        let long = upload.progress(at: start.addingTimeInterval(60))
+        XCTAssertGreaterThan(early, 0)
+        XCTAssertGreaterThan(later, early)
+        XCTAssertLessThan(long, 0.93, "an estimate never claims to be finished")
+        upload.finished = true
+        XCTAssertEqual(upload.progress(at: start.addingTimeInterval(1)), 1)
     }
 
     func testTheEffortSliderSnapsToTheNearestLevel() {

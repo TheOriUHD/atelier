@@ -41,10 +41,11 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             if !store.connected, hub.linkStage >= 2 || store.connectionNote != nil { offline }
-            if temporary { temporaryBar }
+            if temporary, store.selected != nil { temporaryBar.transition(.move(edge: .top).combined(with: .opacity)) }
             if let parent = hub.sideChatParent[store.selected ?? ""] { sideChatBar(parent) }
             content
         }
+        .animation(.smooth(duration: 0.35), value: temporary)
         .background(Theme.background)
         .safeAreaInset(edge: .bottom, spacing: 0) { if !(isEmpty && wide) { bottom } }
         .environment(\.chatServer, store.address)
@@ -78,6 +79,7 @@ struct ConversationView: View {
                 case "coop": sheet = .coop
                 case "sidechats": sheet = .sideChats
                 case "model": modelPicker = true
+                case "temporary": hub.newOptions.temporary = true
                 case "artifacts": showArtifacts = true
                 default: break
                 }
@@ -102,9 +104,15 @@ struct ConversationView: View {
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             if store.selected == nil {
-                Button { hub.newOptions.temporary.toggle(); UISelectionFeedbackGenerator().selectionChanged() } label: { Image(systemName: "eyeglasses") }
-                    .tint(hub.newOptions.temporary ? Theme.clay : Theme.inkSecondary).accessibilityLabel("Temporary chat").accessibilityValue(hub.newOptions.temporary ? "On" : "Off")
-                    .accessibilityHint("A temporary chat is deleted when you leave it")
+                Button {
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    withAnimation(.smooth(duration: 0.4)) { hub.newOptions.temporary.toggle() }
+                } label: {
+                    Image(systemName: "circle.dashed").font(.system(size: 17, weight: .medium)).frame(width: 22, height: 22)
+                        .symbolEffect(.bounce, value: hub.newOptions.temporary)
+                }
+                .tint(hub.newOptions.temporary ? Theme.clay : Theme.inkSecondary).accessibilityLabel("Temporary chat").accessibilityValue(hub.newOptions.temporary ? "On" : "Off")
+                .accessibilityHint("A temporary chat is deleted when you leave it")
             } else {
                 Menu {
                     Button("New conversation", systemImage: "square.and.pencil") { ChatNav.newConversation(store) }
@@ -120,12 +128,7 @@ struct ConversationView: View {
                         }
                         if session.mode == "code" { CodeToolsMenu(store: store) }
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        if running { ProgressView().controlSize(.small) }
-                        Image(systemName: "ellipsis")
-                    }
-                }.accessibilityLabel(running ? "Conversation actions, still working" : "Conversation actions")
+                } label: { Image(systemName: "ellipsis") }.accessibilityLabel("Conversation actions")
             }
         }
     }
@@ -161,30 +164,54 @@ struct ConversationView: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// For a temporary chat that is open: a quiet line under the title, with the way out.
     private var temporaryBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: "eyeglasses")
-            Text("Temporary chat").font(.subheadline.weight(.semibold))
-            Text(hub.temporaryMode == "fresh" ? "Starts fresh. Deleted when you leave." : "Deleted when you leave.").font(.footnote).opacity(0.8).lineLimit(1)
+            Image(systemName: "circle.dashed").font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.clay)
+            Text("Temporary chat").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+            Text(hub.temporaryMode == "fresh" ? "Starts fresh. Deleted when you leave." : "Deleted when you leave.").font(.footnote).foregroundStyle(Theme.inkMuted).lineLimit(1)
             Spacer(minLength: 0)
-            Button { if store.selected == nil { hub.newOptions.temporary = false } else { ChatNav.newConversation(store) } } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .bold)) }.accessibilityLabel("Leave temporary chat")
+            Button { ChatNav.newConversation(store) } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.inkSecondary).frame(width: 26, height: 26).background(Theme.fillStrong, in: Circle()) }
+                .buttonStyle(.plain).accessibilityLabel("Leave temporary chat")
         }
-        .foregroundStyle(Color(uiColor: .systemBackground)).padding(.horizontal, 16).padding(.vertical, 9)
-        .background(Theme.ink, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .padding(.horizontal, 12).padding(.bottom, 4)
+        .padding(.leading, 16).padding(.trailing, 10).padding(.vertical, 8)
+        .background(Theme.fill, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.inkMuted.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+        .padding(.horizontal, 12).padding(.bottom, 6)
         .accessibilityElement(children: .contain)
     }
 
     // MARK: the page
 
+    /// Which page the conversation area shows; a change between them is a fade, never a switch.
+    private enum Page: Equatable { case failed, loading, starting, greeting, chat }
+    private var page: Page {
+        if hub.openError != nil, store.selected != nil, !ChatNav.loaded(store) { return .failed }
+        // While a conversation is being started the first message stays on screen, so the greeting never comes back for a moment.
+        if hub.starting != nil, isEmpty { return .starting }
+        if !ChatNav.loaded(store) { return .loading }
+        return isEmpty ? .greeting : .chat
+    }
+
     @ViewBuilder private var content: some View {
-        if let failure = hub.openError, store.selected != nil, !ChatNav.loaded(store) {
-            ScrollView { InlineError(message: failure) { if let id = store.selected { Task { await ChatNav.open(store, id) } } }.padding(.top, 60) }
-        } else if !ChatNav.loaded(store) {
-            ChatSkeleton()
-        } else if isEmpty {
-            if wide { centeredStart } else { NewConversation(store: store) }
-        } else { transcript }
+        Group {
+            switch page {
+            case .failed:
+                ScrollView { InlineError(message: hub.openError ?? "") { if let id = store.selected { Task { await ChatNav.open(store, id) } } }.padding(.top, 60) }.transition(.opacity)
+            case .loading: ChatSkeleton().transition(.opacity)
+            case .starting: if let starting = hub.starting { ChatStartingView(starting: starting).transition(.opacity) }
+            case .greeting: (wide ? AnyView(centeredStart) : AnyView(NewConversation(store: store))).transition(.opacity.combined(with: .scale(scale: 0.97)))
+            case .chat: transcript.transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.4), value: page)
+        .onChange(of: isEmpty) { _, empty in if !empty { hub.starting = nil } }
+        .task(id: hub.starting?.id) {
+            // If nothing came of it (the send failed), the greeting returns after a few seconds.
+            guard hub.starting != nil else { return }
+            try? await Task.sleep(for: .seconds(8))
+            if !Task.isCancelled { hub.starting = nil }
+        }
     }
 
     private var transcript: some View {
@@ -193,7 +220,7 @@ struct ConversationView: View {
         let snapshot = store.transcript.snapshot
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 26) {
+                transcriptStack(laziness: turns.count > 60) {
                     ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
                         TurnView(turn: turn, store: store, isLast: index == turns.count - 1, running: running, onEdit: { editing = $0 }, onOpenArtifact: { openArtifact($0) }, onViewEdit: { viewEdit($0) }, siblings: branch.siblings).id(turn.id)
                     }
@@ -247,6 +274,11 @@ struct ConversationView: View {
             }
             .animation(.snappy, value: follow)
         }
+    }
+
+    @ViewBuilder private func transcriptStack<Content: View>(laziness lazy: Bool, @ViewBuilder _ content: () -> Content) -> some View {
+        if lazy { LazyVStack(alignment: .leading, spacing: 26) { content() } }
+        else { VStack(alignment: .leading, spacing: 26) { content() } }
     }
 
     /// What the newest part of the running reply is doing, in a few words.
@@ -416,21 +448,28 @@ struct NewConversation: View {
     }
     private var fewChats: Bool { store.sessions.filter { $0.mode == "chat" && !$0.archived }.count < 5 }
     private var temporary: Bool { hub.newOptions.temporary }
-    private var offersProject: Bool { !temporary || hub.temporaryMode == "private" }
+    /// A temporary chat belongs to no project.
+    private var offersProject: Bool { !temporary }
 
     var body: some View {
         VStack(spacing: 18) {
             if !inline { Spacer() }
-            AtelierMark(size: 54)
+            ZStack {
+                AtelierMark(size: 54).opacity(temporary ? 0 : 1).scaleEffect(temporary ? 0.8 : 1)
+                Image(systemName: "circle.dashed").font(.system(size: 46, weight: .light)).foregroundStyle(Theme.inkSecondary).opacity(temporary ? 1 : 0).scaleEffect(temporary ? 1 : 1.2)
+            }
             Text(temporary ? "You're in a temporary chat" : greeting).font(.system(.title, design: .serif, weight: .medium)).multilineTextAlignment(.center).foregroundStyle(Theme.ink).minimumScaleFactor(0.8)
+                .contentTransition(.opacity)
             if temporary {
                 Text(hub.temporaryMode == "fresh" ? "It stays out of your history, and starts fresh: no memory, personal instructions or projects. It is deleted when you leave it." : "It stays out of your history and memory, and is deleted when you leave it.")
                     .font(.footnote).foregroundStyle(Theme.inkMuted).multilineTextAlignment(.center).frame(maxWidth: 360)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            if offersProject { projectChip }
-            if !temporary, fewChats { starters }
+            if offersProject { projectChip.transition(.opacity) }
+            if !temporary, fewChats { starters.transition(.opacity) }
             if !inline { Spacer(); Spacer() }
         }
+        .animation(.smooth(duration: 0.4), value: temporary)
         .padding(inline ? 0 : 24).frame(maxWidth: .infinity)
         .alert("New project", isPresented: $naming) {
             TextField("Name", text: $projectName)
@@ -526,6 +565,51 @@ struct Working: View {
     }
 }
 
+/// A small clock whose hands go round: for a request that is waiting its turn.
+struct WaitingClock: View {
+    @State private var spinning = false
+    var body: some View {
+        ZStack {
+            Circle().stroke(Theme.inkMuted, lineWidth: 1.5)
+            Capsule().fill(Theme.inkMuted).frame(width: 1.5, height: 5).offset(y: -2.5).rotationEffect(.degrees(spinning ? 360 : 0), anchor: .center)
+                .animation(.linear(duration: 6).repeatForever(autoreverses: false), value: spinning)
+            Capsule().fill(Theme.inkMuted).frame(width: 1.5, height: 3.5).offset(y: -1.75).rotationEffect(.degrees(spinning ? 360 * 12 : 0), anchor: .center)
+                .animation(.linear(duration: 72).repeatForever(autoreverses: false), value: spinning)
+        }
+        .frame(width: 15, height: 15).padding(.vertical, 4)
+        .onAppear { spinning = true }
+        .accessibilityLabel("Waiting in line")
+    }
+}
+
+/// The first message of a conversation that is being started, shown where it will be once the conversation has opened,
+/// so the greeting fades into the chat instead of switching.
+struct ChatStartingView: View {
+    let starting: ChatStarting
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .trailing, spacing: 8) {
+                    if starting.files > 0 { Label(ChatText.plural(starting.files, "file"), systemImage: "paperclip").font(.footnote).foregroundStyle(Theme.inkMuted) }
+                    if !starting.text.isEmpty {
+                        Text(starting.text).font(.system(.body)).foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 16).padding(.vertical, 11)
+                            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    }
+                }
+                .frame(maxWidth: 560, alignment: .trailing).frame(maxWidth: .infinity, alignment: .trailing)
+                HStack(spacing: 8) { Working() }
+            }
+            .frame(maxWidth: Theme.readingWidth, alignment: .leading)
+            .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 40)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollDisabled(true)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// What the run is doing now: waiting in line for a local model, compacting, loading a model, calling a tool or writing,
 /// and for how long the turn has gone on.
 struct ChatRunLine: View {
@@ -559,7 +643,7 @@ struct ChatRunLine: View {
     var body: some View {
         if text != nil || !lastIsAssistant {
             HStack(spacing: 8) {
-                Working()
+                if snapshot["queued"] != .null { WaitingClock() } else { Working() }
                 Text(text ?? "Working").font(.footnote).foregroundStyle(Theme.inkMuted)
                 if let since {
                     TimelineView(.periodic(from: .now, by: 1)) { context in

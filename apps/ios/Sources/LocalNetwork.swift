@@ -52,6 +52,18 @@ struct FoundServer: Identifiable, Equatable {
         guard state != .scanning else { return }
         state = .scanning
         found = []
+        #if DEBUG
+        // `--demo signin`: servers that are not on anyone's real network, for looking at the list.
+        if Demo.requested == "signin" {
+            try? await Task.sleep(for: .milliseconds(600))
+            found = [
+                FoundServer(host: "192.168.1.20", name: "Studio Mac", version: "0.10.1", url: URL(string: "http://192.168.1.20:7340")!, compatible: true),
+                FoundServer(host: "192.168.1.44", name: "Home server", version: "0.10.1", url: URL(string: "https://atelier.example.com")!, compatible: true),
+            ]
+            state = .finished
+            return
+        }
+        #endif
         let prefixes = Self.subnets()
         let results = await Self.probeAll(prefixes: prefixes)
         guard !Task.isCancelled else { return }

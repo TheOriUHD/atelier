@@ -150,3 +150,14 @@ struct CardBackground: ViewModifier {
 extension View {
     func card(radius: CGFloat = 20) -> some View { modifier(CardBackground(radius: radius)) }
 }
+
+extension View {
+    /// A raised surface for the message box and the panels that replace it. It is solid on purpose: glass picks a light or a dark
+    /// look from what is behind it, and over a moving conversation that showed as a flash of the other mode.
+    func raisedBox(radius: CGFloat = 28) -> some View {
+        self
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 1))
+            .shadow(color: .black.opacity(0.10), radius: 14, y: 4)
+    }
+}

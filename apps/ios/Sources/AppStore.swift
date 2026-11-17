@@ -43,6 +43,9 @@ import UniformTypeIdentifiers
     private var restoring = false
     /// A QR sign-in is in progress: nothing else may take the connection (or try to restore an old sign-in) meanwhile.
     private var pairing = false
+    /// The socket may have been closed while the app was in the background: look once when it comes back.
+    private var needsCheck = false
+    private var pollTask: Task<Void, Never>?
     private var reloadTask: Task<Void, Never>?
     private var pendingSend: (session: String, parts: [JSON], mutation: String)?
     private var userID = ""
@@ -59,6 +62,8 @@ import UniformTypeIdentifiers
         rpc.event = { [weak self] method, value in self?.receive(method, value) }
         rpc.disconnected = { [weak self] in
             guard let self else { return }
+            // A socket the system closed while the app was away is not news: the app looks when it comes back.
+            guard self.active else { self.needsCheck = true; return }
             self.connected = false
             self.scheduleReconnect()
         }
@@ -141,6 +146,9 @@ import UniformTypeIdentifiers
         authStatus = status
         info = (try? await rpc.call("app.info")) ?? .null
         signedIn = true; connected = true
+        needsCheck = false
+        DeveloperOptions.shared.noteAttempt(reset: true)
+        startPolling()
         try await refresh()
         if let selected { try await open(selected) }
     }
@@ -270,8 +278,68 @@ import UniformTypeIdentifiers
     func lifecycle(active: Bool) {
         self.active = active
         saveDraft()
-        if active { Task { await reconnectQuietly() } }
-        else { reconnectTask?.cancel(); reloadTask?.cancel(); rpc.close(); connected = false }
+        if active {
+            Task { await resumed() }
+            startPolling()
+        } else {
+            // Nothing runs in the background. The socket is left as it is: the system keeps it or closes it, and the app
+            // finds out when it comes back, so a short trip to another app never shows a "reconnecting" banner.
+            reconnectTask?.cancel(); reloadTask?.cancel(); pollTask?.cancel(); pollTask = nil
+        }
+    }
+
+    private func resumed() async {
+        guard signedIn else { return }
+        if connected, !needsCheck, !DeveloperOptions.shared.checkOnForeground { return }
+        await checkConnection(reason: "foreground")
+    }
+
+    /// Asks the server whether it is there, with a short wait. A server that answers changes nothing on screen; one that
+    /// does not starts connecting again (the list says so only if that takes a while).
+    func checkConnection(reason: String) async {
+        guard signedIn, !pairing, !restoring else { return }
+        let started = ContinuousClock.now
+        do {
+            _ = try await rpc.call("app.info", timeout: 4)
+            let elapsed = started.duration(to: .now)
+            DeveloperOptions.shared.noteCheck(latency: Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000), problem: nil)
+            needsCheck = false
+            if !connected { connected = true }
+        } catch {
+            DeveloperOptions.shared.noteCheck(latency: nil, problem: ChatError.text(error))
+            rpc.close()
+            connected = false
+            await reconnectQuietly()
+        }
+    }
+
+    /// The timer some developers switch on: look at the connection every so many seconds while the app is open.
+    func startPolling() {
+        pollTask?.cancel(); pollTask = nil
+        let options = DeveloperOptions.shared
+        guard active, signedIn, options.alwaysCheck else { return }
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(max(2, options.checkInterval)))
+                guard !Task.isCancelled, let self, self.active else { return }
+                await self.checkConnection(reason: "timer")
+            }
+        }
+    }
+
+    func developerOptionsChanged() { startPolling() }
+
+    func reconnectNow() async {
+        rpc.close()
+        connected = false
+        await reconnectQuietly()
+    }
+
+    /// For trying the banners: closes the socket as a bad network would.
+    func dropConnectionForTesting() {
+        rpc.close()
+        connected = false
+        scheduleReconnect()
     }
     func logout() async throws {
         _ = try await rpc.call("auth.logout")
@@ -309,8 +377,8 @@ import UniformTypeIdentifiers
         guard active, signedIn else { return }
         reconnectTask?.cancel()
         reconnectTask = Task {
-            for delay in [1, 2, 4, 8, 10] {
-                do { try await Task.sleep(for: .seconds(delay)); try Task.checkCancellation(); try await restore(); return }
+            for delay in DeveloperOptions.shared.backoffDelays {
+                do { try await Task.sleep(for: .seconds(delay)); try Task.checkCancellation(); DeveloperOptions.shared.noteAttempt(); try await restore(); return }
                 catch is CancellationError { return } catch { self.connectionNote = error is MobileError ? error.localizedDescription : nil }
             }
         }

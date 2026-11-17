@@ -111,7 +111,7 @@ enum ChatDemo {
     static let archived: [JSON] = [session("a1", "Old notes about the garden", ago: 60 * 86400, archived: true), session("a2", "Holiday packing list", ago: 90 * 86400, archived: true)]
 
     static let coopState: JSON = ["sessionId": "c1", "me": "account:u1", "role": "editor", "via": "server", "hostAway": false, "ended": false, "invite": .null, "knocking": [], "sharedUse": ["requests": 3, "spentUsd": 0.12],
-        "participants": [["id": "account:u2", "kind": "account", "name": "Ben Archer", "avatar": .null, "role": "host", "models": "host", "model": "anthropic/opus", "trusted": true, "online": true, "joinedAt": 1], ["id": "account:u1", "kind": "account", "name": "Philipp Buss", "avatar": .null, "role": "editor", "models": "host", "model": "anthropic/sonnet", "trusted": false, "online": true, "joinedAt": 2], ["id": "account:u3", "kind": "account", "name": "Cy Ito", "avatar": .null, "role": "viewer", "models": "host", "model": .null, "trusted": false, "online": false, "joinedAt": 3]],
+        "participants": [["id": "account:u2", "kind": "account", "name": "Ben Archer", "avatar": .null, "role": "host", "models": "host", "model": "anthropic/opus", "trusted": true, "online": true, "joinedAt": 1], ["id": "account:u1", "kind": "account", "name": "Maya Lindqvist", "avatar": .null, "role": "editor", "models": "host", "model": "anthropic/sonnet", "trusted": false, "online": true, "joinedAt": 2], ["id": "account:u3", "kind": "account", "name": "Cy Ito", "avatar": .null, "role": "viewer", "models": "host", "model": .null, "trusted": false, "online": false, "joinedAt": 3]],
         "settings": ["shareModels": true, "sharedRequestsPerDay": 50, "sharedSpendPerDayUsd": 2, "guestsKeepCopy": true, "allowGuestModels": true, "navigator": .null], "hostModels": [["ref": "anthropic/opus", "displayName": "Opus 5.5"], ["ref": "anthropic/sonnet", "displayName": "Sonnet 5.5"]]]
 
     // MARK: images
@@ -371,7 +371,7 @@ enum ChatDemo {
         case "coop.directory": return .array([["userId": "u2", "name": "Ben Archer", "avatar": .null], ["userId": "u3", "name": "Cy Ito", "avatar": .null], ["userId": "u4", "name": "Dana Moss", "avatar": .null]])
         case "coop.start", "coop.add", "coop.settings", "coop.participant", "coop.models": return coopState
         case "coop.invite": return ["url": "https://atelierhq.dev/join#v1.demo", "expiresAt": t(-86400)]
-        case "auth.status": return ["setupRequired": false, "signup": "invite", "user": ["id": "u1", "name": "Philipp Buss", "username": "philipp", "role": .string(Launch.role)], "local": false, "oidc": []]
+        case "auth.status": return ["setupRequired": false, "signup": "invite", "user": ["id": "u1", "name": "Maya Lindqvist", "username": "maya", "role": .string(Launch.role)], "local": false, "oidc": []]
         case "chat.changePreview", "chat.editPreview": return ["state": "ready", "rows": [["kind": "context", "text": "export function start() {", "line": 1], ["kind": "remove", "text": "  server.listen(0);", "line": 3], ["kind": "add", "text": "  await new Promise((r) => server.listen(0, r));", "line": 3], ["kind": "context", "text": "  return server;", "line": 4]]]
         default: return nil
         }

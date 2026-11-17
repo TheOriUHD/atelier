@@ -16,6 +16,8 @@ targets:
       path: Info.plist
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
+        # Only the system's own HTTPS/TLS: no export paperwork per upload.
+        ITSAppUsesNonExemptEncryption: false
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Looking for a server on the same Wi-Fi, and talking to one there without HTTPS (a desktop sharing itself).
         NSLocalNetworkUsageDescription: Find your Atelier server on this network.
@@ -40,7 +42,7 @@ targets:
         INFOPLIST_KEY_NSCameraUsageDescription: Take a photo to attach to your conversation.
         INFOPLIST_KEY_NSMicrophoneUsageDescription: Dictate a message to your Atelier server.
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Save pictures from your conversations to your photo library.
-        MARKETING_VERSION: '0.1.0'
+        MARKETING_VERSION: '1.0.0'
         CURRENT_PROJECT_VERSION: '1'
   AtelierTests:
     type: bundle.unit-test

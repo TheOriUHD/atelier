@@ -85,7 +85,7 @@ enum PersonalDemo {
         switch method {
         case "account.get":
             if account == nil {
-                account = json(#"{"id":"u1","username":"philipp","name":"Philipp Buss","role":"admin","avatar":null,"mustChangePassword":false,"hasPassword":true,"disabled":false,"safeguards":"inherit","createdAt":1700000000000,"lastActiveAt":1700000000000}"#)
+                account = json(#"{"id":"u1","username":"maya","name":"Maya Lindqvist","role":"admin","avatar":null,"mustChangePassword":false,"hasPassword":true,"disabled":false,"safeguards":"inherit","createdAt":1700000000000,"lastActiveAt":1700000000000}"#)
                 if state == "mustchange" { account = account?.setting("mustChangePassword", .bool(true)) }
             }
             return account
@@ -115,7 +115,7 @@ enum PersonalDemo {
         case "account.removePasskey":
             passkeys?.removeAll { $0["id"] == params["id"] }; return json(#"{"ok":true}"#)
         case "account.identities":
-            if identities == nil { identities = state == "empty" ? json(#"{"connected":[],"available":[]}"#) : json(#"{"connected":[{"id":"i1","providerId":"authentik","provider":"Authentik","label":"philipp@studio.example.com","createdAt":1700000000000,"lastUsedAt":1700500000000}],"available":[{"id":"google","name":"Google"}]}"#) }
+            if identities == nil { identities = state == "empty" ? json(#"{"connected":[],"available":[]}"#) : json(#"{"connected":[{"id":"i1","providerId":"authentik","provider":"Authentik","label":"maya@studio.example.com","createdAt":1700000000000,"lastUsedAt":1700500000000}],"available":[{"id":"google","name":"Google"}]}"#) }
             return identities
         case "account.removeIdentity":
             identities = identities?.setting("connected", .array(identities?["connected"].array.filter { $0["id"] != params["id"] } ?? [])); return json(#"{"ok":true}"#)
@@ -144,7 +144,7 @@ enum PersonalDemo {
     private static func makeDevices() -> [JSON] {
         if state == "empty" { return [] }
         var list: [JSON] = [
-            .obj(["id": "d1", "name": "Philipp's MacBook Pro", "platform": "darwin", "createdAt": ago(60 * 86400), "lastSeenAt": ago(30), "current": false, "online": true]),
+            .obj(["id": "d1", "name": "Maya's MacBook Pro", "platform": "darwin", "createdAt": ago(60 * 86400), "lastSeenAt": ago(30), "current": false, "online": true]),
             .obj(["id": "d2", "name": "Studio Windows PC with a very long machine name that keeps going", "platform": "win32", "createdAt": ago(120 * 86400), "lastSeenAt": ago(5 * 86400), "current": false, "online": false]),
         ]
         if state == "long" { for i in 0..<6 { list.append(.obj(["id": .string("dv\(i)"), "name": .string("Build machine \(i + 1)"), "platform": "linux", "createdAt": ago(Double(i + 5) * 86400), "lastSeenAt": ago(Double(i + 1) * 3600), "current": false, "online": .bool(i % 2 == 0)])) } }
@@ -256,10 +256,10 @@ enum PersonalDemo {
         if state == "empty" { return [] }
         let now = Int(Date.now.timeIntervalSince1970 * 1000)
         var list: [JSON] = [
-            json(#"{"id":"u-abc1234567","type":"ollama","name":"Ollama on the MacBook","baseUrl":"http://localhost:11434","enabled":true,"deviceId":"d1","deviceName":"Philipp's MacBook Pro","online":true,"hasKey":false,"status":{"providerId":"u-abc1234567","ok":true,"latencyMs":42,"version":"0.12.3","modelCount":6,"warnings":[],"checkedAt":\#(now - 120000)},"createdAt":1700000000000}"#),
+            json(#"{"id":"u-abc1234567","type":"ollama","name":"Ollama on the MacBook","baseUrl":"http://localhost:11434","enabled":true,"deviceId":"d1","deviceName":"Maya's MacBook Pro","online":true,"hasKey":false,"status":{"providerId":"u-abc1234567","ok":true,"latencyMs":42,"version":"0.12.3","modelCount":6,"warnings":[],"checkedAt":\#(now - 120000)},"createdAt":1700000000000}"#),
             json(#"{"id":"u-def2345678","type":"llamacpp","name":"llama.cpp (studio)","baseUrl":"http://192.168.1.50:8080","enabled":true,"deviceId":"d2","deviceName":"Studio Windows PC with a very long machine name that keeps going","online":false,"hasKey":false,"createdAt":1700000000000}"#),
-            json(#"{"id":"u-ghi3456789","type":"openai-compatible","name":"LM Studio","baseUrl":"http://localhost:1234/v1","enabled":true,"deviceId":"d1","deviceName":"Philipp's MacBook Pro","online":true,"hasKey":true,"status":{"providerId":"u-ghi3456789","ok":false,"latencyMs":null,"modelCount":0,"warnings":[],"error":"Connection refused: nothing answers on that port.","checkedAt":\#(now - 60000)},"createdAt":1700000000000}"#),
-            json(#"{"id":"u-jkl4567890","type":"chatgpt-chat","name":"ChatGPT Chat","baseUrl":"https://chatgpt.com","enabled":false,"deviceId":"d1","deviceName":"Philipp's MacBook Pro","online":true,"hasKey":false,"createdAt":1700000000000}"#),
+            json(#"{"id":"u-ghi3456789","type":"openai-compatible","name":"LM Studio","baseUrl":"http://localhost:1234/v1","enabled":true,"deviceId":"d1","deviceName":"Maya's MacBook Pro","online":true,"hasKey":true,"status":{"providerId":"u-ghi3456789","ok":false,"latencyMs":null,"modelCount":0,"warnings":[],"error":"Connection refused: nothing answers on that port.","checkedAt":\#(now - 60000)},"createdAt":1700000000000}"#),
+            json(#"{"id":"u-jkl4567890","type":"chatgpt-chat","name":"ChatGPT Chat","baseUrl":"https://chatgpt.com","enabled":false,"deviceId":"d1","deviceName":"Maya's MacBook Pro","online":true,"hasKey":false,"createdAt":1700000000000}"#),
         ]
         if state == "long" { for i in 0..<5 { list.append(json(#"{"id":"u-x\#(i)00000000","type":"ollama","name":"Ollama box \#(i + 1)","baseUrl":"http://10.0.0.\#(i + 10):11434","enabled":true,"deviceId":"d1","deviceName":"Lab machine \#(i + 1)","online":true,"hasKey":false,"createdAt":1}"#)) } }
         return list
@@ -268,7 +268,7 @@ enum PersonalDemo {
     private static func makeImageServers() -> [JSON] {
         if state == "empty" { return [] }
         let now = Int(Date.now.timeIntervalSince1970 * 1000)
-        return [json(#"{"id":"u-img1234567","type":"comfyui","preset":"comfyui","name":"ComfyUI (studio)","baseUrl":"http://127.0.0.1:8188","enabled":true,"deviceId":"d1","deviceName":"Philipp's MacBook Pro","online":true,"hasKey":false,"status":{"providerId":"u-img1234567","ok":true,"latencyMs":80,"modelCount":9,"warnings":[],"checkedAt":\#(now - 300000)},"createdAt":1}"#)]
+        return [json(#"{"id":"u-img1234567","type":"comfyui","preset":"comfyui","name":"ComfyUI (studio)","baseUrl":"http://127.0.0.1:8188","enabled":true,"deviceId":"d1","deviceName":"Maya's MacBook Pro","online":true,"hasKey":false,"status":{"providerId":"u-img1234567","ok":true,"latencyMs":80,"modelCount":9,"warnings":[],"checkedAt":\#(now - 300000)},"createdAt":1}"#)]
     }
 
     private static func usageRows(days: Int) -> [JSON] {

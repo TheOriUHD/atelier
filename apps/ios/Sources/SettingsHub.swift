@@ -7,6 +7,8 @@ enum SettingsPageID: String, CaseIterable, Identifiable, Hashable {
     case general, account, privacy, memory, usage, code, folders, cloud, yourModels, personalConnectors, skills, plugins, shortcuts, help
     // Admin
     case providers, media, models, capabilities, adminCode, connectors, secrets, users, limits, server, activity
+    // Switched on by tapping the version ten times
+    case developer
 
     var id: String { rawValue }
     var isAdmin: Bool {
@@ -42,6 +44,7 @@ enum SettingsPageID: String, CaseIterable, Identifiable, Hashable {
         case .limits: "Limits"
         case .server: "Server"
         case .activity: "Activity"
+        case .developer: "Developer"
         }
     }
     var symbol: String {
@@ -71,12 +74,14 @@ enum SettingsPageID: String, CaseIterable, Identifiable, Hashable {
         case .limits: "gauge.with.dots.needle.50percent"
         case .server: "server.rack"
         case .activity: "clock.arrow.circlepath"
+        case .developer: "hammer"
         }
     }
     /// Whether this person may open it here.
     @MainActor func available(for store: AppStore) -> Bool {
         if isAdmin && !store.isAdmin { return false }
         switch self {
+        case .developer: return DeveloperOptions.shared.enabled
         case .media: return store.offers("imageGeneration")
         case .users: return !store.offers("sharedComputer")
         case .limits: return !store.authStatus["local"].bool && !store.offers("sharedComputer") && store.offers("usageLimits")
@@ -102,7 +107,7 @@ struct SettingsView: View {
         _path = State(initialValue: (start ?? launched).map { [$0] } ?? [])
     }
 
-    private var personal: [SettingsPageID] { SettingsPageID.allCases.filter { !$0.isAdmin && $0.available(for: store) } }
+    private var personal: [SettingsPageID] { SettingsPageID.allCases.filter { !$0.isAdmin && $0 != .developer && $0.available(for: store) } }
     private var admin: [SettingsPageID] { SettingsPageID.allCases.filter { $0.isAdmin && $0.available(for: store) } }
 
     var body: some View {
@@ -126,8 +131,14 @@ struct SettingsView: View {
                         ForEach(admin) { page in row(page) }
                     } header: { Text("Admin") } footer: { Text("Changes here apply to everyone on this server.") }
                 }
+                if SettingsPageID.developer.available(for: store) {
+                    Section { row(.developer) }
+                }
                 Section {
-                    LabeledContent("Atelier for iPhone and iPad", value: "0.1.0")
+                    // Ten quick taps turn on the developer options.
+                    LabeledContent("Atelier for iPhone and iPad", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
+                        .contentShape(Rectangle())
+                        .onTapGesture { if let message = DeveloperOptions.shared.tapVersion() { store.notify(message) } }
                     LabeledContent("Server", value: store.info["version"].string)
                 }
                 Section { Button("Sign out", role: .destructive) { signOut = true } }
@@ -176,6 +187,7 @@ struct SettingsView: View {
         case .limits: LimitsSettings(store: store)
         case .server: ServerSettings(store: store)
         case .activity: ActivitySettings(store: store)
+        case .developer: DeveloperSettings(store: store)
         }
     }
 }

@@ -178,7 +178,7 @@ struct NewCodeSessionPage: View {
                 }.buttonStyle(.plain).disabled(!ready).accessibilityLabel("Start session")
             }.padding(.horizontal, 10).padding(.bottom, 10).padding(.top, 2)
         }
-        .glassEffect(.regular, in: .rect(cornerRadius: 28, style: .continuous))
+        .raisedBox()
     }
 
     private func chip(_ title: String, symbol: String? = nil) -> some View {

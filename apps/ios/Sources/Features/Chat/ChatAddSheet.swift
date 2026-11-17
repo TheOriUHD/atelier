@@ -28,6 +28,8 @@ struct ChatAddSheet: View {
 
     private var session: Conversation? { ChatNav.session(store) }
     private var isCode: Bool { mode == "code" }
+    /// A temporary chat belongs to no project.
+    private var temporary: Bool { session?.isTemporary == true || (session == nil && hub.newOptions.temporary) }
     private var projectName: String {
         let id = session?.projectID ?? (session == nil ? store.project : nil)
         return id.flatMap { id in store.projects.first { $0["id"].string == id }?["name"].stringOrNil } ?? "None"
@@ -44,7 +46,7 @@ struct ChatAddSheet: View {
                         Button { choose(.camera); dismiss() } label: { row("camera", "Camera") }
                     }
                     Button { choose(.files); dismiss() } label: { row("doc.badge.arrow.up", "Add files") }
-                    if !isCode, !store.projects.isEmpty || session?.projectID != nil {
+                    if !isCode, !temporary, !store.projects.isEmpty || session?.projectID != nil {
                         NavigationLink { ChatAddProjectPage(store: store) } label: { row("folder", "Add to project", value: projectName) }
                     }
                 }
@@ -80,7 +82,18 @@ struct ChatAddSheet: View {
         }
         .tint(Theme.clay)
         .presentationDetents([.medium, .large], selection: $detent).presentationDragIndicator(.visible)
-        .onChange(of: picked) { _, items in add(items) }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !picked.isEmpty {
+                // Pictures are picked first and attached with this button, as in the Claude app.
+                Button { attach() } label: {
+                    Text(picked.count == 1 ? "Attach 1 photo" : "Attach \(picked.count) photos")
+                        .font(.headline).foregroundStyle(Theme.background).frame(maxWidth: .infinity).frame(height: 54).background(Theme.ink, in: Capsule())
+                }
+                .buttonStyle(.plain).padding(.horizontal, 20).padding(.top, 10).padding(.bottom, 8)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.smooth(duration: 0.25), value: picked.isEmpty)
         .onAppear {
             research = session?.research ?? hub.newOptions.research
             connectorsOff = session?.connectorsOff ?? hub.newOptions.connectorsOff
@@ -111,18 +124,19 @@ struct ChatAddSheet: View {
     /// iOS's own picker, built into the sheet: it runs outside the app, so Atelier sees only the pictures that are tapped
     /// and needs no access to the library.
     private var photos: some View {
-        PhotosPicker(selection: $picked, maxSelectionCount: 20, selectionBehavior: .continuous, matching: .images) { Label("Photos", systemImage: "photo") }
+        PhotosPicker(selection: $picked, maxSelectionCount: 20, selectionBehavior: .ordered, matching: .images) { Label("Photos", systemImage: "photo") }
             .photosPickerStyle(.compact)
             .photosPickerAccessoryVisibility(.hidden, edges: .all)
-            .frame(height: 108)
+            .frame(height: 114)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .padding(.horizontal, 16)
             .listRowInsets(EdgeInsets()).listRowBackground(Color.clear).listRowSeparator(.hidden)
     }
 
-    private func add(_ items: [PhotosPickerItem]) {
-        guard !items.isEmpty else { return }
+    /// Adds the picked pictures to the message and closes the sheet: they show in the box with their progress.
+    private func attach() {
+        let items = picked
         picked = []
+        dismiss()
         for item in items {
             Task {
                 do {

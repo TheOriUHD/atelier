@@ -50,7 +50,7 @@ final class AdminDemoState: @unchecked Sendable {
     }
 
     private func seedUsers() {
-        users = [person("u1", "philipp", "Philipp Buss", role: "admin", active: 20, created: 86400 * 90)]
+        users = [person("u1", "maya", "Maya Lindqvist", role: "admin", active: 20, created: 86400 * 90)]
         if variant == "empty" { return }
         users += [
             person("u2", "mia.member", "Mia Member", must: true),
@@ -300,29 +300,29 @@ final class AdminDemoState: @unchecked Sendable {
     private struct Template { let kind: String; let actor: String?; let target: String?; let summary: String; let detail: JSON; let ip: String? }
 
     private static let templates: [Template] = [
-        Template(kind: "signin.success", actor: "philipp", target: "philipp", summary: "philipp signed in", detail: ["method": "password", "client": "mobile"], ip: "203.0.113.24"),
+        Template(kind: "signin.success", actor: "maya", target: "maya", summary: "maya signed in", detail: ["method": "password", "client": "mobile"], ip: "203.0.113.24"),
         Template(kind: "signin.failed", actor: "jonas", target: "jonas", summary: "Failed sign-in as jonas", detail: ["reason": "wrong password"], ip: "198.51.100.7"),
-        Template(kind: "account.created", actor: "philipp", target: "mia.member", summary: "Created the account mia.member", detail: ["role": "user", "via": "admin"], ip: "203.0.113.24"),
-        Template(kind: "settings.changed", actor: "philipp", target: "server.signup", summary: "Changed server.signup: invite → open", detail: ["path": "server.signup", "from": "invite", "to": "open"], ip: "203.0.113.24"),
+        Template(kind: "account.created", actor: "maya", target: "mia.member", summary: "Created the account mia.member", detail: ["role": "user", "via": "admin"], ip: "203.0.113.24"),
+        Template(kind: "settings.changed", actor: "maya", target: "server.signup", summary: "Changed server.signup: invite → open", detail: ["path": "server.signup", "from": "invite", "to": "open"], ip: "203.0.113.24"),
         Template(kind: "signin.blocked", actor: nil, target: "admin", summary: "Sign-in as admin blocked after repeated failures", detail: ["limit": 8], ip: "192.0.2.99"),
         Template(kind: "invite.created", actor: "anna", target: "i1", summary: "Created an invite for a user", detail: ["role": "user", "expiresAt": .number(Double(Int(Date.now.timeIntervalSince1970 * 1000)) + 604_800_000)], ip: "203.0.113.31"),
-        Template(kind: "account.role_changed", actor: "philipp", target: "anna", summary: "Changed the role of anna from user to admin", detail: ["from": "user", "to": "admin"], ip: "203.0.113.24"),
+        Template(kind: "account.role_changed", actor: "maya", target: "anna", summary: "Changed the role of anna from user to admin", detail: ["from": "user", "to": "admin"], ip: "203.0.113.24"),
         Template(kind: "provider.added", actor: "anna", target: "mistral", summary: "Added provider Mistral", detail: ["family": "text", "type": "mistral", "host": "api.mistral.ai", "enabled": true], ip: "203.0.113.31"),
         Template(kind: "secret.rotated", actor: "anna", target: "mistral-key", summary: "Replaced the secret mistral-key", detail: [:], ip: "203.0.113.31"),
-        Template(kind: "limits.changed", actor: "philipp", target: "limits.tokensPerDay", summary: "Changed limits.tokensPerDay: 100000 → 200000", detail: ["path": "limits.tokensPerDay", "from": 100000, "to": 200000], ip: "203.0.113.24"),
+        Template(kind: "limits.changed", actor: "maya", target: "limits.tokensPerDay", summary: "Changed limits.tokensPerDay: 100000 → 200000", detail: ["path": "limits.tokensPerDay", "from": 100000, "to": 200000], ip: "203.0.113.24"),
         Template(kind: "invite.used", actor: "sam", target: "i3", summary: "sam used an invite", detail: ["role": "user"], ip: "198.51.100.12"),
-        Template(kind: "account.password_reset", actor: "philipp", target: "mia.member", summary: "Reset the password of mia.member", detail: [:], ip: "203.0.113.24"),
+        Template(kind: "account.password_reset", actor: "maya", target: "mia.member", summary: "Reset the password of mia.member", detail: [:], ip: "203.0.113.24"),
         Template(kind: "plugin.installed", actor: "anna", target: "docs-helper", summary: "Installed plugin docs-helper", detail: ["source": "github.com/example/docs-helper"], ip: "203.0.113.31"),
-        Template(kind: "server.update_started", actor: "philipp", target: nil, summary: "Started a server update", detail: [:], ip: "203.0.113.24"),
-        Template(kind: "audit.exported", actor: "philipp", target: nil, summary: "Exported the activity log (212 events)", detail: ["events": 212], ip: "203.0.113.24"),
-        Template(kind: "account.disabled", actor: "philipp", target: "leo", summary: "Disabled the account leo", detail: [:], ip: "203.0.113.24"),
-        Template(kind: "identity.saved", actor: "philipp", target: "authentik", summary: "Saved the single sign-on provider Authentik", detail: ["newAccounts": "pending"], ip: "203.0.113.24"),
+        Template(kind: "server.update_started", actor: "maya", target: nil, summary: "Started a server update", detail: [:], ip: "203.0.113.24"),
+        Template(kind: "audit.exported", actor: "maya", target: nil, summary: "Exported the activity log (212 events)", detail: ["events": 212], ip: "203.0.113.24"),
+        Template(kind: "account.disabled", actor: "maya", target: "leo", summary: "Disabled the account leo", detail: [:], ip: "203.0.113.24"),
+        Template(kind: "identity.saved", actor: "maya", target: "authentik", summary: "Saved the single sign-on provider Authentik", detail: ["newAccounts": "pending"], ip: "203.0.113.24"),
         Template(kind: "model.hidden", actor: "anna", target: "ollama/qwen3", summary: "Hid model ollama/qwen3", detail: ["family": "text"], ip: "203.0.113.31"),
-        Template(kind: "signin.terminal_approved", actor: "philipp", target: "Philipp's MacBook", summary: "philipp signed in a terminal on Philipp's MacBook", detail: ["from": "203.0.113.24", "platform": "darwin"], ip: "203.0.113.24"),
+        Template(kind: "signin.terminal_approved", actor: "maya", target: "Maya's MacBook", summary: "maya signed in a terminal on Maya's MacBook", detail: ["from": "203.0.113.24", "platform": "darwin"], ip: "203.0.113.24"),
         Template(kind: "connector.added", actor: "anna", target: "github", summary: "Added connector github", detail: [:], ip: "203.0.113.31"),
         Template(kind: "skill.installed", actor: "anna", target: "pdf, xlsx", summary: "Installed 2 skills", detail: ["source": "github.com/example/skills"], ip: "203.0.113.31"),
-        Template(kind: "settings.instructions", actor: "philipp", target: "AGENTS.md", summary: "Changed the system instructions", detail: ["characters": 2412], ip: "203.0.113.24"),
-        Template(kind: "account.deleted", actor: "philipp", target: "old.test", summary: "Deleted the account old.test and everything it owned", detail: ["role": "user"], ip: "203.0.113.24"),
+        Template(kind: "settings.instructions", actor: "maya", target: "AGENTS.md", summary: "Changed the system instructions", detail: ["characters": 2412], ip: "203.0.113.24"),
+        Template(kind: "account.deleted", actor: "maya", target: "old.test", summary: "Deleted the account old.test and everything it owned", detail: ["role": "user"], ip: "203.0.113.24"),
         Template(kind: "plugin.futureevent", actor: "anna", target: "x", summary: "Did something a newer server records", detail: ["someNewKey": "value", "enabled": false], ip: "203.0.113.31"),
     ]
 

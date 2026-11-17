@@ -210,9 +210,12 @@ import UniformTypeIdentifiers
 
     var thumbnails: [String: UIImage] = [:]
     /// Files being uploaded right now, by name.
-    var uploading: [String] = []
+    /// Files on their way to the server, in the order they were added: each shows in the message box as it will look.
+    var uploading: [ChatUpload] = []
     /// Whether dictation has a speech service on this server (the microphone is hidden when it has none).
     var dictationOn = true
+    /// The first message of a conversation that is being created, kept on screen until the conversation shows it.
+    var starting: ChatStarting?
 
     // MARK: how long the connection has been missing
 
@@ -227,13 +230,17 @@ import UniformTypeIdentifiers
     func watchLink(connected: Bool) async {
         linkStage = 0
         if connected { hasConnected = true; return }
+        let options = DeveloperOptions.shared
         do {
-            try await Task.sleep(for: .seconds(hasConnected ? 3 : 5))
-            if !hasConnected {
+            if hasConnected {
+                try await Task.sleep(for: .seconds(options.reconnectingAfter))
+                linkStage = 2
+            } else {
+                try await Task.sleep(for: .seconds(options.stillConnectingAfter))
                 linkStage = 1
-                try await Task.sleep(for: .seconds(10))
+                try await Task.sleep(for: .seconds(max(1, options.cantReachAfter - options.stillConnectingAfter)))
+                linkStage = 2
             }
-            linkStage = 2
         } catch { return }
     }
     /// Where the words the server hears while someone dictates are delivered (the dictation in progress sets it).
@@ -510,5 +517,33 @@ enum ChatReactions {
 
     static func removeProjectFile(_ store: AppStore, projectId: String, fileId: String) async throws {
         _ = try await store.rpc.call("projects.removeFile", ["projectId": .string(projectId), "fileId": .string(fileId)])
+    }
+}
+
+/// What the person just sent from the new-conversation page.
+struct ChatStarting: Equatable, Identifiable {
+    let id = UUID()
+    let text: String
+    let files: Int
+}
+
+/// A file being uploaded from the message box.
+struct ChatUpload: Identifiable, Equatable {
+    let id = UUID()
+    let name: String
+    /// Set for a picture: the box shows it right away, with the progress over it.
+    let thumbnail: UIImage?
+    let bytes: Int
+    let started = Date()
+    /// Set when the server has the file: the ring fills up before the chip makes way for the real one.
+    var finished = false
+
+    /// How far along it looks: the file goes in one piece, so this is an estimate that slows down towards the end and
+    /// jumps to full when the server answers.
+    func progress(at date: Date) -> Double {
+        if finished { return 1 }
+        let seconds = date.timeIntervalSince(started)
+        let expected = max(0.8, Double(bytes) / 1_500_000)
+        return 0.92 * (1 - exp(-seconds / expected))
     }
 }

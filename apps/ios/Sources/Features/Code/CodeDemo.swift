@@ -16,16 +16,16 @@ enum CodeDemo {
     private static var workspaces: [JSON] {
         if state == "empty" { return [] }
         let all: [JSON] = [
-            ["id": "w1", "kind": "local", "name": "atelier-web", "root": "/Users/philipp/Developer/atelier-web", "host": nil, "deviceId": "d1", "available": .bool(state != "offline"), "scratch": false, "trusted": true, "lastUsedAt": .number(ago(300))],
+            ["id": "w1", "kind": "local", "name": "atelier-web", "root": "/Users/maya/Developer/atelier-web", "host": nil, "deviceId": "d1", "available": .bool(state != "offline"), "scratch": false, "trusted": true, "lastUsedAt": .number(ago(300))],
             ["id": "w2", "kind": "ssh", "name": "api", "root": "/srv/api", "host": "build-box", "deviceId": nil, "available": true, "scratch": false, "trusted": true, "lastUsedAt": .number(ago(7200))],
             ["id": "w3", "kind": "codespace", "name": "mobile-app", "root": "/workspaces/mobile-app", "host": "fuzzy-space-guacamole-x7", "deviceId": nil, "available": true, "scratch": false, "trusted": .bool(trusted.contains("w3")), "lastUsedAt": .number(ago(86400))],
-            ["id": "w4", "kind": "local", "name": "home-lab", "root": "/home/philipp/lab", "host": nil, "deviceId": "d2", "available": false, "scratch": false, "trusted": true, "lastUsedAt": .number(ago(5 * 86400))],
-            ["id": "w6", "kind": "local", "name": "atelier-docs", "root": "/Users/philipp/Developer/atelier-docs", "host": nil, "deviceId": "d1", "available": true, "scratch": false, "trusted": true, "lastUsedAt": .number(ago(40_000))],
+            ["id": "w4", "kind": "local", "name": "home-lab", "root": "/home/maya/lab", "host": nil, "deviceId": "d2", "available": false, "scratch": false, "trusted": true, "lastUsedAt": .number(ago(5 * 86400))],
+            ["id": "w6", "kind": "local", "name": "atelier-docs", "root": "/Users/maya/Developer/atelier-docs", "host": nil, "deviceId": "d1", "available": true, "scratch": false, "trusted": true, "lastUsedAt": .number(ago(40_000))],
             ["id": "w5", "kind": "local", "name": "scratch-2026-11-17-a1b2", "root": "/data/scratch/a1b2", "host": nil, "deviceId": "d1", "available": true, "scratch": true, "trusted": true, "lastUsedAt": .number(ago(600))],
         ]
         var list = all.filter { !removed.contains($0["id"].string) } + extraFolders
         if state == "long" {
-            for n in 0..<14 { list.append(["id": .string("x\(n)"), "kind": "local", "name": .string("project-\(n + 1)"), "root": .string("/Users/philipp/Developer/project-\(n + 1)"), "host": nil, "deviceId": "d1", "available": true, "scratch": false, "trusted": true, "lastUsedAt": .number(ago(Double(n + 2) * 86400))]) }
+            for n in 0..<14 { list.append(["id": .string("x\(n)"), "kind": "local", "name": .string("project-\(n + 1)"), "root": .string("/Users/maya/Developer/project-\(n + 1)"), "host": nil, "deviceId": "d1", "available": true, "scratch": false, "trusted": true, "lastUsedAt": .number(ago(Double(n + 2) * 86400))]) }
         }
         return list
     }
@@ -183,7 +183,7 @@ enum CodeDemo {
     // MARK: Terminal
 
     nonisolated(unsafe) private static var shellLine = ""
-    private static let prompt = "\u{1B}[1;32mphilipp@mac\u{1B}[0m:\u{1B}[1;34m~/atelier-web\u{1B}[0m$ "
+    private static let prompt = "\u{1B}[1;32mmaya@mac\u{1B}[0m:\u{1B}[1;34m~/atelier-web\u{1B}[0m$ "
 
     private static func shell(_ text: String, _ id: String) {
         var out = ""
@@ -239,7 +239,7 @@ enum CodeDemo {
     nonisolated(unsafe) private static var prefs: JSON = [
         "code": ["font": "", "syntaxTheme": ["light": "atelier-light", "dark": "atelier-dark"], "transcriptView": "normal", "suggestions": true, "permanentGoalMode": false, "explainChanges": false],
         "appearance": ["interfaceFont": "sans"],
-        "git": ["authorName": "Philipp Buss", "authorEmail": ""],
+        "git": ["authorName": "Maya Lindqvist", "authorEmail": ""],
         "permissions": ["allow": ["Bash(git status *)", "Bash(npm test *)", "Edit(/docs/**)"]],
         "models": [:],
     ]
@@ -254,7 +254,7 @@ enum CodeDemo {
     nonisolated(unsafe) private static var codespaceStates: [String: String] = ["fuzzy-space-guacamole-x7": "Available", "scenic-umbrella-p9": "Shutdown"]
     nonisolated(unsafe) private static var connections: [JSON] = [
         ["id": "c1", "name": "Build box", "host": "build-box", "port": nil, "keyPath": nil, "folder": "~/projects", "passwordSaved": true],
-        ["id": "c2", "name": "Home server", "host": "philipp@home.example.net", "port": 2222, "keyPath": "~/.ssh/id_ed25519", "folder": nil, "passwordSaved": false],
+        ["id": "c2", "name": "Home server", "host": "maya@home.example.net", "port": 2222, "keyPath": "~/.ssh/id_ed25519", "folder": nil, "passwordSaved": false],
     ]
 
     private static func set(_ node: JSON, _ path: [String], _ value: JSON) -> JSON { CodeJSONPath.setting(node, path, value) }
@@ -277,7 +277,7 @@ enum CodeDemo {
         switch method {
         // Folders
         case "workspaces.list": return .array(workspaces)
-        case "account.devices": return [["id": "d1", "name": "Philipp's MacBook Pro", "platform": "macOS", "current": false, "online": true], ["id": "d2", "name": "Mac mini", "platform": "macOS", "current": false, "online": false]]
+        case "account.devices": return [["id": "d1", "name": "Maya's MacBook Pro", "platform": "macOS", "current": false, "online": true], ["id": "d2", "name": "Mac mini", "platform": "macOS", "current": false, "online": false]]
         case "workspaces.trust": trusted.insert(params["id"]?.string ?? ""); return workspaces.first { $0["id"] == params["id"] } ?? .null
         case "workspaces.remove": removed.insert(params["id"]?.string ?? ""); return ["ok": true]
         case "workspaces.sshHosts": return ["build-box", "home", "staging"]
@@ -292,15 +292,15 @@ enum CodeDemo {
             if let id = params["id"]?.stringOrNil, let i = connections.firstIndex(where: { $0["id"].string == id }) { saved["passwordSaved"] = connections[i]["passwordSaved"]; connections[i] = .object(saved) }
             else { saved["id"] = .string("c\(connections.count + 1)"); connections.append(.object(saved)) }
             return .object(saved)
-        case "ssh.test": return ["ok": true, "message": .string("Connected to \(params["host"]?.string ?? "the host") as philipp.")]
+        case "ssh.test": return ["ok": true, "message": .string("Connected to \(params["host"]?.string ?? "the host") as maya.")]
         case "ssh.remove": connections.removeAll { $0["id"] == params["id"] }; return ["ok": true]
         case "ssh.forgetPassword":
             if let i = connections.firstIndex(where: { $0["id"] == params["id"] }) { connections[i] = connections[i].setting("passwordSaved", false) }
             return ["ok": true]
         case "ssh.browse":
-            let path = params["path"]?.stringOrNil ?? "/home/philipp"
-            let dirs: [String] = path == "/home/philipp" ? ["projects", "notes", "work"] : path.hasSuffix("projects") ? ["api", "web", "infra"] : []
-            return ["path": .string(path), "home": "/home/philipp", "dirs": .array(dirs.map(JSON.string))]
+            let path = params["path"]?.stringOrNil ?? "/home/maya"
+            let dirs: [String] = path == "/home/maya" ? ["projects", "notes", "work"] : path.hasSuffix("projects") ? ["api", "web", "infra"] : []
+            return ["path": .string(path), "home": "/home/maya", "dirs": .array(dirs.map(JSON.string))]
         case "ssh.mkdir": return ["path": .string("\(params["parent"]?.string ?? "")/\(params["name"]?.string ?? "")")]
         case "ssh.answer": return ["ok": true]
 
@@ -391,7 +391,7 @@ enum CodeDemo {
         case "github.disconnect": githubConnected = false; return ["ok": true]
         case "github.repos":
             if state == "empty" { return [] }
-            return [["fullName": "example/atelier-web", "private": true, "defaultBranch": "main", "pushedAt": .number(ago(3600))], ["fullName": "example/mobile-app", "private": false, "defaultBranch": "main", "pushedAt": .number(ago(86400))], ["fullName": "example/api", "private": true, "defaultBranch": "main", "pushedAt": .number(ago(5 * 86400))], ["fullName": "philippb/dotfiles", "private": false, "defaultBranch": "main", "pushedAt": .number(ago(40 * 86400))]]
+            return [["fullName": "example/atelier-web", "private": true, "defaultBranch": "main", "pushedAt": .number(ago(3600))], ["fullName": "example/mobile-app", "private": false, "defaultBranch": "main", "pushedAt": .number(ago(86400))], ["fullName": "example/api", "private": true, "defaultBranch": "main", "pushedAt": .number(ago(5 * 86400))], ["fullName": "mayab/dotfiles", "private": false, "defaultBranch": "main", "pushedAt": .number(ago(40 * 86400))]]
         case "codespaces.list":
             if state == "empty" { return [] }
             return [codespace("fuzzy-space-guacamole-x7", "example/mobile-app", "fuzzy space guacamole"), codespace("scenic-umbrella-p9", "example/atelier-web", "scenic umbrella")]

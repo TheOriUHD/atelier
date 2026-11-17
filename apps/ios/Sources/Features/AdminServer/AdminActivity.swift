@@ -98,7 +98,7 @@ struct AdminAuditEvent: Identifiable, Equatable, Sendable {
         }
     }
 
-    /// "Philipp Buss · Created the account member" reads from the summary; this is the who, for the second line.
+    /// "Maya Lindqvist · Created the account member" reads from the summary; this is the who, for the second line.
     var byline: String {
         [actor.map { "by \($0)" }, AdminFormat.dateTime(at)].compactMap { $0 }.joined(separator: " · ")
     }

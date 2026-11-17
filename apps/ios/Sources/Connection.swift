@@ -52,7 +52,20 @@ import Security
     /// Return nil for a method it doesn't know; throw to show an error state.
     var stub: ((String, [String: JSON]) throws -> JSON?)?
     #endif
-    func call(_ method: String, _ params: [String: JSON] = [:]) async throws -> JSON {
+    /// One call to the server, timed for the developer request log.
+    func call(_ method: String, _ params: [String: JSON] = [:], timeout: Double = 30) async throws -> JSON {
+        let started = ContinuousClock.now
+        do {
+            let result = try await perform(method, params, timeout: timeout)
+            DeveloperOptions.shared.record(method, since: started, error: nil)
+            return result
+        } catch {
+            DeveloperOptions.shared.record(method, since: started, error: error)
+            throw error
+        }
+    }
+
+    private func perform(_ method: String, _ params: [String: JSON], timeout: Double) async throws -> JSON {
         #if DEBUG
         if let stub, let result = try stub(method, params) { return result }
         #endif
@@ -66,7 +79,7 @@ import Security
                 catch { self?.pending.removeValue(forKey: id)?.resume(throwing: error) }
             }
             Task { [weak self] in
-                try? await Task.sleep(for: .seconds(30))
+                try? await Task.sleep(for: .seconds(timeout))
                 self?.pending.removeValue(forKey: id)?.resume(throwing: MobileError.message("The server did not acknowledge the request. Refresh before retrying an action."))
             }
         }

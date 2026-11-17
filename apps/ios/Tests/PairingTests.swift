@@ -46,4 +46,26 @@ import XCTest
         XCTAssertEqual(ChatSignIn.normalized("studio.local/"), "http://studio.local")
         XCTAssertEqual(ChatSignIn.normalized("atelier.example.com"), "https://atelier.example.com")
     }
+
+    // MARK: developer options
+
+    func testReconnectDelaysAreReadFromWhatWasTypedAndKeptInRange() {
+        XCTAssertEqual(DeveloperOptions.parseDelays("1, 2, 4, 8, 10"), [1, 2, 4, 8, 10])
+        XCTAssertEqual(DeveloperOptions.parseDelays("0.5;3 9"), [0.5, 3, 9])
+        XCTAssertEqual(DeveloperOptions.parseDelays("0, 1000, abc"), [1, 2, 4, 8, 10])
+        XCTAssertEqual(DeveloperOptions.parseDelays(""), [1, 2, 4, 8, 10])
+        XCTAssertEqual(DeveloperOptions.parseDelays(Array(repeating: "5", count: 40).joined(separator: ",")).count, 20)
+    }
+
+    func testTenQuickTapsOnTheVersionTurnOnTheDeveloperOptions() {
+        let options = DeveloperOptions.shared
+        let before = options.enabled
+        options.enabled = false
+        defer { options.enabled = before; options.save() }
+        var messages: [String] = []
+        for _ in 0..<10 { if let message = options.tapVersion() { messages.append(message) } }
+        XCTAssertTrue(options.enabled)
+        XCTAssertTrue(messages.last?.contains("on") == true)
+        XCTAssertEqual(messages.count, 7, "silent for the first three taps, then a countdown, then the confirmation")
+    }
 }

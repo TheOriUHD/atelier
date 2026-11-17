@@ -81,13 +81,18 @@ extension ChatHub {
             if let known { return await run(known, args: command.args, store: store, hooks: hooks) }
         }
         do {
-            if store.selected == nil { try await start(store: store, hub: hub) }
+            if store.selected == nil {
+                withAnimation(.smooth(duration: 0.4)) { hub.starting = ChatStarting(text: text, files: store.attachments.count) }
+                try await start(store: store, hub: hub)
+            }
             try await store.send()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return true
         } catch is CancellationError {
+            withAnimation(.smooth) { hub.starting = nil }
             return false
         } catch {
+            withAnimation(.smooth) { hub.starting = nil }
             store.error = ChatError.text(error)
             return false
         }
@@ -169,6 +174,7 @@ struct ChatComposer: View {
     @FocusState private var focused: Bool
 
     private var mode: String { session?.mode ?? "chat" }
+    private var temporaryBox: Bool { session?.isTemporary == true || (session == nil && hub.newOptions.temporary) }
     private var current: JSON? { store.models.first { $0["ref"].string == store.selectedModel } }
     private var modelName: String { current?["displayName"].string ?? "" }
     private var empty: Bool { store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.attachments.isEmpty }
@@ -186,7 +192,7 @@ struct ChatComposer: View {
 
     var body: some View {
         if let readOnly {
-            Label(readOnly, systemImage: "eye").font(.subheadline).foregroundStyle(Theme.inkSecondary).frame(maxWidth: .infinity, alignment: .leading).padding(16).glassEffect(.regular, in: .rect(cornerRadius: 24, style: .continuous))
+            Label(readOnly, systemImage: "eye").font(.subheadline).foregroundStyle(Theme.inkSecondary).frame(maxWidth: .infinity, alignment: .leading).padding(16).raisedBox(radius: 24)
         } else {
             VStack(spacing: 8) {
                 if !commandMatches.isEmpty { slashMenu.transition(.move(edge: .bottom).combined(with: .opacity)) }
@@ -212,7 +218,7 @@ struct ChatComposer: View {
                     EffortPanel(store: store, model: current, mode: mode)
                         .frame(maxWidth: .infinity)
                         .fixedSize(horizontal: false, vertical: true)
-                        .glassEffect(.regular, in: .rect(cornerRadius: 28, style: .continuous))
+                        .raisedBox()
                         .background(alignment: .bottom) {
                             // Anywhere else on the screen closes it.
                             Color.black.opacity(0.18).frame(width: 3000, height: 3000)
@@ -244,7 +250,14 @@ struct ChatComposer: View {
             if dictation.active { voiceControls.transition(.opacity) } else { controls.transition(.opacity) }
         }
         .animation(.snappy(duration: 0.2), value: dictation.active)
-        .glassEffect(.regular, in: .rect(cornerRadius: 28, style: .continuous))
+        .raisedBox()
+        // A temporary chat's box has a dashed edge, like the icon that switches it on.
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(Theme.inkMuted.opacity(0.6), style: StrokeStyle(lineWidth: 1.4, dash: [6, 5]))
+                .opacity(temporaryBox ? 1 : 0).allowsHitTesting(false)
+        }
+        .animation(.smooth(duration: 0.4), value: temporaryBox)
         .sheet(isPresented: $addSheet, onDismiss: runAfterAdd) {
             ChatAddSheet(store: store, hub: hub, mode: mode, folderSlash: folderSlash, choose: { afterAdd = $0 }, upload: { data, name, mime in await uploadData(data, name: name, mime: mime) })
         }
@@ -267,6 +280,13 @@ struct ChatComposer: View {
             case "voice": voiceBase = ""; dictation.demo(words: "Hello, this is an example voice")
             case "listening": voiceBase = ""; dictation.demo(words: "")
             case "effort": Task { try? await Task.sleep(for: .seconds(1)); effortOpen = true }
+            case "uploading":
+                let picture = UIGraphicsImageRenderer(size: CGSize(width: 160, height: 160)).image { context in
+                    let colors = [UIColor(red: 0.85, green: 0.47, blue: 0.34, alpha: 1).cgColor, UIColor(red: 0.2, green: 0.25, blue: 0.4, alpha: 1).cgColor] as CFArray
+                    let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
+                    context.cgContext.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 160, y: 160), options: [])
+                }
+                hub.uploading = [ChatUpload(name: "Photo.jpg", thumbnail: picture, bytes: 9_000_000), ChatUpload(name: "Report.pdf", thumbnail: nil, bytes: 4_000_000)]
             default: break
             }
             #endif
@@ -454,9 +474,7 @@ struct ChatComposer: View {
                     ForEach(Array(store.attachments.enumerated()), id: \.offset) { index, attachment in
                         AttachmentChip(attachment: attachment, thumbnail: hub.thumbnails[attachment["blob"].string]) { store.attachments.remove(at: index) }
                     }
-                    ForEach(hub.uploading, id: \.self) { name in
-                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text(name).font(.footnote).lineLimit(1) }.padding(.horizontal, 12).padding(.vertical, 9).background(Theme.fill, in: Capsule())
-                    }
+                    ForEach(hub.uploading) { upload in UploadingChip(upload: upload).transition(.opacity.combined(with: .scale(scale: 0.9))) }
                 }.padding(.horizontal, 14).padding(.top, 12)
             }
         }
@@ -478,25 +496,33 @@ struct ChatComposer: View {
     private func upload(_ data: Data, name: String, mime: String) { Task { await uploadData(data, name: name, mime: mime) } }
 
     private func uploadData(_ data: Data, name: String, mime: String) async {
-        hub.uploading.append(name)
-        defer { hub.uploading.removeAll { $0 == name } }
-        do {
-            try await store.upload(data, name: name, mime: mime)
-            if mime.hasPrefix("image/"), let blob = store.attachments.last?["blob"].string, let image = UIImage(data: data) { hub.thumbnails[blob] = image.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? image }
-        } catch is CancellationError { return } catch { store.error = ChatError.text(error) }
+        let picture = mime.hasPrefix("image/") ? UIImage(data: data) : nil
+        let thumbnail = picture.flatMap { $0.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? $0 }
+        await send(data, name: name, mime: mime, thumbnail: thumbnail)
     }
 
     private func upload(_ url: URL) async {
-        hub.uploading.append(url.lastPathComponent)
-        defer { hub.uploading.removeAll { $0 == url.lastPathComponent } }
         do {
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
             let data = try Data(contentsOf: url)
             let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-            try await store.upload(data, name: url.lastPathComponent, mime: mime)
-            if mime.hasPrefix("image/"), let blob = store.attachments.last?["blob"].string, let image = UIImage(data: data) { hub.thumbnails[blob] = image.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? image }
+            await uploadData(data, name: url.lastPathComponent, mime: mime)
         } catch is CancellationError { return } catch { store.error = ChatError.text(error) }
+    }
+
+    /// Adds the file to the message: it shows at once with its progress, and is replaced by the attached file when done.
+    private func send(_ data: Data, name: String, mime: String, thumbnail: UIImage?) async {
+        let item = ChatUpload(name: name, thumbnail: thumbnail, bytes: data.count)
+        withAnimation(.smooth(duration: 0.25)) { hub.uploading.append(item) }
+        do {
+            try await store.upload(data, name: name, mime: mime)
+            if let thumbnail, let blob = store.attachments.last?["blob"].string { hub.thumbnails[blob] = thumbnail }
+            if let index = hub.uploading.firstIndex(where: { $0.id == item.id }) { hub.uploading[index].finished = true }
+            try? await Task.sleep(for: .milliseconds(260))
+        } catch is CancellationError {
+        } catch { store.error = ChatError.text(error) }
+        withAnimation(.smooth(duration: 0.25)) { hub.uploading.removeAll { $0.id == item.id } }
     }
 
     // MARK: the / menu
@@ -542,6 +568,7 @@ struct AttachmentChip: View {
     var thumbnail: UIImage?
     let remove: () -> Void
     @State private var preview: URL?
+    @State private var viewing = false
     @Environment(\.chatServer) private var server
 
     private var isQuote: Bool { attachment["type"].string == "context" }
@@ -571,13 +598,57 @@ struct AttachmentChip: View {
                 .buttonStyle(.plain).offset(x: 6, y: -6).accessibilityLabel(isQuote ? "Remove quote" : "Remove \(attachment["name"].string.isEmpty ? "attachment" : attachment["name"].string)")
         }
         .padding(.top, 6).padding(.trailing, 6)
-        .onTapGesture { if !isQuote { open() } }
+        .onTapGesture { if isImage { viewing = true } else if !isQuote { open() } }
         .quickLookPreview($preview)
+        .fullScreenCover(isPresented: $viewing) { MediaViewer(items: [attachment], start: 0).environment(\.chatServer, server) }
         .accessibilityAddTraits(isQuote ? [] : .isButton)
     }
 
     /// A tap shows the file as it will arrive.
     private func open() {
         Task { preview = try? await ChatBlobs.shared.file(sha: attachment["blob"].string, mime: attachment["mime"].string, name: attachment["name"].string, server: server) }
+    }
+}
+
+/// A file on its way, as it will look once attached; a picture shows its preview with a ring that fills as it goes.
+struct UploadingChip: View {
+    let upload: ChatUpload
+
+    var body: some View {
+        Group {
+            if let thumbnail = upload.thumbnail {
+                Image(uiImage: thumbnail).resizable().scaledToFill().frame(width: 64, height: 64)
+                    .overlay(Color.black.opacity(0.38))
+                    .overlay { UploadRing(upload: upload, size: 26) }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } else {
+                HStack(spacing: 8) {
+                    UploadRing(upload: upload, size: 18, onDark: false)
+                    Text(upload.name).font(.footnote).lineLimit(1).frame(maxWidth: 150)
+                }.padding(.horizontal, 12).frame(height: 40).background(Theme.fill, in: Capsule())
+            }
+        }
+        .padding(.top, 6).padding(.trailing, 6)
+        .accessibilityElement(children: .ignore).accessibilityLabel("Uploading \(upload.name)")
+    }
+}
+
+/// A circle that fills clockwise as the upload goes on.
+struct UploadRing: View {
+    let upload: ChatUpload
+    let size: CGFloat
+    var onDark = true
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: upload.finished)) { context in
+            let progress = upload.progress(at: context.date)
+            let tint: Color = onDark ? .white : Theme.clay
+            ZStack {
+                Circle().stroke(tint.opacity(0.3), lineWidth: size * 0.12)
+                Circle().trim(from: 0, to: max(0.02, progress)).stroke(tint, style: StrokeStyle(lineWidth: size * 0.12, lineCap: .round)).rotationEffect(.degrees(-90))
+            }
+            .frame(width: size, height: size)
+            .animation(.smooth(duration: 0.25), value: upload.finished)
+        }
     }
 }
