@@ -146,6 +146,40 @@ export const TerminalSignInPoll = z.discriminatedUnion('state', [
 ]);
 export type TerminalSignInPoll = z.infer<typeof TerminalSignInPoll>;
 
+/**
+ * Signing in the person's own phone with a QR code (ARCHITECTURE §25): a person signed in and at their screen asks for a
+ * code (`account.pairStart`), which is a terminal sign-in approved in advance. The phone scans it and polls with its
+ * token (`auth.terminalPoll`), once, within five minutes.
+ */
+export const PAIR_REQUEST_TTL_MS = 5 * 60_000;
+export const PAIR_LINK_SCHEME = 'atelier';
+
+export const PairStart = z.object({
+  /** The secret in the QR code: whoever scans it before it expires signs in as this person, once. */
+  pollToken: z.string(),
+  /** Addresses a phone can try for this server, best first. */
+  addresses: z.array(z.string()).min(1),
+  expiresAt: z.number(),
+});
+export type PairStart = z.infer<typeof PairStart>;
+
+/** What a QR code holds: `atelier://pair?token=…&server=https://…&server=http://192.168.1.20:7340`. */
+export function pairingLink(addresses: readonly string[], pollToken: string): string {
+  const query = new URLSearchParams();
+  query.set('token', pollToken);
+  for (const address of addresses) query.append('server', address);
+  return `${PAIR_LINK_SCHEME}://pair?${query.toString()}`;
+}
+
+/** The token and addresses a pairing link holds, or null when `text` is something else. */
+export function parsePairingLink(text: string): { pollToken: string; addresses: string[] } | null {
+  const url = URL.parse(text.trim());
+  if (!url || url.protocol !== `${PAIR_LINK_SCHEME}:` || url.hostname !== 'pair') return null;
+  const pollToken = url.searchParams.get('token') ?? '';
+  const addresses = url.searchParams.getAll('server').filter((a) => /^https?:\/\//.test(a));
+  return pollToken.length >= 16 && addresses.length > 0 ? { pollToken, addresses } : null;
+}
+
 /** What the /link page shows about a request before the person approves it. */
 export const TerminalSignInRequest = z.object({
   code: z.string(),

@@ -10,7 +10,7 @@
  * so it names the computer and address that asked and says to approve only a terminal you just started.
  */
 import { randomBytes } from 'node:crypto';
-import { formatInviteCode, INVITE_CODE_ALPHABET, normalizeTerminalCode, TERMINAL_CODE_LENGTH, type TerminalSignInPoll, type TerminalSignInRequest, type UserSummary } from '@atelier/protocol';
+import { formatInviteCode, INVITE_CODE_ALPHABET, normalizeTerminalCode, PAIR_REQUEST_TTL_MS, TERMINAL_CODE_LENGTH, type PairStart, type TerminalSignInPoll, type TerminalSignInRequest, type UserSummary } from '@atelier/protocol';
 import type { AuditLog } from '../audit/audit-log.ts';
 import { hashToken, newToken } from './passwords.ts';
 import { AccountError, type AccountService, type ClientInfo } from './account-service.ts';
@@ -20,6 +20,8 @@ export const TERMINAL_POLL_SECONDS = 2;
 /** Open requests one address may have at once, and new ones it may make in 15 minutes. */
 const OPEN_PER_ADDRESS = 5;
 const STARTS_PER_WINDOW = 20;
+/** QR codes one person may show in 15 minutes. */
+const PAIRS_PER_WINDOW = 10;
 /** Wrong codes one person (or one address) may look up in 15 minutes before lookups are refused. */
 const WRONG_CODES = 8;
 const WINDOW_MS = 15 * 60_000;
@@ -34,6 +36,8 @@ interface Request {
   createdAt: number;
   expiresAt: number;
   decision: { approved: true; userId: string } | { approved: false } | null;
+  /** Set on a QR code shown by this person: it was approved in advance, and there is only one open at a time. */
+  pairedBy?: string;
 }
 
 /** 8 symbols from 40 random bits, five bits each, so every symbol is equally likely. */
@@ -83,6 +87,42 @@ export class TerminalSignIns {
     const base = origin.replace(/\/$/, '');
     const shown = formatInviteCode(code);
     return { code: shown, pollToken, verifyUrl: `${base}/#/link`, verifyUrlComplete: `${base}/#/link?code=${shown}`, expiresAt: now + TERMINAL_REQUEST_TTL_MS, interval: TERMINAL_POLL_SECONDS };
+  }
+
+  /**
+   * A sign-in for the person's own phone, approved in advance: they are at their screen and chose to show it as a QR code.
+   * The phone redeems it once through `poll`, within five minutes; showing another code ends the one before it. Its code
+   * is never shown (the token in the QR code is the secret), so nothing can look it up by guessing.
+   */
+  startApproved(who: Pick<UserSummary, 'id' | 'username'>, client: ClientInfo, addresses: readonly string[]): PairStart {
+    this.prune();
+    const now = this.now();
+    const key = `pair:${who.id}`;
+    const recent = (this.starts.get(key) ?? []).filter((t) => t > now - WINDOW_MS);
+    if (recent.length >= PAIRS_PER_WINDOW) throw new AccountError('rate_limited', 'Too many codes were shown. Try again in a few minutes.');
+    this.starts.set(key, [...recent, now]);
+    for (const [code, r] of this.requests) if (r.pairedBy === who.id) this.requests.delete(code);
+    let code = newTerminalCode();
+    while (this.requests.has(code)) code = newTerminalCode();
+    const pollToken = newToken();
+    const expiresAt = now + PAIR_REQUEST_TTL_MS;
+    this.requests.set(code, {
+      code,
+      pollHash: hashToken(pollToken),
+      deviceName: 'Phone, by QR code',
+      platform: 'mobile',
+      ip: client.ip ?? '',
+      userAgent: (client.userAgent ?? '').slice(0, 300),
+      createdAt: now,
+      expiresAt,
+      decision: { approved: true, userId: who.id },
+      pairedBy: who.id,
+    });
+    this.audit?.record(
+      { actorId: who.id, actor: who.username, ip: client.ip ?? null },
+      { kind: 'signin.pair_shown', target: who.username, summary: `${who.username} showed a QR code to sign in a phone`, detail: { from: client.ip ?? null } },
+    );
+    return { pollToken, addresses: [...addresses], expiresAt };
   }
 
   /** The terminal asks how its request stands; an approved one becomes a sign-in, handed out this once. */

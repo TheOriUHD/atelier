@@ -333,6 +333,15 @@ export const SETTINGS_INDEX = [
     available: () => !isLocal(),
   },
   {
+    id: 'account.phone',
+    page: 'account',
+    label: 'Sign in your phone',
+    description:
+      'Shows a QR code that the Atelier app on your phone scans to sign in as you, with no address or password to type. The code works once, for five minutes.',
+    keywords: ['qr', 'qr code', 'mobile', 'iphone', 'ipad', 'ios', 'scan', 'pair', 'app', 'phone'],
+    available: () => true,
+  },
+  {
     id: 'account.screenLock',
     page: 'account',
     label: 'Screen lock',

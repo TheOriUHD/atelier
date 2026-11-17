@@ -395,6 +395,9 @@ importers:
       mermaid:
         specifier: 12.2.0
         version: 12.2.0
+      qrcode-generator:
+        specifier: 2.0.4
+        version: 2.0.4
       react:
         specifier: 19.3.0
         version: 19.3.0

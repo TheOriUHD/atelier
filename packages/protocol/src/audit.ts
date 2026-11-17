@@ -15,6 +15,7 @@ export const AUDIT_KINDS = [
   'signin.blocked',
   'signin.terminal_approved',
   'signin.terminal_denied',
+  'signin.pair_shown',
   'account.created',
   'account.updated',
   'account.role_changed',

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { normalizeTerminalCode } from '@atelier/protocol';
+import { normalizeTerminalCode, PAIR_REQUEST_TTL_MS, pairingLink, parsePairingLink } from '@atelier/protocol';
 import { openDatabase, type Db } from '../store/db.ts';
 import { authSessions } from '../store/schema.ts';
 import { AccountService, type ClientInfo } from './account-service.ts';
@@ -120,5 +120,59 @@ describe('TerminalSignIns', () => {
     }
     expect(normalizeTerminalCode('k7qf-3mzd')).toBe('K7QF3MZD');
     expect(normalizeTerminalCode('K7QF-3MZ')).toBeNull();
+  });
+
+  describe('a phone signed in by QR code', () => {
+    const phone: ClientInfo = { clientKind: 'mobile', ip: '10.0.0.8', userAgent: 'Atelier Mobile iOS' };
+
+    it('signs the phone in as the person who showed the code, once, as a mobile session', async () => {
+      const { user } = await accounts.setup({ username: 'ada', name: 'Ada', password: 'ada-password-1' }, web);
+      const pair = signIns.startApproved(user, web, [origin]);
+      expect(pair.addresses).toEqual([origin]);
+      expect(pair.expiresAt).toBe(now + PAIR_REQUEST_TTL_MS);
+      expect(recorded.map((r) => r.kind)).toEqual(['signin.pair_shown']);
+      const done = await signIns.poll(pair.pollToken, phone);
+      expect(done).toMatchObject({ state: 'approved', user: { id: user.id } });
+      if (done.state !== 'approved') throw new Error('not approved');
+      const row = await db.select().from(authSessions).where(eq(authSessions.tokenHash, hashToken(done.token))).get();
+      expect(row?.clientKind).toBe('mobile');
+      expect(await signIns.poll(pair.pollToken, phone)).toEqual({ state: 'expired' });
+    });
+
+    it('does not answer to a wrong token, and ends after five minutes', async () => {
+      const { user } = await accounts.setup({ username: 'ada', name: 'Ada', password: 'ada-password-1' }, web);
+      const pair = signIns.startApproved(user, web, [origin]);
+      expect(await signIns.poll('x'.repeat(43), phone)).toEqual({ state: 'expired' });
+      now += PAIR_REQUEST_TTL_MS + 1;
+      expect(await signIns.poll(pair.pollToken, phone)).toEqual({ state: 'expired' });
+    });
+
+    it('lets one code at a time stand for a person, and limits how many may be shown', async () => {
+      const { user } = await accounts.setup({ username: 'ada', name: 'Ada', password: 'ada-password-1' }, web);
+      const first = signIns.startApproved(user, web, [origin]);
+      const second = signIns.startApproved(user, web, [origin]);
+      expect(await signIns.poll(first.pollToken, phone)).toEqual({ state: 'expired' });
+      expect(await signIns.poll(second.pollToken, phone)).toMatchObject({ state: 'approved' });
+      for (let i = 0; i < 8; i++) signIns.startApproved(user, web, [origin]);
+      expect(await code(() => signIns.startApproved(user, web, [origin]))).toBe('rate_limited');
+    });
+
+    it('does not sign in an account that was disabled after the code was shown', async () => {
+      await accounts.setup({ username: 'ada', name: 'Ada', password: 'ada-password-1' }, web);
+      const { user: bob } = await accounts.create({ username: 'bob', name: 'Bob', role: 'user' });
+      const pair = signIns.startApproved(bob, web, [origin]);
+      await accounts.adminUpdate(bob.id, { disabled: true });
+      expect(await code(signIns.poll(pair.pollToken, phone))).toBe('disabled');
+    });
+
+    it('writes a link a phone reads back, and refuses anything else', () => {
+      const link = pairingLink(['https://atelier.example.com', 'http://192.168.1.20:7340'], 'A'.repeat(43));
+      expect(link.startsWith('atelier://pair?')).toBe(true);
+      expect(parsePairingLink(link)).toEqual({ pollToken: 'A'.repeat(43), addresses: ['https://atelier.example.com', 'http://192.168.1.20:7340'] });
+      expect(parsePairingLink('https://atelier.example.com')).toBeNull();
+      expect(parsePairingLink('atelier://pair?token=short&server=https://a.example')).toBeNull();
+      expect(parsePairingLink(`atelier://pair?token=${'A'.repeat(43)}&server=javascript:alert(1)`)).toBeNull();
+      expect(parsePairingLink(`atelier://pair?token=${'A'.repeat(43)}`)).toBeNull();
+    });
   });
 });

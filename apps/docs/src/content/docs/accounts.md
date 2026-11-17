@@ -219,6 +219,22 @@ approve: that would sign *their* terminal in as you. Approve only a terminal you
 code. Approvals and denials go into the [activity log](#the-activity-log) (`signin.terminal_approved`,
 `signin.terminal_denied`). The terminal can also sign in with a password or an invite code.
 
+### Signing in a phone *(next release)*
+
+The Atelier app for iPhone and iPad signs in with a QR code. In **Settings › Account › Sign in your phone**, choose **Show
+QR code**; on the phone's sign-in screen choose **Scan QR code**. The phone signs in as the account on your screen, with
+no address or password to type, and shows up under **Active sessions** like any other sign-in.
+
+- **One use, five minutes.** The code works once; a new code ends the one before it, and one person can show 10 in 15
+  minutes. The phone's sign-in is the account's own, so it ends with **Revoke**, **Log out of all devices** or a
+  password change like any other.
+- **Show it only to your own phone.** Whoever scans it before it runs out signs in as you. Showing a code goes into the
+  [activity log](#the-activity-log) (`signin.pair_shown`).
+- **Which address.** On a server, the code holds the address you opened Atelier at. Opened as `localhost` a phone can't
+  reach it, and the page says so. In the desktop app it works while **Share on your network** is on (see
+  [Connection](#settings--connection)); the code then holds the computer's network address, and the phone signs in
+  for the account that shares it.
+
 ### Rate limits and lockouts
 
 - **Wrong passwords:** after 8 failures for the same username from the same address within 15 minutes, further attempts

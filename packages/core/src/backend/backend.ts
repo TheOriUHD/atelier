@@ -2450,6 +2450,24 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       await passkeys.remove(me(ctx).id, id);
       return { ok: true as const };
     },
+    'account.pairStart': (_input, ctx) =>
+      accountErrors(async () => {
+        const c = ctx.connection();
+        let addresses: string[];
+        if (shareAvailable) {
+          if (!shareChoice.enabled || !shareServer) throw appError('unsupported', 'Turn on “Share on your network” in Settings › Connection first, then show the code again.');
+          addresses = shareAddresses(shareChoice.port);
+          if (addresses.length === 0) throw appError('unsupported', 'This computer has no address on a network that a phone could reach.');
+        } else if (platform.surface === 'web') {
+          const origin = (c.origin ?? '').replace(/\/$/, '');
+          const host = URL.parse(origin)?.hostname ?? '';
+          if (!origin || /^(localhost|127\.|\[?::1\]?$)/.test(host)) throw appError('unsupported', 'This page was opened as localhost, which a phone cannot reach. Open Atelier at the server’s own address and show the code again.');
+          addresses = [origin];
+        } else {
+          throw appError('unsupported', 'Only a server, or a computer sharing itself on the network, can sign a phone in by QR code.');
+        }
+        return terminalSignIns.startApproved(me(ctx), c.client, addresses);
+      }),
     'account.devices': async (_input, ctx) => {
       const userId = me(ctx).id;
       const connected = (id: string) => [...connections].some((c) => c.deviceId === id && c.auth?.user.id === userId);

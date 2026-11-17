@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Sign in a phone with a QR code.** Settings › Account › **Sign in your phone** shows a QR code, in the desktop app and in the browser. The Atelier app on a phone scans it and signs in as you, with no address or password to type. The code works once, for five minutes, and a new one ends the one before it. On the desktop it needs **Share on your network**; on a server it holds the address you opened Atelier at.
+
 - **Native mobile client foundation.** A SwiftUI iPhone/iPad app connects to HTTPS Atelier servers, with Keychain sign-in, browser approval, streamed conversations, projects, attachments, dictation, permission cards and native settings. Servers identify mobile sessions and deduplicate ordinary sends by client mutation ID. This is a development build, not yet a distributed mobile release.
 
 - **Choose what the composer’s circle shows.** Right-click it to select context usage or one of your provider’s reported plan limits, such as ChatGPT Plan’s five-hour or weekly window or Mistral Vibe’s monthly allowance. The choice is remembered per provider on this device; left-click still opens the details.

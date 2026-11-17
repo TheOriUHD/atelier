@@ -56,6 +56,7 @@ import {
   ClientKind,
   TerminalSignInPoll,
   TerminalSignInRequest,
+  PairStart,
   TerminalSignInStart,
   DeviceSummary,
   IdentitySummary,
@@ -231,6 +232,8 @@ export const contract = {
     /** Sign-ins with identity providers on this account, and the server's providers it can still connect. */
     'account.identities': { input: Empty, output: z.object({ connected: z.array(IdentitySummary), available: z.array(OidcSignInOption) }) },
     'account.removeIdentity': { input: Id, output: Ok },
+    /** A sign-in for the person's own phone, already approved: shown as a QR code, redeemed once through `auth.terminalPoll`. */
+    'account.pairStart': { input: Empty, output: PairStart },
     'account.devices': { input: Empty, output: z.array(DeviceSummary) },
     'account.removeDevice': { input: Id, output: Ok },
     /** Desktop apps register the machine they run on for the signed-in user. */

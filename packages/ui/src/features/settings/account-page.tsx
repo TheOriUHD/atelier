@@ -48,6 +48,7 @@ import { SAFEGUARD_CATEGORIES } from './capabilities-page.tsx';
 import { Cell, DataTable, TableRow } from './data-table.tsx';
 import { InstructionsField } from './instructions-field.tsx';
 import { settingEntry } from './search-index.ts';
+import { PhoneSignInSection } from './phone-sign-in.tsx';
 import { ScreenLockSection } from './screen-lock-section.tsx';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
@@ -76,6 +77,7 @@ export function AccountPage() {
       <>
         <ProfileSection account={account} />
         <PersonalInstructionsSection />
+        <PhoneSignInSection />
         <ScreenLockSection />
       </>
     );
@@ -90,6 +92,7 @@ export function AccountPage() {
       <IdentitiesSection />
       <SessionsSection />
       <DevicesSection />
+      <PhoneSignInSection />
     </>
   );
 }
