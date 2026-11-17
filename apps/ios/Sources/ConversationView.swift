@@ -199,9 +199,10 @@ struct ConversationView: View {
             case .failed:
                 ScrollView { InlineError(message: hub.openError ?? "") { if let id = store.selected { Task { await ChatNav.open(store, id) } } }.padding(.top, 60) }.transition(.opacity)
             case .loading: ChatSkeleton().transition(.opacity)
-            case .starting: if let starting = hub.starting { ChatStartingView(starting: starting).transition(.opacity) }
             case .greeting: (wide ? AnyView(centeredStart) : AnyView(NewConversation(store: store))).transition(.opacity.combined(with: .scale(scale: 0.97)))
-            case .chat: transcript.transition(.opacity)
+            // The first message is shown by the same view that shows the conversation, so when the conversation opens
+            // nothing is replaced: the real message simply takes the place of the one that was waiting.
+            case .starting, .chat: transcript.transition(.opacity)
             }
         }
         .animation(.smooth(duration: 0.4), value: page)
@@ -221,6 +222,10 @@ struct ConversationView: View {
         return ScrollViewReader { proxy in
             ScrollView {
                 transcriptStack(laziness: turns.count > 60) {
+                    if turns.isEmpty, let starting = hub.starting {
+                        ChatStartingBubble(starting: starting)
+                        ChatRunLine(snapshot: .null, lastIsAssistant: false, activity: nil)
+                    }
                     ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
                         TurnView(turn: turn, store: store, isLast: index == turns.count - 1, running: running, onEdit: { editing = $0 }, onOpenArtifact: { openArtifact($0) }, onViewEdit: { viewEdit($0) }, siblings: branch.siblings).id(turn.id)
                     }
@@ -551,17 +556,20 @@ struct ChatStarter: Identifiable, Hashable {
 
 /// "Working": three dots that rise in turn, under what the assistant has written so far.
 struct Working: View {
-    @State private var phase = 0.0
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<3) { index in
-                Circle().fill(Theme.inkMuted).frame(width: 6, height: 6)
-                    .opacity(0.35 + 0.65 * max(0, sin((phase - Double(index) * 0.7) * .pi)))
+        // Drawn from the clock, frame by frame: a value animated between two states would only fade between them.
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 5) {
+                ForEach(0..<3) { index in
+                    let wave = max(0, sin((time / 1.3 - Double(index) * 0.35) * 2 * .pi))
+                    Circle().fill(Theme.inkMuted).frame(width: 6, height: 6)
+                        .opacity(0.3 + 0.7 * wave).scaleEffect(0.8 + 0.3 * wave)
+                }
             }
         }
         .padding(.vertical, 6)
-        .onAppear { withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) { phase = 2 } }
-        .accessibilityLabel("The assistant is working")
+        .accessibilityElement().accessibilityLabel("The assistant is working")
     }
 }
 
@@ -582,30 +590,20 @@ struct WaitingClock: View {
     }
 }
 
-/// The first message of a conversation that is being started, shown where it will be once the conversation has opened,
-/// so the greeting fades into the chat instead of switching.
-struct ChatStartingView: View {
+/// The first message of a conversation that is being started, where it will be once the conversation has opened.
+struct ChatStartingBubble: View {
     let starting: ChatStarting
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                VStack(alignment: .trailing, spacing: 8) {
-                    if starting.files > 0 { Label(ChatText.plural(starting.files, "file"), systemImage: "paperclip").font(.footnote).foregroundStyle(Theme.inkMuted) }
-                    if !starting.text.isEmpty {
-                        Text(starting.text).font(.system(.body)).foregroundStyle(Theme.ink)
-                            .padding(.horizontal, 16).padding(.vertical, 11)
-                            .background(Theme.fill, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    }
-                }
-                .frame(maxWidth: 560, alignment: .trailing).frame(maxWidth: .infinity, alignment: .trailing)
-                HStack(spacing: 8) { Working() }
+        VStack(alignment: .trailing, spacing: 8) {
+            if starting.files > 0 { Label(ChatText.plural(starting.files, "file"), systemImage: "paperclip").font(.footnote).foregroundStyle(Theme.inkMuted) }
+            if !starting.text.isEmpty {
+                Text(starting.text).font(.system(.body)).foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 16).padding(.vertical, 11)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
-            .frame(maxWidth: Theme.readingWidth, alignment: .leading)
-            .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 40)
-            .frame(maxWidth: .infinity)
         }
-        .scrollDisabled(true)
+        .frame(maxWidth: 560, alignment: .trailing).frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityElement(children: .combine)
     }
 }

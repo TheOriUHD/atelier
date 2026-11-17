@@ -168,6 +168,9 @@ struct ChatComposer: View {
     @State private var effortOpen = false
     @State private var afterAdd: ChatAddChoice?
     @State private var sending = false
+    /// Send was tapped while files were still uploading: the message goes out by itself when they are done.
+    @State private var waitingForUploads = false
+    @State private var failuresAtTap = 0
     /// Skills and commands of the Code session's folder (the server lists them per folder).
     @State private var folderSlash: [JSON]?
     @Environment(\.scenePhase) private var phase
@@ -178,6 +181,9 @@ struct ChatComposer: View {
     private var current: JSON? { store.models.first { $0["ref"].string == store.selectedModel } }
     private var modelName: String { current?["displayName"].string ?? "" }
     private var empty: Bool { store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.attachments.isEmpty }
+    private var uploading: Bool { !hub.uploading.isEmpty }
+    /// Something to send now, or files on their way that a message can wait for.
+    private var canSend: Bool { !empty || uploading }
     private var slashQuery: String? { ChatSlash.menuQuery(store.draft) }
     private var mention: String? { mode == "code" && session != nil ? ChatSlash.mention(in: store.draft) : nil }
     private var commandMatches: [ChatSlashCommand] {
@@ -242,7 +248,7 @@ struct ChatComposer: View {
                 .onKeyPress(.return, phases: .down) { press in
                     // A hardware keyboard: Return sends, Shift+Return and Option+Return start a new line.
                     if press.modifiers.contains(.shift) || press.modifiers.contains(.option) { return .ignored }
-                    submit()
+                    sendTapped()
                     return .handled
                 }
                 .onChange(of: store.draft) { _, _ in store.saveDraft() }
@@ -361,19 +367,41 @@ struct ChatComposer: View {
 
     // MARK: send and stop
 
-    private var stopping: Bool { running && empty }
+    private var stopping: Bool { running && empty && !uploading && !waitingForUploads }
 
     private var sendButton: some View {
-        Button { if stopping { stop() } else { submit() } } label: {
+        Button { sendTapped() } label: {
             ZStack {
-                Circle().fill(Theme.clay.opacity(!stopping && empty ? 0.35 : 1))
-                if sending { ProgressView().tint(.white) }
+                Circle().fill(waitingForUploads ? Theme.fillStrong : Theme.clay.opacity(!stopping && !canSend ? 0.35 : 1))
+                if waitingForUploads { ProgressView().tint(Theme.inkSecondary) }
+                else if sending { ProgressView().tint(.white) }
                 else { Image(systemName: stopping ? "stop.fill" : "arrow.up").font(.system(size: 15, weight: .bold)).foregroundStyle(.white) }
             }.frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
-        .disabled(sending || (!stopping && (empty || !store.connected || store.uncertainDelivery)))
-        .accessibilityLabel(stopping ? "Stop" : running ? "Send, it joins at the next step" : "Send")
+        .disabled(sending || (!stopping && !waitingForUploads && (!canSend || !store.connected || store.uncertainDelivery)))
+        .animation(.smooth(duration: 0.2), value: waitingForUploads)
+        .accessibilityLabel(waitingForUploads ? "Sends when the upload is done. Tap to cancel" : stopping ? "Stop" : running ? "Send, it joins at the next step" : "Send")
+        .onChange(of: hub.uploading.isEmpty) { _, none in
+            guard none, waitingForUploads else { return }
+            waitingForUploads = false
+            // A file that failed is not sent without: the message stays in the box for the person to look at.
+            if hub.uploadFailures == failuresAtTap { submit() }
+        }
+    }
+
+    /// The button and the Return key: send now, or, with files still uploading, send as soon as they are done.
+    private func sendTapped() {
+        if waitingForUploads { waitingForUploads = false; return }
+        if stopping { stop(); return }
+        if uploading {
+            guard store.connected, !store.uncertainDelivery else { return }
+            failuresAtTap = hub.uploadFailures
+            waitingForUploads = true
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return
+        }
+        submit()
     }
 
     private func submit() {
@@ -495,7 +523,14 @@ struct ChatComposer: View {
 
     private func upload(_ data: Data, name: String, mime: String) { Task { await uploadData(data, name: name, mime: mime) } }
 
-    private func uploadData(_ data: Data, name: String, mime: String) async {
+    private func uploadData(_ original: Data, name originalName: String, mime originalMime: String) async {
+        var data = original, name = originalName, mime = originalMime
+        // A big picture (a camera photo, an image from Files) is scaled down first: it has to cross the network in one piece.
+        if mime.hasPrefix("image/"), let prepared = ChatPhotoFile.prepare(original), prepared.data.count < original.count {
+            data = prepared.data
+            mime = prepared.mime
+            name = (originalName as NSString).deletingPathExtension + (mime == "image/png" ? ".png" : ".jpg")
+        }
         let picture = mime.hasPrefix("image/") ? UIImage(data: data) : nil
         let thumbnail = picture.flatMap { $0.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? $0 }
         await send(data, name: name, mime: mime, thumbnail: thumbnail)
@@ -521,7 +556,7 @@ struct ChatComposer: View {
             if let index = hub.uploading.firstIndex(where: { $0.id == item.id }) { hub.uploading[index].finished = true }
             try? await Task.sleep(for: .milliseconds(260))
         } catch is CancellationError {
-        } catch { store.error = ChatError.text(error) }
+        } catch { hub.uploadFailures += 1; store.error = ChatError.text(error) }
         withAnimation(.smooth(duration: 0.25)) { hub.uploading.removeAll { $0.id == item.id } }
     }
 

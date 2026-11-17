@@ -16,10 +16,19 @@ import SwiftUI
         #endif
     }
 
+    /// The window itself is the paper colour, so what shows behind the keyboard's rounded top corners is not black.
+    @MainActor private static func paintWindows() {
+        let paper = UIColor { traits in UIColor(Theme.background).resolvedColor(with: traits) }
+        for scene in UIApplication.shared.connectedScenes {
+            for window in (scene as? UIWindowScene)?.windows ?? [] { window.backgroundColor = paper }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             content
                 .tint(Theme.clay)
+                .onAppear { Self.paintWindows() }
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
                 .task {
                     guard !demo else { return }

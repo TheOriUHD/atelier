@@ -55,6 +55,14 @@ const model = http.createServer(async (request, response) => {
   if (request.url === '/v1/chat/completions') {
     for await (const chunk of request) void chunk;
     response.setHeader('content-type', 'text/event-stream');
+    // THINK=1: a first pause and some reasoning before the answer, as a thinking model does.
+    if (process.env.THINK) {
+      await new Promise((r) => setTimeout(r, 1500));
+      for (const word of 'Let me think about how the week should go. The pull requests come first, then the offsite reply, then the settings change. '.split(/(?<=\s)/)) {
+        response.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant', reasoning_content: word }, finish_reason: null }] })}\n\n`);
+        await new Promise((r) => setTimeout(r, 120));
+      }
+    }
     for (const piece of REPLY) for (const word of piece.split(/(?<=\s)/)) {
       response.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant', content: word }, finish_reason: null }] })}\n\n`);
       await new Promise((r) => setTimeout(r, 25));

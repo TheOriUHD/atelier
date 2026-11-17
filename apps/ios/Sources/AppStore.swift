@@ -266,7 +266,9 @@ import UniformTypeIdentifiers
     func upload(_ data: Data, name: String, mime: String) async throws {
         guard data.count <= 32 * 1024 * 1024 else { throw MobileError.message("Attachments are limited to 32 MB each.") }
         busy = true; defer { busy = false }
-        let file = try await rpc.call("files.upload", ["name": .string(name), "mime": .string(mime), "dataBase64": .string(data.base64EncodedString())])
+        // A file goes in one piece, so the wait grows with its size: at least a minute, and room for a slow mobile connection.
+        let patience = min(300, max(60, Double(data.count) / 60_000))
+        let file = try await rpc.call("files.upload", ["name": .string(name), "mime": .string(mime), "dataBase64": .string(data.base64EncodedString())], timeout: patience)
         attachments.append(.object(["type": .string(mime.hasPrefix("image/") ? "image" : "document"), "blob": file["blob"], "mime": .string(mime), "name": .string(name)]))
     }
     func upload(_ url: URL) async throws {

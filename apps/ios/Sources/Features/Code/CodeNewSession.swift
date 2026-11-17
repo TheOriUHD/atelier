@@ -27,6 +27,8 @@ struct NewCodeSessionPage: View {
     /// What the person wants done first; the session starts with it.
     @State private var prompt = ""
     @State private var options = false
+    /// The effort panel is open: it covers the box until the person taps elsewhere.
+    @State private var effortOpen = false
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
 
@@ -40,7 +42,6 @@ struct NewCodeSessionPage: View {
     private var caps: CodeCapabilities { CodeCapabilities(store: store) }
     private var selectedFolder: CodeWorkspace? { chosen.flatMap { id in folders.folders.first { $0.id == id } } }
     private var chosenModel: JSON? { store.models.first { $0["ref"].string == model } }
-    private var efforts: [String] { chosenModel?["effortLevels"].array.map(\.string) ?? [] }
     private var modes: [CodeMode] { CodeMode.offered(code: true, planAuto: caps.planAuto) }
     private var effectiveMode: CodeMode { CodeMode(rawValue: mode) ?? system.defaultMode }
     private var ready: Bool { (selectedFolder != nil || scratch) && !model.isEmpty && !busy }
@@ -58,9 +59,6 @@ struct NewCodeSessionPage: View {
                 } header: { Text("How much it may do") } footer: { Text(effectiveMode.detail + ".") }
                 Section {
                     PickRow(title: "Model", selection: $model, options: store.models.map { ($0["ref"].string, $0["displayName"].string) })
-                    if !efforts.isEmpty {
-                        PickRow(title: "How hard it thinks", selection: $effort, options: [("", "Default")] + efforts.map { ($0, $0.capitalized) })
-                    }
                 } header: { Text("Model") }
                 if let problem { Section { Text(problem).font(.subheadline).foregroundStyle(Theme.danger).textSelection(.enabled) } }
             }
@@ -97,13 +95,23 @@ struct NewCodeSessionPage: View {
                     model = preferredModel ?? (store.models.contains { $0["ref"].string == store.selectedModel } ? store.selectedModel : store.models.first?["ref"].string ?? "")
                 }
                 if chosen == nil, !scratch { chosen = folders.folders.first { $0.available }?.id }
+                #if DEBUG
+                // `--effort <level>` opens the effort panel on that level, for looking at it.
+                if let level = Launch.value("--effort") { effort = level; try? await Task.sleep(for: .milliseconds(500)); effortOpen = true }
+                #endif
             }
             .onChange(of: chosen) { _, _ in Task { await loadBranch() } }
-            .onChange(of: model) { _, _ in if !efforts.contains(effort) { effort = "" } }
+            .onChange(of: model) { _, _ in if !effortLevels.contains(effort) { effort = "" } }
             .codeTrustDialog($trust)
             .sheet(isPresented: $options) { optionsSheet }
         }
         .tint(Theme.clay)
+    }
+
+    private var effortLevels: [String] { ChatEffort.choices(chosenModel, mode: "code", ultracode: ChatHub.of(store).ultracodeOn) }
+    private var effortLabel: String? {
+        guard effortLevels.count > 1, let shown = ChatEffort.shown(effort.isEmpty ? nil : effort, model: chosenModel, mode: "code", ultracode: ChatHub.of(store).ultracodeOn) else { return nil }
+        return ChatEffort.name(shown, model: chosenModel)
     }
 
     private var firstName: String { store.userName.split(separator: " ").first.map(String.init) ?? "" }
@@ -125,7 +133,9 @@ struct NewCodeSessionPage: View {
                         if let currentBranch, branchKnown { pill(currentBranch, symbol: "arrow.triangle.branch") { options = true } }
                     }.padding(.horizontal, 2)
                 }
-                box
+                box.coveredBy($effortOpen) {
+                    if let model = chosenModel { EffortPanel(store: store, model: model, mode: "code", local: $effort) }
+                }
             }
             .padding(.horizontal, 16).padding(.bottom, 10)
         }
@@ -161,6 +171,7 @@ struct NewCodeSessionPage: View {
                         Menu {
                             Picker("Model", selection: $model) { ForEach(store.models.filter { !$0["hidden"].bool }, id: \.self) { Text($0["displayName"].string).tag($0["ref"].string) } }
                         } label: { chip(chosenModel?["displayName"].string ?? "Choose a model") }
+                        if let label = effortLabel { EffortChip(label: label) { focused = false; effortOpen = true } }
                         Menu {
                             Picker("Permission mode", selection: $mode) {
                                 Text("Default · \(system.defaultMode.short)").tag("")

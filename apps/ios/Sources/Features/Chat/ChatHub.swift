@@ -212,6 +212,8 @@ import UniformTypeIdentifiers
     /// Files being uploaded right now, by name.
     /// Files on their way to the server, in the order they were added: each shows in the message box as it will look.
     var uploading: [ChatUpload] = []
+    /// How many uploads have failed so far: a message waiting for its files checks this before it goes.
+    var uploadFailures = 0
     /// Whether dictation has a speech service on this server (the microphone is hidden when it has none).
     var dictationOn = true
     /// The first message of a conversation that is being created, kept on screen until the conversation shows it.

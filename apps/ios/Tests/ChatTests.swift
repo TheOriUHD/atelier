@@ -512,6 +512,36 @@ import SwiftUI
         XCTAssertEqual(upload.progress(at: start.addingTimeInterval(1)), 1)
     }
 
+    func testBigPicturesAreScaledDownBeforeTheyAreSentAndSmallOnesAreLeftAlone() throws {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4000, height: 3000), format: { let f = UIGraphicsImageRendererFormat(); f.scale = 1; return f }())
+        let big = renderer.image { context in
+            for column in 0..<40 { for row in 0..<30 {
+                UIColor(hue: CGFloat((column * 7 + row * 13) % 100) / 100, saturation: 0.8, brightness: 0.9, alpha: 1).setFill()
+                context.fill(CGRect(x: column * 100, y: row * 100, width: 100, height: 100))
+            } }
+        }
+        let bigData = try XCTUnwrap(big.jpegData(compressionQuality: 1))
+        let prepared = try XCTUnwrap(ChatPhotoFile.prepare(bigData))
+        XCTAssertEqual(prepared.mime, "image/jpeg")
+        XCTAssertLessThan(prepared.data.count, bigData.count)
+        let scaled = try XCTUnwrap(UIImage(data: prepared.data))
+        XCTAssertEqual(max(scaled.size.width * scaled.scale, scaled.size.height * scaled.scale), 2048, accuracy: 1)
+
+        let tiny = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64)).image { $0.cgContext.setFillColor(UIColor.red.cgColor); $0.cgContext.fill(CGRect(x: 0, y: 0, width: 64, height: 64)) }
+        let tinyData = try XCTUnwrap(tiny.pngData())
+        let kept = try XCTUnwrap(ChatPhotoFile.prepare(tinyData))
+        XCTAssertEqual(kept.data, tinyData)
+        XCTAssertEqual(kept.mime, "image/png")
+        XCTAssertNil(ChatPhotoFile.prepare(Data("not a picture".utf8)))
+    }
+
+    func testCodeSessionsOfferUltracodeAndChatsDoNot() {
+        let model = json(#"{"ref":"a/b","capabilities":{"reasoning":"effort"},"effortLevels":["low","medium","high","xhigh","max"]}"#)
+        XCTAssertEqual(ChatEffort.choices(model, mode: "code", ultracode: true).last, "ultracode")
+        XCTAssertFalse(ChatEffort.choices(model, mode: "chat", ultracode: true).contains("ultracode"))
+        XCTAssertFalse(ChatEffort.choices(model, mode: "code", ultracode: false).contains("ultracode"))
+    }
+
     func testTheEffortSliderSnapsToTheNearestLevel() {
         // A 300 point track with 22 point ends and five levels: stops every 64 points from 22.
         XCTAssertEqual(EffortSlider.nearest(0, width: 300, inset: 22, count: 5), 0)

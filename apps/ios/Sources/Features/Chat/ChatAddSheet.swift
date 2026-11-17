@@ -124,7 +124,7 @@ struct ChatAddSheet: View {
     /// iOS's own picker, built into the sheet: it runs outside the app, so Atelier sees only the pictures that are tapped
     /// and needs no access to the library.
     private var photos: some View {
-        PhotosPicker(selection: $picked, maxSelectionCount: 20, selectionBehavior: .ordered, matching: .images) { Label("Photos", systemImage: "photo") }
+        PhotosPicker(selection: $picked, maxSelectionCount: 20, selectionBehavior: .continuousAndOrdered, matching: .images) { Label("Photos", systemImage: "photo") }
             .photosPickerStyle(.compact)
             .photosPickerAccessoryVisibility(.hidden, edges: .all)
             .frame(height: 114)
@@ -176,13 +176,36 @@ enum ChatPhotoFile {
         return prepare(data)
     }
 
+    /// The longest side a picture is sent at: models look at no more than about this much anyway, and a photo from a
+    /// phone's camera is several megabytes that would have to cross a mobile connection first.
+    static let longestSide = 2048
+    static let keepAsIsBelow = 1_500_000
+
     static func prepare(_ data: Data) -> (data: Data, name: String, mime: String)? {
-        let kind = CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceGetType($0) }.flatMap { UTType($0 as String) }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let kind = CGImageSourceGetType(source).flatMap { UTType($0 as String) }
         let stem = "Photo-" + UUID().uuidString.prefix(4)
-        if kind?.conforms(to: .png) == true { return (data, stem + ".png", "image/png") }
-        if kind?.conforms(to: .jpeg) == true { return (data, stem + ".jpg", "image/jpeg") }
-        if kind?.conforms(to: .gif) == true { return (data, stem + ".gif", "image/gif") }
-        guard let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.9) else { return nil }
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let width = properties?[kCGImagePropertyPixelWidth] as? Int ?? 0
+        let height = properties?[kCGImagePropertyPixelHeight] as? Int ?? 0
+        let small = max(width, height) <= longestSide && data.count <= keepAsIsBelow
+        let hasAlpha = properties?[kCGImagePropertyHasAlpha] as? Bool ?? false
+        if small {
+            if kind?.conforms(to: .png) == true { return (data, stem + ".png", "image/png") }
+            if kind?.conforms(to: .jpeg) == true { return (data, stem + ".jpg", "image/jpeg") }
+            if kind?.conforms(to: .gif) == true { return (data, stem + ".gif", "image/gif") }
+        }
+        // An animation is kept whole unless it is huge; everything else is scaled down and sent as JPEG (PNG when it has transparency).
+        if kind?.conforms(to: .gif) == true, data.count < 8_000_000 { return (data, stem + ".gif", "image/gif") }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: longestSide,
+        ]
+        guard let scaled = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let image = UIImage(cgImage: scaled)
+        if hasAlpha, let png = image.pngData() { return (png, stem + ".png", "image/png") }
+        guard let jpeg = image.jpegData(compressionQuality: 0.85) else { return nil }
         return (jpeg, stem + ".jpg", "image/jpeg")
     }
 }

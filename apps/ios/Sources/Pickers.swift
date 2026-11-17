@@ -113,6 +113,9 @@ struct EffortPanel: View {
     @Bindable var store: AppStore
     let model: JSON
     let mode: String
+    /// For a place that has no conversation yet (the new Code session page): the level lives here ("" is the recommended
+    /// one) instead of in the store, and there is no Thinking switch.
+    var local: Binding<String>?
     @State private var index = 0
     @State private var loaded = false
     private var hub: ChatHub { ChatHub.of(store) }
@@ -121,7 +124,8 @@ struct EffortPanel: View {
     private var level: String { levels.indices.contains(index) ? levels[index] : (levels.first ?? "") }
 
     private var storedEffort: String? {
-        session.map { $0.effort.isEmpty ? nil : $0.effort } ?? (store.selectedEffort.isEmpty ? nil : store.selectedEffort)
+        if let local { return local.wrappedValue.isEmpty ? nil : local.wrappedValue }
+        return session.map { $0.effort.isEmpty ? nil : $0.effort } ?? (store.selectedEffort.isEmpty ? nil : store.selectedEffort)
     }
 
     var body: some View {
@@ -129,7 +133,8 @@ struct EffortPanel: View {
         let warning = ChatEffort.warning(level, model: model)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
-                Text(ChatEffort.name(level, model: model)).font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink)
+                Text(ChatEffort.name(level, model: model)).font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(level == "ultracode" ? UltracodeLook.violet : Theme.ink)
+                    .animation(.smooth(duration: 0.25), value: level)
                 Spacer(minLength: 8)
                 if let warning {
                     Label(warning, systemImage: "exclamationmark.triangle").labelStyle(.titleAndIcon).font(.caption).foregroundStyle(Color(hex: 0xB77800))
@@ -139,7 +144,7 @@ struct EffortPanel: View {
                 }
             }
             .frame(height: 36)
-            EffortSlider(names: levels.map { ChatEffort.name($0, model: model) }, index: $index, onCommit: commit)
+            EffortSlider(names: levels.map { ChatEffort.name($0, model: model) }, ultracodeStop: levels.firstIndex(of: "ultracode"), index: $index, onCommit: commit)
             HStack {
                 Text("Faster")
                 Spacer()
@@ -148,7 +153,7 @@ struct EffortPanel: View {
             Text(Self.sentences(ChatEffort.explanation(level, model: model, mode: mode), 2))
                 .font(.footnote).foregroundStyle(Theme.inkSecondary).lineLimit(3)
                 .frame(maxWidth: .infinity, minHeight: 56, maxHeight: 56, alignment: .topLeading)
-            if model["capabilities"]["reasoning"].string == "toggle" {
+            if local == nil, model["capabilities"]["reasoning"].string == "toggle" {
                 let always = ["xhigh", "max", "ultracode"].contains(level)
                 Divider()
                 Toggle(isOn: Binding(get: { always || (session?.thinking ?? hub.thinkingDefault) }, set: { setThinking($0) })) {
@@ -183,6 +188,7 @@ struct EffortPanel: View {
 
     private func commit(_ chosen: Int) {
         guard levels.indices.contains(chosen) else { return }
+        if let local { local.wrappedValue = levels[chosen]; return }
         store.selectedEffort = levels[chosen]
         if store.selected != nil { Task { do { try await store.updateModel() } catch { store.error = ChatError.text(error) } } }
     }
@@ -197,6 +203,8 @@ struct EffortPanel: View {
 /// to move a good way to leave), and it locks in with a hard click.
 struct EffortSlider: View {
     let names: [String]
+    /// Which stop is Ultracode, when there is one: the slider is drawn charged and violet while it is there.
+    var ultracodeStop: Int?
     @Binding var index: Int
     let onCommit: (Int) -> Void
     @State private var dragX: CGFloat?
@@ -233,14 +241,16 @@ struct EffortSlider: View {
             let stops = max(names.count - 1, 1)
             let resting = inset + span * CGFloat(index) / CGFloat(stops)
             let x = dragX.map { Self.magnet($0, width: width, inset: inset, count: names.count) } ?? resting
+            let ultra = ultracodeStop != nil && index == ultracodeStop
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.fill)
-                Capsule().fill(Theme.clay.opacity(0.18)).frame(width: x + inset)
+                Capsule().fill((ultra ? UltracodeLook.violet : Theme.clay).opacity(0.18)).frame(width: x + inset)
+                UltracodeField(lit: ultra, origin: CGPoint(x: width - inset, y: height / 2)).clipShape(Capsule())
                 ForEach(names.indices, id: \.self) { stop in
                     Circle().fill(Theme.inkMuted.opacity(0.55)).frame(width: 6, height: 6)
                         .position(x: inset + span * CGFloat(stop) / CGFloat(stops), y: height / 2)
                 }
-                Circle().fill(Theme.clay).frame(width: thumb, height: thumb)
+                Circle().fill(ultra ? UltracodeLook.violet : Theme.clay).frame(width: thumb, height: thumb)
                     .shadow(color: .black.opacity(0.2), radius: 5, y: 2)
                     .position(x: x, y: height / 2)
             }
@@ -256,6 +266,7 @@ struct EffortSlider: View {
                         if next != index, abs(Self.magnet(value.location.x, width: width, inset: inset, count: names.count) - (inset + span * CGFloat(next) / CGFloat(stops))) < 0.5 {
                             index = next
                             click.impactOccurred(intensity: 1)
+                            if next == ultracodeStop { UINotificationFeedbackGenerator().notificationOccurred(.success) }
                             click.prepare()
                         }
                     }
