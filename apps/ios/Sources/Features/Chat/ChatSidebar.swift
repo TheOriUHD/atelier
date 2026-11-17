@@ -33,6 +33,11 @@ struct ChatSidebar: View {
     @State private var managing = false
     @State private var joining = false
     @State private var results = ChatSearchModel()
+    /// How far the list is pulled down past its top, and whether that is far enough to open search on letting go.
+    @State private var pull: CGFloat = 0
+    @State private var pullArmed = false
+    @State private var touching = false
+    private let pullThreshold: CGFloat = 54
     private var hub: ChatHub { ChatHub.of(store) }
 
     private var visible: [Conversation] {
@@ -55,7 +60,7 @@ struct ChatSidebar: View {
         List {
             if !store.connected { banner("Reconnecting. Your draft stays on this device.", symbol: "wifi.slash", action: "Retry") { store.perform { try await store.restore() } } }
             if let error = hub.listError { banner(error, symbol: "exclamationmark.triangle", action: "Try again") { Task { await hub.reloadAll() } } }
-            if isSearching { searchRows } else { browseRows }
+            if isSearching { searchRows } else if searching { recentRows } else { browseRows }
         }
         .listStyle(.plain)
         .listSectionSpacing(0)
@@ -67,7 +72,24 @@ struct ChatSidebar: View {
         .navigationTitle("Atelier")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
-        .refreshable { await hub.reloadAll() }
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in max(0, -(geometry.contentOffset.y + geometry.contentInsets.top)) } action: { _, distance in
+            pull = distance
+            let armed = distance >= pullThreshold
+            if armed != pullArmed {
+                pullArmed = armed
+                if armed, touching { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            }
+        }
+        .onScrollPhaseChange { _, phase in
+            let wasTouching = touching
+            touching = phase == .interacting
+            // Letting go while the ring is full opens search (and reads the list again, as pulling used to).
+            if wasTouching, !touching, pullArmed, !searching {
+                searching = true
+                Task { await hub.reloadAll() }
+            }
+        }
+        .overlay(alignment: .top) { pullIndicator }
         .chatSessionPrompts(store: store, prompt: prompt) { id in if id == store.selected { ChatNav.newConversation(store) } }
         .modifier(ChatGroupPrompts(store: store, prompt: groupPrompt))
         .sheet(isPresented: $managing) { ChatGroupsSheet(store: store, hub: hub) }
@@ -81,11 +103,32 @@ struct ChatSidebar: View {
             if let route = Launch.route("home") {
                 switch route {
                 case "search": search = "plan"; searching = true
+                case "recents": searching = true
                 case "groups": managing = true
                 default: break
                 }
             }
             #endif
+        }
+    }
+
+    /// The search button that fills with a ring as the list is pulled down; full, it clicks, and letting go opens search.
+    @ViewBuilder private var pullIndicator: some View {
+        if pull > 6, !searching {
+            let progress = min(pull / pullThreshold, 1)
+            ZStack {
+                Circle().fill(Theme.surface)
+                Circle().stroke(Theme.hairline, lineWidth: 3)
+                Circle().trim(from: 0, to: progress).stroke(Theme.clay, style: StrokeStyle(lineWidth: 3, lineCap: .round)).rotationEffect(.degrees(-90))
+                Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .medium)).foregroundStyle(pullArmed ? Theme.clay : Theme.ink)
+            }
+            .frame(width: 40, height: 40)
+            .shadow(color: .black.opacity(0.1), radius: 5, y: 1)
+            .scaleEffect(0.7 + 0.3 * progress)
+            .opacity(Double(min(pull / 30, 1)))
+            .padding(.top, max(4, min(pull, pullThreshold * 1.4) / 2 - 20))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 
@@ -284,6 +327,27 @@ struct ChatSidebar: View {
         } else if !loading, visible.isEmpty, pinnedProjects.isEmpty {
             if mode == .code { ContentUnavailableView("No Code sessions", systemImage: "chevron.left.forwardslash.chevron.right", description: Text("Start one with the button below.")) }
             else { ContentUnavailableView("No conversations yet", systemImage: "bubble.left", description: Text("Start one with the button below.")) }
+        }
+    }
+
+    /// What search shows before anything is typed: the latest conversations, and the projects.
+    @ViewBuilder private var recentRows: some View {
+        let recent = Array(visible.sorted { $0.updated > $1.updated }.prefix(8))
+        if !recent.isEmpty { Section { ForEach(recent) { session in row(session) } } header: { header("Recents") } }
+        if mode == .chat, !store.projects.isEmpty {
+            Section {
+                ForEach(store.projects, id: \.self) { project in
+                    Button { actions.openProject(project["id"].string) } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "folder").font(.system(size: 15)).foregroundStyle(Theme.inkSecondary).frame(width: 22)
+                            Text(project["name"].string).font(.system(.body, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }.padding(.vertical, 9).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18))
+                }
+            } header: { header("Projects") }
         }
     }
 

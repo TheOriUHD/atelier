@@ -236,15 +236,112 @@ struct PermissionModeChip: View {
     }
 
     private func change(to mode: CodeMode) {
-        guard mode != current, let id = session.id else { return }
+        guard mode != current else { return }
         changing = true
         Task {
             defer { changing = false }
-            await store.attempt {
-                let updated = try await codeCall(store, "sessions.update", ["id": .string(id), "permissionMode": .string(mode.rawValue)])
-                if let index = store.sessions.firstIndex(where: { $0.id == id }) { store.sessions[index] = Conversation(raw: updated) }
+            await CodePermission.set(mode, store: store)
+        }
+    }
+}
+
+/// Changing the open session's permission mode.
+@MainActor enum CodePermission {
+    static func set(_ mode: CodeMode, store: AppStore) async {
+        guard let id = CodeSession(store: store).id else { return }
+        await store.attempt {
+            let updated = try await codeCall(store, "sessions.update", ["id": .string(id), "permissionMode": .string(mode.rawValue)])
+            if let index = store.sessions.firstIndex(where: { $0.id == id }) { store.sessions[index] = Conversation(raw: updated) }
+        }
+    }
+}
+
+/// The Permission row of the + sheet: the mode in force, opening the list of modes.
+struct PermissionModeRow: View {
+    let store: AppStore
+    @State private var system: CodeSystemSettings
+
+    init(store: AppStore) {
+        self.store = store
+        _system = State(initialValue: CodeSystemSettings(store: store))
+    }
+
+    private var session: CodeSession { CodeSession(store: store) }
+    private var isCode: Bool { session.summary?.mode == "code" }
+    private var current: CodeMode {
+        let own = session.permissionMode ?? system.defaultMode
+        return isCode ? own : own.forChat()
+    }
+
+    var body: some View {
+        NavigationLink { PermissionModePage(store: store) } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "checkmark.shield").font(.system(size: 18)).foregroundStyle(Theme.ink).frame(width: 26)
+                Text("Permission").foregroundStyle(Theme.ink)
+                Spacer(minLength: 8)
+                Text(current.short).foregroundStyle(Theme.inkMuted).lineLimit(1)
             }
         }
+        .task { await system.load() }
+    }
+}
+
+/// "Select mode": every permission mode with what it means, the one in force checked.
+struct PermissionModePage: View {
+    let store: AppStore
+    @State private var system: CodeSystemSettings
+    @State private var changing: CodeMode?
+
+    init(store: AppStore) {
+        self.store = store
+        _system = State(initialValue: CodeSystemSettings(store: store))
+    }
+
+    private var session: CodeSession { CodeSession(store: store) }
+    private var isCode: Bool { session.summary?.mode == "code" }
+    private var current: CodeMode {
+        let own = session.permissionMode ?? system.defaultMode
+        return isCode ? own : own.forChat()
+    }
+
+    private func tint(_ mode: CodeMode) -> Color {
+        switch mode {
+        case .ask: Theme.ink
+        case .acceptEdits: Color(hex: 0x7C6AF2)
+        case .plan, .planAuto: Color(hex: 0x3B82F6)
+        case .auto: Theme.clay
+        case .bypass: Theme.danger
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(CodeMode.offered(code: isCode, planAuto: CodeCapabilities(store: store).planAuto)) { mode in
+                    Button {
+                        guard mode != current, changing == nil else { return }
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        changing = mode
+                        Task { await CodePermission.set(mode, store: store); changing = nil }
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: mode.symbol).font(.system(size: 20)).foregroundStyle(tint(mode)).frame(width: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(mode.title).foregroundStyle(Theme.ink)
+                                Text(mode.detail).font(.subheadline).foregroundStyle(Theme.inkMuted).fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 8)
+                            if changing == mode { ProgressView() }
+                            else if current == mode { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(Theme.clay) }
+                        }.contentShape(Rectangle())
+                    }
+                    .accessibilityAddTraits(current == mode ? .isSelected : [])
+                }
+            }
+        }
+        .listStyle(.insetGrouped).scrollContentBackground(.hidden).background(Theme.sunken)
+        .navigationTitle("Select mode").navigationBarTitleDisplayMode(.inline)
+        .task { await system.load() }
     }
 }
 

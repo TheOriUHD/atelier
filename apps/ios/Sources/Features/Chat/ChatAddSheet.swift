@@ -49,14 +49,7 @@ struct ChatAddSheet: View {
                     }
                 }
                 if isCode, session != nil {
-                    Section {
-                        HStack(spacing: 14) {
-                            Image(systemName: "checkmark.shield").font(.system(size: 18)).foregroundStyle(Theme.ink).frame(width: 26)
-                            Text("Permission").foregroundStyle(Theme.ink)
-                            Spacer(minLength: 8)
-                            PermissionModeChip(store: store)
-                        }
-                    }
+                    Section { PermissionModeRow(store: store) }
                 }
                 Section {
                     if hub.webSearchOn, !isCode {
@@ -79,7 +72,7 @@ struct ChatAddSheet: View {
             }
             .listStyle(.insetGrouped).scrollContentBackground(.hidden).background(Theme.sunken)
             .contentMargins(.top, 0, for: .scrollContent)
-            .navigationTitle(isCode ? "Add to session" : "Add to conversation").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(isCode ? "Add context" : "Add to conversation").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button(role: .close) { dismiss() }.tint(Theme.ink) }
                 ToolbarItem(placement: .topBarTrailing) { Button("Photos") { choose(.photos); dismiss() }.tint(Theme.inkSecondary) }
@@ -121,7 +114,7 @@ struct ChatAddSheet: View {
         PhotosPicker(selection: $picked, maxSelectionCount: 20, selectionBehavior: .continuous, matching: .images) { Label("Photos", systemImage: "photo") }
             .photosPickerStyle(.compact)
             .photosPickerAccessoryVisibility(.hidden, edges: .all)
-            .frame(height: 124)
+            .frame(height: 108)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .padding(.horizontal, 16)
             .listRowInsets(EdgeInsets()).listRowBackground(Color.clear).listRowSeparator(.hidden)
