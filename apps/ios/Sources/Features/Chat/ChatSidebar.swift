@@ -60,7 +60,14 @@ struct ChatSidebar: View {
 
     var body: some View {
         List {
-            if !store.connected { banner(store.connectionNote ?? "Reconnecting. Your draft stays on this device.", symbol: "wifi.slash", action: "Retry") { store.perform { try await store.restore() } } }
+            if !store.connected {
+                // A server that answered and refused is known at once; otherwise the line waits its turn.
+                if store.connectionNote != nil || hub.linkStage >= 2 {
+                    banner(store.connectionNote ?? (hub.hasConnected ? "Reconnecting. Your draft stays on this device." : "Can't reach your server. Your draft stays on this device."), symbol: "wifi.slash", action: "Retry") { store.perform { try await store.restore() } }
+                } else if hub.linkStage == 1 {
+                    banner("Still connecting…", symbol: "arrow.triangle.2.circlepath", action: "Retry", soft: true) { store.perform { try await store.restore() } }
+                }
+            }
             if let error = hub.listError { banner(error, symbol: "exclamationmark.triangle", action: "Try again") { Task { await hub.reloadAll() } } }
             if isSearching { searchRows } else if searching { recentRows } else { browseRows }
         }
@@ -235,15 +242,15 @@ struct ChatSidebar: View {
         } else { header(group.title) }
     }
 
-    private func banner(_ text: String, symbol: String, action: String, perform: @escaping () -> Void) -> some View {
+    private func banner(_ text: String, symbol: String, action: String, soft: Bool = false, perform: @escaping () -> Void) -> some View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
             Text(text).font(.footnote).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             Button(action, action: perform).font(.footnote.weight(.semibold)).tint(Theme.clay)
         }
-        .padding(.horizontal, 14).padding(.vertical, 10).background(Theme.waiting.opacity(0.16), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .foregroundStyle(Theme.ink)
+        .padding(.horizontal, 14).padding(.vertical, 10).background(soft ? Theme.fill : Theme.waiting.opacity(0.16), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .foregroundStyle(soft ? Theme.inkSecondary : Theme.ink)
         .listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top: 6, leading: 18, bottom: 6, trailing: 18))
         .accessibilityElement(children: .combine)
     }

@@ -213,6 +213,29 @@ import UniformTypeIdentifiers
     var uploading: [String] = []
     /// Whether dictation has a speech service on this server (the microphone is hidden when it has none).
     var dictationOn = true
+
+    // MARK: how long the connection has been missing
+
+    /// 0: connecting, nothing to say yet (only the placeholder rows); 1: taking a while, a quiet line with Retry;
+    /// 2: not connected, the banner that says so.
+    var linkStage = 0
+    /// Whether this run of the app has been connected: after that a lost connection is news sooner.
+    private(set) var hasConnected = false
+
+    /// Follows the connection: while it is missing, moves through the stages as the seconds pass. Cancelled and started
+    /// again whenever the connection changes.
+    func watchLink(connected: Bool) async {
+        linkStage = 0
+        if connected { hasConnected = true; return }
+        do {
+            try await Task.sleep(for: .seconds(hasConnected ? 3 : 5))
+            if !hasConnected {
+                linkStage = 1
+                try await Task.sleep(for: .seconds(10))
+            }
+            linkStage = 2
+        } catch { return }
+    }
     /// Where the words the server hears while someone dictates are delivered (the dictation in progress sets it).
     @ObservationIgnored var dictationListener: ((JSON) -> Void)?
 

@@ -40,7 +40,7 @@ struct ConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !store.connected { offline }
+            if !store.connected, hub.linkStage >= 2 || store.connectionNote != nil { offline }
             if temporary { temporaryBar }
             if let parent = hub.sideChatParent[store.selected ?? ""] { sideChatBar(parent) }
             content

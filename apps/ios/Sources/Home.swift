@@ -59,6 +59,7 @@ struct RootView: View {
                 settings = SettingsRequest(page: (note.userInfo?["page"] as? String).flatMap(SettingsPageID.init(rawValue:)))
             }
             .task(id: store.connected) { if store.connected { await hub.reloadAll() } }
+            .task(id: store.connected) { await hub.watchLink(connected: store.connected) }
             #if DEBUG
             // `--open settings/<page>` opens Settings on launch, with a demo or after `--autologin`.
             .onAppear { if let page = Launch.route("settings").flatMap(SettingsPageID.init(rawValue:)) { settings = SettingsRequest(page: page) } }
