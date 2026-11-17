@@ -46,7 +46,7 @@ struct SignInView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
-        .background(Theme.background)
+        .paperBehind()
         .tint(Theme.clay)
         .fullScreenCover(isPresented: $scanning) { QRScanSheet { link in pair(link) } }
         .task { if store.address.isEmpty, discovery.state == .idle { await discovery.scan() } }

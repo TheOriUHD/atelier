@@ -15,6 +15,8 @@ struct ConversationView: View {
     @State private var follow = true
     @State private var nearBottom = true
     @State private var scrolling = false
+    /// How far the keyboard reaches up from the bottom of the screen.
+    @State private var keyboard: CGFloat = 0
     @State private var prompt = ChatSessionPrompt()
     @State private var wholeFile: JSON?
     @State private var editing: Turn?
@@ -39,15 +41,23 @@ struct ConversationView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if !store.connected, hub.linkStage >= 2 || store.connectionNote != nil { offline }
-            if temporary, store.selected != nil { temporaryBar.transition(.move(edge: .top).combined(with: .opacity)) }
-            if let parent = hub.sideChatParent[store.selected ?? ""] { sideChatBar(parent) }
-            content
+        // The room for the keyboard is made here, from where UIKit says the keyboard is, not by SwiftUI's own inset: that one
+        // could stay behind after the system took the keyboard away, and could be a little short when it changed height.
+        ZStack {
+            Theme.background.ignoresSafeArea(.all)
+            KeyboardProbe(height: $keyboard).frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true)
+            VStack(spacing: 0) {
+                if !store.connected, hub.linkStage >= 2 || store.connectionNote != nil { offline }
+                if temporary, store.selected != nil { temporaryBar.transition(.move(edge: .top).combined(with: .opacity)) }
+                if let parent = hub.sideChatParent[store.selected ?? ""] { sideChatBar(parent) }
+                content
+            }
+            .animation(.smooth(duration: 0.35), value: temporary)
+            .safeAreaInset(edge: .bottom, spacing: 0) { if !(isEmpty && wide) { bottom } }
+            .padding(.bottom, keyboard)
         }
-        .animation(.smooth(duration: 0.35), value: temporary)
-        .background(Theme.background)
-        .safeAreaInset(edge: .bottom, spacing: 0) { if !(isEmpty && wide) { bottom } }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .environment(\.keyboardHeight, keyboard)
         .environment(\.chatServer, store.address)
         #if DEBUG
         .modifier(DebugMediaViewer())
@@ -242,10 +252,11 @@ struct ConversationView: View {
                         }
                     }
                     if !store.artifacts.isEmpty { artifactsEntry }
-                    Color.clear.frame(height: 1).id("bottom")
+                    // The end of the page is this, so the newest text always has room between it and the box.
+                    Color.clear.frame(height: 24).id("bottom")
                 }
                 .frame(maxWidth: Theme.readingWidth, alignment: .leading)
-                .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 40)
+                .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 16)
                 .frame(maxWidth: .infinity)
             }
             .defaultScrollAnchor(.bottom)
@@ -265,7 +276,8 @@ struct ConversationView: View {
             }
             .onChange(of: store.transcript.seq) { _, _ in if follow { proxy.scrollTo("bottom", anchor: .bottom) } }
             .overlay(alignment: .bottom) {
-                if !follow {
+                // Only when the page is really away from the end: touching or pulling it at the end does not call for it.
+                if !follow, !nearBottom {
                     Button { follow = true; withAnimation(.snappy) { proxy.scrollTo("bottom", anchor: .bottom) } } label: {
                         Image(systemName: "arrow.down").font(.system(size: 15, weight: .regular)).foregroundStyle(Theme.ink)
                             .frame(width: 38, height: 38)
@@ -280,7 +292,7 @@ struct ConversationView: View {
                     .accessibilityLabel(running ? "Scroll to the end, still working" : "Scroll to the end")
                 }
             }
-            .animation(.snappy, value: follow)
+            .animation(.snappy, value: !follow && !nearBottom)
         }
     }
 

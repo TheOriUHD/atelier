@@ -140,7 +140,7 @@ struct NewCodeSessionPage: View {
             .padding(.horizontal, 16).padding(.bottom, 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background)
+        .paperBehind()
         .overlay(alignment: .top) {
             if let problem { Text(problem).font(.footnote).foregroundStyle(Theme.danger).padding(12).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous)).padding(.horizontal, 16).padding(.top, 8) }
         }

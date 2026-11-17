@@ -174,6 +174,7 @@ struct ChatComposer: View {
     /// Skills and commands of the Code session's folder (the server lists them per folder).
     @State private var folderSlash: [JSON]?
     @Environment(\.scenePhase) private var phase
+    @Environment(\.keyboardHeight) private var keyboardHeight
     @FocusState private var focused: Bool
 
     private var mode: String { session?.mode ?? "chat" }
@@ -407,6 +408,8 @@ struct ChatComposer: View {
     private func submit() {
         guard !sending, !empty, !store.busy, store.connected, !store.uncertainDelivery else { return }
         sending = true
+        // The on-screen keyboard goes down with the message (and the box with it); a hardware keyboard keeps its place.
+        if keyboardHeight > 0 { focused = false }
         Task {
             defer { sending = false }
             if await ChatSend.submit(store: store, hub: hub, hooks: hooks) { onSent() }
