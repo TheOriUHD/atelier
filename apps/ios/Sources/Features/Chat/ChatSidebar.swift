@@ -401,14 +401,14 @@ struct ChatSessionRow: View {
                         else if session.mode == "code" { Text(codeLine).lineLimit(1) }
                         else if !model.isEmpty { Text(model).lineLimit(1) }
                         if session.isGuest, !session.coopHost.isEmpty { Text("· \(session.coopHost)").lineLimit(1) }
+                        // When it last moved belongs to the second line, so the right edge is left to the dot.
+                        Text("· \(session.updated, format: .relative(presentation: .numeric, unitsStyle: .narrow))").monospacedDigit().lineLimit(1).fixedSize().layoutPriority(1)
                     }.font(.footnote).foregroundStyle(Theme.inkMuted)
                 }
                 Spacer(minLength: 8)
-                Text(session.updated, format: .relative(presentation: .numeric, unitsStyle: .narrow)).font(.footnote).foregroundStyle(Theme.inkMuted).monospacedDigit()
+                if let dot = session.dot { StatusDot(kind: dot) }
             }
             .padding(.vertical, 7).contentShape(Rectangle())
-            // What is going on (working, needs an answer, a new reply) sits in the right margin, so the titles line up with the headings above them.
-            .overlay(alignment: .trailing) { if let dot = session.dot { StatusDot(kind: dot).offset(x: 13) } }
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)
