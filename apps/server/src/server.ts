@@ -70,7 +70,7 @@ app.use('*', async (c, next) => {
 // The public address (ATELIER_BASE_URL), when set: a client that found this server on the local network by its IP
 // address connects through the address people use instead (sign-in pages and connectors' sign-ins come back to it).
 const publicUrl = URL.parse(env.ATELIER_BASE_URL ?? '')?.origin ?? null;
-app.get('/api/health', (c) => c.json({ ok: true, app: 'atelier', version: APP.version, ...(publicUrl && publicUrl !== 'null' ? { url: publicUrl } : {}) }));
+app.get('/api/health', (c) => c.json({ ok: true, app: 'atelier', version: APP.version, mobileProtocol: 1, ...(publicUrl && publicUrl !== 'null' ? { url: publicUrl } : {}) }));
 
 // ------------------------------------------------------------------ sign-in (browsers)
 // Browsers sign in over HTTP so the session token lives in an HttpOnly cookie that scripts can't read.
@@ -206,7 +206,7 @@ app.get(
   upgradeWebSocket((c) => {
     const token = tokenOf(c);
     // Browsers bring the session cookie; the desktop app's relay and the terminal app send their token as a header.
-    const client: ClientInfo = { ...clientOf(c), clientKind: getCookie(c, COOKIE) ? 'web' : /^Atelier CLI\b/.test(c.req.header('user-agent') ?? '') ? 'cli' : 'desktop' };
+    const client: ClientInfo = { ...clientOf(c), clientKind: getCookie(c, COOKIE) ? 'web' : /^Atelier Mobile\b/.test(c.req.header('user-agent') ?? '') ? 'mobile' : /^Atelier CLI\b/.test(c.req.header('user-agent') ?? '') ? 'cli' : 'desktop' };
     const origin = originOf(c);
     let disconnect: (() => void) | undefined;
     const handlers = new Set<(m: RpcMessage) => void>();

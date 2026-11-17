@@ -131,6 +131,7 @@ see are hidden in the app.
 | **Explain each change** | Before each edit, Atelier says why in one short sentence, and a permission prompt shows it under the title. Every edit uses a few more tokens, whether a prompt shows or not. New sessions pick this up; a running one keeps what it started with. |
 | **Code appearance** | Syntax highlighting for code: one theme for the light app theme, one for the dark. |
 | **Default transcript view** | How Code sessions open: tool calls as usual, with thinking expanded, or with every call’s details expanded. Each session can switch in its header. |
+| **Permanent goal mode** | Off by default. In Code and Chat tasks, remind the assistant about unfinished todos and automatically continue a finished reply while its task list makes progress, up to four times. This can use more tokens; stops when it asks you a question. |
 | **Suggested replies** | After a reply in Code or a chat’s task, a short guess at your next message shows in the message box; Tab puts it in, typing sets it aside. The small model (or the conversation’s) writes it from your recent messages and the reply. |
 | **Code font** | A monospace font installed on your computer, for code and diffs. |
 | **Commit author name** | Used for commits you make from the Code view. Empty uses the repository’s git config. |

@@ -461,7 +461,7 @@ export const contract = {
     'sessions.leave': { input: Id, output: z.object({ deleted: z.boolean() }) },
 
     'chat.send': {
-      input: z.object({ sessionId: z.string(), parentId: z.string().nullable().optional(), parts: z.array(Part).min(1), answerWith: z.string().max(300).optional() }),
+      input: z.object({ sessionId: z.string(), parentId: z.string().nullable().optional(), parts: z.array(Part).min(1), answerWith: z.string().max(300).optional(), clientMutationId: z.string().uuid().optional() }),
       output: z.object({ userMessageId: z.string() }),
     },
     'chat.stop': { input: z.object({ sessionId: z.string() }), output: Ok },

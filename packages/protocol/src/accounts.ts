@@ -62,7 +62,7 @@ export const UserSummary = z.object({
 export type UserSummary = z.infer<typeof UserSummary>;
 
 /** Who a sign-in is for: a browser (cookie), the desktop app or the terminal app (each keeps its own token). */
-export const ClientKind = z.enum(['web', 'desktop', 'cli']);
+export const ClientKind = z.enum(['web', 'desktop', 'cli', 'mobile']);
 export type ClientKind = z.infer<typeof ClientKind>;
 
 export const AuthSessionSummary = z.object({
@@ -413,10 +413,11 @@ export const UserPrefs = z.object({
       transcriptView: TranscriptView.default('normal'),
       /** After a reply in Code and Cowork, a short guess at the next message shows in the message box (Tab puts it in). */
       suggestions: z.boolean().default(true),
+      permanentGoalMode: z.boolean().default(false),
       /** Edit and Write get a short `reason` the permission card shows. Costs tokens on every edit, and a session keeps what it started with. */
       explainChanges: z.boolean().default(false),
     })
-    .default({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true, explainChanges: false }),
+    .default({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true, permanentGoalMode: false, explainChanges: false }),
   sidebar: SidebarView.default({
     status: 'active',
     environments: ['local', 'cloud', 'remote', 'ssh'],

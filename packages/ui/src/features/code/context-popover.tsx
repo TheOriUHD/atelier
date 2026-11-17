@@ -4,11 +4,11 @@
  * The ring grows while a reply streams. A new session's composer has
  * the ring too, with an empty window and the same usage.
  */
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import { chatGptPlanLabel, type ContextUsage, type ProviderType, type SessionUsage } from '@atelier/protocol';
-import { Button, IconButton, Popover, PopoverContent, PopoverTrigger, ProgressRing, Tooltip, cn } from '../../components/ui/index.ts';
+import { Button, IconButton, Menu, MenuContent, MenuLabel, MenuRadioGroup, MenuRadioItem, Popover, PopoverContent, PopoverTrigger, ProgressRing, Tooltip, cn } from '../../components/ui/index.ts';
 import { popupScrollClass } from '../../components/ui/styles.ts';
 import { useOpenSettings } from '../../app/navigation.ts';
 import { clockTime } from '../../lib/dates.ts';
@@ -95,9 +95,7 @@ export function ContextButton({
         if (next) void breakdown.refetch();
       }}
     >
-      <PopoverTrigger render={<button type="button" aria-label={`Context window: ${Math.round(fraction * 100)}% used`} className={RING_CLASS} />}>
-        <ProgressRing value={fraction} aria-hidden="true" />
-      </PopoverTrigger>
+      <UsageRing key={`${provider}:${providerId}`} fraction={fraction} provider={provider} providerId={providerId} closeDetails={() => setOpen(false)} />
       <ContextPopover
         context={context}
         usage={breakdown.data?.usage}
@@ -124,15 +122,49 @@ export function NewSessionContextButton({ limit, provider = null, providerId }: 
   const titleId = useId();
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={<button type="button" aria-label="Context window: 0% used" className={RING_CLASS} />}>
-        <ProgressRing value={0} aria-hidden="true" />
-      </PopoverTrigger>
+      <UsageRing key={`${provider}:${providerId}`} fraction={0} provider={provider} providerId={providerId} closeDetails={() => setOpen(false)} />
       <PopoverContent side="top" align="end" sideOffset={8} aria-labelledby={titleId} className={POPOVER_CLASS}>
         <WindowHeading titleId={titleId} used={0} limit={limit} />
         <PlainBar fraction={0} />
         <UsageSection provider={provider} providerId={providerId} sessionCost={null} onOpenUsage={openUsage} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+function UsageRing({ fraction, provider, providerId, closeDetails }: { fraction: number; provider: ProviderType | null; providerId: string | undefined; closeDetails(): void }) {
+  const button = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState(false);
+  const storageKey = `atelier.usageRing.${provider ?? 'context'}.${providerId ?? ''}`;
+  const [chosen, setChosen] = useState(() => {
+    try { return localStorage.getItem(storageKey) ?? 'context'; } catch { return 'context'; }
+  });
+  const { windows } = usePlanWindows(provider, providerId, true);
+  const selected = windows.find((w) => w.key === chosen);
+  const value = selected ? Math.min(1, Math.max(0, selected.usedPercent / 100)) : fraction;
+  const label = `${selected?.name ?? 'Context window'}: ${Math.round(value * 100)}% used`;
+  return (
+    <>
+      <PopoverTrigger render={<button ref={button} type="button" aria-label={label} title={`${label}. Right-click to choose what the circle shows.`} className={RING_CLASS} onContextMenu={(e) => {
+        e.preventDefault();
+        closeDetails();
+        setMenu(true);
+      }} />}>
+        <ProgressRing value={value} aria-hidden="true" />
+      </PopoverTrigger>
+      <Menu open={menu} onOpenChange={setMenu}>
+        <MenuContent side="top" align="end" anchor={button} aria-label="Circle display">
+          <MenuRadioGroup value={selected?.key ?? 'context'} onValueChange={(next: string) => {
+            setChosen(next);
+            try { localStorage.setItem(storageKey, next); } catch { /* The choice still holds while this composer is open. */ }
+          }}>
+            <MenuLabel>Circle display</MenuLabel>
+            <MenuRadioItem value="context">Context window</MenuRadioItem>
+            {windows.map((w) => <MenuRadioItem key={w.key} value={w.key}>{w.name}</MenuRadioItem>)}
+          </MenuRadioGroup>
+        </MenuContent>
+      </Menu>
+    </>
   );
 }
 
@@ -383,13 +415,14 @@ export const reportsPlanLimits = (provider: ProviderType | null): boolean => pro
  * weekly one; Mistral Vibe's monthly allowance as Mistral's billing API says, for the provider `providerId`. `now` is
  * when they were read, for "Resets in …". Admins only: anyone else gets none.
  */
-export function usePlanWindows(provider: ProviderType | null = 'chatgpt', providerId?: string) {
+export function usePlanWindows(provider: ProviderType | null = 'chatgpt', providerId?: string, refresh = false) {
   const vibe = provider === 'mistral-vibe';
-  const chatgpt = useQuery({ queryKey: keys.chatgpt, queryFn: () => rpc().call('chatgpt.status', {}), staleTime: 0, enabled: !vibe });
+  const chatgpt = useQuery({ queryKey: keys.chatgpt, queryFn: () => rpc().call('chatgpt.status', {}), staleTime: 30_000, enabled: provider === 'chatgpt', refetchInterval: refresh ? 60_000 : false });
   const allowance = useQuery({
     queryKey: keys.planUsage(providerId ?? ''),
     queryFn: () => rpc().call('providers.planUsage', { id: providerId! }),
-    staleTime: 0,
+    staleTime: 30_000,
+    refetchInterval: refresh ? 60_000 : false,
     enabled: vibe && !!providerId,
   });
   if (vibe) {
@@ -407,7 +440,7 @@ export function usePlanWindows(provider: ProviderType | null = 'chatgpt', provid
   }
   const rawPlan = chatgpt.data?.plan?.toLowerCase();
   const pro = !!rawPlan?.startsWith('pro');
-  const windows: PlanWindow[] = [chatgpt.data?.limits?.primary, chatgpt.data?.limits?.secondary]
+  const windows: PlanWindow[] = (provider === 'chatgpt' ? [chatgpt.data?.limits?.primary, chatgpt.data?.limits?.secondary] : [])
     .filter((w): w is NonNullable<typeof w> => !!w && (w.windowMinutes === null || w.windowMinutes > 0) && (!pro || w.windowMinutes === 10_080))
     .map((w) => ({ key: String(w.windowMinutes ?? 'window'), name: windowName(w.windowMinutes), usedPercent: w.usedPercent, resetsAt: w.resetsAt }));
   return {

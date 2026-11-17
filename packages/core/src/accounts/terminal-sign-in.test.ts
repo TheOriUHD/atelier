@@ -56,6 +56,19 @@ describe('TerminalSignIns', () => {
     expect(await signIns.poll(start.pollToken, terminal)).toEqual({ state: 'expired' });
   });
 
+  it('records native mobile browser approvals as mobile sessions', async () => {
+    const mobile: ClientInfo = { clientKind: 'mobile', ip: '10.0.0.8', userAgent: 'Atelier Mobile iOS' };
+    const { user } = await accounts.setup({ username: 'ada', name: 'Ada', password: 'ada-password-1' }, web);
+    const start = signIns.start({ deviceName: 'iPhone', platform: 'iOS' }, mobile, origin);
+    signIns.decide(start.code, true, user, web);
+    const done = await signIns.poll(start.pollToken, mobile);
+    expect(done.state).toBe('approved');
+    if (done.state !== 'approved') throw new Error('not approved');
+    const row = await db.select().from(authSessions).where(eq(authSessions.tokenHash, hashToken(done.token))).get();
+    expect(row?.clientKind).toBe('mobile');
+    expect(await signIns.poll(start.pollToken, mobile)).toEqual({ state: 'expired' });
+  });
+
   it('says when a request was denied, and an answered one can’t be answered again', async () => {
     const { user } = await accounts.setup({ username: 'ada', name: 'Ada', password: 'ada-password-1' }, web);
     const start = signIns.start({ deviceName: 'box', platform: 'Linux' }, terminal, origin);

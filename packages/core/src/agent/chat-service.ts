@@ -492,6 +492,7 @@ function outputCap(effort: Effort | null): number {
 
 export class ChatService {
   private runs = new Map<string, ActiveRun>();
+  private pendingSends = new Map<string, Promise<string>>();
   /** Co-op: for whom each running turn is (coop-turns.ts), and the turn a Retry or Continue asked to run as someone. */
   private actors = new Map<string, TurnActor>();
   /** The app each session's person last wrote from (`heardFrom`): the panes and visuals its tools may count on. */
@@ -804,11 +805,25 @@ export class ChatService {
     this.apps.set(sessionId, app);
   }
 
-  async send(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null, opts: { answerWith?: string } = {}): Promise<string> {
+  async send(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null, opts: { answerWith?: string; clientMutationId?: string } = {}): Promise<string> {
+    if (!opts.clientMutationId) return this.sendOnce(sessionId, rawParts, parentId, by, opts);
+    const id = `send_${createHash('sha256').update(JSON.stringify([sessionId, by?.id ?? null, opts.clientMutationId])).digest('hex')}`;
+    const pending = this.pendingSends.get(id);
+    if (pending) return pending;
+    const run = (async () => {
+      const existing = await this.deps.repo.getMessage(id);
+      if (existing) return existing.id;
+      return this.sendOnce(sessionId, rawParts, parentId, by, opts, id);
+    })();
+    this.pendingSends.set(id, run);
+    try { return await run; } finally { this.pendingSends.delete(id); }
+  }
+
+  private async sendOnce(sessionId: string, rawParts: Part[], parentId?: string | null, by?: TurnParticipant | null, opts: { answerWith?: string } = {}, messageId?: string): Promise<string> {
     const checked = this.checked(sessionId, withQuotes(by && by.role !== 'host' ? guestParts(rawParts) : rawParts));
     const parts = Array.isArray(checked) ? checked : await checked;
     const answerWith = by && opts.answerWith ? await this.checkedAnswerWith(sessionId, opts.answerWith, by) : undefined;
-    const id = newId();
+    const id = messageId ?? newId();
     await this.start(sessionId, true, {
       before: async () => {
         const session = await this.requireSession(sessionId);
@@ -1517,7 +1532,7 @@ export class ChatService {
       // that stops to report progress mid-task (some do, whatever the prompt says) carries on; only while the list keeps
       // moving, and a few times at most, so one that is truly stuck ends.
       let listBefore: string | null = null;
-      for (let round = 0; result.stopReason === 'end' && !signal.aborted && !session.parentSessionId && round < MAX_CONTINUE_ROUNDS; round++) {
+      for (let round = 0; result.stopReason === 'end' && !signal.aborted && !session.parentSessionId && round < MAX_CONTINUE_ROUNDS && (await this.deps.person(session.userId)).prefs.code.permanentGoalMode; round++) {
         const todos = (await this.requireSession(sessionId)).todos as Todo[];
         const note = todosOpen(todos, this.deps.promptOverrides());
         const list = JSON.stringify(todos);
@@ -2140,7 +2155,7 @@ export class ChatService {
     if ((session.mode === 'chat' && !this.unified(session)) || session.parentSessionId) return null;
     const since = call.name === 'TodoWrite' ? 0 : (this.sinceTodo.get(session.id) ?? 0) + 1;
     this.sinceTodo.set(session.id, since % TODO_NUDGE_CALLS);
-    if (since < TODO_NUDGE_CALLS) return null;
+    if (since < TODO_NUDGE_CALLS || !(await this.deps.person(session.userId)).prefs.code.permanentGoalMode) return null;
     return todoNudge((await this.requireSession(session.id)).todos as Todo[], this.deps.promptOverrides());
   }
 

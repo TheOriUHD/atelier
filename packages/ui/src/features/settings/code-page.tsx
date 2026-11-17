@@ -25,6 +25,7 @@ export function CodePage() {
   const interfaceFont = usePref<InterfaceFont>(['appearance', 'interfaceFont']);
   const transcriptView = usePref<TranscriptView>(['code', 'transcriptView']);
   const suggestions = usePref<boolean>(['code', 'suggestions']);
+  const permanentGoalMode = usePref<boolean>(['code', 'permanentGoalMode']);
   const allow = usePref<string[]>(['permissions', 'allow']);
   const explainChanges = usePref<boolean>(['code', 'explainChanges']);
   const authorName = usePref<string>(['git', 'authorName']);
@@ -55,6 +56,11 @@ export function CodePage() {
         </SettingRow>
         <SettingRow id="code.suggestions" setting={suggestions}>
           {(label) => <Switch {...label} checked={suggestions.value} onCheckedChange={(v) => void suggestions.set(v)} />}
+        </SettingRow>
+      </SettingsSection>
+      <SettingsSection title="Tasks">
+        <SettingRow id="code.permanentGoalMode" setting={permanentGoalMode}>
+          {(label) => <Switch {...label} checked={permanentGoalMode.value} onCheckedChange={(v) => void permanentGoalMode.set(v)} />}
         </SettingRow>
       </SettingsSection>
       <SettingsSection title="Permissions">

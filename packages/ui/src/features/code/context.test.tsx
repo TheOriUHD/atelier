@@ -102,7 +102,7 @@ function Session({ id, children }: { id: string; children: React.ReactNode }) {
   return children;
 }
 
-function show(id: string, snap: SessionSnapshot, ui: React.ReactNode) {
+function show(id: string, snap: SessionSnapshot, ui: React.ReactNode, handlers: typeof backend.handlers = {}) {
   backend.handlers = {
     'sessions.subscribe': () => snap,
     'artifacts.list': () => [],
@@ -110,6 +110,7 @@ function show(id: string, snap: SessionSnapshot, ui: React.ReactNode) {
     'chat.compact': () => ({ ok: true }),
     'models.list': () => [],
     'usage.summary': () => WEEK,
+    ...handlers,
   };
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -122,6 +123,7 @@ function show(id: string, snap: SessionSnapshot, ui: React.ReactNode) {
 
 beforeEach(() => {
   backend.calls.length = 0;
+  localStorage.clear();
   seq = 1;
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
@@ -314,6 +316,63 @@ describe('ContextButton', () => {
     fireEvent.click(within(popover).getByRole('button', { name: 'Compact session' }));
     await settle();
     expect(callsTo('chat.compact')).toEqual([{ sessionId: 's-pop' }]);
+  });
+
+  it('selects each plan window from the ring’s right-click menu and remembers the choice', async () => {
+    show('s-picker', snapshot('s-picker'), <ContextButton sessionId="s-picker" busy={false} provider="chatgpt" providerId="plan" />);
+    backend.handlers['chatgpt.status'] = () => ({ available: true, signedIn: true, signingIn: false, plan: 'plus',
+      limits: { primary: { usedPercent: 42, windowMinutes: 300, resetsAt: NOW + 60_000 }, secondary: { usedPercent: 91, windowMinutes: 10_080, resetsAt: NOW + 86_400_000 } },
+    });
+    await settle();
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Context window: 13% used' }));
+    await settle();
+    expect(screen.getByRole('menuitemradio', { name: 'Context window' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '5-hour limit' }));
+    await settle();
+    const fiveHour = screen.getByRole('button', { name: '5-hour limit: 42% used' });
+    fireEvent.contextMenu(fiveHour);
+    await settle();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Weekly limit' }));
+    await settle();
+    expect(screen.getByRole('button', { name: 'Weekly limit: 91% used' })).toBeTruthy();
+    expect(localStorage.getItem('atelier.usageRing.chatgpt.plan')).toBe('10080');
+    cleanup();
+    show('s-picker-new', snapshot('s-picker-new'), <NewSessionContextButton limit={8000} provider="chatgpt" providerId="plan" />, {
+      'chatgpt.status': () => ({ available: true, signedIn: true, signingIn: false, plan: 'plus', limits: { secondary: { usedPercent: 91, windowMinutes: 10_080, resetsAt: NOW + 86_400_000 } } }),
+    });
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Weekly limit: 91% used' }));
+    await settle();
+    expect(screen.getByRole('heading', { name: 'Context window' })).toBeTruthy();
+  });
+
+  it('selects Mistral Vibe’s monthly allowance and can switch back to context', async () => {
+    show('s-vibe-ring', snapshot('s-vibe-ring'), <ContextButton sessionId="s-vibe-ring" busy={false} provider="mistral-vibe" providerId="vibe" />, {
+      'providers.planUsage': () => ({ usedPercent: 63, resetsAt: NOW + 86_400_000, plan: 'Pro' }),
+    });
+    await settle();
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Context window: 13% used' }));
+    await settle();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Monthly allowance' }));
+    await settle();
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Monthly allowance: 63% used' }));
+    await settle();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Context window' }));
+    await settle();
+    expect(screen.getByRole('button', { name: 'Context window: 13% used' })).toBeTruthy();
+    expect(callsTo('chatgpt.status')).toHaveLength(0);
+    expect(callsTo('providers.planUsage')).toEqual([{ id: 'vibe' }]);
+  });
+
+  it('offers only context for a provider without limits, ignoring a saved unavailable window', async () => {
+    localStorage.setItem('atelier.usageRing.ollama.local', '10080');
+    show('s-local-ring', snapshot('s-local-ring'), <ContextButton sessionId="s-local-ring" busy={false} provider="ollama" providerId="local" />);
+    await settle();
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Context window: 13% used' }));
+    await settle();
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(1);
+    expect(callsTo('chatgpt.status')).toHaveLength(0);
+    expect(callsTo('providers.planUsage')).toHaveLength(0);
   });
 
   it("shows a ChatGPT subscription's own usage windows in place of the person's usage", async () => {

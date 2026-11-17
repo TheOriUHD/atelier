@@ -30,10 +30,13 @@ describe('settings schema', () => {
     expect(p.appearance.theme).toBe('system');
     expect(p.appearance.chatFont).toBe('serif');
     expect(p.appearance.interfaceFont).toBe('sans');
-    expect(p.code).toEqual({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true, explainChanges: false });
+    expect(p.code).toEqual({ font: '', syntaxTheme: { light: 'atelier-light', dark: 'atelier-dark' }, transcriptView: 'normal', suggestions: true, permanentGoalMode: false, explainChanges: false });
     expect(UserPrefs.safeParse({ appearance: { theme: 'neon' } }).success).toBe(false);
     // Stored before these keys existed: defaults fill in.
     expect(UserPrefs.parse({ appearance: { theme: 'dark' }, code: { font: 'Fira Code' } }).code.syntaxTheme.dark).toBe('atelier-dark');
+    expect(UserPrefs.parse({ code: { font: 'Fira Code' } }).code.permanentGoalMode).toBe(false);
+    expect(UserPrefs.parse({ code: { permanentGoalMode: true } }).code.permanentGoalMode).toBe(true);
+    expect(UserPrefs.safeParse({ code: { permanentGoalMode: 'true' } }).success).toBe(false);
     expect(UserPrefs.safeParse({ code: { font: 'Fira"; color: red' } }).success).toBe(false);
     expect(UserPrefs.safeParse({ code: { syntaxTheme: { light: '../evil' } } }).success).toBe(false);
   });

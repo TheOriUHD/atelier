@@ -4,6 +4,12 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Native mobile client foundation.** A SwiftUI iPhone/iPad app connects to HTTPS Atelier servers, with Keychain sign-in, browser approval, streamed conversations, projects, attachments, dictation, permission cards and native settings. Servers identify mobile sessions and deduplicate ordinary sends by client mutation ID. This is a development build, not yet a distributed mobile release.
+
+- **Choose what the composer’s circle shows.** Right-click it to select context usage or one of your provider’s reported plan limits, such as ChatGPT Plan’s five-hour or weekly window or Mistral Vibe’s monthly allowance. The choice is remembered per provider on this device; left-click still opens the details.
+
+- **Permanent goal mode is opt-in.** Settings › Code › Tasks now has **Permanent goal mode**, off by default. Only when enabled does Atelier remind an assistant about unfinished todos and send a finished reply back to work. It applies to Code and Chat tasks, keeps the existing progress and question checks, and allows at most four continuations.
+
 ## [0.10.1] — 2026-11-16
 
 - **The website and the docs are easier to find, for search engines and for AI agents.**

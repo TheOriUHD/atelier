@@ -65,6 +65,7 @@ expire. On a server, everyone who can use the provider uses the admin's plan.
   for the "5-hour limit" and the "Weekly limit", amber from 75% and red from 90%. Atelier reads them from your account the way
   Codex's status does (at most every 30 seconds), and each reply's headers update them. Before the first reply the popover may
   say "ChatGPT reports your usage with each reply: it shows after the next message."
+- **Choose what the ring shows** *(next release)*: right-click the circle beside the composer and choose **Context window**, **5-hour limit**, or **Weekly limit**, depending on what your plan reports. The choice is remembered per provider on this device; if that window is unavailable, the ring shows context instead. Left-click still opens the details.
 - **Pro plans** show as **Pro 100**, **Pro 200** or **Pro 500**, and only their weekly window, because those plans have no
   5-hour window.
 

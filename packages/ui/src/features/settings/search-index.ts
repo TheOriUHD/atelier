@@ -542,6 +542,14 @@ export const SETTINGS_INDEX = [
     keywords: ['verbose', 'thinking', 'expand', 'details', 'tool calls', 'appearance'],
   },
   {
+    id: 'code.permanentGoalMode',
+    page: 'code',
+    label: 'Permanent goal mode',
+    description:
+      'Off by default. In Code and Chat tasks, remind the assistant about unfinished todos and automatically continue a finished reply while its task list makes progress, up to four times. This can use more tokens; stops when it asks you a question.',
+    keywords: ['tasks', 'todos', 'continue', 'automatic', 'feedback loop', 'goal'],
+  },
+  {
     id: 'code.suggestions',
     page: 'code',
     label: 'Suggested replies',

@@ -145,6 +145,24 @@ afterEach(async () => {
 });
 
 describe('ChatService', () => {
+  it('deduplicates concurrent mobile sends and retries after a service restart', async () => {
+    const chat = service();
+    const session = await repo.create({ mode: 'chat' });
+    const parts = [{ type: 'text' as const, text: 'One message' }];
+    const opts = { clientMutationId: 'f798d267-e091-47b7-ae19-607c586d862a' };
+    const [first, second] = await Promise.all([
+      chat.send(session.id, parts, undefined, undefined, opts),
+      chat.send(session.id, parts, undefined, undefined, opts),
+    ]);
+    expect(second).toBe(first);
+    await chat.settle(session.id);
+    const restarted = service();
+    expect(await restarted.send(session.id, parts, undefined, undefined, opts)).toBe(first);
+    expect((await restarted.snapshot(session.id)).messages.filter((message) => message.role === 'user')).toHaveLength(1);
+    const other = await repo.create({ mode: 'chat' });
+    expect(await restarted.send(other.id, parts, undefined, undefined, opts)).not.toBe(first);
+    await restarted.settle(other.id);
+  });
   it('stores inline visual input once and returns only a tiny confirmation', async () => {
     const input = { title: 'Orbit', description: 'An orbit explainer.', html: '<p>Orbit</p>' };
     let called = false;
@@ -925,7 +943,9 @@ describe('auto-compaction', () => {
 
   it('carries a long task on a small window through several compactions to the end', async () => {
     const requests: ChatRequest[] = [];
-    const chat = service({ resolve: async () => ({ adapter: agent(requests, 12), info: small }) }, undefined, { mcpTools: async () => [dump] });
+    const prefs = quietPrefs();
+    prefs.code.permanentGoalMode = true;
+    const chat = service({ resolve: async () => ({ adapter: agent(requests, 12), info: small }) }, undefined, { mcpTools: async () => [dump], person: async () => ({ prefs, name: 'Tester', safeguards: 'inherit' as const }) });
     const s = await repo.create({ mode: 'work' });
     await chat.send(s.id, [{ type: 'text', text: TASK }]);
     await chat.settle(s.id);
@@ -970,6 +990,18 @@ describe('auto-compaction', () => {
     expect(events.filter((e) => e.event.type === 'compacting').map((e) => (e.event as { active: boolean }).active)).toEqual(summaries.flatMap(() => [true, false]));
   });
 
+  it('does not inject task-list reminders or restart a long task by default', async () => {
+    const requests: ChatRequest[] = [];
+    const chat = service({ resolve: async () => ({ adapter: agent(requests, 12), info: small }) }, undefined, { mcpTools: async () => [dump] });
+    const s = await repo.create({ mode: 'work' });
+    await chat.send(s.id, [{ type: 'text', text: TASK }]);
+    await chat.settle(s.id);
+    expect(main(requests)).toHaveLength(14);
+    const { messages } = await repo.branch(s.id);
+    expect(messages.some((m) => resultText(m).includes("The task list hasn't changed for a while"))).toBe(false);
+    expect(messages.some((m) => messageText(m.parts).includes('your task list still has open items'))).toBe(false);
+  });
+
   it('stops a turn that has been summarized over and over and still does not fit, saying how to fix it', async () => {
     const requests: ChatRequest[] = [];
     // A window that can't hold even one result: every step overflows, so every step is summarized again.
@@ -1006,7 +1038,9 @@ describe('auto-compaction', () => {
 
   it('leaves older tool results out when summarizing fails, says so, and still finishes', async () => {
     const requests: ChatRequest[] = [];
-    const chat = service({ resolve: async () => ({ adapter: agent(requests, 8, { failSummaries: true }), info: small }) }, undefined, { mcpTools: async () => [dump] });
+    const prefs = quietPrefs();
+    prefs.code.permanentGoalMode = true;
+    const chat = service({ resolve: async () => ({ adapter: agent(requests, 8, { failSummaries: true }), info: small }) }, undefined, { mcpTools: async () => [dump], person: async () => ({ prefs, name: 'Tester', safeguards: 'inherit' as const }) });
     const s = await repo.create({ mode: 'work' });
     await chat.send(s.id, [{ type: 'text', text: TASK }]);
     await chat.settle(s.id);

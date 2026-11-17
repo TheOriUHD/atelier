@@ -94,7 +94,7 @@ export class TerminalSignIns {
     if (request.decision === null) return { state: 'pending' };
     this.requests.delete(request.code);
     if (!request.decision.approved) return { state: 'denied' };
-    const signedIn = await this.accounts.signInAs(request.decision.userId, { ...client, clientKind: 'cli' }, 'terminal');
+    const signedIn = await this.accounts.signInAs(request.decision.userId, { ...client, clientKind: client.clientKind === 'mobile' ? 'mobile' : 'cli' }, 'terminal');
     return { state: 'approved', ...signedIn };
   }
 

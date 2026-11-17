@@ -2894,11 +2894,11 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { deleted: true };
     },
 
-    'chat.send': async ({ sessionId, parentId, parts, answerWith }, ctx) => {
+    'chat.send': async ({ sessionId, parentId, parts, answerWith, clientMutationId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.send');
       heard(sessionId, ctx.connection().client);
       await ownBlobsOnly(parts, ctx);
-      return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, answerWith ? { answerWith } : {})) };
+      return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, { ...(answerWith ? { answerWith } : {}), ...(clientMutationId ? { clientMutationId } : {}) })) };
     },
     'coop.track': async ({ sessionId, task }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'coop.track');
