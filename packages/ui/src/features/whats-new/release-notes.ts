@@ -38,6 +38,28 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.2',
+    intro: 'Your phone gets more of Atelier, and can think for itself.',
+    highlights: [
+      {
+        icon: Link,
+        title: 'Sign in your phone with a QR code',
+        body: 'In Settings › Account, choose Sign in your phone and scan the code with the Atelier app: no address or password to type. The code works once, for five minutes.',
+      },
+      {
+        icon: Cpu,
+        title: 'Models that run on your phone',
+        body: 'The Atelier app for iPhone and iPad can download small models and run them on the phone itself. Pick one in a conversation, start a new one on it or take over one you began elsewhere. The conversation stays on your server, and a phone’s models are only offered to that phone.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'Keep a temporary chat',
+        body: 'In the phone app, the menu of a temporary chat starts with Delete chat now and Keep chat, which turns it into an ordinary conversation.',
+      },
+    ],
+    also: ['You can choose what the circle beside the message box shows, and Permanent goal mode is off until you turn it on in Settings › Code.'],
+  },
+  {
     version: '0.10.1',
     intro: 'Dictation stops when you say so.',
     highlights: [

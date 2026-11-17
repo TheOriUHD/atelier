@@ -219,7 +219,7 @@ approve: that would sign *their* terminal in as you. Approve only a terminal you
 code. Approvals and denials go into the [activity log](#the-activity-log) (`signin.terminal_approved`,
 `signin.terminal_denied`). The terminal can also sign in with a password or an invite code.
 
-### Signing in a phone *(next release)*
+### Signing in a phone
 
 The Atelier app for iPhone and iPad signs in with a QR code. In **Settings › Account › Sign in your phone**, choose **Show
 QR code**; on the phone's sign-in screen choose **Scan QR code**. The phone signs in as the account on your screen, with
