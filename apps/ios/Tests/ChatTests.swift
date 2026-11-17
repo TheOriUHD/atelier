@@ -459,9 +459,13 @@ import SwiftUI
         XCTAssertEqual(ChatComposer.join("Keep this", "  "), "Keep this")
     }
 
-    func testTheEffortMenuShowsOnlyTheFirstSentenceOfAnExplanation() {
-        XCTAssertEqual(EffortMenu.firstSentence("Fastest replies, fewest tool calls. Quick questions and small edits."), "Fastest replies, fewest tool calls.")
-        XCTAssertEqual(EffortMenu.firstSentence("Max uses about 3.5 times more tokens."), "Max uses about 3.5 times more tokens.")
-        XCTAssertEqual(EffortMenu.symbol("ultracode"), "sparkles")
+    func testTheEffortSliderSnapsToTheNearestLevel() {
+        // A 300 point track with 22 point ends and five levels: stops every 64 points from 22.
+        XCTAssertEqual(EffortSlider.nearest(0, width: 300, inset: 22, count: 5), 0)
+        XCTAssertEqual(EffortSlider.nearest(60, width: 300, inset: 22, count: 5), 1)
+        XCTAssertEqual(EffortSlider.nearest(150, width: 300, inset: 22, count: 5), 2)
+        XCTAssertEqual(EffortSlider.nearest(278, width: 300, inset: 22, count: 5), 4)
+        XCTAssertEqual(EffortSlider.nearest(900, width: 300, inset: 22, count: 5), 4)
+        XCTAssertEqual(EffortSlider.nearest(150, width: 300, inset: 22, count: 1), 0)
     }
 }

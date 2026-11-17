@@ -22,8 +22,9 @@ extension Conversation {
 struct RootView: View {
     @Bindable var store: AppStore
     var startIn: HomeMode = .chat
-    @State private var settings = false
-    @State private var settingsStart: SettingsPageID?
+    /// Settings, with the page to open on when something elsewhere in the app links to one. Being the presentation's own
+    /// item, the page can't be lost to the timing of another sheet closing.
+    @State private var settings: SettingsRequest?
     @State private var mode: HomeMode
     @State private var column: NavigationSplitViewVisibility = .all
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
@@ -53,21 +54,21 @@ struct RootView: View {
             .tint(Theme.clay)
             .environment(\.chatServer, store.address)
             .onReceive(NotificationCenter.default.publisher(for: .atelierNewConversation)) { _ in compose() }
-            .onReceive(NotificationCenter.default.publisher(for: .atelierSettings)) { _ in settings = true }
-            .sheet(isPresented: $settings, onDismiss: { settingsStart = nil }) { SettingsView(store: store, start: settingsStart) }
+            .onReceive(NotificationCenter.default.publisher(for: .atelierSettings)) { _ in settings = SettingsRequest() }
+            .sheet(item: $settings) { SettingsView(store: store, start: $0.page) }
             .sheet(isPresented: $newCode) { NewCodeSessionSheet(store: store) { id in newCode = false; open(id) } }
             .onReceive(NotificationCenter.default.publisher(for: .atelierOpenSettings)) { note in
-                settingsStart = (note.userInfo?["page"] as? String).flatMap(SettingsPageID.init(rawValue:))
-                settings = true
+                settings = SettingsRequest(page: (note.userInfo?["page"] as? String).flatMap(SettingsPageID.init(rawValue:)))
             }
             .task(id: store.connected) { if store.connected { await hub.reloadAll() } }
             #if DEBUG
             // `--open settings/<page>` opens Settings on launch, with a demo or after `--autologin`.
-            .onAppear { if let page = Launch.route("settings").flatMap(SettingsPageID.init(rawValue:)) { settingsStart = page; settings = true } }
+            .onAppear { if let page = Launch.route("settings").flatMap(SettingsPageID.init(rawValue:)) { settings = SettingsRequest(page: page) } }
             #endif
             .onChange(of: store.signedIn) { _, signedIn in if !signedIn { hub.clearCaches() } }
             .onAppear {
                 #if DEBUG
+                if Demo.requested == "conversation-root" { showDetail() }
                 switch Launch.route("home") {
                 case "projects": route = .projects; showDetail()
                 case "project": route = .projects; openProject = store.projects.first?["id"].string; showDetail()
@@ -87,7 +88,7 @@ struct RootView: View {
             open: { open($0) },
             compose: { compose() },
             show: { route = $0; openProject = nil; showDetail() },
-            settings: { settings = true },
+            settings: { settings = SettingsRequest() },
             openProject: { openProject = $0; route = .projects; showDetail() }
         )
     }
@@ -123,6 +124,12 @@ struct RootView: View {
         ChatNav.newConversation(store, project: id)
         showDetail()
     }
+}
+
+/// A request to show Settings, optionally on one page.
+struct SettingsRequest: Identifiable {
+    let id = UUID()
+    var page: SettingsPageID?
 }
 
 extension Notification.Name {

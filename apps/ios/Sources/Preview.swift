@@ -126,7 +126,7 @@ struct DemoRoot: View {
     var body: some View {
         switch Demo.requested ?? "" {
         case "signin": SignInView(store: store)
-        case "home", "split": RootView(store: store)
+        case "home", "split", "conversation-root": RootView(store: store)
         case "code": RootViewInCode(store: store)
         case "settings": SettingsView(store: store)
         case "model": ConversationView(store: store).sheet(isPresented: .constant(true)) { ModelPicker(store: store) }

@@ -239,7 +239,7 @@ struct ChatComposer: View {
             dictation.onFailure = { message in store.draft = voiceBase; store.error = message }
             #if DEBUG
             switch Launch.route("conversation") {
-            case "add", "add-large": addSheet = true
+            case "add", "add-large", "add-plugins": addSheet = true
             case "voice": voiceBase = ""; dictation.demo(words: "Hello, this is an example voice")
             case "listening": voiceBase = ""; dictation.demo(words: "")
             default: break
@@ -259,7 +259,7 @@ struct ChatComposer: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     modelChip
-                    if let effortLabel, let current { EffortMenu(store: store, model: current, mode: mode, label: effortLabel) }
+                    if let effortLabel, let current { EffortChip(store: store, model: current, mode: mode, label: effortLabel) }
                     if hub.webSearchOn, mode != "code", session?.research ?? hub.newOptions.research { researchChip }
                     if mode == "code", session != nil { PermissionModeChip(store: store) }
                 }

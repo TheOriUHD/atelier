@@ -73,7 +73,7 @@ struct ChatAddSheet: View {
                             .foregroundStyle(Theme.ink)
                     }
                     if store.isAdmin {
-                        Button { dismiss(); openSettings(.plugins) } label: { row("puzzlepiece.extension", "Add plugins") }
+                        Button { openPlugins() } label: { row("puzzlepiece.extension", "Add plugins") }
                     }
                 }
             }
@@ -88,7 +88,22 @@ struct ChatAddSheet: View {
         .tint(Theme.clay)
         .presentationDetents([.medium, .large], selection: $detent).presentationDragIndicator(.visible)
         .onChange(of: picked) { _, items in add(items) }
-        .onAppear { research = session?.research ?? hub.newOptions.research; connectorsOff = session?.connectorsOff ?? hub.newOptions.connectorsOff }
+        .onAppear {
+            research = session?.research ?? hub.newOptions.research
+            connectorsOff = session?.connectorsOff ?? hub.newOptions.connectorsOff
+            #if DEBUG
+            if Launch.route("conversation") == "add-plugins" { Task { try? await Task.sleep(for: .seconds(1.5)); openPlugins() } }
+            #endif
+        }
+    }
+
+    /// Settings opens on the Plugins page once this sheet has finished closing, so the two don't fight over the screen.
+    private func openPlugins() {
+        dismiss()
+        Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            openSettings(.plugins)
+        }
     }
 
     private func row(_ symbol: String, _ title: String, value: String? = nil) -> some View {

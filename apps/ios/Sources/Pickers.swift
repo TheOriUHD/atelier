@@ -88,50 +88,93 @@ struct ModelPicker: View {
     }
 }
 
-/// The effort chip's own small menu: how hard the model thinks, apart from the model list. In a conversation a change
-/// applies from the next message; on a new page it is what the conversation starts with.
-struct EffortMenu: View {
+/// The effort chip: it opens a small panel with a slider that clicks into place at each level, from fast to thorough.
+/// In a conversation a change applies from the next message; on a new page it is what the conversation starts with.
+struct EffortChip: View {
     @Bindable var store: AppStore
     let model: JSON
     let mode: String
     let label: String
-    private var hub: ChatHub { ChatHub.of(store) }
-    private var session: Conversation? { store.sessions.first { $0.id == store.selected } }
+    @State private var open = false
 
     var body: some View {
-        let levels = ChatEffort.choices(model, mode: mode, ultracode: hub.ultracodeOn)
-        let stored = session.map { $0.effort.isEmpty ? nil : $0.effort } ?? (store.selectedEffort.isEmpty ? nil : store.selectedEffort)
-        let shown = ChatEffort.shown(stored, model: model, mode: mode, ultracode: hub.ultracodeOn) ?? levels.first ?? ""
-        let recommended = ChatEffort.recommended(model, mode: mode)
-        Menu {
-            Picker("Effort", selection: Binding(get: { shown }, set: { choose($0) })) {
-                ForEach(levels, id: \.self) { level in
-                    Label {
-                        Text(ChatEffort.name(level, model: model) + (level == recommended ? ", recommended" : ""))
-                        Text(Self.firstSentence(ChatEffort.explanation(level, model: model, mode: mode)))
-                    } icon: { Image(systemName: Self.symbol(level)) }.tag(level)
-                }
-            }
-            if model["capabilities"]["reasoning"].string == "toggle" {
-                let always = ["xhigh", "max", "ultracode"].contains(shown)
-                Divider()
-                Toggle(isOn: Binding(get: { always || (session?.thinking ?? hub.thinkingDefault) }, set: { setThinking($0) })) {
-                    Label { Text("Thinking"); Text(always ? "Always on at this level" : "Recommended") } icon: { Image(systemName: "brain") }
-                }.disabled(always)
-            }
-        } label: {
+        Button { open = true } label: {
             HStack(spacing: 5) {
                 Text(label).font(.subheadline)
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
             }
             .foregroundStyle(Theme.inkSecondary).padding(.horizontal, 12).frame(minHeight: 36).background(Theme.fill, in: Capsule())
         }
-        .hoverEffect(.highlight).accessibilityLabel("Effort: \(label)").accessibilityHint("Choose how hard it thinks")
+        .buttonStyle(.plain).hoverEffect(.highlight)
+        .accessibilityLabel("Effort: \(label)").accessibilityHint("Choose how hard it thinks")
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            EffortPanel(store: store, model: model, mode: mode).presentationCompactAdaptation(.popover)
+        }
+        #if DEBUG
+        .onAppear { if Launch.route("conversation") == "effort" { Task { try? await Task.sleep(for: .seconds(1)); open = true } } }
+        #endif
+    }
+}
+
+/// What the effort chip opens: the level's name, the slider, what the level means, and Thinking for models with only a switch.
+struct EffortPanel: View {
+    @Bindable var store: AppStore
+    let model: JSON
+    let mode: String
+    @State private var index = 0
+    @State private var loaded = false
+    private var hub: ChatHub { ChatHub.of(store) }
+    private var session: Conversation? { store.sessions.first { $0.id == store.selected } }
+    private var levels: [String] { ChatEffort.choices(model, mode: mode, ultracode: hub.ultracodeOn) }
+    private var level: String { levels.indices.contains(index) ? levels[index] : (levels.first ?? "") }
+
+    private var storedEffort: String? {
+        session.map { $0.effort.isEmpty ? nil : $0.effort } ?? (store.selectedEffort.isEmpty ? nil : store.selectedEffort)
     }
 
-    private func choose(_ level: String) {
-        UISelectionFeedbackGenerator().selectionChanged()
-        store.selectedEffort = level
+    var body: some View {
+        let recommended = ChatEffort.recommended(model, mode: mode)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(ChatEffort.name(level, model: model)).font(.system(.title3, design: .serif, weight: .medium)).foregroundStyle(Theme.ink)
+                if level == recommended { Text("Recommended").font(.caption2.weight(.semibold)).foregroundStyle(Theme.clay).padding(.horizontal, 7).padding(.vertical, 2).background(Theme.clay.opacity(0.12), in: Capsule()) }
+                Spacer(minLength: 0)
+            }
+            EffortSlider(names: levels.map { ChatEffort.name($0, model: model) }, index: $index, onCommit: commit)
+            HStack {
+                Text("Faster")
+                Spacer()
+                Text("Smarter")
+            }.font(.caption).foregroundStyle(Theme.inkMuted)
+            Text(ChatEffort.explanation(level, model: model, mode: mode))
+                .font(.footnote).foregroundStyle(Theme.inkSecondary).fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 52, alignment: .topLeading)
+            if let warning = ChatEffort.warning(level, model: model) {
+                Label(warning, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Color(hex: 0xB77800)).fixedSize(horizontal: false, vertical: true)
+            }
+            if model["capabilities"]["reasoning"].string == "toggle" {
+                let always = ["xhigh", "max", "ultracode"].contains(level)
+                Divider()
+                Toggle(isOn: Binding(get: { always || (session?.thinking ?? hub.thinkingDefault) }, set: { setThinking($0) })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Thinking").foregroundStyle(Theme.ink)
+                        Text(always ? "Always on at this level" : "Recommended").font(.footnote).foregroundStyle(Theme.inkMuted)
+                    }
+                }.tint(Theme.clay).disabled(always)
+            }
+        }
+        .padding(18).frame(width: 300)
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            let shown = ChatEffort.shown(storedEffort, model: model, mode: mode, ultracode: hub.ultracodeOn) ?? levels.first ?? ""
+            index = levels.firstIndex(of: shown) ?? 0
+        }
+    }
+
+    private func commit(_ chosen: Int) {
+        guard levels.indices.contains(chosen) else { return }
+        store.selectedEffort = levels[chosen]
         if store.selected != nil { Task { do { try await store.updateModel() } catch { store.error = ChatError.text(error) } } }
     }
 
@@ -139,21 +182,69 @@ struct EffortMenu: View {
         if let id = store.selected { Task { do { try await ChatActions.update(store, id, ["thinking": .bool(value)]) } catch { store.error = ChatError.text(error) } } }
         else { Task { await hub.setPref(["thinking"], .bool(value)) } }
     }
+}
 
-    static func firstSentence(_ text: String) -> String {
-        guard let end = text.range(of: ". ") else { return text }
-        return String(text[..<end.lowerBound]) + "."
+/// A slider whose thumb clicks into place at each level, with a tick of feedback as it crosses from one to the next.
+struct EffortSlider: View {
+    let names: [String]
+    @Binding var index: Int
+    let onCommit: (Int) -> Void
+    @State private var dragX: CGFloat?
+    @State private var feedback = UISelectionFeedbackGenerator()
+    private let height: CGFloat = 44
+    private let thumb: CGFloat = 34
+
+    /// The level whose stop is nearest to a touch at `x`, on a track `width` wide whose stops start `inset` from each end.
+    static func nearest(_ x: CGFloat, width: CGFloat, inset: CGFloat, count: Int) -> Int {
+        guard count > 1, width > 2 * inset else { return 0 }
+        let fraction = (min(max(x, inset), width - inset) - inset) / (width - 2 * inset)
+        return min(max(Int((fraction * CGFloat(count - 1)).rounded()), 0), count - 1)
     }
 
-    static func symbol(_ level: String) -> String {
-        switch level {
-        case "low": "hare"
-        case "medium": "gauge.with.dots.needle.33percent"
-        case "high": "gauge.with.dots.needle.50percent"
-        case "xhigh": "gauge.with.dots.needle.67percent"
-        case "max": "gauge.with.dots.needle.100percent"
-        case "ultracode": "sparkles"
-        default: "gauge.with.dots.needle.50percent"
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let inset = height / 2
+            let span = max(width - 2 * inset, 1)
+            let stops = max(names.count - 1, 1)
+            let resting = inset + span * CGFloat(index) / CGFloat(stops)
+            let x = dragX.map { min(max($0, inset), width - inset) } ?? resting
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.fill)
+                Capsule().fill(Theme.clay.opacity(0.18)).frame(width: x + inset)
+                ForEach(names.indices, id: \.self) { stop in
+                    Circle().fill(Theme.inkMuted.opacity(0.55)).frame(width: 6, height: 6)
+                        .position(x: inset + span * CGFloat(stop) / CGFloat(stops), y: height / 2)
+                }
+                Circle().fill(Theme.clay).frame(width: thumb, height: thumb)
+                    .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
+                    .position(x: x, y: height / 2)
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if dragX == nil { feedback.prepare() }
+                        dragX = value.location.x
+                        let next = Self.nearest(value.location.x, width: width, inset: inset, count: names.count)
+                        if next != index { index = next; feedback.selectionChanged(); feedback.prepare() }
+                    }
+                    .onEnded { value in
+                        let next = Self.nearest(value.location.x, width: width, inset: inset, count: names.count)
+                        withAnimation(.snappy(duration: 0.2)) { dragX = nil; index = next }
+                        onCommit(next)
+                    }
+            )
+        }
+        .frame(height: height)
+        .accessibilityElement()
+        .accessibilityLabel("Effort")
+        .accessibilityValue(names.indices.contains(index) ? names[index] : "")
+        .accessibilityAdjustableAction { direction in
+            let next = direction == .increment ? min(index + 1, names.count - 1) : max(index - 1, 0)
+            guard next != index else { return }
+            index = next
+            onCommit(next)
         }
     }
 }
