@@ -8,7 +8,7 @@ export const TEXT_BASE = 'http://127.0.0.1:19911';
 export const IMAGE_BASE = 'http://127.0.0.1:19912';
 
 export async function connectFakeDesktop(port, user, password) {
-  const http = `http://127.0.0.1:${port}`;
+  const _http = `http://127.0.0.1:${port}`;
   const rpcSocket = new WebSocket(`ws://127.0.0.1:${port}/api/ws`);
   await new Promise((resolve, reject) => { rpcSocket.onopen = resolve; rpcSocket.onerror = reject; });
   let next = 1;

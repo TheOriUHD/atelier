@@ -5,7 +5,7 @@ import { connectFakeDesktop, TEXT_ID, IMAGE_ID, TEXT_BASE, IMAGE_BASE } from './
 const [memberTemp, portArg] = process.argv.slice(2);
 const PORT = Number(portArg ?? 17420);
 let passed = 0, failed = 0;
-const report = (name, good, detail = '') => { good ? passed++ : failed++; console.log(`${good ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
+const report = (name, good, detail = '') => { if (good) passed++; else failed++; console.log(`${good ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 
 async function client(user, password, clientKind = 'mobile') {
   const socket = new WebSocket(`ws://127.0.0.1:${PORT}/api/ws`);
@@ -59,7 +59,7 @@ member0.close();
 const me = await client('member', 'member-test-pass-1');
 
 // ---- General
-const prefs = await must(me, '', 'prefs.get', {}, (r) => r.appearance.chatFont === 'serif' && r.dictation.holdToRecord === true);
+await must(me, '', 'prefs.get', {}, (r) => r.appearance.chatFont === 'serif' && r.dictation.holdToRecord === true);
 for (const [path, value] of [
   [['appearance', 'chatFont'], 'sans'], [['appearance', 'textSize'], 'l'], [['appearance', 'transcriptWidth'], 'wide'], [['appearance', 'motion'], 'reduced'],
   [['models', 'rememberLast'], false], [['models', 'chat'], 'demo/demo-model'], [['dictation', 'language'], 'de'], [['dictation', 'holdToRecord'], false],
@@ -88,7 +88,7 @@ await must(admin, 'admin', 'settings.set', { layer: 'global', path: ['memory', '
 console.log('SKIP  dictation.prepare (it would download the 715 MB speech model)');
 
 // ---- Account
-const account = await must(me, '', 'account.get', {}, (r) => r.username === 'member' && r.hasPassword === true && r.mustChangePassword === false);
+await must(me, '', 'account.get', {}, (r) => r.username === 'member' && r.hasPassword === true && r.mustChangePassword === false);
 await must(me, '', 'account.update', { name: 'Mia Member Jr.' }, (r) => r.name === 'Mia Member Jr.');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const file = await must(me, 'avatar', 'files.upload', { name: 'profile.jpg', mime: 'image/png', dataBase64: png.toString('base64') }, (r) => r.blob?.length === 64);
@@ -126,7 +126,7 @@ pending.close();
 await must(me2, '', 'memory.list', {}, (r) => Array.isArray(r.entries));
 const written = await must(me2, 'a fixed entry by hand', 'memory.update', { section: 'preferences', details: '- Keep lists short\n- Answer in German' }, (r) => r.section === 'preferences' && r.details.includes('German'));
 await must(me2, '', 'memory.get', { id: written.id }, (r) => r.id === written.id);
-const listed = await must(me2, 'after', 'memory.list', {}, (r) => r.entries.some((e) => e.id === written.id));
+await must(me2, 'after', 'memory.list', {}, (r) => r.entries.some((e) => e.id === written.id));
 await must(me2, 'edit', 'memory.update', { id: written.id, details: '- Keep lists short' }, (r) => r.details === '- Keep lists short');
 await refuses(me2, 'an entry that is gone', 'memory.get', { id: 'nope' }, 'no longer exists');
 // The scripted model cannot do a memory model's work; what comes back is still the server's own sentence.
@@ -154,7 +154,7 @@ await refuses(me2, 'a member reading plan windows', 'chatgpt.status', {}, 'Only 
 await refuses(me2, 'a member reading plan windows', 'providers.planUsage', { id: 'demo' }, 'Only admins');
 
 // ---- Your models, with a stand-in desktop app that lends one model server and one image server
-const emptyList = await must(me2, 'before any', 'personalProviders.list', {}, (r) => r.length === 0);
+await must(me2, 'before any', 'personalProviders.list', {}, (r) => r.length === 0);
 await must(me2, 'before any', 'personalImageProviders.list', {}, (r) => r.length === 0);
 await refuses(me2, 'adding from a phone', 'personalProviders.detect', {}, 'desktop app');
 await refuses(me2, 'adding from a phone', 'personalProviders.save', { id: TEXT_ID, type: 'ollama', name: 'Ollama', baseUrl: TEXT_BASE }, 'desktop app');
@@ -192,7 +192,7 @@ await must(me2, 'remove the device', 'account.removeDevice', { id: devices.find(
 await must(me2, 'after', 'account.devices', {}, (r) => r.length === 0);
 
 // ---- Privacy
-const session = await must(me2, 'a chat to export and delete', 'sessions.create', { mode: 'chat', model: 'demo/demo-model' }, (r) => r.id);
+await must(me2, 'a chat to export and delete', 'sessions.create', { mode: 'chat', model: 'demo/demo-model' }, (r) => r.id);
 const exported = await must(me2, '', 'privacy.export', {}, (r) => r.sha256?.length === 64 && r.name.endsWith('.zip'));
 const zip = await blob(me2.token, exported.sha256);
 report('the export downloads as a zip', zip.status === 200 && zip.bytes.subarray(0, 2).toString() === 'PK', `${zip.bytes.length} bytes`);
@@ -201,7 +201,7 @@ await must(me2, 'after', 'sessions.list', { archived: 'active', limit: 200 }, (r
 
 // ---- Help and reports
 await must(me2, '', 'app.info', {}, (r) => r.reports === true && r.version);
-const prepIssue = await must(me2, 'issue, diagnostics only', 'reports.prepare', { kind: 'issue', diagnostics: true, chatSessionId: null }, (r) => r.diagnostics && r.chat === null);
+await must(me2, 'issue, diagnostics only', 'reports.prepare', { kind: 'issue', diagnostics: true, chatSessionId: null }, (r) => r.diagnostics && r.chat === null);
 const chatSession = await must(me2, '', 'sessions.create', { mode: 'chat', model: 'demo/demo-model' }, (r) => r.id);
 const prepChat = await must(me2, 'with a conversation', 'reports.prepare', { kind: 'issue', diagnostics: true, chatSessionId: chatSession.id }, (r) => r.diagnostics && r.chat?.coverage);
 await must(me2, 'feature, nothing attached', 'reports.prepare', { kind: 'feature', diagnostics: false, chatSessionId: null }, (r) => r.diagnostics === null && r.chat === null);

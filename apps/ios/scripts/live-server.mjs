@@ -73,14 +73,14 @@ const model = http.createServer(async (request, response) => {
 });
 await new Promise((resolve) => model.listen(base + 2, '127.0.0.1', resolve));
 await new Promise((resolve, reject) => {
-  const timer = setInterval(async () => { try { if ((await fetch(`http://127.0.0.1:${base}/api/health`)).ok) { clearInterval(timer); resolve(); } } catch {} }, 200);
+  const timer = setInterval(async () => { try { if ((await fetch(`http://127.0.0.1:${base}/api/health`)).ok) { clearInterval(timer); resolve(); } } catch { /* not up yet */ } }, 200);
   setTimeout(() => reject(new Error('server did not start')), 30000);
 });
 
 let nextId = 1;
 const call = (socket, method, params) => new Promise((resolve, reject) => {
   const id = nextId++;
-  const handler = ({ data }) => { const m = JSON.parse(data); if (m.id === id) { socket.removeEventListener('message', handler); m.error ? reject(new Error(`${method}: ${m.error.message}`)) : resolve(m.result); } };
+  const handler = ({ data }) => { const m = JSON.parse(data); if (m.id === id) { socket.removeEventListener('message', handler); if (m.error) reject(new Error(`${method}: ${m.error.message}`)); else resolve(m.result); } };
   socket.addEventListener('message', handler);
   socket.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
 });
