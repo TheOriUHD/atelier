@@ -275,6 +275,9 @@ enum ChatReactions {
 @MainActor final class ChatBlobs {
     static let shared = ChatBlobs()
     private let images = NSCache<NSString, UIImage>()
+    /// A smaller copy of a picture this phone just sent, so the message shows it at once and in its final shape while the
+    /// full one is still to be fetched.
+    private let previews = NSCache<NSString, UIImage>()
     private var running: [String: Task<URL, Error>] = [:]
 
     private var folder: URL {
@@ -289,6 +292,7 @@ enum ChatReactions {
 
     func clear() {
         images.removeAllObjects()
+        previews.removeAllObjects()
         running.values.forEach { $0.cancel() }
         running = [:]
         try? FileManager.default.removeItem(at: folder)
@@ -329,6 +333,8 @@ enum ChatReactions {
     }
 
     func cachedImage(sha: String) -> UIImage? { images.object(forKey: sha as NSString) }
+    func preview(sha: String) -> UIImage? { previews.object(forKey: sha as NSString) }
+    func setPreview(_ image: UIImage, sha: String) { previews.setObject(image, forKey: sha as NSString) }
 
     #if DEBUG
     /// Demo screens show pictures without a server.
@@ -526,7 +532,13 @@ enum ChatReactions {
 struct ChatStarting: Equatable, Identifiable {
     let id = UUID()
     let text: String
-    let files: Int
+    /// What is attached, as the message will carry it, so the waiting message looks like the real one.
+    let parts: [JSON]
+
+    /// The part of a message that an uploaded file becomes.
+    static func part(for file: JSON) -> JSON {
+        .object(["type": .string(file["mime"].string.hasPrefix("image/") ? "image" : "file"), "blob": file["blob"], "mime": file["mime"], "name": file["name"]])
+    }
 }
 
 /// A file being uploaded from the message box.

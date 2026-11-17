@@ -7,6 +7,8 @@ struct AttachmentView: View {
     let part: JSON
     let store: AppStore
     var onReference: ((JSON) -> Void)?
+    /// Where it sits in the width it is given: a person's own messages are on the right.
+    var alignment: Alignment = .leading
     @State private var preview: URL?
     @State private var loading = false
     @State private var viewer = false
@@ -19,11 +21,12 @@ struct AttachmentView: View {
     var body: some View {
         if isImage {
             Button { viewer = true } label: {
-                BlobImage(blob: part["blob"].string, mime: part["mime"].string, maxHeight: 260, corner: 16)
+                BlobImage(blob: part["blob"].string, mime: part["mime"].string, maxHeight: 260, maxWidth: 280, corner: 16)
                     .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.hairline, lineWidth: 0.5))
             }
             .buttonStyle(.plain).accessibilityLabel(name.isEmpty ? "Attached picture" : "Attached picture \(name)").accessibilityHint("Opens it full screen")
             .fullScreenCover(isPresented: $viewer) { MediaViewer(items: [part], start: 0, onReference: onReference).environment(\.chatServer, server) }
+            .frame(maxWidth: .infinity, alignment: alignment)
         } else {
             Button { open() } label: {
                 HStack(spacing: 12) {

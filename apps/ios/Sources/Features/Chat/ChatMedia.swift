@@ -20,16 +20,42 @@ struct BlobImage: View {
     let blob: String
     let mime: String
     var maxHeight: CGFloat = 320
+    var maxWidth: CGFloat = 360
     var corner: CGFloat = 16
     var fill = false
     @Environment(\.chatServer) private var server
     @State private var image: UIImage?
     @State private var failed = false
 
+    /// Starts from the picture already at hand (one fetched before, or the copy kept from sending it), so it is in place
+    /// and in its final shape on the first frame.
+    init(blob: String, mime: String, maxHeight: CGFloat = 320, maxWidth: CGFloat = 360, corner: CGFloat = 16, fill: Bool = false) {
+        self.blob = blob
+        self.mime = mime
+        self.maxHeight = maxHeight
+        self.maxWidth = maxWidth
+        self.corner = corner
+        self.fill = fill
+        _image = State(initialValue: ChatBlobs.shared.cachedImage(sha: blob) ?? ChatBlobs.shared.preview(sha: blob))
+    }
+
+    /// The size a picture takes in a box: as large as fits, never larger than it is, whatever the room it is offered.
+    static func fitted(_ size: CGSize, in box: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0 else { return CGSize(width: 140, height: 120) }
+        let scale = min(1, box.width / size.width, box.height / size.height)
+        return CGSize(width: (size.width * scale).rounded(), height: (size.height * scale).rounded())
+    }
+
     var body: some View {
         Group {
             if let image {
-                if fill { Image(uiImage: image).resizable().scaledToFill() } else { Image(uiImage: image).resizable().scaledToFit() }
+                if fill {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    // An exact size: a picture asked to fit the room it is offered takes the whole width in some containers.
+                    let size = Self.fitted(image.size, in: CGSize(width: maxWidth, height: maxHeight))
+                    Image(uiImage: image).resizable().frame(width: size.width, height: size.height)
+                }
             } else if failed {
                 ZStack { Theme.fill; Image(systemName: "photo.badge.exclamationmark").font(.system(size: 22, weight: .light)).foregroundStyle(Theme.inkMuted) }
                     .frame(width: 140, height: min(maxHeight, 120))
@@ -38,7 +64,6 @@ struct BlobImage: View {
                 ZStack { Theme.fill; ProgressView() }.frame(width: 140, height: min(maxHeight, 120))
             }
         }
-        .frame(maxHeight: fill ? nil : maxHeight)
         .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
         .task(id: blob) {
             if let cached = ChatBlobs.shared.cachedImage(sha: blob) { image = cached; return }
@@ -253,6 +278,8 @@ struct MediaViewer: View {
     @State private var index: Int
     @State private var details: JSON?
     @State private var chrome = true
+    /// How far the picture has been pulled down (or up) by the finger.
+    @State private var pull: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(\.chatServer) private var server
 
@@ -266,11 +293,14 @@ struct MediaViewer: View {
             Color.black.ignoresSafeArea()
             TabView(selection: $index) {
                 ForEach(Array(items.enumerated()), id: \.offset) { position, item in
-                    ZoomableBlob(blob: item["blob"].string, mime: item["mime"].string, onTap: { withAnimation(.snappy) { chrome.toggle() } }).tag(position).ignoresSafeArea()
+                    ZoomableBlob(blob: item["blob"].string, mime: item["mime"].string, onTap: { withAnimation(.snappy) { chrome.toggle() } },
+                                 onPull: { pull = $0 }, onRelease: { release(travelled: $0, velocity: $1) }).tag(position).ignoresSafeArea()
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            if chrome { controls.transition(.opacity) }
+            // The picture follows the finger and shrinks a little as it goes; let go far enough, or with a flick, and it leaves.
+            .offset(y: pull).scaleEffect(1 - min(abs(pull) / 1600, 0.18))
+            if chrome { controls.transition(.opacity).opacity(pull == 0 ? 1 : 0) }
         }
         .statusBarHidden(!chrome)
         .sheet(item: Binding(get: { details.map { DetailsBox(item: $0) } }, set: { if $0 == nil { details = nil } })) { MediaDetails(item: $0.item) }
@@ -278,6 +308,15 @@ struct MediaViewer: View {
     }
 
     private struct DetailsBox: Identifiable { let item: JSON; var id: String { item["blob"].string } }
+
+    private func release(travelled: CGFloat, velocity: CGFloat) {
+        if abs(travelled) > 110 || abs(velocity) > 900 {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            dismiss()
+        } else {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { pull = 0 }
+        }
+    }
 
     private var current: JSON { items.indices.contains(index) ? items[index] : .null }
 
@@ -310,12 +349,15 @@ struct ZoomableBlob: View {
     let blob: String
     let mime: String
     var onTap: () -> Void = {}
+    /// A vertical drag while the picture is not zoomed: how far it has gone, then how it ended (distance, speed).
+    var onPull: (CGFloat) -> Void = { _ in }
+    var onRelease: (CGFloat, CGFloat) -> Void = { _, _ in }
     @Environment(\.chatServer) private var server
     @State private var image: UIImage?
     @State private var failed = false
     var body: some View {
         Group {
-            if let image { ZoomScroll(image: image, onTap: onTap) }
+            if let image { ZoomScroll(image: image, onTap: onTap, onPull: onPull, onRelease: onRelease) }
             else if failed { Label("This picture could not be loaded", systemImage: "photo.badge.exclamationmark").foregroundStyle(.white.opacity(0.7)) }
             else { ProgressView().tint(.white) }
         }
@@ -338,6 +380,8 @@ final class ChatZoomingScrollView: UIScrollView {
 struct ZoomScroll: UIViewRepresentable {
     let image: UIImage
     let onTap: () -> Void
+    var onPull: (CGFloat) -> Void = { _ in }
+    var onRelease: (CGFloat, CGFloat) -> Void = { _, _ in }
 
     func makeUIView(context: Context) -> ChatZoomingScrollView {
         let scroll = ChatZoomingScrollView()
@@ -358,17 +402,45 @@ struct ZoomScroll: UIViewRepresentable {
         let single = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.singleTap))
         single.require(toFail: double)
         view.addGestureRecognizer(single)
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.delegate = context.coordinator
+        pan.maximumNumberOfTouches = 1
+        scroll.addGestureRecognizer(pan)
         context.coordinator.scroll = scroll
         return scroll
     }
 
-    func updateUIView(_ scroll: ChatZoomingScrollView, context: Context) { scroll.imageView.image = image; context.coordinator.onTap = onTap }
-    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
+    func updateUIView(_ scroll: ChatZoomingScrollView, context: Context) {
+        scroll.imageView.image = image
+        context.coordinator.onTap = onTap
+        context.coordinator.onPull = onPull
+        context.coordinator.onRelease = onRelease
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap, onPull: onPull, onRelease: onRelease) }
 
-    final class Coordinator: NSObject, UIScrollViewDelegate {
+    final class Coordinator: NSObject, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         weak var scroll: ChatZoomingScrollView?
         var onTap: () -> Void
-        init(onTap: @escaping () -> Void) { self.onTap = onTap }
+        var onPull: (CGFloat) -> Void
+        var onRelease: (CGFloat, CGFloat) -> Void
+        init(onTap: @escaping () -> Void, onPull: @escaping (CGFloat) -> Void, onRelease: @escaping (CGFloat, CGFloat) -> Void) { self.onTap = onTap; self.onPull = onPull; self.onRelease = onRelease }
+
+        /// The drag starts only on a picture that is not zoomed and only for a mostly vertical move: sideways is the next picture.
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            guard let pan = gesture as? UIPanGestureRecognizer, let scroll else { return true }
+            let velocity = pan.velocity(in: scroll)
+            return scroll.zoomScale <= 1.01 && abs(velocity.y) > abs(velocity.x) * 1.2
+        }
+        func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+        @objc func pan(_ gesture: UIPanGestureRecognizer) {
+            guard let scroll else { return }
+            let travelled = gesture.translation(in: scroll).y
+            switch gesture.state {
+            case .changed: onPull(travelled)
+            case .ended, .cancelled, .failed: onRelease(travelled, gesture.velocity(in: scroll).y)
+            default: break
+            }
+        }
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { (scrollView as? ChatZoomingScrollView)?.imageView }
         @objc func singleTap() { onTap() }
         @objc func doubleTap(_ gesture: UITapGestureRecognizer) {

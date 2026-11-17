@@ -66,7 +66,7 @@ struct TurnView: View {
             }
             ForEach(turn.blocks) { block in
                 switch block {
-                case .file(_, let part): AttachmentView(part: part, store: store, onReference: reference)
+                case .file(_, let part): AttachmentView(part: part, store: store, onReference: reference, alignment: .trailing)
                 case .text(_, let text):
                     Group {
                         if turn.notice?["kind"].string == "command" { Text(ChatCommandText.attributed(text)) } else { Text(text) }

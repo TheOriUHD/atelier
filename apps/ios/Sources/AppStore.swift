@@ -263,13 +263,18 @@ import UniformTypeIdentifiers
         params["effort"] = selectedEffort.isEmpty ? .null : .string(selectedEffort)
         _ = try await rpc.call("sessions.update", params)
     }
-    func upload(_ data: Data, name: String, mime: String) async throws {
+    /// Sends a file to the server and returns it as the message will carry it, without attaching it yet.
+    func uploadFile(_ data: Data, name: String, mime: String) async throws -> JSON {
         guard data.count <= 32 * 1024 * 1024 else { throw MobileError.message("Attachments are limited to 32 MB each.") }
         busy = true; defer { busy = false }
         // A file goes in one piece, so the wait grows with its size: at least a minute, and room for a slow mobile connection.
         let patience = min(300, max(60, Double(data.count) / 60_000))
         let file = try await rpc.call("files.upload", ["name": .string(name), "mime": .string(mime), "dataBase64": .string(data.base64EncodedString())], timeout: patience)
-        attachments.append(.object(["type": .string(mime.hasPrefix("image/") ? "image" : "document"), "blob": file["blob"], "mime": .string(mime), "name": .string(name)]))
+        return .object(["type": .string(mime.hasPrefix("image/") ? "image" : "document"), "blob": file["blob"], "mime": .string(mime), "name": .string(name)])
+    }
+
+    func upload(_ data: Data, name: String, mime: String) async throws {
+        attachments.append(try await uploadFile(data, name: name, mime: mime))
     }
     func upload(_ url: URL) async throws {
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }

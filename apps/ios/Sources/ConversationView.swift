@@ -49,6 +49,9 @@ struct ConversationView: View {
         .background(Theme.background)
         .safeAreaInset(edge: .bottom, spacing: 0) { if !(isEmpty && wide) { bottom } }
         .environment(\.chatServer, store.address)
+        #if DEBUG
+        .modifier(DebugMediaViewer())
+        #endif
         .navigationTitle(store.selected == nil ? "" : (session?.displayTitle ?? "Atelier"))
         .navigationSubtitle(store.selected == nil ? "" : modelName)
         .navigationBarTitleDisplayMode(.inline)
@@ -223,7 +226,7 @@ struct ConversationView: View {
             ScrollView {
                 transcriptStack(laziness: turns.count > 60) {
                     if turns.isEmpty, let starting = hub.starting {
-                        ChatStartingBubble(starting: starting)
+                        ChatStartingBubble(starting: starting, store: store)
                         ChatRunLine(snapshot: .null, lastIsAssistant: false, activity: nil)
                     }
                     ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
@@ -593,18 +596,25 @@ struct WaitingClock: View {
 /// The first message of a conversation that is being started, where it will be once the conversation has opened.
 struct ChatStartingBubble: View {
     let starting: ChatStarting
+    let store: AppStore
 
+    /// Built exactly as a person's message in the transcript is (same stack, same widths, the same pictures), so when the real
+    /// message takes its place nothing moves.
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            if starting.files > 0 { Label(ChatText.plural(starting.files, "file"), systemImage: "paperclip").font(.footnote).foregroundStyle(Theme.inkMuted) }
+            ForEach(Array(starting.parts.enumerated()), id: \.offset) { _, part in
+                AttachmentView(part: part, store: store, alignment: .trailing)
+            }
             if !starting.text.isEmpty {
                 Text(starting.text).font(.system(.body)).foregroundStyle(Theme.ink)
                     .padding(.horizontal, 16).padding(.vertical, 11)
                     .background(Theme.fill, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
         }
-        .frame(maxWidth: 560, alignment: .trailing).frame(maxWidth: .infinity, alignment: .trailing)
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: 560, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.leading, 44)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -736,3 +746,37 @@ struct ArtifactsPresenter: ViewModifier {
         }
     }
 }
+
+#if DEBUG
+/// `--open conversation/viewer`: the full-screen picture viewer on a generated picture, for trying the swipe away.
+struct DebugMediaViewer: ViewModifier {
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                if Launch.route("conversation") == "attachment" {
+                    // A tall phone screenshot, as in the conversation that looked wrong.
+                    let tall = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 1300)).image { context in
+                        UIColor(red: 0.12, green: 0.14, blue: 0.2, alpha: 1).setFill()
+                        context.fill(CGRect(x: 0, y: 0, width: 600, height: 1300))
+                        UIColor(red: 0.85, green: 0.47, blue: 0.34, alpha: 1).setFill()
+                        context.fill(CGRect(x: 60, y: 200, width: 480, height: 600))
+                    }
+                    ChatBlobs.shared.seed(sha: String(repeating: "a", count: 64), image: tall)
+                }
+                guard Launch.route("conversation") == "viewer", !shown else { return }
+                let picture = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 1200)).image { context in
+                    let colors = [UIColor(red: 0.85, green: 0.47, blue: 0.34, alpha: 1).cgColor, UIColor(red: 0.15, green: 0.2, blue: 0.4, alpha: 1).cgColor] as CFArray
+                    let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
+                    context.cgContext.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 900, y: 1200), options: [])
+                }
+                ChatBlobs.shared.seed(sha: "demo-viewer", image: picture)
+                shown = true
+            }
+            .fullScreenCover(isPresented: $shown) {
+                MediaViewer(items: [["type": "image", "blob": "demo-viewer", "mime": "image/png", "name": "Photo.jpg"]], start: 0)
+            }
+    }
+}
+#endif

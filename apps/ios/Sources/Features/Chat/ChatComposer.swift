@@ -82,7 +82,7 @@ extension ChatHub {
         }
         do {
             if store.selected == nil {
-                withAnimation(.smooth(duration: 0.4)) { hub.starting = ChatStarting(text: text, files: store.attachments.count) }
+                withAnimation(.smooth(duration: 0.4)) { hub.starting = ChatStarting(text: text, parts: store.attachments.map(ChatStarting.part(for:))) }
                 try await start(store: store, hub: hub)
             }
             try await store.send()
@@ -532,8 +532,10 @@ struct ChatComposer: View {
             name = (originalName as NSString).deletingPathExtension + (mime == "image/png" ? ".png" : ".jpg")
         }
         let picture = mime.hasPrefix("image/") ? UIImage(data: data) : nil
-        let thumbnail = picture.flatMap { $0.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? $0 }
-        await send(data, name: name, mime: mime, thumbnail: thumbnail)
+        // The message shows the picture from this copy until the full one has come back from the server.
+        let preview = picture.flatMap { $0.preparingThumbnail(of: CGSize(width: 720, height: 720)) ?? $0 }
+        let thumbnail = preview.flatMap { $0.preparingThumbnail(of: CGSize(width: 160, height: 160)) ?? $0 }
+        await send(data, name: name, mime: mime, thumbnail: thumbnail, preview: preview)
     }
 
     private func upload(_ url: URL) async {
@@ -547,17 +549,29 @@ struct ChatComposer: View {
     }
 
     /// Adds the file to the message: it shows at once with its progress, and is replaced by the attached file when done.
-    private func send(_ data: Data, name: String, mime: String, thumbnail: UIImage?) async {
+    private func send(_ data: Data, name: String, mime: String, thumbnail: UIImage?, preview: UIImage? = nil) async {
         let item = ChatUpload(name: name, thumbnail: thumbnail, bytes: data.count)
         withAnimation(.smooth(duration: 0.25)) { hub.uploading.append(item) }
         do {
-            try await store.upload(data, name: name, mime: mime)
-            if let thumbnail, let blob = store.attachments.last?["blob"].string { hub.thumbnails[blob] = thumbnail }
+            let file = try await store.uploadFile(data, name: name, mime: mime)
             if let index = hub.uploading.firstIndex(where: { $0.id == item.id }) { hub.uploading[index].finished = true }
-            try? await Task.sleep(for: .milliseconds(260))
+            try? await Task.sleep(for: .milliseconds(220))
+            // The ring has filled: the attached file takes the place of the one on its way, in one step, so the two are never both there.
+            if let thumbnail { hub.thumbnails[file["blob"].string] = thumbnail }
+            if let preview { ChatBlobs.shared.setPreview(preview, sha: file["blob"].string) }
+            var swap = Transaction(animation: nil)
+            swap.disablesAnimations = true
+            withTransaction(swap) {
+                store.attachments.append(file)
+                hub.uploading.removeAll { $0.id == item.id }
+            }
         } catch is CancellationError {
-        } catch { hub.uploadFailures += 1; store.error = ChatError.text(error) }
-        withAnimation(.smooth(duration: 0.25)) { hub.uploading.removeAll { $0.id == item.id } }
+            hub.uploading.removeAll { $0.id == item.id }
+        } catch {
+            hub.uploadFailures += 1
+            store.error = ChatError.text(error)
+            withAnimation(.smooth(duration: 0.25)) { hub.uploading.removeAll { $0.id == item.id } }
+        }
     }
 
     // MARK: the / menu
