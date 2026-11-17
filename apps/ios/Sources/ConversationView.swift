@@ -333,6 +333,7 @@ struct ConversationView: View {
         VStack(spacing: 30) {
             Spacer(minLength: 0)
             NewConversation(store: store, inline: true)
+            HomeModePicker()
             bottom
             Spacer(minLength: 0)
             Spacer(minLength: 0)

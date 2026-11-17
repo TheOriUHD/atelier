@@ -5,6 +5,38 @@ enum HomeMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// What the new-conversation pages need to offer the Chat | Code choice: which one is chosen, and how to change it (which
+/// also changes the page and the list beside it).
+struct HomeModeControl: @unchecked Sendable {
+    var mode: HomeMode
+    var set: (HomeMode) -> Void
+}
+
+private struct HomeModeKey: EnvironmentKey { static let defaultValue: HomeModeControl? = nil }
+
+extension EnvironmentValues {
+    var homeMode: HomeModeControl? {
+        get { self[HomeModeKey.self] }
+        set { self[HomeModeKey.self] = newValue }
+    }
+}
+
+/// The Chat | Code choice on an iPad, over the box a new conversation starts from: the box and what it starts depend on it.
+/// A phone keeps it in the list's own bar and shows nothing here.
+struct HomeModePicker: View {
+    @Environment(\.homeMode) private var control
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        if sizeClass == .regular, let control {
+            Picker("Mode", selection: Binding(get: { control.mode }, set: { control.set($0) })) {
+                ForEach(HomeMode.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented).frame(width: 200).frame(maxWidth: .infinity)
+        }
+    }
+}
+
 extension Conversation {
     var updated: Date { Date(timeIntervalSince1970: Double(raw["updatedAt"].int) / 1000) }
     var unseen: Bool { raw["finishedUnseen"].bool }
@@ -50,6 +82,7 @@ struct RootView: View {
                 detail
             }
             .navigationSplitViewStyle(.balanced)
+            .environment(\.homeMode, HomeModeControl(mode: mode, set: { switchMode($0) }))
             .tint(Theme.clay)
             .environment(\.chatServer, store.address)
             .onReceive(NotificationCenter.default.publisher(for: .atelierNewConversation)) { _ in compose() }
@@ -106,7 +139,17 @@ struct RootView: View {
     /// On a phone the detail slides over the list; on an iPad the list stays where the person left it.
     private func showDetail() { compactColumn = .detail }
 
+    /// The Chat | Code choice over the box of a new conversation: the page and the list follow it.
+    private func switchMode(_ new: HomeMode) {
+        guard new != mode else { return }
+        withAnimation(.smooth(duration: 0.25)) { mode = new }
+        if new == .code { route = .newCode } else { route = .conversation; ChatNav.newConversation(store) }
+        showDetail()
+    }
+
     private func open(_ id: String) {
+        // The list beside it shows what the open conversation is: chats, or Code sessions.
+        if let session = store.sessions.first(where: { $0.id == id }) { mode = session.mode == "code" ? .code : .chat }
         route = .conversation
         showDetail()
         Task { await ChatNav.open(store, id) }

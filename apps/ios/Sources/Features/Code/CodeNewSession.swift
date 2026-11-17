@@ -126,6 +126,7 @@ struct NewCodeSessionPage: View {
                     .font(.system(size: 32, weight: .regular, design: .serif)).foregroundStyle(Theme.ink)
             }
             Spacer(minLength: 0)
+            HomeModePicker().padding(.bottom, 14)
             VStack(alignment: .leading, spacing: 12) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {

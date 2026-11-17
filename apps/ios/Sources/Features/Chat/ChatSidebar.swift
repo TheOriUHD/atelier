@@ -83,7 +83,7 @@ struct ChatSidebar: View {
             devices = all.filter { !$0["current"].bool && $0["platform"].string != "ios" }
         }
         .searchable(text: $search, isPresented: $searching, prompt: mode == .code ? "Search sessions" : "Search conversations")
-        .navigationTitle("Atelier")
+        .navigationTitle(isPad ? "" : "Atelier")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in max(0, -(geometry.contentOffset.y + geometry.contentInsets.top)) } action: { _, distance in
@@ -148,21 +148,38 @@ struct ChatSidebar: View {
 
     // MARK: toolbar
 
+    /// An iPad's list has a bar at the bottom as Claude's has: the profile and the view options on the left, a new conversation
+    /// on the right; the top is left to the name and the search. A phone keeps its profile, the Chat | Code choice and the
+    /// view options at the top.
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button { actions.settings() } label: { Avatar(name: store.userName, size: 34, ring: true) }
-                .buttonStyle(.plain).accessibilityLabel("Settings")
-        }
-        .sharedBackgroundVisibility(.hidden)
-        ToolbarItem(placement: .principal) {
-            Picker("Mode", selection: $mode) { ForEach(HomeMode.allCases) { Text($0.rawValue).tag($0) } }
-                .pickerStyle(.segmented).frame(width: 170)
-        }
-        ToolbarItem(placement: .topBarTrailing) { viewMenu }
-        if sizeClass != .regular {
-            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        if isPad {
+            ToolbarItem(placement: .topBarLeading) { Text("Atelier").font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).fixedSize() }
+                .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .bottomBar) {
+                Button { actions.settings() } label: { Avatar(name: store.userName, size: 34, ring: true) }.buttonStyle(.plain).accessibilityLabel("Settings")
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .bottomBar) { viewMenu }
             ToolbarSpacer(.flexible, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) { Button { actions.compose() } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel(mode == .code ? "New Code session" : "New conversation") }
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { actions.settings() } label: { Avatar(name: store.userName, size: 34, ring: true) }
+                    .buttonStyle(.plain).accessibilityLabel("Settings")
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .principal) {
+                Picker("Mode", selection: $mode) { ForEach(HomeMode.allCases) { Text($0.rawValue).tag($0) } }
+                    .pickerStyle(.segmented).frame(width: 170)
+            }
+            ToolbarItem(placement: .topBarTrailing) { viewMenu }
+            if sizeClass != .regular {
+                DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) { Button { actions.compose() } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel(mode == .code ? "New Code session" : "New conversation") }
+            }
         }
     }
 
@@ -194,7 +211,8 @@ struct ChatSidebar: View {
     // MARK: browsing
 
     @ViewBuilder private var browseRows: some View {
-        if sizeClass == .regular { newRow }
+        // On an iPad the bar at the bottom has the button, so the list starts with what there is to open.
+        if sizeClass == .regular, !isPad { newRow }
         if mode == .chat {
             navRow("folder", "Projects", count: store.projects.count) { actions.show(.projects) }
             navRow("doc.on.doc", "Artifacts", count: nil) { actions.show(.artifacts) }
