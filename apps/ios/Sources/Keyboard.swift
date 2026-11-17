@@ -20,6 +20,11 @@ extension EnvironmentValues {
 ///
 /// The measuring view lives on the window, not in the page: it must not be a size the page decides, or the page and the
 /// measurement would feed each other.
+///
+/// The keyboard is one thing for the whole window, but it is not always the page's: on an iPad the list beside the page
+/// has a search field of its own, and when that one has the keyboard the page must stay as it is. So a height is only
+/// reported while the field that has the keyboard sits inside the page (`Anchor` is the page's own frame: put the probe
+/// as the page's background).
 struct KeyboardProbe: UIViewRepresentable {
     @Binding var height: CGFloat
 
@@ -62,6 +67,10 @@ struct KeyboardProbe: UIViewRepresentable {
             let probe = Probe(frame: window.bounds)
             probe.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             probe.report = report
+            probe.page = { [weak self] in
+                guard let self, self.window != nil else { return nil }
+                return self.convert(self.bounds, to: nil)
+            }
             window.addSubview(probe)
             self.probe = probe
         }
@@ -75,6 +84,8 @@ struct KeyboardProbe: UIViewRepresentable {
     /// As big as the window and invisible. A marker inside it sits on the top edge of the keyboard layout guide.
     final class Probe: UIView {
         var report: ((CGFloat, Animation?) -> Void)?
+        /// Where the page is, in window coordinates.
+        var page: (() -> CGRect?)?
         private let marker = UIView()
         private var last: CGFloat = 0
         private var announcedUntil = Date.distantPast
@@ -104,6 +115,19 @@ struct KeyboardProbe: UIViewRepresentable {
                     MainActor.assumeIsolated { self?.announcedUntil = Date().addingTimeInterval(max(0.35, duration + 0.15)) }
                 })
             }
+            // The keyboard can stay where it is while it passes from one field to another (the list's search to the page's
+            // box): who has it is looked at again whenever a field starts or stops being edited.
+            for name in [UITextField.textDidBeginEditingNotification, UITextField.textDidEndEditingNotification, UITextView.textDidBeginEditingNotification, UITextView.textDidEndEditingNotification] {
+                observers.list.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.setNeedsLayout() }
+                })
+            }
+        }
+
+        /// Whether the field that has the keyboard is in the page. With no field known, the keyboard is taken as the page's.
+        private func servesPage() -> Bool {
+            guard let page = page?(), !page.isEmpty, let field = UIResponder.atelierFirstResponder as? UIView, field.window != nil, field.window === window else { return true }
+            return page.intersects(field.convert(field.bounds, to: nil))
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -113,7 +137,8 @@ struct KeyboardProbe: UIViewRepresentable {
             // From the keyboard's top down to the bottom of the screen, less the strip the home indicator already takes:
             // that strip is a safe area the page keeps, so only the rest is room to make.
             let reach = bounds.height - marker.frame.minY
-            let height = reach > 0 ? max(0, (reach - (window?.safeAreaInsets.bottom ?? 0)).rounded()) : 0
+            var height = reach > 0 ? max(0, (reach - (window?.safeAreaInsets.bottom ?? 0)).rounded()) : 0
+            if height > 0, !servesPage() { height = 0 }
             guard abs(height - last) >= 0.5 else { return }
             last = height
             // The keyboard's own motion is a spring of this shape; while it is moving the page follows it, and while a finger
@@ -131,4 +156,35 @@ extension View {
     func paperBehind() -> some View {
         background { Theme.background.ignoresSafeArea(.all) }
     }
+}
+
+extension UIResponder {
+    @MainActor private static weak var foundFirstResponder: UIResponder?
+
+    @objc @MainActor private func atelierReportFirstResponder() { UIResponder.foundFirstResponder = self }
+
+    /// Whatever has the keyboard right now, if anything: asked of the responder chain, which hands it to whoever holds it.
+    @MainActor static var atelierFirstResponder: UIResponder? {
+        foundFirstResponder = nil
+        UIApplication.shared.sendAction(#selector(atelierReportFirstResponder), to: nil, from: nil, for: nil)
+        return foundFirstResponder
+    }
+}
+
+/// A page of the detail column that makes room for the keyboard when it is its own, and not for one that belongs to the
+/// list beside it (see `KeyboardProbe`).
+private struct RoomForItsKeyboard: ViewModifier {
+    @State private var keyboard: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.bottom, keyboard)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+            .background { KeyboardProbe(height: $keyboard).allowsHitTesting(false).accessibilityHidden(true) }
+            .background { Theme.background.ignoresSafeArea(.all) }
+    }
+}
+
+extension View {
+    func roomForItsKeyboard() -> some View { modifier(RoomForItsKeyboard()) }
 }

@@ -44,7 +44,6 @@ struct ConversationView: View {
         // could stay behind after the system took the keyboard away, and could be a little short when it changed height.
         ZStack {
             Theme.background.ignoresSafeArea(.all)
-            KeyboardProbe(height: $keyboard).frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true)
             VStack(spacing: 0) {
                 if !store.connected, hub.linkStage >= 2 || store.connectionNote != nil { offline }
                 if let parent = hub.sideChatParent[store.selected ?? ""] { sideChatBar(parent) }
@@ -53,6 +52,7 @@ struct ConversationView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) { if !(isEmpty && wide) { bottom } }
             .padding(.bottom, keyboard)
         }
+        .background { KeyboardProbe(height: $keyboard).allowsHitTesting(false).accessibilityHidden(true) }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .environment(\.keyboardHeight, keyboard)
         .environment(\.chatServer, store.address)

@@ -126,8 +126,13 @@ struct RootView: View {
     }
 
     @ViewBuilder private var detail: some View {
+        // A conversation makes its own room for the keyboard; the other pages do it the same way, for their own fields only.
+        if route == .conversation { ConversationView(store: store) } else { page.roomForItsKeyboard() }
+    }
+
+    @ViewBuilder private var page: some View {
         switch route {
-        case .conversation: ConversationView(store: store)
+        case .conversation: EmptyView()
         case .projects: ChatProjectsPage(store: store, initial: openProject, open: { open($0) }, startIn: { startIn(project: $0) })
         case .artifacts: NavigationStack { ArtifactsPage(store: store, openConversation: { open($0) }) }
         case .images: NavigationStack { GalleryPage(store: store, open: { open($0) }) }
