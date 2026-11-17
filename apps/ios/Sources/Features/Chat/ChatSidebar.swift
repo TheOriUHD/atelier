@@ -220,7 +220,7 @@ struct ChatSidebar: View {
     }
 
     private func header(_ title: String) -> some View {
-        Text(title).font(.footnote.weight(.semibold)).foregroundStyle(Theme.inkMuted).textCase(nil).padding(.top, 12)
+        Text(title).font(.footnote.weight(.semibold)).foregroundStyle(Theme.inkMuted).textCase(nil).padding(.top, 12).padding(.leading, 1.7)
     }
 
     @ViewBuilder private func groupHeader(_ group: ChatListGroup) -> some View {
@@ -231,7 +231,7 @@ struct ChatSidebar: View {
                     Text(group.title).font(.footnote.weight(.semibold))
                     Text("\(group.sessions.count)").font(.footnote).foregroundStyle(Theme.inkMuted)
                     Spacer()
-                }.foregroundStyle(Theme.inkMuted).padding(.top, 12).contentShape(Rectangle())
+                }.foregroundStyle(Theme.inkMuted).padding(.top, 12).padding(.leading, 1.7).contentShape(Rectangle())
             }
             .buttonStyle(.plain).textCase(nil)
             .accessibilityLabel("\(group.title), \(group.sessions.count) conversations, \(group.collapsed ? "collapsed" : "expanded")")
@@ -257,7 +257,6 @@ struct ChatSidebar: View {
 
     private func skeletonRow(width: CGFloat) -> some View {
         HStack(spacing: 10) {
-            Color.clear.frame(width: 8)
             VStack(alignment: .leading, spacing: 7) {
                 RoundedRectangle(cornerRadius: 5).fill(Theme.fill).frame(width: width, height: 14)
                 RoundedRectangle(cornerRadius: 4).fill(Theme.fill).frame(width: 80, height: 10)
@@ -297,7 +296,6 @@ struct ChatSidebar: View {
     private func pinnedProject(_ project: JSON) -> some View {
         Button { actions.openProject(project["id"].string) } label: {
             HStack(spacing: 10) {
-                Color.clear.frame(width: 8)
                 Text(project["name"].string).font(.system(.body, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
                 Spacer(minLength: 8)
                 Label("Project", systemImage: "folder").font(.footnote).foregroundStyle(Theme.inkMuted).labelStyle(.titleAndIcon)
@@ -394,7 +392,6 @@ struct ChatSessionRow: View {
         let model = ChatModels.name(session.model, in: store.models)
         Button(action: open) {
             HStack(alignment: .center, spacing: 10) {
-                Group { if let dot = session.dot { StatusDot(kind: dot) } else { Color.clear } }.frame(width: 8)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(session.displayTitle).font(.system(.body, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1)
                     HStack(spacing: 6) {
@@ -410,6 +407,8 @@ struct ChatSessionRow: View {
                 Text(session.updated, format: .relative(presentation: .numeric, unitsStyle: .narrow)).font(.footnote).foregroundStyle(Theme.inkMuted).monospacedDigit()
             }
             .padding(.vertical, 7).contentShape(Rectangle())
+            // What is going on (working, needs an answer, a new reply) sits in the right margin, so the titles line up with the headings above them.
+            .overlay(alignment: .trailing) { if let dot = session.dot { StatusDot(kind: dot).offset(x: 13) } }
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)
