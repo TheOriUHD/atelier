@@ -12,6 +12,19 @@ targets:
     type: application
     platform: iOS
     sources: [Sources]
+    info:
+      path: Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Looking for a server on the same Wi-Fi, and talking to one there without HTTPS (a desktop sharing itself).
+        NSLocalNetworkUsageDescription: Find your Atelier server on this network.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # atelier://pair?… is what the QR code on the computer holds: the Camera app opens Atelier with it.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.atelier.mobile
+            CFBundleURLSchemes: [atelier]
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

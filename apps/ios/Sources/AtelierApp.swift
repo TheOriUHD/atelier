@@ -26,9 +26,16 @@ import SwiftUI
                     if let launch = Launch.autologin {
                         store.address = launch.address
                         store.perform { try await store.login(username: launch.user, password: launch.password) }
+                    } else if let text = Launch.value("--pair"), let link = PairingLink.parse(text) {
+                        store.perform { try await store.signIn(pairing: link) }
                     } else { await store.reconnectQuietly() }
                 }
                 .toasts(store)
+                .onOpenURL { url in
+                    // The Camera app scanning the QR code from the computer opens Atelier with it.
+                    guard let link = PairingLink.parse(url.absoluteString) else { return }
+                    store.perform { try await store.signIn(pairing: link) }
+                }
                 .onChange(of: phase) { _, phase in
                     guard !demo else { return }
                     if phase == .active { store.lifecycle(active: true) }

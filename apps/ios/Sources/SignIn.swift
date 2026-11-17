@@ -14,6 +14,8 @@ struct SignInView: View {
     @State private var next = ""
     @State private var confirm = ""
     @State private var touched: Set<Field> = []
+    @State private var discovery = NetworkDiscovery()
+    @State private var scanning = false
     @FocusState private var field: Field?
     private enum Field: Hashable { case server, name, username, password, token, invite, current, next, confirm }
 
@@ -46,6 +48,8 @@ struct SignInView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.background)
         .tint(Theme.clay)
+        .fullScreenCover(isPresented: $scanning) { QRScanSheet { link in pair(link) } }
+        .task { if store.address.isEmpty, discovery.state == .idle { await discovery.scan() } }
         .onAppear {
             if store.address.isEmpty == false, model.probe == .idle { model.schedule(store.address) }
             #if DEBUG
@@ -113,6 +117,7 @@ struct SignInView: View {
 
     private var loginForm: some View {
         VStack(spacing: 14) {
+            foundServers
             VStack(spacing: 0) {
                 serverRow
                 Divider().overlay(Theme.hairline).padding(.leading, 48)
@@ -139,6 +144,7 @@ struct SignInView: View {
             }.padding(.vertical, 2)
 
             VStack(spacing: 8) {
+                Button { scanning = true } label: { Label("Scan QR code from your computer", systemImage: "qrcode.viewfinder") }.buttonStyle(QuietButtonStyle()).disabled(model.busy)
                 Button("Use passkey or SSO in browser") { startBrowser() }.buttonStyle(QuietButtonStyle()).disabled(model.busy || !addressReady || !model.browserSignIn)
                 if !model.providers.isEmpty {
                     Text("Sign in with \(model.providers.map { $0["name"].string }.joined(separator: ", ")) or a passkey in the browser.").font(.footnote).foregroundStyle(Theme.inkMuted).multilineTextAlignment(.center)
@@ -156,9 +162,65 @@ struct SignInView: View {
         }
     }
 
+    /// Servers that answered on this Wi-Fi: tap one to fill the address.
+    @ViewBuilder private var foundServers: some View {
+        if discovery.state == .scanning || !discovery.found.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text("Found on your network").font(.footnote.weight(.semibold)).foregroundStyle(Theme.inkMuted)
+                    if discovery.state == .scanning { ProgressView().controlSize(.mini) }
+                    Spacer()
+                    if discovery.state == .finished { Button("Look again") { Task { await discovery.scan() } }.font(.footnote.weight(.medium)) }
+                }.padding(.horizontal, 4)
+                if !discovery.found.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(discovery.found.enumerated()), id: \.element.id) { index, server in
+                            if index > 0 { Divider().overlay(Theme.hairline).padding(.leading, 48) }
+                            Button { choose(server) } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "desktopcomputer").foregroundStyle(Theme.clay).frame(width: 24)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(server.name).foregroundStyle(Theme.ink).lineLimit(1)
+                                        Text(server.compatible ? foundLine(server) : "Too old for the app. Update it first.").font(.footnote).foregroundStyle(server.compatible ? Theme.inkMuted : Theme.waiting).lineLimit(1)
+                                    }
+                                    Spacer(minLength: 8)
+                                    if !server.secure { Image(systemName: "lock.open").font(.footnote).foregroundStyle(Theme.inkMuted).accessibilityLabel("Not encrypted") }
+                                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.inkMuted)
+                                }.padding(.horizontal, 16).padding(.vertical, 12).contentShape(Rectangle())
+                            }.buttonStyle(.plain).disabled(!server.compatible)
+                        }
+                    }.card(radius: 18)
+                }
+            }
+        } else if discovery.state == .finished, store.address.isEmpty {
+            Button { Task { await discovery.scan() } } label: { Label("Look for servers on this network", systemImage: "dot.radiowaves.left.and.right").font(.subheadline) }
+                .foregroundStyle(Theme.clay).frame(maxWidth: .infinity)
+        }
+    }
+
+    private func foundLine(_ server: FoundServer) -> String {
+        let place: String? = server.name == server.host ? nil : (server.secure ? (server.url.host ?? server.host) : server.host)
+        return [place, server.version.isEmpty ? "Atelier" : "Atelier \(server.version)"].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private func choose(_ server: FoundServer) {
+        store.address = server.url.absoluteString
+        field = .username
+    }
+
+    /// A QR code from the computer: the server and a one-time sign-in in one.
+    private func pair(_ link: PairingLink) {
+        model.error = nil
+        model.busy = true
+        Task {
+            defer { model.busy = false }
+            do { try await store.signIn(pairing: link) } catch is CancellationError { return } catch { model.error = ChatError.text(error) }
+        }
+    }
+
     private var serverRow: some View {
         row("server.rack") {
-            TextField("https://atelier.example.com", text: $store.address, prompt: Text("https://atelier.example.com").foregroundStyle(Theme.inkMuted))
+            TextField("Server address", text: $store.address, prompt: Text(verbatim: "https://atelier.example.com").foregroundStyle(Theme.inkMuted))
                 .keyboardType(.URL).textContentType(.none).textInputAutocapitalization(.never).autocorrectionDisabled().foregroundStyle(Theme.ink).focused($field, equals: .server).submitLabel(.next).onSubmit { field = .username }
         }
     }
@@ -172,7 +234,12 @@ struct SignInView: View {
             case .idle: EmptyView()
             case .checking: HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Checking the server").font(.footnote).foregroundStyle(Theme.inkMuted) }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
             case .ready:
-                statusLine("Atelier server at \(URL(string: ChatSignIn.normalized(store.address))?.host ?? store.address)", symbol: "checkmark.circle", tone: Theme.success)
+                VStack(alignment: .leading, spacing: 6) {
+                    statusLine("Atelier server at \(URL(string: ChatSignIn.normalized(store.address))?.host ?? store.address)", symbol: "checkmark.circle", tone: Theme.success)
+                    if ChatSignIn.normalized(store.address).lowercased().hasPrefix("http://") {
+                        statusLine("Not encrypted. Only sign in like this on your own network.", symbol: "exclamationmark.shield", tone: Theme.waiting)
+                    }
+                }
             case .unreachable(let text):
                 VStack(alignment: .leading, spacing: 8) {
                     statusLine(text, symbol: "wifi.exclamationmark", tone: Theme.danger)

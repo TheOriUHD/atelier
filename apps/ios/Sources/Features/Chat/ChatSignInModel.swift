@@ -46,18 +46,22 @@ import AuthenticationServices
 
     // MARK: asking the server
 
-    /// Adds `https://` when the person typed a bare host, and says why an address cannot work.
+    /// Adds `https://` when the person typed a bare host (`http://` for one on their own network), and says why an address cannot work.
     static func normalized(_ input: String) -> String {
         var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         while text.hasSuffix("/") { text.removeLast() }
-        if !text.isEmpty, !text.contains("://") { text = "https://" + text }
+        if !text.isEmpty, !text.contains("://") {
+            // A bare address on the person's own network is a desktop sharing itself, which speaks plain HTTP there.
+            let host = text.split(whereSeparator: { $0 == ":" || $0 == "/" }).first.map(String.init) ?? text
+            text = (LocalAddress.isPrivateHost(host) ? "http://" : "https://") + text
+        }
         return text
     }
 
     static func addressProblem(_ input: String) -> String? {
         let text = normalized(input)
         guard !text.isEmpty else { return nil }
-        if text.lowercased().hasPrefix("http://") { return "Atelier connects over HTTPS only. Use an address that starts with https://." }
+        if text.lowercased().hasPrefix("http://"), (try? serverURL(text)) == nil { return "Atelier connects over HTTPS, except to a server on your own network (an address like http://192.168.1.20:7340). Use an address that starts with https://." }
         if (try? serverURL(text)) == nil { return "Enter the address without a path, password or query, like https://atelier.example.com." }
         return nil
     }

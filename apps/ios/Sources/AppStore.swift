@@ -41,6 +41,8 @@ import UniformTypeIdentifiers
     private var reconnectTask: Task<Void, Never>?
     private var active = true
     private var restoring = false
+    /// A QR sign-in is in progress: nothing else may take the connection (or try to restore an old sign-in) meanwhile.
+    private var pairing = false
     private var reloadTask: Task<Void, Never>?
     private var pendingSend: (session: String, parts: [JSON], mutation: String)?
     private var userID = ""
@@ -80,8 +82,50 @@ import UniformTypeIdentifiers
         address = url.absoluteString; UserDefaults.standard.set(address, forKey: "server")
         try await restore()
     }
+    /// Signs in with what a QR code on the person's computer holds: a one-time sign-in they approved there. The addresses are
+    /// tried in order; the first server that answers is the one. An account already signed in here is left for the new one.
+    func signIn(pairing link: PairingLink) async throws {
+        busy = true; defer { busy = false }
+        pairing = true
+        defer { pairing = false }
+        reconnectTask?.cancel()
+        var failure: Error = MobileError.message("Can't reach the server in this code. Is this phone on the same network as the computer?")
+        for candidate in link.addresses {
+            guard let url = try? serverURL(candidate) else { continue }
+            do {
+                try await checkServer(url)
+                if signedIn { leaveAccount() }
+                rpc.connect(url, token: nil)
+                let result = try await rpc.call("auth.terminalPoll", ["pollToken": .string(link.token)])
+                guard result["state"].string == "approved", !result["token"].string.isEmpty else {
+                    rpc.close()
+                    throw PairingExpired()
+                }
+                try CredentialStore.save(result["token"].string, server: url.absoluteString)
+                address = url.absoluteString; UserDefaults.standard.set(address, forKey: "server")
+                pairing = false
+                try await restore()
+                return
+            } catch is PairingExpired {
+                throw MobileError.message("This code ran out or was already used. Show a new one on your computer and scan it again.")
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                failure = error
+            }
+        }
+        throw failure
+    }
+    private struct PairingExpired: Error {}
+    /// This phone stops being signed in here, without telling the server (the sign-in stays valid where it was made).
+    private func leaveAccount() {
+        rpc.close()
+        signedIn = false; connected = false
+        sessions = []; transcript = Transcript(); draft = ""; attachments = []; selected = nil
+        userName = ""; authStatus = .null; info = .null
+    }
     func restore() async throws {
-        guard !address.isEmpty, !restoring, !connected else { return }
+        guard !address.isEmpty, !restoring, !pairing, !connected else { return }
         restoring = true; defer { restoring = false }
         let url = try serverURL(address)
         guard let token = CredentialStore.read(url.absoluteString) else { return }

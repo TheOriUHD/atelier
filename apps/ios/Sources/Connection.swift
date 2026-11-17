@@ -11,7 +11,7 @@ import Security
         close()
         let generation = generation
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
-        components.scheme = "wss"; components.path = "/api/ws"
+        components.scheme = url.scheme == "http" ? "ws" : "wss"; components.path = "/api/ws"
         var request = URLRequest(url: components.url!)
         request.setValue("Atelier Mobile iOS", forHTTPHeaderField: "User-Agent")
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }

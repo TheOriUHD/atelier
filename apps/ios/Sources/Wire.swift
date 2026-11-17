@@ -131,7 +131,7 @@ enum MobileError: LocalizedError {
 
 func serverURL(_ input: String) throws -> URL {
     guard let url = URL(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
-          url.scheme == "https", url.host != nil, url.user == nil, url.password == nil,
+          LocalAddress.allows(url), url.user == nil, url.password == nil,
           url.query == nil, url.fragment == nil, url.path.isEmpty || url.path == "/" else {
         throw MobileError.message("Enter an HTTPS server address without a path, password, or query.")
     }
