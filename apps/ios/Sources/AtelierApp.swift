@@ -15,6 +15,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     private let demo: Bool
 
     init() {
+        #if DEBUG || E2E
+        // `--set-server <address>`: points the app at that server before it starts (to undo a test that signed in elsewhere).
+        if let address = Launch.value("--set-server") { UserDefaults.standard.set(address, forKey: "server") }
+        #endif
         #if DEBUG
         demo = Demo.requested != nil
         _store = State(initialValue: Demo.store())

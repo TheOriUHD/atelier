@@ -5,6 +5,12 @@ import Foundation
 /// sends the text, then prints what came back (`E2E …` lines). For trying the whole path without touching the screen.
 enum OnDeviceDebug {
     @MainActor static func run(_ store: AppStore) async {
+        if Launch.value("--e2e-status") != nil {
+            try? await Task.sleep(for: .seconds(12))
+            NSLog("E2E status: server %@, signed in %d, connected %d, error %@", store.address, store.signedIn ? 1 : 0, store.connected ? 1 : 0, store.error ?? store.connectionNote ?? "none")
+            print("E2E status: server \(store.address), signed in \(store.signedIn), connected \(store.connected), error \(store.error ?? store.connectionNote ?? "none")")
+            return
+        }
         guard let text = Launch.value("--e2e-send") else { return }
         func say(_ line: String) { NSLog("E2E %@", line); print("E2E \(line)") }
         // Signed in? (An autologin that failed says why.)
