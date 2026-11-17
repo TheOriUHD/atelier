@@ -1906,3 +1906,37 @@ describe('a merged chat’s permission mode', () => {
     for (const mode of ['auto', 'default', 'acceptEdits', 'bypassPermissions'] as const) expect(workingMode(mode, true)).toBe(mode);
   });
 });
+
+describe('account.pairStart', () => {
+  const from = (origin: string, client: { clientKind: 'web' | 'mobile'; ip: string; userAgent: string }): RpcClient<AppContract> => {
+    const [clientSide, serverSide] = createMemoryTransportPair();
+    backend.connect(serverSide, { client, origin });
+    return createRpcClient(contract, clientSide);
+  };
+
+  it('gives a signed-in person a sign-in for their phone, once, with the address they opened Atelier at', async () => {
+    const page = from('https://atelier.example.com/', { clientKind: 'web', ip: '10.0.0.2', userAgent: 'test' });
+    await page.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'web' });
+    const pair = await page.call('account.pairStart', {});
+    expect(pair.addresses).toEqual(['https://atelier.example.com']);
+    expect(pair.expiresAt).toBeGreaterThan(Date.now());
+
+    const phone = from('https://atelier.example.com', { clientKind: 'mobile', ip: '10.0.0.3', userAgent: 'Atelier Mobile iOS' });
+    expect(await phone.call('auth.terminalPoll', { pollToken: pair.pollToken })).toMatchObject({ state: 'approved', user: { username: 'ada' } });
+    expect(await phone.call('account.get', {})).toMatchObject({ username: 'ada' });
+    expect(await phone.call('auth.terminalPoll', { pollToken: pair.pollToken })).toEqual({ state: 'expired' });
+    const sessions = await page.call('account.sessions', {});
+    expect(sessions.filter((s) => s.clientKind === 'mobile')).toHaveLength(1);
+  });
+
+  it('refuses a page opened as localhost, which a phone cannot reach', async () => {
+    const page = from('http://localhost:5173', { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' });
+    await page.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'web' });
+    expect(await code(page.call('account.pairStart', {}))).toBe('unsupported');
+  });
+
+  it('needs someone signed in', async () => {
+    const stranger = from('https://atelier.example.com', { clientKind: 'web', ip: '10.0.0.9', userAgent: 'test' });
+    expect(await code(stranger.call('account.pairStart', {}))).not.toBe('ok');
+  });
+});

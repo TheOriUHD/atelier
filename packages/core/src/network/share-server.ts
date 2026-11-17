@@ -162,6 +162,8 @@ export async function startShareServer(backend: ShareBackend, options: ShareOpti
     : null;
   if (root && !pages) logger.info('The web app build is missing; sharing the API only', { uiDir: root });
 
+  /** What an app that signs in over the socket says it is, by the name it gives itself. */
+  const appKind = (userAgent: string | undefined): ClientInfo['clientKind'] => (/^Atelier Mobile\b/.test(userAgent ?? '') ? 'mobile' : /^Atelier CLI\b/.test(userAgent ?? '') ? 'cli' : 'desktop');
   const client = (req: IncomingMessage, kind: ClientInfo['clientKind']): ClientInfo => ({ clientKind: kind, ip: remoteOf(req), userAgent: req.headers['user-agent'] ?? '', network: true });
 
   const html = (res: ServerResponse, page: string, csp: string) =>
@@ -203,7 +205,7 @@ export async function startShareServer(backend: ShareBackend, options: ShareOpti
       return send(res, 421, 'Open Atelier on this computer by its address on your network, such as http://192.168.1.20:7340.');
     }
     const { pathname } = new URL(req.url ?? '/', 'http://share');
-    if (pathname === '/api/health') return json(res, 200, { ok: true, app: 'atelier', version: APP.version, name });
+    if (pathname === '/api/health') return json(res, 200, { ok: true, app: 'atelier', version: APP.version, mobileProtocol: 1, name });
     if (pathname === '/api/auth/login' && req.method === 'POST') {
       if (!sameOrigin(req)) return json(res, 403, { code: 'bad_origin', message: 'Cross-site request refused.' });
       try {
@@ -272,7 +274,7 @@ export async function startShareServer(backend: ShareBackend, options: ShareOpti
       onClose: (h) => (closers.add(h), () => closers.delete(h)),
     };
     // Browsers bring the cookie; an app that signs in over the socket keeps its token and sends it as a header.
-    const disconnect = backend.connect(transport, { ...(token ? { token } : {}), client: client(req, cookie ? 'web' : 'desktop'), origin: originOf(req) });
+    const disconnect = backend.connect(transport, { ...(token ? { token } : {}), client: client(req, cookie ? 'web' : appKind(req.headers['user-agent'])), origin: originOf(req) });
     ws.on('message', (data, binary) => {
       if (binary) return;
       let message: RpcMessage;

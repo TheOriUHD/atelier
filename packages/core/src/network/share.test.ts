@@ -112,7 +112,7 @@ describe('sharing this computer on the network', { timeout: 90_000 }, () => {
     expect(on).toMatchObject({ enabled: true, listening: true, error: null, passwordSet: true, port });
     expect(on.addresses.at(-1)).toMatch(new RegExp(`^http://.+:${port}$`));
 
-    expect(JSON.parse((await http(port, '/api/health')).body)).toMatchObject({ ok: true, app: 'atelier', version: APP.version });
+    expect(JSON.parse((await http(port, '/api/health')).body)).toMatchObject({ ok: true, app: 'atelier', version: APP.version, mobileProtocol: 1 });
     const page = await http(port, '/sessions/abc');
     expect(page.body).toContain('<title>Atelier</title>');
     expect(page.headers['content-security-policy']).toContain("frame-ancestors 'none'");
