@@ -24,6 +24,12 @@ struct ModelPicker: View {
                         ForEach(group.models, id: \.self) { model in row(model) }
                     } header: { Text(group.offline ? "\(group.label), not connected" : group.label) }
                 }
+                if store.offers("deviceOnlyModels"), query.isEmpty {
+                    let device = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+                    Section {
+                        Button { dismiss(); openSettings(.onDevice) } label: { Label(LocalModelStore.shared.installed.isEmpty ? "Get models for this \(device)" : "Manage models on this \(device)", systemImage: "arrow.down.circle").foregroundStyle(Theme.clay) }
+                    } footer: { Text("They run on this \(device) and nowhere else. The conversation stays on your server.") }
+                }
                 if store.isAdmin, usable > 0, query.isEmpty {
                     Section { Button { dismiss(); openSettings(.providers) } label: { Label("Add a provider", systemImage: "plus.circle").foregroundStyle(Theme.clay) } } footer: { Text("Connect Ollama, llama.cpp, Anthropic, OpenAI or any compatible endpoint.") }
                 }

@@ -447,7 +447,9 @@ enum ChatModels {
                 if $0["order"].int != $1["order"].int { return $0["order"].int < $1["order"].int }
                 return $0["displayName"].string.localizedCaseInsensitiveCompare($1["displayName"].string) == .orderedAscending
             }
-            let label = list.first?["personal"]["deviceName"].stringOrNil ?? providerNames[key] ?? list.first?["providerName"].stringOrNil ?? key
+            // A model that runs on this phone is only here: it says so.
+            let own = list.first?["personal"]["exclusive"].bool == true ? (UIDevice.current.userInterfaceIdiom == .pad ? "On this iPad" : "On this iPhone") : nil
+            let label = own ?? list.first?["personal"]["deviceName"].stringOrNil ?? providerNames[key] ?? list.first?["providerName"].stringOrNil ?? key
             return ChatModelGroup(id: key, label: label, models: list, offline: list.allSatisfy { $0["available"] == .bool(false) })
         }
     }

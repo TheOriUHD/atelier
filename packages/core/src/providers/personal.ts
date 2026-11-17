@@ -12,7 +12,7 @@ import type { ProviderFetch } from './types.ts';
 
 export type PersonalProviderRow = typeof personalProviders.$inferSelect;
 /** A row with its computer's name; null once that computer was removed from the account. */
-export type PersonalRow = PersonalProviderRow & { deviceName: string | null };
+export type PersonalRow = PersonalProviderRow & { deviceName: string | null; devicePlatform: string | null };
 
 /** The secret holding a personal provider's API key. */
 export const personalKeyId = (userId: string, providerId: string) => `provider-user-${userId}-${providerId}`;
@@ -22,12 +22,12 @@ export class PersonalProviderRepo {
 
   async list(userId: string): Promise<PersonalRow[]> {
     const rows = await this.query().where(eq(personalProviders.userId, userId)).orderBy(personalProviders.createdAt).all();
-    return rows.map(({ row, deviceName }) => ({ ...row, deviceName }));
+    return rows.map(({ row, deviceName, devicePlatform }) => ({ ...row, deviceName, devicePlatform }));
   }
 
   async get(id: string): Promise<PersonalRow | null> {
     const found = await this.query().where(eq(personalProviders.id, id)).get();
-    return found ? { ...found.row, deviceName: found.deviceName } : null;
+    return found ? { ...found.row, deviceName: found.deviceName, devicePlatform: found.devicePlatform } : null;
   }
 
   async put(row: PersonalProviderRow): Promise<void> {
@@ -41,7 +41,7 @@ export class PersonalProviderRepo {
 
   private query() {
     return this.db
-      .select({ row: personalProviders, deviceName: devices.name })
+      .select({ row: personalProviders, deviceName: devices.name, devicePlatform: devices.platform })
       .from(personalProviders)
       .leftJoin(devices, and(eq(devices.userId, personalProviders.userId), eq(devices.id, personalProviders.deviceId)));
   }

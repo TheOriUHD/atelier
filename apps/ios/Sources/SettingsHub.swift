@@ -4,7 +4,7 @@ import SwiftUI
 /// offers them (the desktop app's own pages for this computer have no counterpart on a phone).
 enum SettingsPageID: String, CaseIterable, Identifiable, Hashable {
     // Settings
-    case general, account, privacy, memory, usage, code, folders, cloud, yourModels, personalConnectors, skills, plugins, shortcuts, help
+    case general, account, privacy, memory, usage, code, folders, cloud, yourModels, onDevice, personalConnectors, skills, plugins, shortcuts, help
     // Admin
     case providers, media, models, capabilities, adminCode, connectors, secrets, users, limits, server, activity
     // Switched on by tapping the version ten times
@@ -28,6 +28,7 @@ enum SettingsPageID: String, CaseIterable, Identifiable, Hashable {
         case .folders: "Folders"
         case .cloud: "Cloud"
         case .yourModels: "Your models"
+        case .onDevice: "On-device models"
         case .personalConnectors: "Your connectors"
         case .skills: "Skills"
         case .shortcuts: "Shortcuts"
@@ -58,6 +59,7 @@ enum SettingsPageID: String, CaseIterable, Identifiable, Hashable {
         case .folders: "folder"
         case .cloud: "cloud"
         case .yourModels: "cpu"
+        case .onDevice: "iphone.gen3"
         case .personalConnectors: "powerplug"
         case .skills: "text.book.closed"
         case .shortcuts: "keyboard"
@@ -171,6 +173,7 @@ struct SettingsView: View {
         case .folders: FoldersSettings(store: store)
         case .cloud: CloudSettings(store: store)
         case .yourModels: PersonalModelsSettings(store: store)
+        case .onDevice: OnDeviceModelsSettings(store: store)
         case .personalConnectors: ConnectorsSettings(store: store, admin: false)
         case .skills: SkillsSettings(store: store)
         case .shortcuts: ShortcutsSettings(store: store)

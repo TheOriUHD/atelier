@@ -1249,6 +1249,83 @@ describe('a person’s own image servers on their desktop', () => {
 });
 
 describe('a person’s own models on their desktop', () => {
+  it('keeps a phone\'s models for that phone alone: only it lists them or starts a turn on them', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-phone-models-'));
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      fetch: async () => Promise.reject(new TypeError('fetch failed')),
+    });
+    const ID = 'u-0123456789';
+    const BASE = 'http://127.0.0.1:1/v1';
+    const asked: string[] = [];
+    try {
+      const signIn = (clientKind: 'web' | 'mobile') => {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        server.connect(serverSide, { client: { clientKind, ip: '127.0.0.1', userAgent: 'test' } });
+        return createRpcClient(contract, clientSide);
+      };
+      const ada = signIn('web');
+      await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      const browser = signIn('web');
+      const { token } = await browser.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'web' });
+      // The same person's iPhone: its own sign-in, registered as a device that lends the model it runs.
+      const phone = signIn('mobile');
+      await phone.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'mobile' });
+      const device = { id: '2c8f4f1e-6a7b-4a47-8a53-0b7f5d7d9e11', name: 'iPhone', platform: 'ios' };
+      await phone.call('devices.register', device);
+
+      let link: { receive(text: string): void; closed(): void } | null = null;
+      const reply = (frame: object) => link!.receive(JSON.stringify(frame));
+      const respond = (channel: string, body: string, type: string) => {
+        reply({ t: 'opened', channel });
+        reply({ t: 'line', channel, line: JSON.stringify({ head: { status: 200, headers: { 'content-type': type } } }) });
+        reply({ t: 'line', channel, line: JSON.stringify({ chunk: Buffer.from(body).toString('base64') }) });
+        reply({ t: 'closed', channel, reason: 'done' });
+      };
+      const answer = sse([{ data: { choices: [{ index: 0, delta: { content: 'from the phone' }, finish_reason: 'stop' }] } }, { data: { choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } } }], true);
+      link = await server.linkDevice(
+        {
+          send: (frame) => {
+            if (frame.t === 'req') return reply({ t: 'res', id: frame.id, ok: false, code: 'unsupported', error: 'Not here.' });
+            if (frame.t !== 'start' || frame.service.kind !== 'http') return;
+            const { service } = frame;
+            if (service.target !== ID) return reply({ t: 'closed', channel: frame.channel, reason: 'Not lent.' });
+            asked.push(`${service.method} ${service.url}`);
+            setTimeout(() => (service.url.endsWith('/chat/completions') ? respond(frame.channel, answer, 'text/event-stream') : respond(frame.channel, JSON.stringify({ data: [{ id: 'tiny-model' }] }), 'application/json')));
+          },
+          close: () => {},
+        },
+        token,
+        device,
+      );
+      reply({ t: 'hello', hello: { protocol: 2, app: '1.0.0', services: ['http'], lending: { scratch: false, ssh: [], http: [{ id: ID, baseUrl: BASE }] }, home: '/', sep: '/', os: 'ios', arch: 'arm64' } });
+
+      const draft = { id: ID, type: 'openai-compatible' as const, name: 'On this iPhone', baseUrl: BASE };
+      expect(await phone.call('personalProviders.save', draft)).toMatchObject({ id: ID, deviceName: 'iPhone', online: true });
+      const ref = `${ID}/tiny-model`;
+      // Only the phone lists it, as its own.
+      expect((await phone.call('models.list', {})).find((m) => m.ref === ref)).toMatchObject({ personal: { deviceName: 'iPhone', exclusive: true }, available: true });
+      expect((await browser.call('models.list', {})).some((m) => m.ref === ref)).toBe(false);
+
+      // A turn started from the phone runs there; a conversation on it can't be carried on from another window.
+      const session = await phone.call('sessions.create', { mode: 'chat', model: ref });
+      await phone.call('chat.send', { sessionId: session.id, parts: [{ type: 'text', text: 'hi' }] });
+      await vi.waitFor(async () => expect(JSON.stringify((await phone.call('sessions.subscribe', { id: session.id })).messages)).toContain('from the phone'), { timeout: 10_000 });
+      expect(asked).toContain(`POST ${BASE}/chat/completions`);
+      expect(await code(browser.call('chat.send', { sessionId: session.id, parts: [{ type: 'text', text: 'and from here?' }] }))).toBe('forbidden');
+      // The conversation itself stays on the server, readable from every window.
+      expect(JSON.stringify((await browser.call('sessions.subscribe', { id: session.id })).messages)).toContain('from the phone');
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it('serves them through that desktop to their owner alone, while it is connected', async () => {
     const home = await mkdtemp(join(tmpdir(), 'atelier-own-models-'));
     // The server can't reach the laptop's LM Studio itself: every request to it goes through the laptop.

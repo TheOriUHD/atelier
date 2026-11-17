@@ -219,6 +219,24 @@ computer, for you alone. It reaches them through the app.
 - A model server that only your computer can reach also works from a browser tab, as long as the app on that computer is
   connected. You add it from that computer's app.
 
+## Models on your iPhone or iPad
+
+The Atelier app for iPhone and iPad can run small models on the phone itself and offer them to your server. Open
+**Settings › On-device models**, download one (LFM2.5 1.2B, Gemma 3 1B, Qwen3 1.7B or Qwen3 4B; each downloads once from
+Hugging Face, on Wi-Fi unless you allow mobile data) and pick it in the model menu of a conversation, under **On this iPhone**.
+
+- **The conversation stays on your server.** You can read it from any device. A model on the phone answers only when you ask it
+  from the phone: your other devices and browsers don't list it, and can't start a turn on it. They can read the
+  conversation and choose another model to go on.
+- **Start one on the phone, or take over one.** You can start a conversation with a phone model, switch an existing conversation
+  to one, and switch back to a server model at any time.
+- **Keep Atelier open while it answers.** An iPhone gives its GPU to the app only while the app is in front. Atelier keeps the
+  screen awake while a phone model answers, and says so if you leave the app mid-answer.
+- **What to expect.** On an iPhone 17 Pro, LFM2.5 1.2B writes about 85 words a second at first and settles near 60 as the phone
+  warms; Qwen3 4B writes about 17. They are small models: good for short answers, rewriting and quick questions, not for
+  code or deep knowledge, and they have no tools.
+- **Needs** a server of this version. A computer sharing itself on your network doesn't offer it.
+
 ## Sharing one GPU
 
 Atelier keeps one queue per server. By default a local server takes **one request and one model at a time**, so parallel

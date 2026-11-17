@@ -133,7 +133,14 @@ export const ModelInfo = z.object({
   /** Sampling temperature set in Settings › Admin › Models; adapters omit it where the API disallows it. */
   temperature: z.number().min(0).max(2).optional(),
   /** A personal provider's model (personal-providers.ts): it runs on this computer of its owner's, the only one who sees it. */
-  personal: z.object({ deviceId: z.string(), deviceName: z.string() }).optional(),
+  personal: z
+    .object({
+      deviceId: z.string(),
+      deviceName: z.string(),
+      /** Runs on a phone: only that phone lists it and starts turns on it, whatever else the person is signed in on. */
+      exclusive: z.boolean().optional(),
+    })
+    .optional(),
   /** False while a personal model's computer isn't connected or doesn't lend it: listed, but it can't answer. */
   available: z.boolean().optional(),
 });

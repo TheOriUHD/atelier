@@ -8,6 +8,13 @@ import { z } from 'zod';
 import { PersonalProviderId, ProviderStatus, ProviderType } from './models.ts';
 import { ProviderConfig } from './settings.ts';
 
+/**
+ * The platforms of devices whose own models are for that device alone (the Atelier app on a phone runs a model on the
+ * phone itself): the person's other computers and browsers neither list those models nor start a turn on them.
+ */
+export const DEVICE_ONLY_PLATFORMS: readonly string[] = ['ios'];
+export const isDeviceOnlyPlatform = (platform: string | null | undefined): boolean => platform != null && DEVICE_ONLY_PLATFORMS.includes(platform);
+
 export const PersonalProviderType = ProviderType.extract(['ollama', 'llamacpp', 'openai-compatible', 'chatgpt-chat']);
 export type PersonalProviderType = z.infer<typeof PersonalProviderType>;
 

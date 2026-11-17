@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **Models that run on your iPhone or iPad.** In the Atelier app, Settings › **On-device models** downloads small models (LFM2.5 1.2B, Gemma 3 1B, Qwen3 1.7B and 4B) from Hugging Face onto the phone, and the model menu of any conversation then offers them under **On this iPhone**. The phone does the thinking; the conversation stays on your server, so you can read it anywhere. You can start a conversation on one, or take over one you started with a server model, and go back to a server model at any time. A model on a phone is only ever offered to that phone: your other devices and browsers don't list it, and a turn on it can't be started from them (they read the conversation and choose another model). It needs Atelier open on the phone while it answers, and a server of this version.
+
 - **Keep a temporary chat.** The Atelier app for iPhone and iPad has no strip across a temporary chat any more; its **⋯** menu starts with **Delete chat now** (deletes it and leaves) and **Keep chat**, which turns it into an ordinary chat. The server has a new `sessions.keep` call for it (the chat's own person only; its side chats come with it).
 
 - **Sign in a phone with a QR code.** Settings › Account › **Sign in your phone** shows a QR code, in the desktop app and in the browser. The Atelier app on a phone scans it and signs in as you, with no address or password to type. The code works once, for five minutes, and a new one ends the one before it. On the desktop it needs **Share on your network**; on a server it holds the address you opened Atelier at.

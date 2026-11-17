@@ -1,6 +1,14 @@
 import SwiftUI
 
+/// Takes the system's word that a model's background download finished while the app was away.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        Task { @MainActor in LocalModelStore.shared.handleBackgroundEvents(completionHandler) }
+    }
+}
+
 @main struct AtelierApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var store: AppStore
     @Environment(\.scenePhase) private var phase
     @AppStorage("appearance") private var appearance = "system"
@@ -31,12 +39,6 @@ import SwiftUI
                 .onAppear { Self.paintWindows() }
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
                 .task {
-                    // `--llm-bench <model id>`: measure a model on this device and print the result (a spike, see OnDeviceSpike).
-                    if let flag = ProcessInfo.processInfo.arguments.firstIndex(of: "--llm-bench"), flag + 1 < ProcessInfo.processInfo.arguments.count {
-                        let target = ProcessInfo.processInfo.arguments[flag + 1]
-                        if target == "apple" { await OnDeviceSpike().runApple() } else { await OnDeviceSpike().run(target) }
-                        return
-                    }
                     guard !demo else { return }
                     if let launch = Launch.autologin {
                         store.address = launch.address
@@ -51,8 +53,17 @@ import SwiftUI
                     guard let link = PairingLink.parse(url.absoluteString) else { return }
                     store.perform { try await store.signIn(pairing: link) }
                 }
+                .task(id: "\(store.signedIn)|\(store.connected)") {
+                    guard !demo else { return }
+                    LocalModelStore.shared.onChange = { Task { await OnDeviceHub.shared.sync(store) } }
+                    await OnDeviceHub.shared.sync(store)
+                    #if DEBUG || E2E
+                    await OnDeviceDebug.run(store)
+                    #endif
+                }
                 .onChange(of: phase) { _, phase in
                     guard !demo else { return }
+                    if phase == .active { Task { await OnDeviceHub.shared.foreground(store) } }
                     if phase == .active { store.lifecycle(active: true) }
                     else if phase == .background { store.lifecycle(active: false) }
                 }

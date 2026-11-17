@@ -56,6 +56,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_BackgroundColor: LaunchBackground
         CODE_SIGN_ENTITLEMENTS: Atelier.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: app.atelier.mobile
+        # `ATELIER_E2E=E2E` in the environment of a build switches on the launch flags used to try the app on a device.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) $(ATELIER_E2E)'
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES

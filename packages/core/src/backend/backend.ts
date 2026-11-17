@@ -30,6 +30,7 @@ import {
   isLoopbackHost,
   mcpToolName,
   imagePreset,
+  isDeviceOnlyPlatform,
   isPersonalProviderId,
   DetectedImageServer,
   type ImageModelInfo,
@@ -559,7 +560,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
   const settingsFor = (c: Connection) => (isAdmin(c) ? settings.snapshot() : publicSettings(settings.snapshot(), c.auth!.user));
   /** Hidden models are an admin decision: only admins see them (to unhide them). */
-  const modelsFor = (c: Connection, all: ModelInfo[]) => (isAdmin(c) ? all : all.filter((m) => !m.hidden));
+  // A model that runs on a phone is for that phone alone: the person's other windows don't list it.
+  const forThisDevice = (c: Connection, m: ModelInfo) => !m.personal?.exclusive || m.personal.deviceId === c.deviceId;
+  const modelsFor = (c: Connection, all: ModelInfo[]) => all.filter((m) => forThisDevice(c, m) && (isAdmin(c) || !m.hidden));
   const imageModelsFor = (c: Connection, all: ImageModelInfo[]) => (isAdmin(c) ? all : all.filter((m) => !m.hidden));
 
   /** Ends the sign-in of matching connections, which then show the sign-in screen. */
@@ -1565,6 +1568,16 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     if (!deviceId || !userId) return null;
     return links.info(userId, deviceId)?.services.includes(service) ? deviceId : null;
   };
+  /** A turn on a model that runs on a phone starts from that phone or not at all (its models are for it alone). */
+  const onlyOnItsDevice = async (sessionId: string, ctx: Ctx) => {
+    const model = (await sessions.get(sessionId))?.model;
+    const providerId = model ? parseModelRef(model)?.providerId : undefined;
+    if (!providerId || !isPersonalProviderId(providerId)) return;
+    const row = await personalRepo.get(providerId);
+    if (row && isDeviceOnlyPlatform(row.devicePlatform) && row.deviceId !== ctx.connection().deviceId) {
+      throw appError('forbidden', `This conversation's model runs on ${row.deviceName ?? 'a phone'} and can only be used there. Choose another model to go on from here.`);
+    }
+  };
   /** The desktop this call comes from, which must lend `service` to add the person's own models from it. */
   const personalDevice = (ctx: Ctx, service: DeviceService): string => {
     const deviceId = callerDevice(ctx, service);
@@ -2233,6 +2246,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       videoGeneration: true,
       audioGeneration: true,
       terminalSignIn: platform.surface === 'web',
+      deviceOnlyModels: platform.surface === 'web',
       reports: settings.effective.reports.enabled,
       ...(ctx.connection().client.network ? { sharedComputer: true } : shareAvailable ? { networkShare: true } : {}),
     }),
@@ -2925,6 +2939,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
     'chat.send': async ({ sessionId, parentId, parts, answerWith, clientMutationId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.send');
+      await onlyOnItsDevice(sessionId, ctx);
       heard(sessionId, ctx.connection().client);
       await ownBlobsOnly(parts, ctx);
       return { userMessageId: await coopAction(() => chat.send(sessionId, parts, parentId, as, { ...(answerWith ? { answerWith } : {}), ...(clientMutationId ? { clientMutationId } : {}) })) };
@@ -2967,6 +2982,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.queue': async ({ sessionId, parts, joinTurn, answerWith }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.queue');
+      await onlyOnItsDevice(sessionId, ctx);
       heard(sessionId, ctx.connection().client);
       await ownBlobsOnly(parts, ctx);
       return coopAction(() => chat.queue(sessionId, parts, as, { ...(joinTurn ? { joinTurn } : {}), ...(answerWith ? { answerWith } : {}) }));
@@ -2977,24 +2993,28 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     },
     'chat.sendNow': async ({ sessionId, id }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.sendNow');
+      await onlyOnItsDevice(sessionId, ctx);
       heard(sessionId, ctx.connection().client);
       await coopAction(() => chat.sendNow(sessionId, id, as));
       return { ok: true as const };
     },
     'chat.retry': async ({ sessionId, messageId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.retry');
+      await onlyOnItsDevice(sessionId, ctx);
       heard(sessionId, ctx.connection().client);
       await chat.retry(sessionId, messageId, as);
       return { ok: true as const };
     },
     'chat.continue': async ({ sessionId }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.continue');
+      await onlyOnItsDevice(sessionId, ctx);
       heard(sessionId, ctx.connection().client);
       await chat.continue(sessionId, as);
       return { ok: true as const };
     },
     'chat.edit': async ({ sessionId, messageId, parts }, ctx) => {
       const { as } = await sessionFor(sessionId, ctx, 'chat.edit');
+      await onlyOnItsDevice(sessionId, ctx);
       heard(sessionId, ctx.connection().client);
       await ownBlobsOnly(parts, ctx);
       return { userMessageId: await coopAction(() => chat.edit(sessionId, messageId, parts, as)) };

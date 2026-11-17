@@ -7,7 +7,7 @@ import Foundation
 ///   --autologin <address> <user> <password>   signs in on launch (a throwaway server, see scripts/live-server.mjs)
 ///   --role admin|user               the role the demo pretends to have
 enum Launch {
-    #if DEBUG
+    #if DEBUG || E2E
     private static var arguments: [String] { ProcessInfo.processInfo.arguments }
     static func value(_ flag: String) -> String? {
         guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else { return nil }

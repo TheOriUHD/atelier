@@ -7,6 +7,7 @@ import { EventEmitter } from 'node:events';
 import { eq, inArray } from 'drizzle-orm';
 import {
   DEFAULT_BASE_URLS,
+  isDeviceOnlyPlatform,
   isPersonalProviderId,
   modelRef,
   parseModelRef,
@@ -75,6 +76,8 @@ const configKey = (p: ProviderConfig): string => JSON.stringify(Object.fromEntri
 /** A personal provider's row as a provider config (its key is the owner's own secret, read separately). */
 const personalConfig = (row: PersonalRow): ProviderConfig => ({ id: row.id, type: row.type, name: row.name, baseUrl: row.baseUrl, headers: {}, enabled: row.enabled, ...row.options });
 const deviceLabel = (row: PersonalRow): string => row.deviceName ?? 'a removed computer';
+/** What a personal model says about where it runs; a phone's models are for that phone alone. */
+const personalTag = (row: PersonalRow) => ({ deviceId: row.deviceId, deviceName: deviceLabel(row), ...(isDeviceOnlyPlatform(row.devicePlatform) ? { exclusive: true } : {}) });
 
 /**
  * `models` carries the shared models whenever they change; `personalModels` names a person whose own models (personal
@@ -515,7 +518,7 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     const toolCalling = await this.deps.personal.toolCalling(userId);
     return rows.flatMap((row) => {
       const config = personalConfig(row);
-      const extra = { personal: { deviceId: row.deviceId, deviceName: deviceLabel(row) }, available: this.online(row) };
+      const extra = { personal: personalTag(row), available: this.online(row) };
       return cached
         .filter((c) => c.providerId === row.id)
         .map((c) => ({ ...this.personalInfo(c.info as unknown as DiscoveredModel, config, toolCalling), ...extra }))
@@ -540,7 +543,7 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     const config = personalConfig(row);
     const cached = (await this.deps.db.select().from(modelCache).where(eq(modelCache.providerId, providerId)).all()).find((r) => r.modelId === modelId);
     const base: DiscoveredModel = cached ? (cached.info as unknown as DiscoveredModel) : fallbackModel(config, modelId);
-    const info: ModelInfo = { ...this.personalInfo(base, config, await this.deps.personal!.toolCalling(row.userId)), personal: { deviceId: row.deviceId, deviceName: deviceLabel(row) }, available: true };
+    const info: ModelInfo = { ...this.personalInfo(base, config, await this.deps.personal!.toolCalling(row.userId)), personal: personalTag(row), available: true };
     const adapter = await this.adapterFor(config, row);
     return { adapter: info.capabilities.tools === 'prompted' ? this.prompted(adapter) : adapter, info };
   }
@@ -594,6 +597,7 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
       enabled: draft.enabled ?? existing?.enabled ?? true,
       createdAt: existing?.createdAt ?? Date.now(),
       deviceName: existing?.deviceName ?? null,
+      devicePlatform: existing?.devicePlatform ?? null,
     };
     return { row, existing };
   }
@@ -616,7 +620,7 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     const personal = this.requirePersonal();
     const { row } = await this.personalDraft(userId, deviceId, draft);
     if (draft.apiKey) await this.deps.secrets.set({ id: personalKeyId(userId, draft.id), label: `${draft.name} API key`, kind: 'api_key', value: draft.apiKey });
-    const { deviceName: _, ...stored } = row;
+    const { deviceName: _, devicePlatform: __, ...stored } = row;
     await personal.repo.put(stored);
     this.adapters.delete(draft.id);
     await this.refreshPersonal(userId, draft.id);
