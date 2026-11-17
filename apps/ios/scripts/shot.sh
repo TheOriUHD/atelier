@@ -28,8 +28,8 @@ ATELIER_LOCK=sim scripts/build-lock.sh sh -c '
   xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
   xcrun simctl ui "$UDID" appearance "$APPEARANCE" >/dev/null 2>&1 || true
   xcrun simctl install "$UDID" "$APP"
-  xcrun simctl terminate "$UDID" app.atelier.mobile >/dev/null 2>&1 || true
-  xcrun simctl launch "$UDID" app.atelier.mobile "$@" >/dev/null
+  xcrun simctl terminate "$UDID" dev.atelierhq.mobile >/dev/null 2>&1 || true
+  xcrun simctl launch "$UDID" dev.atelierhq.mobile "$@" >/dev/null
   sleep "$WAIT"
   xcrun simctl io "$UDID" screenshot "$OUT" >/dev/null 2>&1
   [ -n "${KEEP:-}" ] || xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true

@@ -50,7 +50,7 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
     /// Called when a model arrives or goes, so the server hears about it.
     var onChange: (() -> Void)?
 
-    private static let sessionID = "app.atelier.mobile.models"
+    private static let sessionID = "dev.atelierhq.mobile.models"
     private var session: URLSession!
     private var backgroundCompletion: (() -> Void)?
     /// What each running download task is for: slug and the file it fetches.

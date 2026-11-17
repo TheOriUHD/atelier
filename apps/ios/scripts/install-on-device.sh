@@ -22,4 +22,4 @@ scripts/build-lock.sh xcodebuild -jobs 3 COMPILER_INDEX_STORE_ENABLE=NO -project
   -derivedDataPath "$BUILD" DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic -allowProvisioningUpdates build | tail -3
 APP="$BUILD/Build/Products/$CONFIG-iphoneos/Atelier.app"
 xcrun devicectl device install app --device "$DEVICE" "$APP"
-xcrun devicectl device process launch --device "$DEVICE" app.atelier.mobile
+xcrun devicectl device process launch --device "$DEVICE" dev.atelierhq.mobile

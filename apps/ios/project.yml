@@ -1,6 +1,6 @@
 name: Atelier
 options:
-  bundleIdPrefix: app.atelier
+  bundleIdPrefix: dev.atelierhq
   deploymentTarget:
     iOS: '26.0'
 settings:
@@ -47,7 +47,7 @@ targets:
           NSAllowsLocalNetworking: true
         # atelier://pair?… is what the QR code on the computer holds: the Camera app opens Atelier with it.
         CFBundleURLTypes:
-          - CFBundleURLName: app.atelier.mobile
+          - CFBundleURLName: dev.atelierhq.mobile
             CFBundleURLSchemes: [atelier]
     settings:
       base:
@@ -55,7 +55,7 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_KEY_UILaunchScreen_BackgroundColor: LaunchBackground
         CODE_SIGN_ENTITLEMENTS: Atelier.entitlements
-        PRODUCT_BUNDLE_IDENTIFIER: app.atelier.mobile
+        PRODUCT_BUNDLE_IDENTIFIER: dev.atelierhq.mobile
         # `ATELIER_E2E=E2E` in the environment of a build switches on the launch flags used to try the app on a device.
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: '$(inherited) $(ATELIER_E2E)'
         GENERATE_INFOPLIST_FILE: YES
