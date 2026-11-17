@@ -60,7 +60,7 @@ struct ChatSidebar: View {
 
     var body: some View {
         List {
-            if !store.connected { banner("Reconnecting. Your draft stays on this device.", symbol: "wifi.slash", action: "Retry") { store.perform { try await store.restore() } } }
+            if !store.connected { banner(store.connectionNote ?? "Reconnecting. Your draft stays on this device.", symbol: "wifi.slash", action: "Retry") { store.perform { try await store.restore() } } }
             if let error = hub.listError { banner(error, symbol: "exclamationmark.triangle", action: "Try again") { Task { await hub.reloadAll() } } }
             if isSearching { searchRows } else if searching { recentRows } else { browseRows }
         }

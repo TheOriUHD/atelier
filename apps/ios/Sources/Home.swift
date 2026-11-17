@@ -78,8 +78,6 @@ struct RootView: View {
                 }
                 #endif
             }
-        } else if store.launching {
-            LaunchHold()
         } else { SignInView(store: store) }
     }
 
@@ -136,19 +134,4 @@ struct SettingsRequest: Identifiable {
 extension Notification.Name {
     static let atelierNewConversation = Notification.Name("atelier.newConversation")
     static let atelierSettings = Notification.Name("atelier.settings")
-}
-
-/// What shows while a saved sign-in is being picked up again: the launch screen's own colour, so opening the app does not
-/// flash the sign-in screen first. A spinner only appears if it takes a moment.
-struct LaunchHold: View {
-    @State private var slow = false
-
-    var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-            if slow { ProgressView().transition(.opacity) }
-        }
-        .animation(.easeIn(duration: 0.3), value: slow)
-        .task { try? await Task.sleep(for: .seconds(1.2)); slow = true }
-    }
 }

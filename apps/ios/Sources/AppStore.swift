@@ -5,8 +5,8 @@ import UniformTypeIdentifiers
 @MainActor @Observable final class AppStore {
     var address = UserDefaults.standard.string(forKey: "server") ?? ""
     var signedIn = false
-    /// A saved sign-in is being picked up again: the sign-in screen waits instead of flashing by.
-    var launching = false
+    /// Why the server could not be reached, when it answered but refused (an old server); nil while it is just not there.
+    var connectionNote: String?
     var connected = false
     var busy = false
     var error: String?
@@ -46,7 +46,14 @@ import UniformTypeIdentifiers
     private var userID = ""
 
     init() {
-        if !address.isEmpty, let url = try? serverURL(address), CredentialStore.read(url.absoluteString) != nil { launching = true }
+        // A server that was added stays the app's home: with a saved sign-in the app opens straight into it, and while the
+        // connection is made (or fails) it shows the reconnecting banner, never the sign-in screen.
+        if !address.isEmpty, let url = try? serverURL(address), CredentialStore.read(url.absoluteString) != nil {
+            signedIn = true
+            userName = UserDefaults.standard.string(forKey: "userName") ?? ""
+            // Drafts are kept per person and server: written before the connection is made, they must land where they will be read.
+            userID = UserDefaults.standard.string(forKey: "userID") ?? ""
+        }
         rpc.event = { [weak self] method, value in self?.receive(method, value) }
         rpc.disconnected = { [weak self] in
             guard let self else { return }
@@ -74,8 +81,8 @@ import UniformTypeIdentifiers
         try await restore()
     }
     func restore() async throws {
-        guard !address.isEmpty, !restoring, !connected else { if !restoring { launching = false }; return }
-        restoring = true; defer { restoring = false; launching = false }
+        guard !address.isEmpty, !restoring, !connected else { return }
+        restoring = true; defer { restoring = false }
         let url = try serverURL(address)
         guard let token = CredentialStore.read(url.absoluteString) else { return }
         try await checkServer(url)
@@ -83,7 +90,10 @@ import UniformTypeIdentifiers
         let status = try await rpc.call("auth.status")
         guard status["user"] != .null else { signedIn = false; connected = false; rpc.close(); throw MobileError.message("Sign in again to this server.") }
         userID = status["user"]["id"].string
+        UserDefaults.standard.set(userID, forKey: "userID")
         userName = status["user"]["name"].string
+        UserDefaults.standard.set(userName, forKey: "userName")
+        connectionNote = nil
         authStatus = status
         info = (try? await rpc.call("app.info")) ?? .null
         signedIn = true; connected = true
@@ -216,7 +226,7 @@ import UniformTypeIdentifiers
     func lifecycle(active: Bool) {
         self.active = active
         saveDraft()
-        if active { perform { try await self.restore() } }
+        if active { Task { await reconnectQuietly() } }
         else { reconnectTask?.cancel(); reloadTask?.cancel(); rpc.close(); connected = false }
     }
     func logout() async throws {
@@ -243,13 +253,21 @@ import UniformTypeIdentifiers
             if selected == value["id"].string { newConversation() }
         }
     }
+    /// Connects again without an alert: the banner says it is reconnecting, and this keeps trying.
+    func reconnectQuietly() async {
+        do { try await restore() } catch is CancellationError { return } catch {
+            connectionNote = error is MobileError ? error.localizedDescription : nil
+            scheduleReconnect()
+        }
+    }
+
     private func scheduleReconnect() {
         guard active, signedIn else { return }
         reconnectTask?.cancel()
         reconnectTask = Task {
             for delay in [1, 2, 4, 8, 10] {
                 do { try await Task.sleep(for: .seconds(delay)); try Task.checkCancellation(); try await restore(); return }
-                catch is CancellationError { return } catch { self.error = error.localizedDescription }
+                catch is CancellationError { return } catch { self.connectionNote = error is MobileError ? error.localizedDescription : nil }
             }
         }
     }
