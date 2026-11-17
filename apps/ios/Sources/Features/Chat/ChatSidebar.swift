@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Where the detail column is: a conversation, or one of the pages the sidebar leads to.
 enum ChatRoute: Hashable {
-    case conversation, projects, artifacts, images, archived
+    case conversation, projects, artifacts, images, archived, newCode
 }
 
 /// What the sidebar asks the screen around it to do.

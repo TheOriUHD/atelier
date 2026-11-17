@@ -4,7 +4,8 @@ import SwiftUI
 
 /// The sheet that starts a Code session: where it works (a folder, or none), how much it may do, which model and how
 /// hard it thinks, and optionally a new branch to start on. Calls `sessions.create`, then `onCreated` with the new session's id.
-struct NewCodeSessionSheet: View {
+/// Starting a Code session: a page in the app (not a sheet), where it works and what it is for.
+struct NewCodeSessionPage: View {
     let store: AppStore
     var onCreated: (String) -> Void
     @State private var folders: CodeFolders
@@ -83,10 +84,11 @@ struct NewCodeSessionSheet: View {
     // MARK: The page
 
     var body: some View {
-        NavigationStack {
+        Group {
             startPage
-            .toolbar { ToolbarItem(placement: .topBarLeading) { Button(role: .close) { dismiss() }.tint(Theme.ink) } }
+            .navigationBarTitleDisplayMode(.inline)
             .task {
+                Task { try? await Task.sleep(for: .milliseconds(450)); focused = true }
                 CodeSshPromptCenter.shared.start(store: store)
                 await folders.load(devices: true)
                 await system.load()
@@ -102,7 +104,6 @@ struct NewCodeSessionSheet: View {
             .sheet(isPresented: $options) { optionsSheet }
         }
         .tint(Theme.clay)
-        .presentationDetents([.large])
     }
 
     private var firstName: String { store.userName.split(separator: " ").first.map(String.init) ?? "" }
@@ -285,7 +286,6 @@ struct NewCodeSessionSheet: View {
                 try await store.send()
             }
             onCreated(id)
-            dismiss()
         } catch is CancellationError { return } catch { problem = error.localizedDescription }
     }
 }
@@ -462,7 +462,7 @@ enum CodeLaunch {
             try? await Task.sleep(for: .milliseconds(900))
             let path = Launch.value("--code-path") ?? "src/server.ts"
             switch route {
-            case "new": CodePresenter.present(NewCodeSessionSheet(store: store) { _ in })
+            case "new": CodePresenter.present(NavigationStack { NewCodeSessionPage(store: store) { _ in } })
             case "viewer": CodePresenter.present(CodeDebugViewer(store: store, path: path, line: Launch.value("--code-line").flatMap(Int.init)))
             case "task": CodePresenter.present(CodePanelFrame(title: "Background tasks", store: store) { CodeTaskDetail(store: store, taskId: Launch.value("--code-task") ?? "k1") })
             case "newloop": CodePresenter.present(CodeNewLoopSheet(store: store))

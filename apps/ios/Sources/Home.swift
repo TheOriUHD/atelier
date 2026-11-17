@@ -30,7 +30,6 @@ struct RootView: View {
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var route: ChatRoute = .conversation
     @State private var openProject: String?
-    @State private var newCode = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     init(store: AppStore, startIn: HomeMode = .chat) {
@@ -56,7 +55,6 @@ struct RootView: View {
             .onReceive(NotificationCenter.default.publisher(for: .atelierNewConversation)) { _ in compose() }
             .onReceive(NotificationCenter.default.publisher(for: .atelierSettings)) { _ in settings = SettingsRequest() }
             .sheet(item: $settings) { SettingsView(store: store, start: $0.page) }
-            .sheet(isPresented: $newCode) { NewCodeSessionSheet(store: store) { id in newCode = false; open(id) } }
             .onReceive(NotificationCenter.default.publisher(for: .atelierOpenSettings)) { note in
                 settings = SettingsRequest(page: (note.userInfo?["page"] as? String).flatMap(SettingsPageID.init(rawValue:)))
             }
@@ -80,6 +78,8 @@ struct RootView: View {
                 }
                 #endif
             }
+        } else if store.launching {
+            LaunchHold()
         } else { SignInView(store: store) }
     }
 
@@ -100,6 +100,7 @@ struct RootView: View {
         case .artifacts: NavigationStack { ArtifactsPage(store: store, openConversation: { open($0) }) }
         case .images: NavigationStack { GalleryPage(store: store, open: { open($0) }) }
         case .archived: NavigationStack { ChatArchivedPage(store: store, open: { open($0) }) }
+        case .newCode: NewCodeSessionPage(store: store) { open($0) }
         }
     }
 
@@ -113,7 +114,7 @@ struct RootView: View {
     }
 
     private func compose() {
-        if mode == .code { newCode = true; return }
+        if mode == .code { route = .newCode; showDetail(); return }
         route = .conversation
         ChatNav.newConversation(store)
         showDetail()
@@ -135,4 +136,19 @@ struct SettingsRequest: Identifiable {
 extension Notification.Name {
     static let atelierNewConversation = Notification.Name("atelier.newConversation")
     static let atelierSettings = Notification.Name("atelier.settings")
+}
+
+/// What shows while a saved sign-in is being picked up again: the launch screen's own colour, so opening the app does not
+/// flash the sign-in screen first. A spinner only appears if it takes a moment.
+struct LaunchHold: View {
+    @State private var slow = false
+
+    var body: some View {
+        ZStack {
+            Theme.background.ignoresSafeArea()
+            if slow { ProgressView().transition(.opacity) }
+        }
+        .animation(.easeIn(duration: 0.3), value: slow)
+        .task { try? await Task.sleep(for: .seconds(1.2)); slow = true }
+    }
 }

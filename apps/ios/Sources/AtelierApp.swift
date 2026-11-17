@@ -26,7 +26,11 @@ import SwiftUI
                     if let launch = Launch.autologin {
                         store.address = launch.address
                         store.perform { try await store.login(username: launch.user, password: launch.password) }
-                    } else { store.perform { try await store.restore() } }
+                    } else {
+                        store.perform { try await store.restore() }
+                        // A server that does not answer must not keep the sign-in screen away for long.
+                        Task { try? await Task.sleep(for: .seconds(8)); store.launching = false }
+                    }
                 }
                 .toasts(store)
                 .onChange(of: phase) { _, phase in

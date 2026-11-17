@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 @MainActor @Observable final class AppStore {
     var address = UserDefaults.standard.string(forKey: "server") ?? ""
     var signedIn = false
+    /// A saved sign-in is being picked up again: the sign-in screen waits instead of flashing by.
+    var launching = false
     var connected = false
     var busy = false
     var error: String?
@@ -44,6 +46,7 @@ import UniformTypeIdentifiers
     private var userID = ""
 
     init() {
+        if !address.isEmpty, let url = try? serverURL(address), CredentialStore.read(url.absoluteString) != nil { launching = true }
         rpc.event = { [weak self] method, value in self?.receive(method, value) }
         rpc.disconnected = { [weak self] in
             guard let self else { return }
@@ -71,8 +74,8 @@ import UniformTypeIdentifiers
         try await restore()
     }
     func restore() async throws {
-        guard !address.isEmpty, !restoring, !connected else { return }
-        restoring = true; defer { restoring = false }
+        guard !address.isEmpty, !restoring, !connected else { if !restoring { launching = false }; return }
+        restoring = true; defer { restoring = false; launching = false }
         let url = try serverURL(address)
         guard let token = CredentialStore.read(url.absoluteString) else { return }
         try await checkServer(url)
