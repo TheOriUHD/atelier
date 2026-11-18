@@ -239,6 +239,26 @@ struct EffortSlider: View {
         return stop + (clamped - stop) * (t * t * (3 - 2 * t))
     }
 
+    private func moved(_ x: CGFloat, width: CGFloat, inset: CGFloat, span: CGFloat, stops: Int) {
+        if dragX == nil { click.prepare() }
+        dragX = x
+        let next = Self.nearest(x, width: width, inset: inset, count: names.count)
+        // The click is where the thumb locks onto the stop, not where the finger crosses halfway.
+        if next != index, abs(Self.magnet(x, width: width, inset: inset, count: names.count) - (inset + span * CGFloat(next) / CGFloat(stops))) < 0.5 {
+            index = next
+            click.impactOccurred(intensity: 1)
+            if next == ultracodeStop { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            click.prepare()
+        }
+    }
+
+    private func ended(_ x: CGFloat, width: CGFloat, inset: CGFloat) {
+        let next = Self.nearest(x, width: width, inset: inset, count: names.count)
+        if next != index { index = next; click.impactOccurred(intensity: 0.8) }
+        dragX = nil
+        onCommit(next)
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
@@ -264,27 +284,24 @@ struct EffortSlider: View {
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        if dragX == nil { click.prepare() }
-                        dragX = value.location.x
-                        let next = Self.nearest(value.location.x, width: width, inset: inset, count: names.count)
-                        // The click is where the thumb locks onto the stop, not where the finger crosses halfway.
-                        if next != index, abs(Self.magnet(value.location.x, width: width, inset: inset, count: names.count) - (inset + span * CGFloat(next) / CGFloat(stops))) < 0.5 {
-                            index = next
-                            click.impactOccurred(intensity: 1)
-                            if next == ultracodeStop { UINotificationFeedbackGenerator().notificationOccurred(.success) }
-                            click.prepare()
-                        }
-                    }
-                    .onEnded { value in
-                        let next = Self.nearest(value.location.x, width: width, inset: inset, count: names.count)
-                        if next != index { index = next; click.impactOccurred(intensity: 0.8) }
-                        dragX = nil
-                        onCommit(next)
-                    }
+                    .onChanged { moved($0.location.x, width: width, inset: inset, span: span, stops: stops) }
+                    .onEnded { ended($0.location.x, width: width, inset: inset) }
             )
+            #if DEBUG
+            // The scripted scenes (PreviewDirector) move a finger over the slider through the same two functions.
+            .onReceive(NotificationCenter.default.publisher(for: .previewSlider)) { note in
+                guard let phase = note.userInfo?["phase"] as? String, let windowX = note.userInfo?["x"] as? CGFloat else { return }
+                let x = windowX - geometry.frame(in: .global).minX
+                if phase == "ended" { ended(x, width: width, inset: inset) } else { moved(x, width: width, inset: inset, span: span, stops: stops) }
+            }
+            #endif
         }
         .frame(height: height)
+        .previewTarget("effort-slider")
+        .onAppear { #if DEBUG
+            PreviewTargets.sliderStops = names.count
+            #endif
+        }
         .accessibilityElement()
         .accessibilityLabel("Effort")
         .accessibilityValue(names.indices.contains(index) ? names[index] : "")

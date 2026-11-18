@@ -236,6 +236,9 @@ struct ChatComposer: View {
                 }
             }
             .animation(.snappy(duration: 0.22), value: effortOpen)
+            #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: .previewEffort)) { effortOpen = ($0.userInfo?["open"] as? Bool) ?? false }
+            #endif
     }
 
     private var composerBox: some View {
@@ -311,7 +314,7 @@ struct ChatComposer: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     modelChip
-                    if let effortLabel, let current { EffortChip(label: effortLabel) { focused = false; effortOpen = true } }
+                    if let effortLabel, let current { EffortChip(label: effortLabel) { focused = false; effortOpen = true }.previewTarget("effort-chip") }
                     if hub.webSearchOn, mode != "code", session?.research ?? hub.newOptions.research { researchChip }
                     if mode == "code", session != nil { PermissionModeChip(store: store) }
                 }

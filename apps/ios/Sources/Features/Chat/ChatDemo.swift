@@ -83,6 +83,7 @@ enum ChatDemo {
     }
 
     static func sessions() -> [JSON] {
+        if let screen = Demo.requested, screen.hasPrefix("preview-") { return PreviewReel.sessions(selected: screen == "preview-chat") }
         if state == "empty" || state == "offline" { return [] }
         var list: [JSON] = [
             session("c1", "Launch plan for 0.11", ago: 3 * 3600, pinned: true, project: "p1", group: "g1", produced: true),
@@ -332,7 +333,9 @@ enum ChatDemo {
             ])
         case "slash.list": return .array(slash)
         case "dictation.status": return ["enabled": true]
-        case "sessions.subscribe": return snapshot(state.isEmpty ? "chat" : state)
+        case "sessions.subscribe":
+            if Demo.requested == "preview-chat" { return PreviewReel.conversation() }
+            return snapshot(state.isEmpty ? "chat" : state)
         case "sessions.unsubscribe", "sessions.markSeen", "sessions.delete", "groups.delete", "chat.stop", "chat.respond", "chat.retry", "chat.send", "chat.queue", "chat.edit", "chat.compact", "chat.react", "coop.admit", "coop.leave", "coop.end", "coop.typing", "projects.delete", "projects.removeFile": return ["ok": true]
         case "sessions.update": return session(params["id"]?.string ?? "c1", "Launch plan for 0.11", ago: 60)
         case "sessions.fork": return session("c1f", "Fork of Launch plan for 0.11", ago: 5)

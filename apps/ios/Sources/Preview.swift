@@ -59,6 +59,14 @@ enum Demo {
         case "home", "settings", "signin": break
         case "code": break
         case "new": store.selected = nil
+        case "preview-list":
+            store.sessions = PreviewReel.sessions(selected: false).map(Conversation.init)
+            store.selected = nil
+        case "preview-chat":
+            store.sessions = PreviewReel.sessions(selected: true).map(Conversation.init)
+            store.selected = "c1"
+            store.transcript = Transcript(snapshot: PreviewReel.conversation())
+            store.draft = ""
         default:
             store.selected = "s2"
             store.transcript = Transcript(snapshot: conversation(screen))
@@ -124,9 +132,15 @@ struct DemoRoot: View {
     @Bindable var store: AppStore
     @State private var sheet = false
     var body: some View {
+        screen
+            .overlay { PreviewOverlay() }
+            .task { if let scene = Demo.requested, scene.hasPrefix("preview-") { await PreviewDirector.run(scene, store: store) } }
+    }
+
+    @ViewBuilder private var screen: some View {
         switch Demo.requested ?? "" {
         case "signin": SignInView(store: store)
-        case "home", "split", "conversation-root": RootView(store: store)
+        case "home", "split", "conversation-root", "preview-list", "preview-chat": RootView(store: store)
         case "code": RootViewInCode(store: store)
         case "settings": SettingsView(store: store)
         case "model": ConversationView(store: store).sheet(isPresented: .constant(true)) { ModelPicker(store: store) }

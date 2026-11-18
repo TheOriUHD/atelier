@@ -100,7 +100,7 @@ struct RootView: View {
             .onChange(of: store.signedIn) { _, signedIn in if !signedIn { hub.clearCaches() } }
             .onAppear {
                 #if DEBUG
-                if Demo.requested == "conversation-root" { showDetail() }
+                if Demo.requested == "conversation-root" || Demo.requested == "preview-chat" { showDetail() }
                 switch Launch.route("home") {
                 case "projects": route = .projects; showDetail()
                 case "project": route = .projects; openProject = store.projects.first?["id"].string; showDetail()
