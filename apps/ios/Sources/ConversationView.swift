@@ -259,7 +259,9 @@ struct ConversationView: View {
             .defaultScrollAnchor(.top, for: .alignment)
             .scrollDismissesKeyboard(.interactively)
             .scrollEdgeEffectStyle(.soft, for: .bottom)
-            .scrollEdgeEffectStyle(.hard, for: .top)
+            // Soft at both ends: the hard style fills the top with the system's black on some iPadOS versions (a black bar across the
+            // page once the keyboard pushes the text under the bar), where the soft one fades like the page.
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .onScrollPhaseChange { _, phase in
                 scrolling = phase == .interacting
                 if phase == .interacting { follow = false } else if phase == .idle { follow = nearBottom }
