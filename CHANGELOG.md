@@ -4,8 +4,6 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
-## [0.10.4] — 2026-11-18
-
 - **Atelier for Chrome works for chats on a server.** A desktop app connected to an Atelier server now lends the extension to it as a device service (`browser`, next to `computer`), while Computer use is on in the app. Before, only the desktop's own backend offered the Browser tool, so a chat on a server fell back to driving the Chrome app through computer use and asking for it. The server picks the computer the way it does for computer use (where the session's folder is, else the one last written from) and offers the Browser tool only while that computer's extension is connected. Older servers ignore the new service; the server needs 0.10.4.
 
 - **No question for each step in Atelier for Chrome.** The Browser tool works only in tabs of its own, so it no longer asks before opening pages, clicking or typing, in any mode. A rule you wrote (`Browser`) still applies, and the assistant still asks in the chat before accepting terms, sending something or paying, and never types passwords.
