@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// `--dump-views`: prints the views near the top of every window with their background colours (where a black void could come from).
     @MainActor static func dumpViews() {
         func describe(_ view: UIView, _ depth: Int) {
-            guard depth < 7 else { return }
+            guard depth < 18 else { return }
             let color = view.backgroundColor.map { c -> String in var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0; c.resolvedColor(with: view.traitCollection).getRed(&r, green: &g, blue: &b, alpha: &a); return String(format: "#%02X%02X%02X a%.2f", Int(r * 255), Int(g * 255), Int(b * 255), a) } ?? "-"
             NSLog("VIEWS %@%@ %@ bg=%@ hidden=%d", String(repeating: "  ", count: depth), NSStringFromClass(type(of: view)), NSCoder.string(for: view.frame), color, view.isHidden ? 1 : 0)
             for sub in view.subviews { describe(sub, depth + 1) }
@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// edge (the keyboard's rounded top corners, a page that moved, a bar that gave way) shows the same grey as the page, never
     /// black. The root hosting view and the split view's own view are opaque black in dark mode by default.
     @MainActor private static func paintWindows() {
+        PaperVoid.paintHostingViewsAsTheyArrive()
         for scene in UIApplication.shared.connectedScenes {
             // Only the app's own windows: the ones UIKit adds for the keyboard and text effects sit above it and are not painted.
             for window in (scene as? UIWindowScene)?.windows ?? [] where window.windowLevel == .normal { PaperVoid.paint(window) }

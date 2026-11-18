@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Atelier
 
@@ -42,5 +43,35 @@ import XCTest
         XCTAssertEqual(transparent.backgroundColor?.cgColor.alpha, 0, "a view made see-through stays so")
         XCTAssertEqual(grey.backgroundColor, UIColor(white: 0.2, alpha: 1), "only black is painted over")
         XCTAssertNotNil(window.backgroundColor)
+    }
+
+    func testAPageIsPaintedAsItArrivesAndASheetIsLeftAlone() {
+        PaperVoid.paintHostingViewsAsTheyArrive()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        let page = UIHostingController(rootView: Text("page"))
+        page.view.backgroundColor = .black
+        window.rootViewController = page
+        window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertFalse(PaperVoid.isOpaqueBlack(page.view), "a page's hosting view is painted when it joins the window")
+        let sheet = UIHostingController(rootView: Text("sheet"))
+        sheet.view.backgroundColor = .black
+        page.present(sheet, animated: false)
+        XCTAssertTrue(PaperVoid.isOpaqueBlack(sheet.view), "the look of a sheet is the presentation's own")
+    }
+
+    private final class TestHostingView: UIView {}
+
+    func testTheArrivalHookRunsForAHostingViewClass() {
+        PaperVoid.paintHostingViewsAsTheyArrive()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        let root = UIViewController()
+        window.rootViewController = root
+        window.makeKeyAndVisible()
+        let view = TestHostingView(frame: root.view.bounds)
+        view.backgroundColor = .black
+        root.view.addSubview(view)
+        XCTAssertFalse(PaperVoid.isOpaqueBlack(view))
     }
 }

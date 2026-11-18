@@ -45,7 +45,8 @@ struct NewCodeSessionPage: View {
 
     private static var isDemoScreen: Bool {
         #if DEBUG
-        Demo.requested != nil
+        // `--keyboard 1`: a demo screen that takes the keyboard like the real page does (for looking at what the keyboard does).
+        Demo.requested != nil && Launch.value("--keyboard") == nil
         #else
         false
         #endif
@@ -91,8 +92,15 @@ struct NewCodeSessionPage: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { if sizeClass == .regular { ToolbarItem(placement: .principal) { HomeModePicker() } } }
             .task {
-                // The box takes the keyboard when the page opens; the canned demo screens (screenshots) stay without it.
-                Task { try? await Task.sleep(for: .milliseconds(450)); focused = !Self.isDemoScreen }
+                // On a phone the box takes the keyboard when the page opens; on an iPad it does not (the page is one choice
+                // among others there, and the keyboard covers more than half of the screen). The wait is part of this task, so
+                // a page that was left again never takes the keyboard afterwards.
+                if sizeClass != .regular, !Self.isDemoScreen {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    if !Task.isCancelled { focused = true }
+                }
+            }
+            .task {
                 CodeSshPromptCenter.shared.start(store: store)
                 await folders.load(devices: true)
                 await system.load()

@@ -142,6 +142,18 @@ struct KeyboardProbe: UIViewRepresentable {
             }
         }
 
+        private var settling = false
+        private func settleSoon() {
+            guard !settling else { return }
+            settling = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                guard let self else { return }
+                self.settling = false
+                self.setNeedsLayout()
+                self.layoutIfNeeded()
+            }
+        }
+
         /// Whether the field that has the keyboard is in the page. With no field known, the keyboard is taken as the page's.
         private func servesPage() -> Bool {
             guard let page = page?(), !page.isEmpty, let field = UIResponder.atelierFirstResponder as? UIView, field.window != nil, field.window === window else { return true }
@@ -159,6 +171,9 @@ struct KeyboardProbe: UIViewRepresentable {
             let reach = bounds.height - marker.frame.minY
             var height = reach > 0 ? max(0, (reach - (window?.safeAreaInsets.bottom ?? 0)).rounded()) : 0
             if height > 0, !servesPage() { height = 0 }
+            // Whatever the keyboard is doing, it is looked at once more a moment later: a page that missed the last step of a
+            // keyboard that came and went quickly must not stay lifted for a keyboard that is no longer there.
+            if height > 0 || last > 0 { settleSoon() }
             guard abs(height - last) >= 0.5 else { return }
             last = height
             // The keyboard's own motion is a spring of this shape; while it is moving the page follows it, and while a finger

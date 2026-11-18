@@ -101,6 +101,15 @@ struct RootView: View {
             .onAppear {
                 #if DEBUG
                 if Demo.requested == "conversation-root" || Demo.requested == "preview-chat" { showDetail() }
+                // `--rapid <ms>`: Code, then Chat again after that many milliseconds (a quick switch back and forth, as a person's finger does).
+                if let wait = Launch.value("--rapid").flatMap(Double.init) {
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        switchMode(.code)
+                        try? await Task.sleep(for: .milliseconds(wait))
+                        switchMode(.chat)
+                    }
+                }
                 switch Launch.route("home") {
                 case "projects": route = .projects; showDetail()
                 case "project": route = .projects; openProject = store.projects.first?["id"].string; showDetail()
