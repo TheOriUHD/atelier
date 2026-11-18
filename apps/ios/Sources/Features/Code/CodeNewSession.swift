@@ -139,35 +139,40 @@ struct NewCodeSessionPage: View {
 
     private var firstName: String { store.userName.split(separator: " ").first.map(String.init) ?? "" }
 
-    /// The greeting, where the session will work, and the box to say what it is for.
+    /// The greeting, where the session will work, and the box to say what it is for. The box sits at the bottom of the page, as
+    /// the message box of any chat does, on a phone and on an iPad (a new conversation's page is the one with its box in the middle);
+    /// with the keyboard up it rides on top of it, and the greeting gives way before it would run under the bar.
     private var startPage: some View {
-        // On an iPad the greeting and the box are one group in the middle, as on a new conversation's page; on a phone the box
-        // sits at the bottom, above the keyboard.
-        let wide = sizeClass == .regular
-        return VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            VStack(spacing: 18) {
-                AtelierMark(size: 46)
-                Text(firstName.isEmpty ? "What shall we build?" : "Hello, \(firstName)")
-                    .font(.system(size: 32, weight: .regular, design: .serif)).foregroundStyle(Theme.ink)
-            }
-            if wide { Spacer().frame(height: 34) } else { Spacer(minLength: 0) }
-            VStack(alignment: .leading, spacing: 12) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        targetMenu
-                        folderMenu
-                        if let currentBranch, branchKnown { pill(currentBranch, symbol: "arrow.triangle.branch") { options = true } }
-                    }.padding(.horizontal, 2)
+        GeometryReader { page in
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                if page.size.height > 330 {
+                    VStack(spacing: 18) {
+                        // The mark goes first when the page is short (an iPad's keyboard in landscape).
+                        if page.size.height > 520 { AtelierMark(size: 46) }
+                        Text(firstName.isEmpty ? "What shall we build?" : "Hello, \(firstName)")
+                            .font(.system(size: 32, weight: .regular, design: .serif)).foregroundStyle(Theme.ink)
+                    }
+                    .transition(.opacity)
                 }
-                box.coveredBy($effortOpen) {
-                    if let model = chosenModel { EffortPanel(store: store, model: model, mode: "code", local: $effort) }
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 12) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            targetMenu
+                            folderMenu
+                            if let currentBranch, branchKnown { pill(currentBranch, symbol: "arrow.triangle.branch") { options = true } }
+                        }.padding(.horizontal, 2)
+                    }
+                    box.coveredBy($effortOpen) {
+                        if let model = chosenModel { EffortPanel(store: store, model: model, mode: "code", local: $effort) }
+                    }
                 }
+                .padding(.horizontal, 16).padding(.bottom, 10)
             }
-            .padding(.horizontal, 16).padding(.bottom, wide ? 0 : 10)
-            if wide { Spacer(minLength: 0); Spacer(minLength: 0) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(.smooth(duration: 0.25), value: page.size.height > 330)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .paperBehind()
         .overlay(alignment: .top) {
             if let problem { Text(problem).font(.footnote).foregroundStyle(Theme.danger).padding(12).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous)).padding(.horizontal, 16).padding(.top, 8) }
