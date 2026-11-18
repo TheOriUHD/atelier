@@ -61,9 +61,13 @@ enum Demo {
         case "new": store.selected = nil
         case "preview-list":
             store.sessions = PreviewReel.sessions(selected: false).map(Conversation.init)
+            store.models = PreviewReel.models
+            store.selectedModel = PreviewReel.local
             store.selected = nil
         case "preview-chat":
             store.sessions = PreviewReel.sessions(selected: true).map(Conversation.init)
+            store.models = PreviewReel.models
+            store.selectedModel = PreviewReel.local
             store.selected = "c1"
             store.transcript = Transcript(snapshot: PreviewReel.conversation())
             store.draft = ""

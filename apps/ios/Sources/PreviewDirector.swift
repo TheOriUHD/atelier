@@ -8,14 +8,14 @@ import UIKit
 // reply arrives as the server's events do, the effort slider is dragged through the same code a finger would use.
 //
 //   preview-list   the conversation list scrolls at a slow, constant speed
-//   preview-chat   a reply streams in word by word; when it is done a finger taps the effort chip and moves the slider
+//   preview-chat   a reply streams in word by word; when it is done the effort panel opens and the slider moves to another level
 //
 // A magenta frame marks the start of a scene and a green one its end, so the recording can be cut exactly.
 
 extension Notification.Name {
     /// Opens or closes the effort panel (`userInfo["open"]`: Bool).
     static let previewEffort = Notification.Name("atelier.preview.effort")
-    /// A scripted finger on the effort slider (`userInfo["phase"]`: "moved" | "ended", `["x"]`: the finger's x in the window).
+    /// A scripted drag on the effort slider (`userInfo["phase"]`: "moved" | "ended", `["x"]`: the touch's x in the window).
     static let previewSlider = Notification.Name("atelier.preview.slider")
 }
 
@@ -32,41 +32,19 @@ extension View {
     }
 }
 
-/// The finger drawn over the screen, and the start and end marks.
-@MainActor @Observable final class PreviewFinger {
-    static let shared = PreviewFinger()
-    var position: CGPoint = .zero
-    var opacity = 0.0
-    var pressed = false
-    var taps = 0
+/// The start and end marks of a scene, drawn over everything (the recording is cut at them).
+@MainActor @Observable final class PreviewMarks {
+    static let shared = PreviewMarks()
     var marker: Color?
 }
 
 struct PreviewOverlay: View {
-    private let finger = PreviewFinger.shared
-    @State private var ring = false
+    private let marks = PreviewMarks.shared
 
     var body: some View {
-        ZStack {
-            Circle().strokeBorder(.white.opacity(0.8), lineWidth: 2.5).frame(width: 46, height: 46)
-                .scaleEffect(ring ? 2.3 : 0.7).opacity(ring ? 0 : 0.0)
-                .position(finger.position)
-            Circle().fill(.white.opacity(finger.pressed ? 0.4 : 0.24))
-                .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.5))
-                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-                .frame(width: 46, height: 46)
-                .scaleEffect(finger.pressed ? 0.78 : 1)
-                .animation(.easeOut(duration: 0.14), value: finger.pressed)
-                .position(finger.position)
-                .opacity(finger.opacity)
-            if let marker = finger.marker { marker.ignoresSafeArea() }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .onChange(of: finger.taps) { _, _ in
-            ring = false
-            withAnimation(.easeOut(duration: 0.55)) { ring = true }
-        }
+        ZStack { if let marker = marks.marker { marker.ignoresSafeArea() } }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
     }
 }
 
@@ -114,21 +92,21 @@ enum PreviewEase {
 }
 
 @MainActor enum PreviewDirector {
-    private static let finger = PreviewFinger.shared
+    private static let marks = PreviewMarks.shared
 
     static func run(_ scene: String, store: AppStore) async {
-        finger.marker = Color(red: 1, green: 0, blue: 1)
+        marks.marker = Color(red: 1, green: 0, blue: 1)
         await pause(0.8)
         if scene == "preview-list" { await settleList() }
         await pause(0.4)
-        finger.marker = nil
+        marks.marker = nil
         await pause(0.5)
         switch scene {
         case "preview-list": await scrollList()
         case "preview-chat": await chat(store)
         default: break
         }
-        finger.marker = Color(red: 0, green: 1, blue: 0)
+        marks.marker = Color(red: 0, green: 1, blue: 0)
     }
 
     private static func pause(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
@@ -146,23 +124,21 @@ enum PreviewEase {
         await pause(0.4)
     }
 
-    /// Scrolls the biggest list on screen: it eases in, then moves at one constant speed, then eases out.
+    /// Scrolls the biggest list on screen: it eases in, then moves at one constant speed and does not stop (the cut to the next
+    /// scene happens while it is still moving, and the end of the video dissolves into its first seconds).
     private static func scrollList() async {
         guard let list = biggestScrollView() else { return }
         let from = list.contentOffset.y
         let reach = list.contentSize.height + list.adjustedContentInset.bottom - list.bounds.height
-        let distance = min(Double(Launch.value("--distance").flatMap(Double.init) ?? 800), Double(reach - from))
-        let total = Double(Launch.value("--seconds").flatMap(Double.init) ?? 5.8), rampIn = 0.8, rampOut = 1.0
-        let speed = distance / (total - rampIn / 2 - rampOut / 2)
+        let total = Double(Launch.value("--seconds").flatMap(Double.init) ?? 7.0), rampIn = 0.8
+        let speed = Double(Launch.value("--speed").flatMap(Double.init) ?? 155)
+        let distance = min(speed * (total - rampIn / 2), Double(reach - from))
         await Ticker.run(total) { t in
             let s = t * total
-            let travelled: Double
-            if s < rampIn { travelled = speed * s * s / (2 * rampIn) }
-            else if s > total - rampOut { let r = total - s; travelled = distance - speed * r * r / (2 * rampOut) }
-            else { travelled = speed * rampIn / 2 + speed * (s - rampIn) }
-            list.setContentOffset(CGPoint(x: 0, y: from + CGFloat(travelled)), animated: false)
+            let travelled = s < rampIn ? speed * s * s / (2 * rampIn) : speed * rampIn / 2 + speed * (s - rampIn)
+            list.setContentOffset(CGPoint(x: 0, y: from + CGFloat(min(travelled, distance))), animated: false)
         }
-        await pause(0.6)
+        await pause(0.3)
     }
 
     private static func biggestScrollView() -> UIScrollView? {
@@ -226,7 +202,7 @@ enum PreviewEase {
             seq += 1
             _ = store.transcript.apply(.obj(["seq": .number(Double(seq)), "event": value]))
         }
-        await pause(0.9)
+        await pause(0.4)
         // The words arrive at an even pace, as many as are due on each frame.
         let perSecond = Double(Launch.value("--words").flatMap(Double.init) ?? 17)
         var sent = 0
@@ -242,81 +218,43 @@ enum PreviewEase {
         store.transcript.snapshot = store.transcript.snapshot.setting("streamingMessageId", .null)
         await pause(1.1)
         await chooseEffort(store, level: "high")
-        await pause(1.2)
+        await pause(1.0)
     }
 
-    // MARK: the effort chip
+    // MARK: the effort panel
 
-    private static func move(to point: CGPoint, over duration: Double) async {
-        let from = finger.position
-        await Ticker.run(duration) { t in
-            let e = PreviewEase.inOut(t)
-            finger.position = CGPoint(x: from.x + (point.x - from.x) * e, y: from.y + (point.y - from.y) * e)
-        }
-    }
-
-    private static func fade(_ to: Double, over duration: Double) async {
-        let from = finger.opacity
-        await Ticker.run(duration) { t in finger.opacity = from + (to - from) * PreviewEase.smooth(t) }
-    }
-
-    private static func tap() async {
-        finger.pressed = true
-        finger.taps += 1
-        await pause(0.16)
-    }
-
+    /// Opens the effort panel, moves the slider from the level it is on to `level` through the slider's own drag code, and
+    /// closes the panel again.
     private static func chooseEffort(_ store: AppStore, level: String) async {
-        guard let chip = PreviewTargets.frames["effort-chip"] else { return }
-        let target = CGPoint(x: chip.midX, y: chip.midY)
-        // The finger comes in from below the box, to the chip.
-        finger.position = CGPoint(x: target.x + 70, y: target.y + 190)
-        async let appear: Void = fade(1, over: 0.5)
-        await move(to: target, over: 1.1)
-        await appear
-        await pause(0.25)
-        await tap()
-        NotificationCenter.default.post(name: .previewEffort, object: nil, userInfo: ["open": true])
-        await pause(0.14)
-        finger.pressed = false
-        await pause(0.9)
-
-        // Onto the slider's thumb, then along the track to the level.
-        guard let slider = PreviewTargets.frames["effort-slider"], PreviewTargets.sliderStops > 1 else { return }
+        guard let slider = await opened(), PreviewTargets.sliderStops > 1 else { return }
         let inset = slider.height / 2, span = slider.width - 2 * inset, last = Double(PreviewTargets.sliderStops - 1)
         func stop(_ index: Int) -> CGFloat { slider.minX + inset + span * CGFloat(Double(index) / last) }
         let model = store.models.first { $0["ref"].string == store.selectedModel }
         let levels = ChatEffort.choices(model, mode: "chat", ultracode: ChatHub.of(store).ultracodeOn)
         let current = ChatEffort.shown(nil, model: model, mode: "chat", ultracode: ChatHub.of(store).ultracodeOn).flatMap { levels.firstIndex(of: $0) } ?? 1
         let wanted = levels.firstIndex(of: level) ?? 2
-        let y = slider.midY
-        await move(to: CGPoint(x: stop(current), y: y), over: 0.6)
-        await pause(0.2)
-        finger.pressed = true
-        await pause(0.2)
         let start = stop(current), end = stop(wanted)
-        await Ticker.run(1.2) { t in
+        await pause(0.3)
+        await Ticker.run(1.3) { t in
             let x = start + (end - start) * CGFloat(PreviewEase.inOut(t))
-            finger.position = CGPoint(x: x, y: y)
             NotificationCenter.default.post(name: .previewSlider, object: nil, userInfo: ["phase": "moved", "x": x])
         }
-        await pause(0.25)
+        await pause(0.2)
         NotificationCenter.default.post(name: .previewSlider, object: nil, userInfo: ["phase": "ended", "x": end])
-        finger.pressed = false
         // What the server would now report for the conversation.
         if let at = store.sessions.firstIndex(where: { $0.id == store.selected }) {
             store.sessions[at] = Conversation(raw: store.sessions[at].raw.setting("effort", .string(level)))
         }
-        await pause(1.1)
-
-        // A tap beside the panel closes it.
-        let outside = CGPoint(x: slider.midX, y: slider.minY - 330)
-        await move(to: outside, over: 0.7)
-        await tap()
+        await pause(1.4)
         NotificationCenter.default.post(name: .previewEffort, object: nil, userInfo: ["open": false])
-        await pause(0.14)
-        finger.pressed = false
-        await fade(0, over: 0.35)
+        await pause(0.4)
+    }
+
+    /// Opens the panel and returns where its slider is.
+    private static func opened() async -> CGRect? {
+        NotificationCenter.default.post(name: .previewEffort, object: nil, userInfo: ["open": true])
+        await pause(0.8)
+        return PreviewTargets.frames["effort-slider"]
     }
 }
 
@@ -324,38 +262,57 @@ enum PreviewEase {
 enum PreviewReel {
     private static func ms(_ secondsAgo: Double) -> Double { (Date.now.timeIntervalSince1970 - secondsAgo) * 1000 }
 
-    private static func session(_ id: String, _ title: String, ago: Double, model: String = "anthropic/opus", pinned: Bool = false, status: String = "idle", unseen: Bool = false, project: String? = nil) -> JSON {
+    /// The model every conversation of the video runs on: a local one, with the effort slider.
+    static let local = "ollama/qwen3.8-27b", mistral = "mistral/large"
+
+    static let models: [JSON] = [
+        ["ref": "ollama/qwen3.8-27b", "providerId": "ollama", "providerName": "Ollama (home server)", "modelId": "qwen3.8-27b", "displayName": "Qwen 3.8 27B", "contextLength": 131072, "maxOutput": 8192, "capabilities": ["tools": "native", "vision": false, "pdf": false, "reasoning": "effort", "caching": false], "effortLevels": ["low", "medium", "high"], "hidden": false, "favorite": true, "order": 0],
+        ["ref": "mistral/large", "providerId": "mistral", "providerName": "Mistral", "modelId": "large", "displayName": "Mistral Large", "contextLength": 128000, "maxOutput": 8192, "capabilities": ["tools": "native", "vision": false, "pdf": false, "reasoning": "none", "caching": false], "hidden": false, "favorite": false, "order": 1],
+    ]
+
+    private static func session(_ id: String, _ title: String, ago: Double, model: String = local, pinned: Bool = false, status: String = "idle", unseen: Bool = false, project: String? = nil) -> JSON {
         ChatDemo.session(id, title, status: status, ago: ago, pinned: pinned, unseen: unseen, model: model, project: project)
     }
-
-    static let sonnet = "anthropic/sonnet", qwen = "ollama/qwen3", mistral = "mistral/large"
 
     static func sessions(selected: Bool) -> [JSON] {
         let hour = 3600.0, day = 86400.0
         var list = [
             session("p1", "Launch plan for 0.11", ago: 3 * hour, pinned: true, project: "p1"),
-            session("p2", "Trip to Lisbon in March", ago: 2 * day, model: sonnet, pinned: true),
-            session("t1", "Plan the offsite agenda", ago: 90, model: sonnet, status: "running"),
+            session("p2", "Trip to Lisbon in March", ago: 2 * day, pinned: true),
+            session("t1", "Plan the offsite agenda", ago: 90, status: "running"),
             session("t2", "Rename photos by date", ago: 40 * 60, unseen: true),
-            session("t3", "Summarize the Q3 report", ago: 5 * hour, model: sonnet),
+            session("t3", "Summarize the Q3 report", ago: 5 * hour),
             session("t4", "Draft a reply to Anna", ago: 7 * hour, model: mistral),
             session("t5", "How HTTP caching works", ago: 9 * hour),
-            session("y1", "Launch announcement email", ago: 26 * hour, model: sonnet),
-            session("y2", "Compare three self-hosted wikis", ago: 30 * hour, model: qwen),
+            session("y1", "Launch announcement email", ago: 26 * hour),
+            session("y2", "Compare three self-hosted wikis", ago: 30 * hour),
             session("y3", "A speech for Mira's birthday", ago: 34 * hour),
-            session("y4", "Why is my sourdough flat?", ago: 40 * hour, model: sonnet),
+            session("y4", "Why is my sourdough flat?", ago: 40 * hour),
             session("w1", "How the updater checks a download", ago: 4 * day),
             session("w2", "Weekly meal plan without dairy", ago: 4.5 * day, model: mistral),
-            session("w3", "Translate the lease into English", ago: 5 * day, model: sonnet),
-            session("w4", "Fix a leaking tap, step by step", ago: 5.5 * day, model: qwen),
+            session("w3", "Translate the lease into English", ago: 5 * day),
+            session("w4", "Fix a leaking tap, step by step", ago: 5.5 * day),
             session("w5", "A regex for German phone numbers", ago: 6 * day),
-            session("m1", "Cover letter for the design role", ago: 12 * day, model: sonnet),
+            session("m1", "Cover letter for the design role", ago: 12 * day),
             session("m2", "Budget for three weeks in Japan", ago: 14 * day),
             session("m3", "Rename the gym playlist", ago: 18 * day, model: mistral),
-            session("m4", "Why do tides come twice a day?", ago: 21 * day, model: qwen),
+            session("m4", "Why do tides come twice a day?", ago: 21 * day),
             session("m5", "Two ways to manage app state", ago: 24 * day),
-            session("m6", "Birthday ideas for a ten-year-old", ago: 27 * day, model: sonnet),
+            session("m6", "Birthday ideas for a ten-year-old", ago: 27 * day),
             session("m7", "Notes on the new home server", ago: 29 * day),
+            session("o1", "Ideas for a quiet anniversary", ago: 33 * day),
+            session("o2", "Summarize this research paper", ago: 36 * day),
+            session("o3", "Write a polite way to decline", ago: 39 * day),
+            session("o4", "Compare two laptop deals", ago: 43 * day, model: mistral),
+            session("o5", "Fix my bash aliases", ago: 47 * day),
+            session("o6", "Plan a garden for a shady corner", ago: 52 * day),
+            session("o7", "Draft the team handbook intro", ago: 58 * day),
+            session("o8", "Explain compound interest simply", ago: 64 * day),
+            session("o9", "Name ideas for a small bakery", ago: 71 * day),
+            session("o10", "Study plan for the driving test", ago: 78 * day),
+            session("o11", "Why is my Wi-Fi slow at night?", ago: 86 * day),
+            session("o12", "A toast for my sister's wedding", ago: 95 * day),
+            session("o13", "Convert a recipe to metric", ago: 104 * day),
         ]
         if selected { list.insert(session("c1", "A weekend in Lisbon", ago: 20, status: "running"), at: 0) }
         return list
@@ -364,7 +321,7 @@ enum PreviewReel {
     /// The conversation before the reply: the question is sent and the answer has not begun.
     static func conversation() -> JSON {
         let question = "Plan a relaxed weekend in Lisbon for two: good food, one museum, lots of walking."
-        return Demo.json(#"{"session":{"id":"c1","status":"running","title":"A weekend in Lisbon","model":"anthropic/opus"},"seq":3,"streamingMessageId":"a1","messages":[{"id":"u1","role":"user","kind":"normal","parts":[{"type":"text","text":"\#(question)"}],"error":null},{"id":"a1","role":"assistant","kind":"normal","parts":[],"error":null}],"pending":null,"todos":[],"context":{"used":24000,"limit":200000,"threshold":170000,"categories":{"systemPrompt":9000,"systemTools":14000,"mcpTools":0,"skills":0,"messages":1000}}}"#)
+        return Demo.json(#"{"session":{"id":"c1","status":"running","title":"A weekend in Lisbon","model":"ollama/qwen3.8-27b"},"seq":3,"streamingMessageId":"a1","messages":[{"id":"u1","role":"user","kind":"normal","parts":[{"type":"text","text":"\#(question)"}],"error":null},{"id":"a1","role":"assistant","kind":"normal","parts":[],"error":null}],"pending":null,"todos":[],"context":{"used":24000,"limit":131072,"threshold":110000,"categories":{"systemPrompt":9000,"systemTools":14000,"mcpTools":0,"skills":0,"messages":1000}}}"#)
     }
 }
 #else

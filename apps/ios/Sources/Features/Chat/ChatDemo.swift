@@ -311,7 +311,7 @@ enum ChatDemo {
                 if let project = params["projectId"]?.string { return .array(all.filter { $0["projectId"].string == project }) }
                 return .array(all)
             }
-        case "models.list": return .array(models)
+        case "models.list": return .array(Demo.requested?.hasPrefix("preview-") == true ? PreviewReel.models : models)
         case "projects.list":
             return .array([["id": "p1", "name": "Launch 0.11", "description": "Everything for the next release: plan, notes, the changelog and the checklist.", "instructions": "Write like a calm release manager. Short sentences.", "pinnedAt": t(3600), "createdAt": t(9e5), "updatedAt": t(7200), "fileCount": 2, "sessionCount": 4], ["id": "p2", "name": "Home lab", "description": "", "instructions": "", "pinnedAt": .null, "createdAt": t(9e5), "updatedAt": t(40 * 86400), "fileCount": 0, "sessionCount": 1]])
         case "projects.get":

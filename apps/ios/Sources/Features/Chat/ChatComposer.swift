@@ -314,7 +314,7 @@ struct ChatComposer: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     modelChip
-                    if let effortLabel, let current { EffortChip(label: effortLabel) { focused = false; effortOpen = true }.previewTarget("effort-chip") }
+                    if let effortLabel, let current { EffortChip(label: effortLabel) { focused = false; effortOpen = true } }
                     if hub.webSearchOn, mode != "code", session?.research ?? hub.newOptions.research { researchChip }
                     if mode == "code", session != nil { PermissionModeChip(store: store) }
                 }
