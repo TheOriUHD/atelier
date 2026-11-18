@@ -30,6 +30,8 @@ struct NewCodeSessionPage: View {
     /// What the person wants done first; the session starts with it.
     @State private var prompt = ""
     @State private var options = false
+    /// The line above the box, chosen when the page opens.
+    @State private var greeting: String
     /// The effort panel is open: it covers the box until the person taps elsewhere.
     @State private var effortOpen = false
     @FocusState private var focused: Bool
@@ -39,6 +41,7 @@ struct NewCodeSessionPage: View {
     init(store: AppStore, onCreated: @escaping (String) -> Void) {
         self.store = store
         self.onCreated = onCreated
+        _greeting = State(initialValue: CodeGreeting.pick(name: store.userName.split(separator: " ").first.map(String.init) ?? ""))
         _folders = State(initialValue: CodeFolders(store: store))
         _system = State(initialValue: CodeSystemSettings(store: store))
     }
@@ -137,8 +140,6 @@ struct NewCodeSessionPage: View {
         return ChatEffort.name(shown, model: chosenModel)
     }
 
-    private var firstName: String { store.userName.split(separator: " ").first.map(String.init) ?? "" }
-
     /// The greeting, where the session will work, and the box to say what it is for. The box sits at the bottom of the page, as
     /// the message box of any chat does, on a phone and on an iPad (a new conversation's page is the one with its box in the middle);
     /// with the keyboard up it rides on top of it, and the greeting gives way before it would run under the bar.
@@ -150,8 +151,9 @@ struct NewCodeSessionPage: View {
                     VStack(spacing: 18) {
                         // The mark goes first when the page is short (an iPad's keyboard in landscape).
                         if page.size.height > 520 { AtelierMark(size: 46) }
-                        Text(firstName.isEmpty ? "What shall we build?" : "Hello, \(firstName)")
+                        Text(greeting)
                             .font(.system(size: 32, weight: .regular, design: .serif)).foregroundStyle(Theme.ink)
+                            .multilineTextAlignment(.center).padding(.horizontal, 24).fixedSize(horizontal: false, vertical: true)
                     }
                     .transition(.opacity)
                 }
