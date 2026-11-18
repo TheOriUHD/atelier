@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.3] — 2026-11-18
+
 - **Pairing a phone is easier to start and says when it worked.** The QR button is now an icon at the right of the **Profile** heading at the top of Settings › Account (hover: **Pair mobile app**) instead of a section at the bottom, and the code is drawn black on white in every theme. When the phone has scanned it, the window turns into a confirmation such as "Philipp’s iPhone is logged in!" with "iPhone 17 Pro · Atelier 1.0" under it (new `account.phonePaired` event; the phone says what it is in `auth.terminalPoll`'s `device`). In the Atelier app for iPhone and iPad the scanner offers a lens choice (0.5×, 1×, 2×…) on phones with more than one back camera, a flashlight button that only you turn on, a light tick when a code is read and a short run of haptic taps when you are signed in.
 
 - **A temporary chat on the phone survives switching apps.** The Atelier app for iPhone and iPad used to lose an open temporary chat when it sat in the background for more than a minute or two (the system pauses the app and drops its connection; the server then deleted the chat), and every action on it answered "That conversation no longer exists." Now the server keeps a phone's temporary chats while the app is only in the background (new `app.launch`), and ends them when you leave or delete them, when iOS closes the app and you open it again, or when the server restarts. If a chat is gone for any reason the app says so and opens a new one instead of showing a screen where everything fails. Needs this server release; older servers keep the one-minute rule.
