@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Network
 import UIKit
 
 /// A model the phone can run itself, as Atelier offers it for download.
@@ -24,7 +25,7 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
         LocalModelSpec(id: "lfm2.5-1.2b", name: "LFM2.5 1.2B", maker: "Liquid AI", repo: "lmstudio-community/LFM2.5-1.2B-Instruct-MLX-4bit", bytes: 660_000_000, context: 32_768, blurb: "Quick and light. Good for short answers, rewriting and quick questions; not for code or deep knowledge.", thinks: false),
         LocalModelSpec(id: "gemma-3-1b", name: "Gemma 3 1B", maker: "Google", repo: "mlx-community/gemma-3-1b-it-qat-4bit", bytes: 770_000_000, context: 32_768, blurb: "Small and steady, with Google's polish. Good for everyday chat and summaries.", thinks: false),
         LocalModelSpec(id: "qwen3-1.7b", name: "Qwen3 1.7B", maker: "Alibaba", repo: "mlx-community/Qwen3-1.7B-4bit", bytes: 980_000_000, context: 16_384, blurb: "Thinks before it answers, so it reasons better than its size. Slower to start.", thinks: true),
-        LocalModelSpec(id: "qwen3-4b", name: "Qwen3 4B", maker: "Alibaba", repo: "mlx-community/Qwen3-4B-4bit", bytes: 2_280_000_000, context: 12_288, blurb: "The smartest one that fits comfortably: thinks first, writes well, about 17 words a second. Uses a lot of memory.", thinks: true),
+        LocalModelSpec(id: "qwen3-4b", name: "Qwen3 4B", maker: "Alibaba", repo: "mlx-community/Qwen3-4B-4bit", bytes: 2_280_000_000, context: 12_288, blurb: "The smartest one that fits comfortably: thinks first and writes well. Uses a lot of memory.", thinks: true),
     ]
 
     static func spec(_ id: String) -> LocalModelSpec? { catalog.first { $0.id == id } }
@@ -38,9 +39,21 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
     enum State: Equatable {
         case notInstalled
         case downloading(Double)
+        /// The connection dropped part-way: it tries again by itself and goes on from where it stopped.
+        case reconnecting(Double)
+        /// Stopped by the person, or by a connection that stayed away: everything that arrived is kept, and Resume goes on from there.
+        case paused(Double)
         case waitingForWiFi
         case failed(String)
         case installed
+
+        /// How much of the download has arrived, when there is one.
+        var fraction: Double? {
+            switch self {
+            case .downloading(let value), .reconnecting(let value), .paused(let value): value
+            default: nil
+            }
+        }
     }
 
     private(set) var states: [String: State] = [:]
@@ -55,6 +68,12 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
     private var backgroundCompletion: (() -> Void)?
     /// What each running download task is for: slug and the file it fetches.
     private var plans: [String: Plan] = [:]
+    /// How many times in a row a model's download has lost its connection without getting anywhere, and the pause before its next try.
+    private var retries: [String: Int] = [:]
+    private var retryTasks: [String: Task<Void, Never>] = [:]
+    /// Models whose download the person just stopped: the cancelled tasks still report back, and must not leave files behind.
+    private var cancelling: Set<String> = []
+    private let monitor = NWPathMonitor()
 
     private struct FileInfo: Codable, Sendable { let path: String; let size: Int64; let sha256: String? }
     private struct Plan: Codable, Sendable {
@@ -79,6 +98,16 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
             }
         }
         #endif
+        // A download that was begun and not finished waits here, paused, with what it has: the app was closed, or the connection never came back.
+        for spec in LocalModelSpec.catalog where states[spec.id] != .installed {
+            if let plan = Self.readPlan(spec.id) { plans[spec.id] = plan; states[spec.id] = .paused(Self.fraction(plan)) }
+        }
+        // When the connection comes back, the downloads that were waiting for it go on at once instead of after their pause.
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor in self?.connectionIsBack() }
+        }
+        monitor.start(queue: DispatchQueue(label: "dev.atelierhq.mobile.models.path"))
         Task { await reattach() }
     }
 
@@ -130,7 +159,7 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
         let tasks = await session.allTasks
         for task in tasks {
             guard let id = task.taskDescription?.split(separator: "|").first.map(String.init), LocalModelSpec.spec(id) != nil else { continue }
-            if states[id] == .notInstalled || states[id] == nil { states[id] = .downloading(0) }
+            if case .paused(let value) = state(id) { states[id] = .downloading(value) } else if states[id] == .notInstalled || states[id] == nil { states[id] = .downloading(0) }
             if plans[id] == nil, let plan = Self.readPlan(id) { plans[id] = plan }
         }
         // A model whose files are all there but never got its marker (the app ended at the wrong moment).
@@ -146,44 +175,87 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
         try? JSONEncoder().encode(plan).write(to: Self.planURL(id))
     }
 
-    func download(_ spec: LocalModelSpec) {
+    func download(_ spec: LocalModelSpec) { begin(spec, automatic: false) }
+
+    /// Starts a model's download, or carries it on: files that arrived whole stay, a file that was cut short goes on from where
+    /// it stopped, and a file that is already being fetched is left alone. `automatic` is a try after a lost connection.
+    private func begin(_ spec: LocalModelSpec, automatic: Bool) {
         guard state(spec.id) != .installed else { return }
         if case .downloading = state(spec.id) { return }
-        states[spec.id] = .downloading(0)
+        retryTasks[spec.id]?.cancel()
+        retryTasks[spec.id] = nil
+        cancelling.remove(spec.id)
+        if !automatic { retries[spec.id] = 0 }
+        let before = state(spec.id).fraction ?? 0
+        states[spec.id] = automatic ? .reconnecting(before) : .downloading(before)
         Task {
             do {
-                if Self.freeBytes > 0, Self.freeBytes < spec.bytes + 500_000_000 { throw LocalModelError.noRoom(spec.sizeText) }
-                let files = try await Self.listFiles(spec.repo)
+                if Self.freeBytes > 0, Self.freeBytes < Int64(Double(spec.bytes) * (1 - before)) + 500_000_000 { throw LocalModelError.noRoom(spec.sizeText) }
+                // Without the connection the list cannot be asked for again, but the one from the first try is still known.
+                let known = plans[spec.id] ?? Self.readPlan(spec.id)
+                let files: [FileInfo]
+                do { files = try await Self.listFiles(spec.repo) } catch { guard let known else { throw error }; files = known.files }
                 try FileManager.default.createDirectory(at: Self.partial(spec.id), withIntermediateDirectories: true)
-                var plan = Self.readPlan(spec.id) ?? Plan(files: files)
+                var plan = known ?? Plan(files: files)
                 plan.files = files
                 // What is already in the folder counts: a file that arrived whole before is not fetched again.
                 for file in files where Self.partialFile(spec.id, file.path).flatMap({ try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? Int64 }) == file.size { plan.done.insert(file.path) }
                 plans[spec.id] = plan
                 writePlan(spec.id)
-                for file in files where !plan.done.contains(file.path) { start(spec, file) }
+                let running = Set(await session.allTasks.filter { $0.state == .running || $0.state == .suspended }.compactMap(\.taskDescription))
+                for file in files where !plan.done.contains(file.path) && !running.contains("\(spec.id)|\(file.path)") { start(spec, file) }
                 if plan.done.count == files.count { finish(spec.id) } else { update(spec.id) }
             } catch {
-                states[spec.id] = .failed(error.localizedDescription)
+                if DownloadRecovery.isTransient(error) { dropped(spec.id) } else { states[spec.id] = .failed(error.localizedDescription) }
             }
         }
     }
 
     private func start(_ spec: LocalModelSpec, _ file: FileInfo) {
-        guard let url = URL(string: "https://huggingface.co/\(spec.repo)/resolve/main/\(file.path)") else { return }
-        var request = URLRequest(url: url)
-        request.allowsCellularAccess = allowsCellular
-        let task = session.downloadTask(with: request)
+        let task: URLSessionDownloadTask
+        if let data = Self.takeResumeData(spec.id, file.path) {
+            // What the earlier try had already fetched is not fetched again.
+            task = session.downloadTask(withResumeData: data)
+        } else {
+            guard let url = URL(string: "https://huggingface.co/\(spec.repo)/resolve/main/\(file.path)") else { return }
+            var request = URLRequest(url: url)
+            request.allowsCellularAccess = allowsCellular
+            task = session.downloadTask(with: request)
+        }
         task.taskDescription = "\(spec.id)|\(file.path)"
         task.resume()
     }
 
-    func cancel(_ spec: LocalModelSpec) {
+    /// Stops a download and keeps everything that has arrived: each running file hands back the point it reached.
+    func pause(_ spec: LocalModelSpec) {
+        let id = spec.id
+        retryTasks[id]?.cancel()
+        retryTasks[id] = nil
+        states[id] = .paused(state(id).fraction ?? 0)
         Task {
-            for task in await session.allTasks where task.taskDescription?.hasPrefix(spec.id + "|") == true { task.cancel() }
-            plans[spec.id] = nil
-            try? FileManager.default.removeItem(at: Self.partial(spec.id))
-            states[spec.id] = .notInstalled
+            for task in await session.allTasks where task.taskDescription?.hasPrefix(id + "|") == true {
+                guard let task = task as? URLSessionDownloadTask, let path = task.taskDescription?.split(separator: "|", maxSplits: 1).last.map(String.init) else { continue }
+                if let data = await task.cancelByProducingResumeData() { Self.saveResumeData(data, id, path) }
+            }
+        }
+    }
+
+    /// Stops a download for good and throws away what had arrived.
+    func cancel(_ spec: LocalModelSpec) {
+        let id = spec.id
+        retryTasks[id]?.cancel()
+        retryTasks[id] = nil
+        retries[id] = nil
+        cancelling.insert(id)
+        states[id] = .notInstalled
+        plans[id] = nil
+        Task {
+            for task in await session.allTasks where task.taskDescription?.hasPrefix(id + "|") == true { task.cancel() }
+            try? FileManager.default.removeItem(at: Self.partial(id))
+            // The cancelled tasks report back a moment later; by then the folder must stay gone.
+            try? await Task.sleep(for: .seconds(3))
+            try? FileManager.default.removeItem(at: Self.partial(id))
+            cancelling.remove(id)
         }
     }
 
@@ -193,10 +265,63 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
         onChange?()
     }
 
+    /// The connection was lost (or the server stumbled): wait a little, then carry on from where it stopped. After a good many
+    /// tries in a row with no progress it waits, paused, for the person.
+    private func dropped(_ id: String) {
+        guard retryTasks[id] == nil, state(id) != .installed else { return }
+        if case .paused = state(id) { return }
+        let fraction = state(id).fraction ?? 0
+        let attempt = retries[id] ?? 0
+        guard let delay = DownloadRecovery.delay(afterAttempts: attempt) else {
+            retries[id] = 0
+            states[id] = .paused(fraction)
+            return
+        }
+        retries[id] = attempt + 1
+        states[id] = .reconnecting(fraction)
+        retryTasks[id] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.retryTasks[id] = nil
+            self?.restart(id)
+        }
+    }
+
+    private func restart(_ id: String) {
+        guard case .reconnecting = state(id), let spec = LocalModelSpec.spec(id) else { return }
+        begin(spec, automatic: true)
+    }
+
+    private func connectionIsBack() {
+        for (id, state) in states { if case .reconnecting = state { retryTasks[id]?.cancel(); retryTasks[id] = nil; restart(id) } }
+    }
+
+    nonisolated private static func fraction(_ plan: Plan) -> Double {
+        guard plan.total > 0 else { return 0 }
+        return min(1, Double(plan.files.filter { plan.done.contains($0.path) }.reduce(0) { $0 + $1.size }) / Double(plan.total))
+    }
+
+    // MARK: what a stopped file has fetched so far
+
+    nonisolated private static func resumeURL(_ id: String, _ path: String) -> URL { partial(id).appending(path: DownloadRecovery.resumeFileName(path)) }
+    nonisolated private static func saveResumeData(_ data: Data, _ id: String, _ path: String) {
+        guard !data.isEmpty, FileManager.default.fileExists(atPath: partial(id).path) else { return }
+        try? data.write(to: resumeURL(id, path), options: .atomic)
+    }
+    nonisolated private static func takeResumeData(_ id: String, _ path: String) -> Data? {
+        let url = resumeURL(id, path)
+        defer { try? FileManager.default.removeItem(at: url) }
+        return (try? Data(contentsOf: url)).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     private func update(_ id: String) {
         guard let plan = plans[id], plan.total > 0 else { return }
         let received = plan.files.reduce(Int64(0)) { $0 + (plan.done.contains($1.path) ? $1.size : (plan.received[$1.path] ?? 0)) }
-        states[id] = .downloading(min(1, Double(received) / Double(plan.total)))
+        // A late report from a task that was just paused or stopped must not start the bar again.
+        switch state(id) {
+        case .downloading, .reconnecting, .waitingForWiFi: states[id] = .downloading(min(1, Double(received) / Double(plan.total)))
+        case .paused, .failed, .notInstalled, .installed: break
+        }
     }
 
     nonisolated private static func partialFile(_ id: String, _ path: String) -> URL? { partial(id).appending(path: path) }
@@ -221,6 +346,9 @@ struct LocalModelSpec: Identifiable, Hashable, Sendable {
         guard let plan = plans[id] ?? Self.readPlan(id) else { return }
         let target = Self.folder(id)
         try? FileManager.default.removeItem(at: target)
+        for file in (try? FileManager.default.contentsOfDirectory(atPath: Self.partial(id).path)) ?? [] where file.hasPrefix("resume-") {
+            try? FileManager.default.removeItem(at: Self.partial(id).appending(path: file))
+        }
         do {
             try FileManager.default.moveItem(at: Self.partial(id), to: target)
             try? FileManager.default.removeItem(at: target.appending(path: "plan.json"))
@@ -252,7 +380,10 @@ extension LocalModelStore: URLSessionDownloadDelegate {
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteTotalBytesWritten written: Int64, totalBytesExpectedToWrite expected: Int64) {
         guard let parts = downloadTask.taskDescription?.split(separator: "|", maxSplits: 1).map(String.init), parts.count == 2 else { return }
         Task { @MainActor in
+            let before = self.plans[parts[0]]?.received[parts[1]] ?? 0
             self.plans[parts[0]]?.received[parts[1]] = written
+            // Bytes are arriving again: the next lost connection starts the waiting over.
+            if written > before { self.retries[parts[0]] = 0 }
             self.update(parts[0])
         }
     }
@@ -264,7 +395,8 @@ extension LocalModelStore: URLSessionDownloadDelegate {
         let destination = Self.partial(id).appending(path: path)
         let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
         let problem: String? = {
-            guard status == 200 else { return "\(path) was not available (\(status))." }
+            // 206: a file that was carried on from where it stopped comes whole, but with the answer to the part that was asked for.
+            guard status == 200 || status == 206 else { return "\(path) was not available (\(status))." }
             do {
                 try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? FileManager.default.removeItem(at: destination)
@@ -274,7 +406,11 @@ extension LocalModelStore: URLSessionDownloadDelegate {
         }()
         Task { @MainActor in
             guard var plan = self.plans[id] ?? Self.readPlan(id), let file = plan.files.first(where: { $0.path == path }) else { return }
-            if let problem { self.states[id] = .failed(problem); return }
+            if let problem {
+                // A busy server (5xx, 429) is the same as a lost connection: try again in a moment.
+                if DownloadRecovery.isTransient(status: status) { self.dropped(id) } else { self.states[id] = .failed(problem) }
+                return
+            }
             // Size always, and the checksum of the big files: a model that is cut short or altered must not load.
             let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int64) ?? -1
             if size != file.size && file.size > 0 { try? FileManager.default.removeItem(at: destination); self.states[id] = .failed(LocalModelError.damaged(path).localizedDescription); return }
@@ -290,11 +426,19 @@ extension LocalModelStore: URLSessionDownloadDelegate {
     }
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let error, let id = task.taskDescription?.split(separator: "|").first.map(String.init) else { return }
-        if (error as NSError).code == NSURLErrorCancelled { return }
+        guard let error, let parts = task.taskDescription?.split(separator: "|", maxSplits: 1).map(String.init), parts.count == 2 else { return }
+        let id = parts[0], path = parts[1]
+        let nsError = error as NSError
+        // A file that was cut short says how far it got: that is what a later try goes on from (also when the system stopped it,
+        // for instance when the app was swiped away).
+        let resumeData = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
         Task { @MainActor in
+            if let resumeData, !self.cancelling.contains(id), self.state(id) != .installed { Self.saveResumeData(resumeData, id, path) }
+            // Stopped on purpose (paused, or taken away): not a failure.
+            if nsError.code == NSURLErrorCancelled { return }
             if case .installed = self.state(id) { return }
-            self.states[id] = .failed(error.localizedDescription)
+            if case .paused = self.state(id) { return }
+            if DownloadRecovery.isTransient(error) { self.dropped(id) } else { self.states[id] = .failed(error.localizedDescription) }
         }
     }
 
@@ -319,4 +463,26 @@ extension LocalModelStore: URLSessionDownloadDelegate {
         while let chunk = try? handle.read(upToCount: 8 * 1024 * 1024), !chunk.isEmpty { hasher.update(data: chunk) }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
+}
+
+/// When a download that lost its connection tries again, and which errors count as a lost connection.
+enum DownloadRecovery {
+    /// Seconds to wait before the first, second, … try in a row; after the last one the download waits, paused, for the person.
+    static let delays: [Double] = [2, 5, 10, 20, 40, 60, 120, 180]
+    static func delay(afterAttempts attempts: Int) -> Double? { delays.indices.contains(attempts) ? delays[attempts] : nil }
+
+    private static let transient: Set<Int> = [
+        NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut, NSURLErrorNotConnectedToInternet, NSURLErrorDataNotAllowed,
+        NSURLErrorCannotConnectToHost, NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed, NSURLErrorInternationalRoamingOff,
+        NSURLErrorCallIsActive, NSURLErrorResourceUnavailable, NSURLErrorCannotLoadFromNetwork, NSURLErrorBackgroundSessionWasDisconnected,
+    ]
+    static func isTransient(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == NSURLErrorDomain && transient.contains(error.code)
+    }
+    /// A server that is busy or stumbling (not one that says the file is not there).
+    static func isTransient(status: Int) -> Bool { status == 408 || status == 429 || (500...599).contains(status) }
+
+    /// The file a stopped download's resume point is kept in, one per model file.
+    static func resumeFileName(_ path: String) -> String { "resume-" + path.replacingOccurrences(of: "/", with: "__") }
 }

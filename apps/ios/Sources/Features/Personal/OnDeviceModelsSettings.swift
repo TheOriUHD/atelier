@@ -26,7 +26,7 @@ struct OnDeviceModelsSettings: View {
             SettingsSection(title: "Models", footer: "Each one downloads once from Hugging Face and stays on this \(device). Delete one any time to get the room back.") {
                 ForEach(LocalModelSpec.catalog) { spec in row(spec) }
             }
-            SettingsSection(title: "Downloads", footer: "Large downloads wait for Wi-Fi unless you allow mobile data.") {
+            SettingsSection(title: "Downloads", footer: "Large downloads wait for Wi-Fi unless you allow mobile data. A download can be paused, and one that loses its connection carries on by itself from where it stopped.") {
                 ToggleRow(title: "Use mobile data", subtitle: "For the next download.", isOn: Binding(get: { models.allowsCellular }, set: { models.allowsCellular = $0 }))
                 ValueRow(title: "Used on this \(device)", value: ByteCountFormatter.string(fromByteCount: models.bytesUsed, countStyle: .file))
                 ValueRow(title: "Free", value: ByteCountFormatter.string(fromByteCount: LocalModelStore.freeBytes, countStyle: .file))
@@ -68,6 +68,12 @@ struct OnDeviceModelsSettings: View {
             Text(spec.blurb).font(.footnote).foregroundStyle(Theme.inkSecondary)
             switch state {
             case .downloading(let fraction): ProgressView(value: fraction).tint(Theme.clay)
+            case .reconnecting(let fraction):
+                ProgressView(value: fraction).tint(Theme.clay)
+                Label("Connection lost. Trying again…", systemImage: "wifi.exclamationmark").font(.footnote).foregroundStyle(Theme.inkMuted)
+            case .paused(let fraction):
+                ProgressView(value: fraction).tint(Theme.inkMuted)
+                Text(fraction > 0 ? "Paused at \(Int((fraction * 100).rounded())) %. What has arrived is kept." : "Paused. What has arrived is kept.").font(.footnote).foregroundStyle(Theme.inkMuted)
             case .waitingForWiFi: Label("Waiting for Wi-Fi", systemImage: "wifi").font(.footnote).foregroundStyle(Theme.inkMuted)
             case .failed(let why): Text(why).font(.footnote).foregroundStyle(Theme.danger)
             default: EmptyView()
@@ -75,12 +81,26 @@ struct OnDeviceModelsSettings: View {
         }.padding(.vertical, 4)
     }
 
+    /// Stops a download for good and throws away what had arrived.
+    private func stopButton(_ spec: LocalModelSpec) -> some View {
+        Button { models.cancel(spec) } label: { Image(systemName: "xmark") }
+            .buttonStyle(.borderless).accessibilityLabel("Stop and remove the download of \(spec.name)")
+    }
+
     @ViewBuilder private func action(_ spec: LocalModelSpec, _ state: LocalModelStore.State) -> some View {
         switch state {
         case .installed:
             Button(role: .destructive) { asking = spec } label: { Image(systemName: "trash") }.buttonStyle(.borderless).accessibilityLabel("Delete \(spec.name)")
-        case .downloading, .waitingForWiFi:
-            Button("Stop") { models.cancel(spec) }.buttonStyle(.bordered).controlSize(.small)
+        case .downloading, .reconnecting, .waitingForWiFi:
+            HStack(spacing: 8) {
+                Button("Pause") { models.pause(spec) }.buttonStyle(.bordered).controlSize(.small)
+                stopButton(spec)
+            }
+        case .paused:
+            HStack(spacing: 8) {
+                Button { models.download(spec) } label: { Label("Resume", systemImage: "play.fill") }.buttonStyle(.bordered).controlSize(.small).tint(Theme.clay)
+                stopButton(spec)
+            }
         case .failed, .notInstalled:
             Button { models.download(spec) } label: { Label(state == .notInstalled ? "Download" : "Try again", systemImage: "arrow.down.circle") }.buttonStyle(.bordered).controlSize(.small).tint(Theme.clay)
         }

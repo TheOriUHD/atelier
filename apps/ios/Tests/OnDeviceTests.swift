@@ -49,6 +49,38 @@ import XCTest
         }
     }
 
+    func testNoModelDescriptionClaimsASpeed() {
+        // Speeds depend on the phone; the app only shows one that was measured.
+        for spec in LocalModelSpec.catalog {
+            let text = spec.blurb.lowercased()
+            XCTAssertFalse(text.contains("a second") || text.contains("tokens/s") || text.contains("tok/s") || text.contains("per second"), spec.name)
+        }
+    }
+
+    func testALostConnectionIsRetriedAndAMissingFileIsNot() {
+        XCTAssertTrue(DownloadRecovery.isTransient(URLError(.networkConnectionLost)))
+        XCTAssertTrue(DownloadRecovery.isTransient(URLError(.timedOut)))
+        XCTAssertTrue(DownloadRecovery.isTransient(URLError(.notConnectedToInternet)))
+        XCTAssertFalse(DownloadRecovery.isTransient(URLError(.badURL)))
+        XCTAssertFalse(DownloadRecovery.isTransient(URLError(.cancelled)))
+        XCTAssertTrue(DownloadRecovery.isTransient(status: 503))
+        XCTAssertTrue(DownloadRecovery.isTransient(status: 429))
+        XCTAssertFalse(DownloadRecovery.isTransient(status: 404))
+    }
+
+    func testTheWaitBetweenTriesGrowsAndEnds() {
+        let waits = (0..<20).compactMap { DownloadRecovery.delay(afterAttempts: $0) }
+        XCTAssertEqual(waits, waits.sorted())
+        XCTAssertEqual(waits.first, 2)
+        XCTAssertNil(DownloadRecovery.delay(afterAttempts: waits.count))
+    }
+
+    func testEachFileKeepsItsOwnResumePoint() {
+        XCTAssertEqual(DownloadRecovery.resumeFileName("model.safetensors"), "resume-model.safetensors")
+        XCTAssertNotEqual(DownloadRecovery.resumeFileName("a.json"), DownloadRecovery.resumeFileName("b.json"))
+        XCTAssertFalse(DownloadRecovery.resumeFileName("a/b.json").contains("/"))
+    }
+
     func testTheModelListTellsTheServerWhatItNeeds() async throws {
         // Nothing is downloaded here: an empty list is still a list.
         var body = Data()
