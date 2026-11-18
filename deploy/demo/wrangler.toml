@@ -1,0 +1,24 @@
+# The App Review demo server (README.md): the Atelier server in a Cloudflare Container behind this Worker.
+#   cd deploy/demo && npm install && node scripts/seed.mjs ... && npx wrangler deploy
+name = "atelier-demo"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "demo.atelierhq.dev", custom_domain = true }]
+
+[[containers]]
+class_name = "AtelierDemo"
+# Builds the image from the Dockerfile here (Docker must be running) and pushes it to Cloudflare's registry.
+image = "./Dockerfile"
+# 1 GiB of memory, a quarter of a vCPU, 4 GB of disk: billed by what is provisioned while it runs.
+instance_type = "basic"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "ATELIER_DEMO"
+class_name = "AtelierDemo"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AtelierDemo"]
