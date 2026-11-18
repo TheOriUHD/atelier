@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ComputerApp, ComputerMode } from '@atelier/protocol';
 import { Button, Dialog, DialogContent, SegmentedControl, Switch, TextField } from '../../components/ui/index.ts';
 import { refreshComputer, useComputerStatus } from '../../lib/computer.ts';
-import { desktop } from '../../lib/platform.ts';
+import { desktop, openExternal } from '../../lib/platform.ts';
 import type { SettingId } from './search-index.ts';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useWrite } from './use-setting.ts';
@@ -168,9 +168,12 @@ function PermissionRow({ id, granted, kind }: { id: SettingId; granted: boolean;
   );
 }
 
+/** The extension's page in the Chrome Web Store (Brave, Edge, Arc and Vivaldi install from it too). */
+const CHROME_STORE = 'https://chromewebstore.google.com/detail/atelier-for-chrome/efpchbhecdgeeadmefahpgidnfplajln';
+
 /**
- * Atelier for Chrome: connected (and in which browser), or how to install it. Until it is in the Chrome Web Store it is
- * loaded unpacked from the app's own folder.
+ * Atelier for Chrome: connected (and in which browser), or how to install it: from the Chrome Web Store, or unpacked
+ * from the app's own folder (a browser that doesn't take the store's extensions).
  */
 function BrowserRow() {
   const { data: browser } = useQuery({ queryKey: ['desktop', 'browser'], queryFn: () => desktop!.browserExtension!.status(), refetchInterval: 5_000 });
@@ -180,13 +183,16 @@ function BrowserRow() {
       {!browser.connected && (
         <div className="flex flex-col gap-2 text-body text-fg-muted">
           <p>{browser.problem ?? 'Not connected.'}</p>
-          <ol className="list-decimal pl-5">
-            <li>In Chrome (or Brave, Edge, Arc), open chrome://extensions and turn on Developer mode.</li>
-            <li>Choose Load unpacked and pick the Atelier for Chrome folder.</li>
-          </ol>
-          <Button size="sm" className="self-start" onClick={() => void desktop!.browserExtension!.reveal()}>
-            Show the folder
-          </Button>
+          <p>Add Atelier for Chrome from the Chrome Web Store, in Chrome or Brave, Edge or Arc. This row says Connected within a few seconds of adding it.</p>
+          <p>While the extension is new, Chrome may say it is “not trusted by Enhanced Safe Browsing”. That is about its publisher having no track record yet: choose Continue to install.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => openExternal(CHROME_STORE)}>
+              Open the Chrome Web Store
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void desktop!.browserExtension!.reveal()}>
+              Show the folder to load it by hand
+            </Button>
+          </div>
         </div>
       )}
     </SettingRow>

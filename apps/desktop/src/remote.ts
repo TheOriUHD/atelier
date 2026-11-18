@@ -57,6 +57,14 @@ const computer = (sessionId: string, method: string, params: unknown) =>
     process.parentPort.postMessage({ kind: 'req', id, op: 'computer', sessionId, method, params } satisfies BackendToMain);
   }).then((json) => JSON.parse(json) as unknown);
 
+/** Atelier for Chrome for the server's sessions: main holds the extension's connection (browser/bridge.ts). */
+const browser = (method: string, params: unknown) =>
+  new Promise<string>((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    process.parentPort.postMessage({ kind: 'req', id, op: 'browser', method, params } satisfies BackendToMain);
+  }).then((json) => JSON.parse(json) as unknown);
+
 const runnerDir = process.env.ATELIER_RUNNER_DIR;
 const runnerBinary = runnerDir ? join(runnerDir, runnerBinaryName(process.platform, process.arch)) : null;
 const trustedFolders = () => readTrustedFolders(process.env.ATELIER_TRUSTED_FOLDERS!);
@@ -70,6 +78,7 @@ const services = deviceServices({
   trustedFolders,
   chatgptChat,
   computer,
+  browser,
 });
 const deviceLink = createDeviceLink({
   serverUrl,

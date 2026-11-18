@@ -421,6 +421,19 @@ describe('decide', () => {
     expect(decide(click, ctx({ allow: ['ComputerAction'] })).behavior).toBe('allow');
   });
 
+  it('lets Atelier for Chrome work in its own tabs without asking, in every mode that acts, and keeps rules in charge', () => {
+    const open = { name: 'Browser', input: { action: 'open', url: 'https://example.com' } };
+    const click = { name: 'Browser', input: { action: 'click', tab: 3, ref: 4, summary: 'Opens the order' } };
+    const read = { name: 'Browser', input: { action: 'read', tab: 3 } };
+    for (const mode of ['default', 'auto', 'acceptEdits', 'bypassPermissions'] as const) {
+      for (const call of [open, click, read]) expect(decide(call, ctx({}, mode)).behavior, `${call.input.action} ${mode}`).toBe('allow');
+    }
+    // Plan mode doesn't act, and a rule the person wrote still wins.
+    expect(decide(click, ctx({}, 'plan')).behavior).toBe('deny');
+    expect(decide(click, ctx({ deny: ['Browser'] }, 'bypassPermissions')).behavior).toBe('deny');
+    expect(decide(click, ctx({ ask: ['Browser'] }, 'auto')).behavior).toBe('ask');
+  });
+
   it('follows the mode defaults', () => {
     const edit = { name: 'Edit', input: { file_path: '/work/app/src/a.ts', old_string: 'a', new_string: 'b' } };
     expect(decide({ name: 'Read', input: { file_path: 'a.ts' } }, ctx()).behavior).toBe('allow');

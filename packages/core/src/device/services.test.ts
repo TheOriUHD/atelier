@@ -602,4 +602,27 @@ describe('computer use lent to a server', () => {
     expect(without.services).not.toContain('computer');
     await expect(without.request({ op: 'computer', sessionId: 's1', method: 'screenshot', params: {} })).rejects.toMatchObject({ code: 'unsupported' });
   });
+
+  it('lends Atelier for Chrome only where the app has it, and hands each call to the desktop', async () => {
+    const calls: [string, unknown][] = [];
+    const lent = deviceServices({
+      deviceName: 'Laptop',
+      lending: async () => lending,
+      scratchDir: join(dir, 'scratch'),
+      runnerDir: null,
+      ssh: 'ssh',
+      sshDir: join(dir, 'ssh'),
+      browser: async (method, params) => (calls.push([method, params]), method === 'status' ? { connected: true, browser: 'Google Chrome' } : { tab: 3 }),
+    });
+    expect(lent.services).toContain('browser');
+    expect(await lent.request({ op: 'browser', method: 'status', params: {} })).toEqual({ connected: true, browser: 'Google Chrome' });
+    expect(await lent.request({ op: 'browser', method: 'tabs.open', params: { url: 'https://example.com' } })).toEqual({ tab: 3 });
+    expect(calls).toEqual([
+      ['status', {}],
+      ['tabs.open', { url: 'https://example.com' }],
+    ]);
+    const without = services();
+    expect(without.services).not.toContain('browser');
+    await expect(without.request({ op: 'browser', method: 'status', params: {} })).rejects.toMatchObject({ code: 'unsupported' });
+  });
 });

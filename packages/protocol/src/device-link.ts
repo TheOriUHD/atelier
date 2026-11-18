@@ -34,9 +34,10 @@ export const DEVICE_LINK_PROTOCOL = 2;
  * its network: personal model servers and connectors), `ws` (WebSockets to those same addresses, for an image server's
  * progress), `mcp` (personal connectors that run a program there), `home` (the person's own instructions, skills and
  * Claude Code settings in its home folder), `chatgptChat` (the ChatGPT window of the desktop app there), `computer`
- * (computer use there: the person turns it on and allows each app on that computer, never the server).
+ * (computer use there: the person turns it on and allows each app on that computer, never the server), `browser`
+ * (Atelier for Chrome there: the browser extension the person installed on that computer, working in tabs of its own).
  */
-export const DeviceService = z.enum(['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', 'chatgptChat', 'computer']);
+export const DeviceService = z.enum(['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', 'chatgptChat', 'computer', 'browser']);
 export type DeviceService = z.infer<typeof DeviceService>;
 
 /** A personal connector the person allowed to run here, by what runs: see `connectorFingerprintInput`. */
@@ -206,6 +207,8 @@ export const DeviceRequest = z.discriminatedUnion('op', [
    * The desktop's own controller decides what each session may do: apps are allowed only on its cards, never by the server.
    */
   z.object({ op: z.literal('computer'), sessionId: z.string().max(100), method: z.string().min(1).max(64), params: z.unknown() }),
+  /** One Atelier for Chrome call there (`BrowserMethods`; `status` asks whether the extension is connected). */
+  z.object({ op: z.literal('browser'), method: z.string().min(1).max(64), params: z.unknown() }),
 ]);
 export type DeviceRequest = z.infer<typeof DeviceRequest>;
 
@@ -223,6 +226,7 @@ export const REQUEST_SERVICE: Record<DeviceRequest['op'], DeviceService> = {
   'home.read': 'home',
   'mcp.import': 'mcp',
   computer: 'computer',
+  browser: 'browser',
 };
 
 /** `mcp.import`'s answer. */

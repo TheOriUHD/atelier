@@ -164,8 +164,6 @@ Linux (`.deb` and AppImage, x86-64 and ARM64) ([Install](/install/#where-the-dow
   video model ([Add a video provider](/video-generation/#add-a-video-provider)).
 - **Codespaces** are implemented but not verified against a real GitHub account, so treat them as experimental. They run
   on your GitHub account, under its usage and billing rules ([Codespaces](/code/#codespaces)).
-- **Atelier for Chrome** isn't in the Chrome Web Store yet: load it unpacked from the folder **Settings › Computer use ›
-  Atelier for Chrome** shows ([Atelier for Chrome](/computer-use/#web-pages-atelier-for-chrome)).
 - **Connectors** act as the account that signed in or whose token was pasted. GitHub's hosted server may need Copilot on
   your account ([Ready-made entries](/connectors/#ready-made-entries)).
 - **The project's own services.** Co-op between computers goes through the encrypted relay at `coop.atelierhq.dev`, or

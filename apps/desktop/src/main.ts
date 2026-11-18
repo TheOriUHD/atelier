@@ -403,10 +403,12 @@ function startBackend(): void {
         child.postMessage({ kind: 'res', id: m.id, ok: false, error: error instanceof Error ? error.message : String(error) } satisfies MainToBackend);
       }
     } else if (m.kind === 'req' && m.op === 'browser') {
-      // Atelier for Chrome, for the desktop's own backend (a server's sessions reach it through the device link later).
+      // Atelier for Chrome, for the desktop's own backend, and for the server it is signed in to (its sessions reach this
+      // computer through the device link, where the person turned computer use on, as the row in Settings is shown).
       try {
-        if (connection?.mode !== 'local') throw new Error('The browser is for this computer’s own sessions.');
+        if (connection?.mode !== 'local' && connection?.mode !== 'server') throw new Error('The browser is for this computer’s own sessions.');
         if (!browserBridge) throw new Error('Atelier for Chrome isn’t available in this app.');
+        if (connection.mode === 'server' && !(await computer.available())) throw new Error('Computer use is turned off in the desktop app there: turn it on under Settings › Computer use.');
         const value = m.method === 'status' ? browserBridge.status() : await browserBridge.call(m.method as keyof BrowserMethods, m.params as never);
         child.postMessage({ kind: 'res', id: m.id, ok: true, value: JSON.stringify(value) } satisfies MainToBackend);
       } catch (error) {

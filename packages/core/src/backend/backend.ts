@@ -330,11 +330,13 @@ const NOT_OVER_NETWORK: ReadonlySet<keyof AppContract['procedures']> = new Set<k
 ]);
 
 /** What a server takes from its people's desktop devices (ARCHITECTURE §21, device services). */
-const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat', 'computer'];
+const SERVER_DEVICE_SERVICES: readonly DeviceService[] = ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat', 'computer', 'browser'];
 
 
 /** How long one computer-use call through a person's desktop may take: a batch of steps waits on apps there. */
 const COMPUTER_CALL_MS = 5 * 60_000;
+/** One Atelier for Chrome call there: a page that loads slowly, or a screenshot of a big one. */
+const BROWSER_CALL_MS = 2 * 60_000;
 
 /** A merged chat has no plan to approve (ExitPlanMode is Code's): Plan, an admin's default made for Code, asks instead. */
 export const workingMode = (mode: PermissionMode, mergedChat: boolean): PermissionMode => (!mergedChat ? mode : mode === 'plan' ? 'default' : mode === 'planAuto' ? 'auto' : mode);
@@ -395,11 +397,11 @@ export async function createBackend(platform: Platform): Promise<Backend> {
    */
   const lastDevice = new Map<string, string>();
   const lastDeviceOf = new Map<string, string>();
-  const computerDevice = async (session: { id: string; userId: string | null; workspaceId: string | null }): Promise<{ device: string | null; folderDevice: string | null }> => {
+  const computerDevice = async (session: { id: string; userId: string | null; workspaceId: string | null }, service: DeviceService = 'computer'): Promise<{ device: string | null; folderDevice: string | null }> => {
     const userId = session.userId;
     if (!userId) return { device: null, folderDevice: null };
     const folderDevice = session.workspaceId ? await workspaceManager.deviceOf(userId, session.workspaceId) : null;
-    const lends = (id: string) => !!links.info(userId, id)?.services.includes('computer');
+    const lends = (id: string) => !!links.info(userId, id)?.services.includes(service);
     const device = computerDeviceFor({ folderDevice, lastInSession: lastDevice.get(session.id), lastAnywhere: lastDeviceOf.get(userId), devices: links.devices(userId), lends });
     return { device, folderDevice };
   };
@@ -1414,7 +1416,22 @@ export async function createBackend(platform: Platform): Promise<Backend> {
             },
           }
         : {}),
-    ...(platform.browser ? { browser: { call: platform.browser.call } } : {}),
+    ...(platform.browser
+      ? { browser: { call: (_sessionId, method, params) => platform.browser!.call(method, params) } }
+      : platform.surface === 'web'
+        ? {
+            // On a server: Atelier for Chrome on the person's own computer, lent over the device link by its desktop app, in
+            // tabs of its own (the same computer as computer use: where the session's folder is, else where they last wrote).
+            browser: {
+              call: async (sessionId, method, params) => {
+                const row = await sessions.getRow(sessionId);
+                const { device } = row ? await computerDevice(row, 'browser') : { device: null };
+                if (!device || !row?.userId) throw new Error('No computer of yours has Atelier for Chrome connected: open the Atelier desktop app with the extension installed in Chrome.');
+                return (await links.request(row.userId, device, { op: 'browser', method, params }, BROWSER_CALL_MS)) as never;
+              },
+            },
+          }
+        : {}),
     // AddConnector, once the person agreed: one of their own connectors on a server, Settings › Connectors on a desktop.
     addConnector: async (session, c) => {
       const toolNames = (status: McpServerStatus) => status.tools.filter((t) => t.enabled).map((t) => mcpToolName(c.name, t.name));

@@ -4,6 +4,14 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.4] — 2026-11-18
+
+- **Atelier for Chrome works for chats on a server.** A desktop app connected to an Atelier server now lends the extension to it as a device service (`browser`, next to `computer`), while Computer use is on in the app. Before, only the desktop's own backend offered the Browser tool, so a chat on a server fell back to driving the Chrome app through computer use and asking for it. The server picks the computer the way it does for computer use (where the session's folder is, else the one last written from) and offers the Browser tool only while that computer's extension is connected. Older servers ignore the new service; the server needs 0.10.4.
+
+- **No question for each step in Atelier for Chrome.** The Browser tool works only in tabs of its own, so it no longer asks before opening pages, clicking or typing, in any mode. A rule you wrote (`Browser`) still applies, and the assistant still asks in the chat before accepting terms, sending something or paying, and never types passwords.
+
+- **Atelier for Chrome is in the Chrome Web Store.** Settings › Computer use › Atelier for Chrome opens its store page instead of describing "Load unpacked" (the folder stays available for a browser that won't take the store's extensions), the sidebar link goes there, and the docs explain Chrome's "not trusted by Enhanced Safe Browsing" note that a new publisher gets.
+
 ## [0.10.3] — 2026-11-18
 
 - **Pairing a phone is easier to start and says when it worked.** The QR button is now an icon at the right of the **Profile** heading at the top of Settings › Account (hover: **Pair mobile app**) instead of a section at the bottom, and the code is drawn black on white in every theme. When the phone has scanned it, the window turns into a confirmation such as "Philipp’s iPhone is logged in!" with "iPhone 17 Pro · Atelier 1.0" under it (new `account.phonePaired` event; the phone says what it is in `auth.terminalPoll`'s `device`). In the Atelier app for iPhone and iPad the scanner offers a lens choice (0.5×, 1×, 2×…) on phones with more than one back camera, a flashlight button that only you turn on, a light tick when a code is read and a short run of haptic taps when you are signed in.

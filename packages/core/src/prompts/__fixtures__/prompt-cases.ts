@@ -339,7 +339,7 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
       ...(c.browser
         ? {
             browser: {
-              call: (async (method: string) => {
+              call: (async (_sessionId: string, method: string) => {
                 if (method === 'status') return { connected: true, browser: 'Google Chrome 157', extensionVersion: '0.1.0' };
                 throw new Error('Not in a prompt snapshot.');
               }) as never,

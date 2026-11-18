@@ -9,8 +9,14 @@ import { textOutput, type DescribeContext, type Tool, type ToolOutput } from './
 
 export type BrowserCall = <M extends keyof BrowserMethods>(method: M, params: BrowserMethods[M]['params']) => Promise<BrowserMethods[M]['result']>;
 
+/**
+ * A browser call for one session: on the desktop's own backend the one browser there, on a server the browser of the
+ * person's computer that lends it (`browser` device service), which the session decides.
+ */
+export type BrowserSessionCall = <M extends keyof BrowserMethods>(sessionId: string, method: M, params: BrowserMethods[M]['params']) => Promise<BrowserMethods[M]['result']>;
+
 export interface BrowserToolDeps {
-  call: BrowserCall;
+  call: BrowserSessionCall;
   blobs: Pick<BlobStore, 'put'>;
 }
 
@@ -111,7 +117,7 @@ export function createBrowserTool(deps: BrowserToolDeps): Tool<BrowserInput> & {
     async closeTabs(sessionId) {
       const tabs = opened.get(sessionId);
       opened.delete(sessionId);
-      for (const tab of tabs ?? []) await deps.call('tabs.close', { tab }).catch(() => undefined);
+      for (const tab of tabs ?? []) await deps.call(sessionId, 'tabs.close', { tab }).catch(() => undefined);
     },
     name: 'Browser',
     description: describe,
@@ -119,44 +125,45 @@ export function createBrowserTool(deps: BrowserToolDeps): Tool<BrowserInput> & {
     readOnly: false,
     compactExample: { action: 'open', url: 'https://example.com' },
     async run(input, ctx): Promise<ToolOutput> {
+      const call: BrowserCall = (method, params) => deps.call(ctx.sessionId, method, params);
       try {
         switch (input.action) {
           case 'open': {
             need(input, 'url');
-            const tab = await deps.call('tabs.open', { url: input.url! });
+            const tab = await call('tabs.open', { url: input.url! });
             if (!opened.has(ctx.sessionId)) opened.set(ctx.sessionId, new Set());
             opened.get(ctx.sessionId)!.add(tab.tab);
-            const page = await deps.call('page.read', { tab: tab.tab, text: true, elements: true });
+            const page = await call('page.read', { tab: tab.tab, text: true, elements: true });
             return textOutput(pageText(page));
           }
           case 'navigate': {
             need(input, 'tab', 'url');
-            await deps.call('page.navigate', { tab: input.tab!, url: input.url! });
-            return textOutput(pageText(await deps.call('page.read', { tab: input.tab!, text: true, elements: true })));
+            await call('page.navigate', { tab: input.tab!, url: input.url! });
+            return textOutput(pageText(await call('page.read', { tab: input.tab!, text: true, elements: true })));
           }
           case 'back': {
             need(input, 'tab');
-            await deps.call('page.back', { tab: input.tab! });
-            return textOutput(pageText(await deps.call('page.read', { tab: input.tab!, text: true, elements: true })));
+            await call('page.back', { tab: input.tab! });
+            return textOutput(pageText(await call('page.read', { tab: input.tab!, text: true, elements: true })));
           }
           case 'read':
             need(input, 'tab');
-            return textOutput(pageText(await deps.call('page.read', { tab: input.tab!, text: true, elements: true })));
+            return textOutput(pageText(await call('page.read', { tab: input.tab!, text: true, elements: true })));
           case 'find':
             need(input, 'tab', 'query');
-            return textOutput(pageText(await deps.call('page.find', { tab: input.tab!, query: input.query! })));
+            return textOutput(pageText(await call('page.find', { tab: input.tab!, query: input.query! })));
           case 'tabs': {
-            const { tabs } = await deps.call('tabs.list', {});
+            const { tabs } = await call('tabs.list', {});
             return textOutput(tabs.length ? tabs.map(tabLine).join('\n') : 'No tabs of Atelier’s are open: open one.');
           }
           case 'close':
             need(input, 'tab');
-            await deps.call('tabs.close', { tab: input.tab! });
+            await call('tabs.close', { tab: input.tab! });
             opened.get(ctx.sessionId)?.delete(input.tab!);
             return textOutput(`Closed tab ${input.tab}.`);
           case 'screenshot': {
             need(input, 'tab');
-            const shot = await deps.call('page.screenshot', { tab: input.tab!, maxWidth: 1280 });
+            const shot = await call('page.screenshot', { tab: input.tab!, maxWidth: 1280 });
             const { sha256 } = await deps.blobs.put(new Uint8Array(Buffer.from(shot.data, 'base64')), 'image/jpeg');
             return {
               content: [
@@ -167,28 +174,28 @@ export function createBrowserTool(deps: BrowserToolDeps): Tool<BrowserInput> & {
           }
           case 'click': {
             need(input, 'tab');
-            const after = await deps.call('page.click', { ...target(input), ...(input.count ? { count: input.count } : {}) });
-            return textOutput(await afterAction(deps, input, after));
+            const after = await call('page.click', { ...target(input), ...(input.count ? { count: input.count } : {}) });
+            return textOutput(await afterAction(call, input, after));
           }
           case 'type': {
             need(input, 'tab', 'text');
-            const after = await deps.call('page.type', { ...target(input), text: input.text!, ...(input.replace ? { replace: true } : {}), ...(input.submit ? { submit: true } : {}) });
-            return textOutput(await afterAction(deps, input, after));
+            const after = await call('page.type', { ...target(input), text: input.text!, ...(input.replace ? { replace: true } : {}), ...(input.submit ? { submit: true } : {}) });
+            return textOutput(await afterAction(call, input, after));
           }
           case 'key': {
             need(input, 'tab', 'keys');
-            const after = await deps.call('page.key', { tab: input.tab!, keys: input.keys! });
-            return textOutput(await afterAction(deps, input, after));
+            const after = await call('page.key', { tab: input.tab!, keys: input.keys! });
+            return textOutput(await afterAction(call, input, after));
           }
           case 'scroll': {
             need(input, 'tab', 'dy');
-            const after = await deps.call('page.scroll', { ...target(input), dy: input.dy! });
-            return textOutput(await afterAction(deps, input, after));
+            const after = await call('page.scroll', { ...target(input), dy: input.dy! });
+            return textOutput(await afterAction(call, input, after));
           }
           case 'select': {
             need(input, 'tab', 'ref', 'option');
-            const after = await deps.call('page.select', { ...target(input), option: input.option! });
-            return textOutput(await afterAction(deps, input, after));
+            const after = await call('page.select', { ...target(input), option: input.option! });
+            return textOutput(await afterAction(call, input, after));
           }
           default:
             return textOutput(`Unknown action "${String((input as { action?: unknown }).action)}".`, true);
@@ -201,16 +208,16 @@ export function createBrowserTool(deps: BrowserToolDeps): Tool<BrowserInput> & {
 }
 
 /** After an action: where the tab is now and its elements, so the next step needs no read of its own. */
-async function afterAction(deps: BrowserToolDeps, input: BrowserInput, after: BrowserTab): Promise<string> {
-  const page = await deps.call('page.read', { tab: after.tab, text: false, elements: true, maxElements: 80 }).catch(() => null);
+async function afterAction(call: BrowserCall, input: BrowserInput, after: BrowserTab): Promise<string> {
+  const page = await call('page.read', { tab: after.tab, text: false, elements: true, maxElements: 80 }).catch(() => null);
   const done = `${input.summary ? `${input.summary}: done.` : 'Done.'}`;
   return page ? `${done}\n${pageText(page)}` : `${done}\n${tabLine(after)}`;
 }
 
 /** Whether the person's browser has Atelier for Chrome connected: the Browser tool is offered only then. */
-export async function browserConnected(call: BrowserCall): Promise<BrowserStatus> {
+export async function browserConnected(call: BrowserSessionCall, sessionId: string): Promise<BrowserStatus> {
   try {
-    return await call('status', {});
+    return await call(sessionId, 'status', {});
   } catch (error) {
     return { connected: false, problem: error instanceof Error ? error.message : String(error) };
   }

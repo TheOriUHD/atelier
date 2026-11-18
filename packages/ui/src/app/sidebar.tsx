@@ -489,7 +489,7 @@ const LINKS = {
   desktop: 'https://atelierhq.dev/download/#desktop',
   cli: 'https://atelierhq.dev/download/#cli',
   server: 'https://atelierhq.dev/download/#server',
-  chrome: 'https://docs.atelierhq.dev/computer-use/#web-pages-atelier-for-chrome',
+  chrome: 'https://chromewebstore.google.com/detail/atelier-for-chrome/efpchbhecdgeeadmefahpgidnfplajln',
 };
 
 function ProfileFooter() {

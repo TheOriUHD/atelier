@@ -132,13 +132,20 @@ browser itself instead of its pictures:
   background mode for apps can't.
 - **Chrome says so.** While it acts in a page, the browser shows a bar saying Atelier "started debugging this browser";
   **Cancel** there stops it in that tab, and it asks you before going on. The bar goes when it has been idle a moment.
-- **The same rules.** Your permission mode applies to every step that changes something (reading a page doesn't ask).
-  It never types passwords or completes a purchase, and it asks before accepting terms or sending anything.
+- **No question for each step.** You installed it for this, and it works only in its own tabs, so it doesn't ask before
+  each page or click, in any permission mode. It never types passwords or completes a purchase, and it asks you in the
+  chat before accepting terms or sending anything. A permission rule you wrote (`Browser`) still applies.
 
-Until the extension is in the Chrome Web Store, install it from the app: **Settings › Computer use › Atelier for
-Chrome** shows the folder; in your browser open `chrome://extensions`, turn on **Developer mode**, choose **Load
-unpacked** and pick that folder. The row says **Connected in …** once it works. Atelier registers the extension's
-helper with the browsers it finds each time it starts.
+Install it from the [Chrome Web Store](https://chromewebstore.google.com/detail/atelier-for-chrome/efpchbhecdgeeadmefahpgidnfplajln)
+(Brave, Edge and Arc take it from there too). **Settings › Computer use › Atelier for Chrome** says **Connected in …**
+within a few seconds. While the extension is new, Chrome may show "This extension is not trusted by Enhanced Safe
+Browsing": that is about its publisher having no track record yet, and **Continue to install** is the way on. If your
+browser won't take it from the store, the same row shows the extension's folder to load by hand (`chrome://extensions`,
+**Developer mode**, **Load unpacked**). Atelier registers the extension's helper with the browsers it finds each time
+it starts.
+
+On a server, the extension on your computer works for your server's chats too: the desktop app lends it over the same
+link as computer use, while **Computer use** is on in the desktop app. The server needs version 0.10.4 or later.
 
 ### Denied apps
 

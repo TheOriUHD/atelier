@@ -102,7 +102,7 @@ import { Loops, type LoopTick } from './loops.ts';
 import { approvedMode, createExitPlanModeTool } from '../tools/exit-plan-mode.ts';
 import { createAddConnectorTool, type AddedConnector, type NewConnector } from '../tools/add-connector.ts';
 import { createComputerTools, type ComputerCall } from '../tools/computer.ts';
-import { browserConnected, createBrowserTool, type BrowserCall } from '../tools/browser.ts';
+import { browserConnected, createBrowserTool, type BrowserSessionCall } from '../tools/browser.ts';
 import { keepRecentGenerated, keepRecentScreenshots } from './screenshots.ts';
 import { credentialPath } from '../permissions/sensitive.ts';
 import { flavorOfSep } from '../paths.ts';
@@ -263,7 +263,7 @@ export interface ChatServiceDeps {
     where?(session: SessionRow): Promise<{ deviceId: string; name: string } | null>;
   };
   /** Atelier for Chrome on the person's computer (ARCHITECTURE §22): web pages in tabs of its own; offered while connected. */
-  browser?: { call: BrowserCall };
+  browser?: { call: BrowserSessionCall };
   /** Image generation (ARCHITECTURE §23): the tools a session gets when it has an image model, and what it's told about them. */
   images?: {
     generate: GenerateImageDeps['generate'];
@@ -2464,7 +2464,7 @@ export class ChatService {
     // Computer use: top-level Code and Cowork sessions only (a sub-agent can't ask for apps, and several would fight over one mouse).
     const computer = (session.mode === 'code' || this.asTask(session)) && !session.parentSessionId && !shared && (await this.deps.computer?.available(session)) ? this.computerTools : [];
     // Web pages through the extension, where it is connected: top-level Code and Cowork sessions, as computer use.
-    const browser = this.browserTool && (session.mode === 'code' || this.asTask(session)) && !session.parentSessionId && !shared && (await browserConnected(this.deps.browser!.call)).connected ? [this.browserTool] : [];
+    const browser = this.browserTool && (session.mode === 'code' || this.asTask(session)) && !session.parentSessionId && !shared && (await browserConnected(this.deps.browser!.call, session.id)).connected ? [this.browserTool] : [];
     const memory = shared ? [] : (this.deps.memory?.tools(session, await this.memoryAccess(session)) ?? []);
     // What only an app window shows: nothing for a person in the terminal app.
     const terminal = this.apps.get(session.id) === 'cli';

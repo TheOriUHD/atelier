@@ -1018,6 +1018,67 @@ describe('personal instructions', () => {
 });
 
 describe('a desktop lending itself to a server', () => {
+  it('offers a session the Browser tool when one of the person’s desktops lends Atelier for Chrome, and asks that desktop', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-lend-browser-'));
+    const toolSets: string[][] = [];
+    const reply = sse([{ data: { choices: [{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }] } }, { data: { choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } } }], true);
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      fetch: async (url, init) => {
+        if (!String(url).endsWith('/chat/completions')) return jsonResponse({ data: [] });
+        const body = JSON.parse(String(init.body)) as { tools?: { function: { name: string } }[] };
+        toolSets.push((body.tools ?? []).map((t) => t.function.name));
+        return streamResponse(reply);
+      },
+    });
+    try {
+      const signIn = () => {
+        const [clientSide, serverSide] = createMemoryTransportPair();
+        server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+        return createRpcClient(contract, clientSide);
+      };
+      const ada = signIn();
+      await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      await ada.call('settings.set', { layer: 'global', path: ['providers'], value: [{ id: 'fake', type: 'openai-compatible', name: 'Fake', baseUrl: 'http://fake.test/v1', headers: {}, enabled: true }] });
+      const desktop = signIn();
+      const { token } = await desktop.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'desktop' });
+      const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
+      await desktop.call('devices.register', device);
+
+      const asked: { op: string; method?: string }[] = [];
+      let link: { receive(text: string): void } | null = null;
+      const reply2 = (frame: object) => link!.receive(JSON.stringify(frame));
+      link = await server.linkDevice(
+        {
+          send: (frame) => {
+            if (frame.t !== 'req') return;
+            const { request } = frame;
+            asked.push({ op: request.op, ...(request.op === 'browser' ? { method: request.method } : {}) });
+            if (request.op === 'browser') return reply2({ t: 'res', id: frame.id, ok: true, value: { connected: true, browser: 'Google Chrome' } });
+            return reply2({ t: 'res', id: frame.id, ok: false, code: 'unsupported', error: 'Not here.' });
+          },
+          close: () => {},
+        },
+        token,
+        device,
+      );
+      reply2({ t: 'hello', hello: { protocol: 2, app: '0.10.4', services: ['runner', 'scratch', 'browser'], lending: { scratch: true, ssh: [] }, home: '/Users/ada', sep: '/', os: 'darwin', arch: 'arm64' } });
+
+      const session = await ada.call('sessions.create', { mode: 'chat', model: 'fake/m' });
+      await ada.call('chat.send', { sessionId: session.id, parts: [{ type: 'text', text: 'check my order in Chrome' }] });
+      await vi.waitFor(() => expect(toolSets.some((names) => names.includes('Browser'))).toBe(true), { timeout: 10_000 });
+      expect(asked).toContainEqual({ op: 'browser', method: 'status' });
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it.skipIf(!existsSync(hostRunnerBinary(runnerDir)))('takes SSH hosts and folders for sessions without one from the person’s desktop', async () => {
     const home = await mkdtemp(join(tmpdir(), 'atelier-lend-'));
     const server = await createBackend({ surface: 'web', configDir: home, dataDir: home, cipher: { encrypt: async (s) => s, decrypt: async (s) => s }, env: {}, logger: { info: () => {}, error: () => {} } });
@@ -1034,7 +1095,7 @@ describe('a desktop lending itself to a server', () => {
       const { token } = await desktop.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'desktop' });
       const device = { id: '6f1c0a52-4a8e-4d7a-9f53-1d2a3b4c5d6e', name: 'Laptop', platform: process.platform };
       await desktop.call('devices.register', device);
-      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat', 'computer'] });
+      expect((await desktop.call('app.info', {})).deviceLink).toEqual({ protocol: 2, services: ['runner', 'scratch', 'ssh', 'mcp', 'home', 'http', 'ws', 'chatgptChat', 'computer', 'browser'] });
 
       const scratchBase = join(home, 'laptop-scratch');
       let link: { receive(text: string): void } | null = null;

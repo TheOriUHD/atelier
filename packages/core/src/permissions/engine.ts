@@ -146,8 +146,10 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   // And a sound: speech costs little, music more, and the per-turn limit (6 by default) and the daily limits stand in for review.
   if (auto && call.name === 'GenerateAudio') return { behavior: 'allow', reason: 'It only makes a sound.' };
   if (call.name === 'ComputerAction' && onlyLooks(call.input)) return { behavior: 'allow', reason: 'It only looks at the screen.' };
-  // Reading a page in Atelier's own browser tab, its screenshot or the list of those tabs (tools/browser.ts).
-  if (call.name === 'Browser' && ['read', 'find', 'screenshot', 'tabs'].includes(String(call.input.action))) return { behavior: 'allow', reason: 'It only reads the page.' };
+  // Atelier for Chrome (tools/browser.ts) works in tabs of its own, which the person set up by installing the extension, so
+  // it doesn't ask for each page or click. What is sensitive in a page (paying, sending, accepting terms, passwords) its own
+  // instructions have the agent ask about first (AskUser); a rule above still decides when someone wants it asked about.
+  if (call.name === 'Browser') return { behavior: 'allow', reason: ['read', 'find', 'screenshot', 'tabs'].includes(String(call.input.action)) ? 'It only reads the page.' : 'It works in a tab of Atelier’s own.' };
 
   // A connector describes its own tools: a read-only hint lets a call into plan mode but never skips the prompt,
   // and its paths are the server's, not the workspace's.

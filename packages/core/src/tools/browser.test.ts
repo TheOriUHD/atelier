@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BrowserMethods } from '@atelier/protocol';
 import { decide } from '../permissions/engine.ts';
-import { createBrowserTool, elementLine, pageText, type BrowserCall } from './browser.ts';
+import { createBrowserTool, elementLine, pageText, type BrowserSessionCall } from './browser.ts';
 
 const ctx = { sessionId: 's', messageId: 'm', callId: 'c', signal: new AbortController().signal, emit: () => {} };
 const text = (out: { content: { type: string; text?: string }[] }) => out.content.filter((p) => p.type === 'text').map((p) => p.text).join('\n');
 
 function fake(answers: Partial<{ [M in keyof BrowserMethods]: (p: BrowserMethods[M]['params']) => BrowserMethods[M]['result'] }>) {
   const calls: { method: string; params: unknown }[] = [];
-  const call: BrowserCall = async (method, params) => {
+  const call: BrowserSessionCall = async (_session, method, params) => {
     calls.push({ method, params });
     const answer = answers[method] as ((p: unknown) => unknown) | undefined;
     if (!answer) throw new Error(`no answer for ${method}`);
@@ -57,9 +57,9 @@ describe('Browser tool', () => {
     expect(text(out)).toContain('1280×720 CSS pixels');
   });
 
-  it('only reading is allowed without asking', () => {
-    const rules = { mode: 'default' as const, rules: { allow: [], ask: [], deny: [] }, cwd: '/', home: '/', projectRoot: null, roots: [], isReadOnly: () => false };
-    for (const action of ['read', 'find', 'screenshot', 'tabs']) expect(decide({ name: 'Browser', input: { action, tab: 1 } }, rules).behavior).toBe('allow');
-    expect(decide({ name: 'Browser', input: { action: 'click', tab: 1, ref: 2 } }, rules).behavior).not.toBe('allow');
+  it('works in its own tabs without asking, reading or acting, until a rule says otherwise', () => {
+    const rules = (ask: string[] = []) => ({ mode: 'default' as const, rules: { allow: [], ask, deny: [] }, cwd: '/', home: '/', projectRoot: null, roots: [], isReadOnly: () => false });
+    for (const action of ['read', 'find', 'screenshot', 'tabs', 'open', 'click', 'type']) expect(decide({ name: 'Browser', input: { action, tab: 1 } }, rules()).behavior, action).toBe('allow');
+    expect(decide({ name: 'Browser', input: { action: 'click', tab: 1, ref: 2 } }, rules(['Browser'])).behavior).toBe('ask');
   });
 });

@@ -60,6 +60,8 @@ export interface DeviceServicesOptions {
   chatgptChat?: (operation: Extract<DeviceRequest, { op: 'chatgptChat' }>['operation'], value: string) => Promise<string>;
   /** One computer-use call to main's controller here (absent where there is none); main decides what each session may do. */
   computer?: (sessionId: string, method: string, params: unknown) => Promise<unknown>;
+  /** One call to Atelier for Chrome here (absent where there is none): the extension works only in tabs of its own. */
+  browser?: (method: string, params: unknown) => Promise<unknown>;
   /** The folders trusted here, whose `.mcp.json` an import from Claude Code reads. */
   trustedFolders?(): Promise<string[]>;
   /** This computer's home folder (the person's config, and where connectors' programs run). */
@@ -236,7 +238,7 @@ export function deviceServices(o: DeviceServicesOptions) {
   const sockets = new Map<string, Set<{ recheck(): Promise<void> }>>();
 
   return {
-    services: ['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', ...(o.chatgptChat ? ['chatgptChat'] : []), ...(o.computer ? ['computer'] : [])],
+    services: ['runner', 'scratch', 'ssh', 'http', 'ws', 'mcp', 'home', ...(o.chatgptChat ? ['chatgptChat'] : []), ...(o.computer ? ['computer'] : []), ...(o.browser ? ['browser'] : [])],
 
     async hello(): Promise<DeviceHello> {
       return { protocol: DEVICE_LINK_PROTOCOL, app: APP.version, services: this.services, lending: await o.lending(), home, sep, os: process.platform, arch: process.arch };
@@ -303,6 +305,9 @@ export function deviceServices(o: DeviceServicesOptions) {
         case 'computer':
           if (!o.computer) throw new Refusal('unsupported', `${o.deviceName}'s desktop app can't use the computer.`);
           return o.computer(request.sessionId, request.method, request.params);
+        case 'browser':
+          if (!o.browser) throw new Refusal('unsupported', `${o.deviceName}'s desktop app has no Atelier for Chrome.`);
+          return o.browser(request.method, request.params);
         case 'home.scan':
           await allowHome();
           return scanHome(home);

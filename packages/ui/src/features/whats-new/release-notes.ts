@@ -38,6 +38,25 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.4',
+    intro: 'Atelier for Chrome is in the Chrome Web Store, and it now works for chats on your server too.',
+    highlights: [
+      {
+        icon: Globe,
+        title: 'Atelier for Chrome works from your server',
+        body: 'If this app is connected to an Atelier server, its chats can now use the extension in your browser: the desktop app lends it to the server the way it lends computer use. Before, only chats on this computer’s own backend could, and the assistant fell back to driving the Chrome app. Update the server to 0.10.4 to get it, and keep Computer use on in this app.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'No question for each step in Chrome',
+        body: 'The extension works only in tabs of its own, so Atelier no longer asks before each page or click, in any permission mode. It still asks you in the chat before anything sensitive: accepting terms, sending something, paying. It never types passwords.',
+      },
+    ],
+    also: [
+      'Settings › Computer use › Atelier for Chrome links to the Chrome Web Store, and explains Chrome’s “not trusted by Enhanced Safe Browsing” note for a new publisher.',
+    ],
+  },
+  {
     version: '0.10.3',
     intro: 'Pairing a phone is easier to find and says when it worked, and a temporary chat on your phone now survives a trip to another app.',
     highlights: [
