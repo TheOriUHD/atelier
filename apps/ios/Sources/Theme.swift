@@ -6,6 +6,8 @@ enum Theme {
     static let clay = Color(hex: 0xC6613F)
     static let clayBright = Color(hex: 0xD97757)
     static let background = Color.adaptive(light: 0xFCFCFB, dark: 0x151515)
+    /// The list beside the page on an iPad: clearly its own surface, a step darker than the page.
+    static let sidebar = Color.adaptive(light: 0xEFEEEA, dark: 0x0C0C0C)
     /// Behind lists and sidebars: a step away from the page.
     static let sunken = Color.adaptive(light: 0xF5F4F1, dark: 0x101010)
     static let surface = Color.adaptive(light: 0xFFFFFF, dark: 0x20201F)

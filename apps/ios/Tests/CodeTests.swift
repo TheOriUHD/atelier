@@ -611,3 +611,49 @@ final class CodeDemoTests: XCTestCase {
         _ = try await codeCall(store, "sessions.delete", ["id": created["id"]])
     }
 }
+
+final class CodeTargetTests: XCTestCase {
+    private func folder(_ id: String, kind: String = "local", host: String? = nil, device: String? = nil, available: Bool = true, scratch: Bool = false, used: Int) -> CodeWorkspace {
+        CodeWorkspace(.obj(["id": .string(id), "kind": .string(kind), "name": .string(id), "root": .string("/r/\(id)"), "host": host.map { .string($0) } ?? .null, "deviceId": device.map { .string($0) } ?? .null, "available": .bool(available), "scratch": .bool(scratch), "lastUsedAt": .number(Double(used))]))
+    }
+    private let devices: [JSON] = [.obj(["id": "d1", "name": "MacBook"]), .obj(["id": "d2", "name": "Mac mini"])]
+
+    func testFoldersAreGroupedByTheirPlace() {
+        let list = [
+            folder("a", used: 1),
+            folder("b", device: "d1", used: 9), folder("c", device: "d1", used: 8),
+            folder("d", device: "d2", available: false, used: 7),
+            folder("e", kind: "codespace", host: "fuzzy", used: 5),
+            folder("f", kind: "ssh", host: "build-box", used: 4),
+            folder("g", kind: "ssh", host: "build-box", device: "d1", used: 3),
+            folder("scratch", device: "d1", scratch: true, used: 99),
+        ]
+        let targets = CodeTarget.targets(folders: list, devices: devices)
+        XCTAssertEqual(targets.map(\.id), ["server", "device:d1", "device:d2", "cloud", "ssh:build-box"])
+        XCTAssertEqual(targets.map(\.name), ["This server", "MacBook", "Mac mini", "Cloud", "build-box"])
+        XCTAssertEqual(targets[1].folders.map(\.id), ["b", "c", "g"], "a computer's folders, an SSH host reached through it too, the latest first, no scratch folder")
+        XCTAssertEqual(targets.map(\.online), [true, true, false, true, true])
+        XCTAssertNil(targets[2].firstUsable)
+    }
+
+    func testTheServerAndTheCloudAreAlwaysOffered() {
+        let targets = CodeTarget.targets(folders: [], devices: [])
+        XCTAssertEqual(targets.map(\.id), ["server", "cloud"])
+        XCTAssertTrue(targets.allSatisfy { $0.online && $0.folders.isEmpty })
+    }
+
+    func testReachableComputersComeBeforeOfflineOnes() {
+        let list = [folder("x", device: "d2", available: false, used: 9), folder("y", device: "d1", used: 1)]
+        XCTAssertEqual(CodeTarget.targets(folders: list, devices: devices).map(\.id), ["server", "device:d1", "device:d2", "cloud"])
+    }
+
+    func testWhereToStart() {
+        let list = [folder("a", used: 1), folder("b", device: "d1", used: 9), folder("d", device: "d2", available: false, used: 20)]
+        let targets = CodeTarget.targets(folders: list, devices: devices)
+        XCTAssertEqual(CodeTarget.initial(targets, remembered: nil)?.id, "device:d1", "the latest folder that can be reached decides")
+        XCTAssertEqual(CodeTarget.initial(targets, remembered: "server")?.id, "server", "the place used last, while it can be used")
+        XCTAssertEqual(CodeTarget.initial(targets, remembered: "device:d2")?.id, "device:d1", "an offline place is not started in")
+        XCTAssertEqual(CodeTarget.initial(targets, remembered: "gone")?.id, "device:d1")
+        XCTAssertEqual(CodeTarget.initial(CodeTarget.targets(folders: [], devices: []), remembered: nil)?.id, "server")
+    }
+}

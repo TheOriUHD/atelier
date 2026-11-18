@@ -75,7 +75,9 @@ struct ChatSidebar: View {
         .listSectionSpacing(0)
         .environment(\.defaultMinListRowHeight, 1)
         .scrollContentBackground(.hidden)
-        .background(Theme.background)
+        .background(isPad ? Theme.sidebar : Theme.background)
+        // On an iPad the list is its own surface, with a fine line where it meets the page.
+        .overlay(alignment: .trailing) { if isPad { Rectangle().fill(Theme.hairline).frame(width: 1).ignoresSafeArea() } }
         // An iPad's three buttons at the bottom float: no bar behind them, only the soft fade of the rows that run under them,
         // which is what gives the glass something to stand against; the list's end is kept clear of them.
         .toolbarBackgroundVisibility(isPad ? .hidden : .automatic, for: .bottomBar)
@@ -160,7 +162,8 @@ struct ChatSidebar: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         if isPad {
-            ToolbarItem(placement: .topBarLeading) { Text("Atelier").font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).fixedSize() }
+            // The wordmark starts where the rows below it do (their text begins 28 points in; the bar's own margin is 14).
+            ToolbarItem(placement: .topBarLeading) { Text("Atelier").font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).fixedSize().padding(.leading, 14) }
                 .sharedBackgroundVisibility(.hidden)
             // Three buttons, each on its own round glass bubble of one size, as the sidebar button at the top has: nothing
             // behind them and nothing shared between them (the system's own shape is off, so the bubble is not drawn twice).

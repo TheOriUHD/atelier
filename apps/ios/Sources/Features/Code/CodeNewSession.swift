@@ -12,6 +12,9 @@ struct NewCodeSessionPage: View {
     @State private var system: CodeSystemSettings
     @State private var chosen: String?
     @State private var scratch = false
+    /// Where the session works (`CodeTarget.id`): the place comes first, the folder is one there.
+    @State private var targetID: String?
+    @AppStorage("atelier.code.target") private var rememberedTarget = ""
     @State private var mode: String = ""
     @State private var model = ""
     @State private var effort = ""
@@ -42,6 +45,8 @@ struct NewCodeSessionPage: View {
 
     private var caps: CodeCapabilities { CodeCapabilities(store: store) }
     private var selectedFolder: CodeWorkspace? { chosen.flatMap { id in folders.folders.first { $0.id == id } } }
+    private var targets: [CodeTarget] { CodeTarget.targets(folders: folders.all, devices: folders.devices) }
+    private var target: CodeTarget? { targets.first { $0.id == targetID } }
     private var chosenModel: JSON? { store.models.first { $0["ref"].string == model } }
     private var modes: [CodeMode] { CodeMode.offered(code: true, planAuto: caps.planAuto) }
     private var effectiveMode: CodeMode { CodeMode(rawValue: mode) ?? system.defaultMode }
@@ -50,7 +55,6 @@ struct NewCodeSessionPage: View {
     private var optionsSheet: some View {
         NavigationStack {
             List {
-                folderSection
                 if selectedFolder != nil, branchKnown { branchSection }
                 Section {
                     Picker("Permission mode", selection: $mode) {
@@ -66,15 +70,6 @@ struct NewCodeSessionPage: View {
             .listStyle(.insetGrouped).scrollContentBackground(.hidden).background(Theme.sunken)
             .navigationTitle("Session options").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { options = false } } }
-            .sheet(isPresented: $openRepo) {
-                NavigationStack {
-                    CodeRepositoriesView(store: store) { workspace in Task { await folders.load(devices: true); chosen = workspace.id; scratch = false } }
-                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { openRepo = false } } }
-                }.tint(Theme.clay)
-            }
-            .sheet(isPresented: $addSsh) {
-                CodeAddSshFolderSheet(store: store, connections: []) { workspace in Task { await folders.load(devices: true); chosen = workspace.id; scratch = false } }
-            }
         }
         .tint(Theme.clay)
         .presentationDetents([.large])
@@ -96,7 +91,7 @@ struct NewCodeSessionPage: View {
                     if let prefs = try? await store.rpc.call("prefs.get"), let ref = prefs["models"]["code"].stringOrNil, store.models.contains(where: { $0["ref"].string == ref }) { preferredModel = ref }
                     model = preferredModel ?? (store.models.contains { $0["ref"].string == store.selectedModel } ? store.selectedModel : store.models.first?["ref"].string ?? "")
                 }
-                if chosen == nil, !scratch { chosen = folders.folders.first { $0.available }?.id }
+                if targetID == nil, let first = CodeTarget.initial(targets, remembered: rememberedTarget.isEmpty ? nil : rememberedTarget) { choose(target: first.id) }
                 #if DEBUG
                 // `--effort <level>` opens the effort panel on that level, for looking at it.
                 if let level = Launch.value("--effort") { effort = level; try? await Task.sleep(for: .milliseconds(500)); effortOpen = true }
@@ -106,6 +101,15 @@ struct NewCodeSessionPage: View {
             .onChange(of: model) { _, _ in if !effortLevels.contains(effort) { effort = "" } }
             .codeTrustDialog($trust)
             .sheet(isPresented: $options) { optionsSheet }
+            .sheet(isPresented: $openRepo) {
+                NavigationStack {
+                    CodeRepositoriesView(store: store) { workspace in Task { await folders.load(devices: true); select(workspace) } }
+                        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { openRepo = false } } }
+                }.tint(Theme.clay)
+            }
+            .sheet(isPresented: $addSsh) {
+                CodeAddSshFolderSheet(store: store, connections: []) { workspace in Task { await folders.load(devices: true); select(workspace) } }
+            }
         }
         .tint(Theme.clay)
     }
@@ -131,7 +135,8 @@ struct NewCodeSessionPage: View {
             VStack(alignment: .leading, spacing: 12) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        pill(selectedFolder?.label ?? (scratch ? "No folder" : "Choose a folder"), symbol: scratch || selectedFolder == nil ? "folder.badge.questionmark" : (selectedFolder?.kind == .codespace ? "cloud" : selectedFolder?.kind == .ssh ? "server.rack" : "folder")) { options = true }
+                        targetMenu
+                        folderMenu
                         if let currentBranch, branchKnown { pill(currentBranch, symbol: "arrow.triangle.branch") { options = true } }
                     }.padding(.horizontal, 2)
                 }
@@ -148,15 +153,18 @@ struct NewCodeSessionPage: View {
         }
     }
 
+    private func pillLabel(_ title: String, symbol: String, menu: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).font(.system(size: 15))
+            Text(title).font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
+            if menu { Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.inkMuted) }
+        }
+        .foregroundStyle(Theme.ink).padding(.horizontal, 14).frame(height: 44)
+        .background(Theme.surface, in: Capsule()).overlay(Capsule().stroke(Theme.hairline, lineWidth: 0.5))
+    }
+
     private func pill(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: symbol).font(.system(size: 15))
-                Text(title).font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
-            }
-            .foregroundStyle(Theme.ink).padding(.horizontal, 14).frame(height: 44)
-            .background(Theme.surface, in: Capsule()).overlay(Capsule().stroke(Theme.hairline, lineWidth: 0.5))
-        }.buttonStyle(.plain)
+        Button(action: action) { pillLabel(title, symbol: symbol) }.buttonStyle(.plain)
     }
 
     private var box: some View {
@@ -203,46 +211,78 @@ struct NewCodeSessionPage: View {
         .foregroundStyle(Theme.inkSecondary).padding(.horizontal, 12).frame(minHeight: 36).background(Theme.fill, in: Capsule())
     }
 
-    // MARK: Folder
+    // MARK: Where: the place first, then a folder there
 
-    @ViewBuilder private var folderSection: some View {
-        Section {
-            if !folders.didLoad {
-                if let error = folders.error { Text(error).font(.subheadline).foregroundStyle(Theme.danger) } else { HStack { Spacer(); ProgressView(); Spacer() } }
-            } else {
-                folderRow(title: "No folder", subtitle: "A new, empty folder for this session", symbol: "folder.badge.questionmark", selected: scratch, enabled: true) { scratch = true; chosen = nil }
-                ForEach(folders.folders) { workspace in
-                    folderRow(title: workspace.label, subtitle: workspace.available ? workspace.computer(devices: folders.devices) : "Its computer is offline", detail: workspace.kind == .local ? workspace.root : nil,
-                              symbol: workspace.kind == .codespace ? "cloud" : workspace.kind == .ssh ? "server.rack" : "folder", selected: chosen == workspace.id, enabled: workspace.available,
-                              badges: [workspace.kindBadge, workspace.trusted ? nil : "Not trusted"].compactMap { $0 }) { chosen = workspace.id; scratch = false }
+    /// The place, as the web's first chip: this server, each computer of the person's, the cloud, an SSH host.
+    private var targetMenu: some View {
+        Menu {
+            Picker("Where", selection: Binding(get: { targetID ?? "" }, set: { choose(target: $0) })) {
+                ForEach(targets) { place in
+                    Label(place.online ? place.name : "\(place.name) · offline", systemImage: place.symbol).tag(place.id).disabled(!place.online)
                 }
-                ActionRow(title: "Open a repository…", symbol: "shippingbox") { openRepo = true }
-                if caps.isDesktopBackend { ActionRow(title: "Add SSH folder…", symbol: "server.rack") { addSsh = true } }
             }
-        } header: { Text("Where it works") } footer: {
-            Text(folders.folders.isEmpty && folders.didLoad ? "Folders on your computers are opened in the Atelier desktop app connected to this server, and show up here. A codespace works too." : "When the folder is in a git repository, the session works at the repository's top level.")
-        }
+            if caps.isDesktopBackend {
+                Divider()
+                Button("Add SSH folder…", systemImage: "plus") { addSsh = true }
+            }
+        } label: { pillLabel(target?.name ?? "Choose where", symbol: target?.symbol ?? "laptopcomputer", menu: true) }
+            .menuStyle(.button).buttonStyle(.plain).accessibilityLabel("Where it works")
     }
 
-    private func folderRow(title: String, subtitle: String, detail: String? = nil, symbol: String, selected: Bool, enabled: Bool, badges: [String] = [], action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                IconTile(symbol: symbol, tint: selected ? Theme.clay : Theme.inkSecondary, size: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(title).font(.system(.body, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).truncationMode(.middle)
-                        ForEach(badges, id: \.self) { StatusBadge(text: $0, tone: $0 == "Not trusted" ? .warn : .neutral) }
+    /// The folder, as the web's second chip: those of the chosen place, the latest first, and what adds one there.
+    private var folderMenu: some View {
+        Menu {
+            if let target {
+                Picker("Folder", selection: Binding(get: { scratch ? "none" : (chosen ?? "") }, set: { choose(folder: $0) })) {
+                    if target.kind == .server { Label("No folder", systemImage: "folder.badge.questionmark").tag("none") }
+                    ForEach(target.folders) { workspace in
+                        Label(menuTitle(workspace), systemImage: "folder").tag(workspace.id).disabled(!workspace.available)
                     }
-                    Text(subtitle).font(.footnote).foregroundStyle(Theme.inkMuted).lineLimit(1).truncationMode(.middle)
-                    if let detail { Text(detail).font(.mono(.caption)).foregroundStyle(Theme.inkMuted).lineLimit(1).truncationMode(.middle) }
                 }
-                Spacer(minLength: 4)
-                if selected { Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.clay) }
+                switch target.kind {
+                case .cloud:
+                    Divider()
+                    Button("Open a repository…", systemImage: "shippingbox") { openRepo = true }
+                case .computer:
+                    Divider()
+                    Button("Open more folders in its desktop app", systemImage: "laptopcomputer") {}.disabled(true)
+                case .server, .ssh:
+                    if target.folders.isEmpty && target.kind == .ssh { Button("No folders here yet") {}.disabled(true) }
+                    if caps.isDesktopBackend { Divider(); Button("Add SSH folder…", systemImage: "plus") { addSsh = true } }
+                }
             }
-            .contentShape(Rectangle()).opacity(enabled ? 1 : 0.5)
+        } label: {
+            pillLabel(scratch ? "No folder" : (selectedFolder?.label ?? "Select folder…"), symbol: scratch ? "folder.badge.questionmark" : "folder", menu: true)
         }
-        .buttonStyle(.plain).disabled(!enabled)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .menuStyle(.button).buttonStyle(.plain).accessibilityLabel("Folder")
+    }
+
+    private func menuTitle(_ workspace: CodeWorkspace) -> String {
+        var title = workspace.label
+        if !workspace.available { title += " · offline" } else if !workspace.trusted { title += " · not trusted" }
+        return title
+    }
+
+    /// Picks a place: it starts in the latest folder there that can be reached (the server with none starts with no folder).
+    private func choose(target id: String) {
+        guard let place = targets.first(where: { $0.id == id }) else { return }
+        targetID = id
+        rememberedTarget = id
+        if let folder = place.firstUsable { chosen = folder.id; scratch = false }
+        else { chosen = nil; scratch = place.kind == .server }
+    }
+
+    private func choose(folder id: String) {
+        if id == "none" { chosen = nil; scratch = true } else { chosen = id; scratch = false }
+    }
+
+    /// A folder that was just added: its place and it.
+    private func select(_ workspace: CodeWorkspace) {
+        let place = CodeTarget.id(of: workspace)
+        targetID = place
+        rememberedTarget = place
+        chosen = workspace.id
+        scratch = false
     }
 
     // MARK: Branch

@@ -320,7 +320,16 @@ enum ChatDemo {
         case "prefs.get": return prefs
         case "mcp.status": return .array(mcp)
         case "imageModels.list": return .array(imageModels)
-        case "workspaces.list": return .array([["id": "w1", "kind": "local", "name": "app", "root": "/home/me/projects/app", "available": true, "scratch": false, "lastUsedAt": 1]])
+        case "workspaces.list":
+            // Folders in each kind of place: the server, two computers (one offline), a codespace and an SSH host.
+            return .array([
+                ["id": "w1", "kind": "local", "name": "app", "root": "/home/me/projects/app", "available": true, "scratch": false, "lastUsedAt": 1],
+                ["id": "w2", "kind": "local", "name": "atelier-web", "root": "/Users/maya/Developer/atelier-web", "deviceId": "d1", "available": true, "scratch": false, "lastUsedAt": 9000],
+                ["id": "w3", "kind": "local", "name": "atelier-docs", "root": "/Users/maya/Developer/atelier-docs", "deviceId": "d1", "available": true, "scratch": false, "lastUsedAt": 8000],
+                ["id": "w4", "kind": "local", "name": "home-lab", "root": "/home/maya/lab", "deviceId": "d2", "available": false, "scratch": false, "lastUsedAt": 3000],
+                ["id": "w5", "kind": "codespace", "name": "mobile-app", "root": "/workspaces/mobile-app", "host": "fuzzy-space-guacamole-x7", "available": true, "scratch": false, "lastUsedAt": 5000],
+                ["id": "w6", "kind": "ssh", "name": "api", "root": "/srv/api", "host": "build-box", "available": true, "scratch": false, "lastUsedAt": 2000],
+            ])
         case "slash.list": return .array(slash)
         case "dictation.status": return ["enabled": true]
         case "sessions.subscribe": return snapshot(state.isEmpty ? "chat" : state)
