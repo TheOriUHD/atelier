@@ -8,4 +8,7 @@ COPY --chown=atelier:atelier build/data/ /demo-data/
 COPY --chown=atelier:atelier container/demo-model.mjs /app/demo-model.mjs
 COPY --chown=atelier:atelier --chmod=0755 container/start.sh /app/start.sh
 
+# Bumped to make a new container start (it reads the Worker's secrets only when it starts).
+LABEL org.atelierhq.demo.revision="4"
+
 CMD ["/app/start.sh"]

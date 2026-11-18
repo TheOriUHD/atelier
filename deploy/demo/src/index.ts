@@ -10,6 +10,11 @@ interface Env {
   OPENAI_API_KEY?: string;
 }
 
+/** Change this with anything the container's environment (below) depends on: the first request after a deploy that changes it
+ * restarts the container. A running container keeps the environment it started with, and Cloudflare keeps it running across
+ * deploys until it has been idle for `sleepAfter`. */
+const ENVIRONMENT_REVISION = '5';
+
 export class AtelierDemo extends Container<Env> {
   defaultPort = 7340;
   requiredPorts = [7340];
@@ -21,9 +26,22 @@ export class AtelierDemo extends Container<Env> {
   constructor(ctx: DurableObject['ctx'], env: Env) {
     super(ctx, env);
     this.envVars = {
+      // What the server believes its address is. Without it a browser's `Origin` (demo.atelierhq.dev) never matches the
+      // container's own address and sign-in and the live connection are refused; the phone app sends no Origin, which is why
+      // it worked without.
+      ATELIER_BASE_URL: 'https://demo.atelierhq.dev',
       // Read by the server when a request goes out (the provider's key is `${env:OPENAI_API_KEY}`); never stored in the data.
       ...(env.OPENAI_API_KEY ? { OPENAI_API_KEY: env.OPENAI_API_KEY } : {}),
     };
+  }
+
+  override async fetch(request: Request): Promise<Response> {
+    if ((await this.ctx.storage.get('environment-revision')) !== ENVIRONMENT_REVISION) {
+      // Noted first, so requests arriving meanwhile don't each stop it again.
+      await this.ctx.storage.put('environment-revision', ENVIRONMENT_REVISION);
+      await this.destroy().catch(() => undefined);
+    }
+    return super.fetch(request);
   }
 }
 

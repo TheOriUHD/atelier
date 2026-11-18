@@ -11,6 +11,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { CONVERSATIONS, PROJECTS, SCRIPT } from './conversations.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +25,11 @@ const credsFile = resolve(arg('creds', join(here, '../build/creds.json')));
 const SERVER_PORT = 17340;
 const MODEL_PORT = 18099;
 // The model the reviewer starts with (a model ref, `provider/model`); the OpenAI one once its key is on the server.
-const defaultModel = process.env.DEMO_DEFAULT_MODEL ?? 'demo/demo-model';
+const defaultModel = process.env.DEMO_DEFAULT_MODEL ?? 'openai/gpt-6.2-sol';
+// What the reviewer sees in the model picker: the OpenAI model the demo's project allows (shown as "Test Model") and the
+// placeholder with its fixed replies. The other OpenAI models (scripts/openai-models.json: what the key lists) are hidden.
+const TEST_MODEL = defaultModel;
+const OPENAI_IDS = JSON.parse(readFileSync(join(here, 'openai-models.json'), 'utf8'));
 
 if (!existsSync(serverFile)) throw new Error('--server must be the release\'s server.mjs');
 const password = () => randomBytes(15).toString('base64url');
@@ -116,11 +121,17 @@ async function main() {
     path: ['providers'],
     value: [
       { id: 'demo', type: 'openai-compatible', name: 'Demo', baseUrl: `http://127.0.0.1:${MODEL_PORT}/v1`, headers: {}, enabled: true },
-      // The key is the container's OPENAI_API_KEY, read when a request goes out; nothing of it is stored in this data.
-      { id: 'openai', type: 'openai', name: 'GPT', baseUrl: 'https://api.openai.com', apiKey: '${env:OPENAI_API_KEY}', headers: {}, enabled: true },
+      // The key is the container's OPENAI_API_KEY (`${NAME}` is read from the environment when a request goes out); nothing of
+      // it is stored in this data.
+      { id: 'openai', type: 'openai', name: 'GPT', baseUrl: 'https://api.openai.com', apiKey: '${OPENAI_API_KEY}', headers: {}, enabled: true },
     ],
   });
-  await admin.call('settings.set', { layer: 'global', path: ['models', 'overrides'], value: { 'demo/demo-model': { displayName: 'Demo model (fixed replies)', favorite: true } } });
+  const overrides = {
+    'demo/demo-model': { displayName: 'Fixed replies (offline)', order: 2 },
+    ...Object.fromEntries(OPENAI_IDS.map((id) => [`openai/${id}`, { hidden: true }])),
+    [TEST_MODEL]: { displayName: 'Test Model', favorite: true, order: 1, hidden: false },
+  };
+  await admin.call('settings.set', { layer: 'global', path: ['models', 'overrides'], value: overrides });
   await admin.call('settings.set', { layer: 'global', path: ['models', 'defaults', 'chat'], value: defaultModel });
   const made = await admin.call('users.create', { username: creds.reviewer.username, name: 'App Reviewer', role: 'user' });
   admin.close();
