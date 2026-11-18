@@ -76,8 +76,8 @@ struct ChatSidebar: View {
         .environment(\.defaultMinListRowHeight, 1)
         .scrollContentBackground(.hidden)
         .background(Theme.background)
-        // An iPad's three round buttons at the bottom float: no bar and no edge effect behind them, the rows simply run under
-        // their bubbles; the list's end is kept clear of them.
+        // An iPad's three buttons at the bottom float: no bar and no edge effect behind them, the rows simply run under them;
+        // the list's end is kept clear of them.
         .toolbarBackgroundVisibility(isPad ? .hidden : .automatic, for: .bottomBar)
         .scrollEdgeEffectHidden(isPad, for: .bottom)
         .contentMargins(.bottom, isPad ? 64 : 0, for: .scrollContent)
@@ -162,16 +162,21 @@ struct ChatSidebar: View {
         if isPad {
             ToolbarItem(placement: .topBarLeading) { Text("Atelier").font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).fixedSize() }
                 .sharedBackgroundVisibility(.hidden)
-            // Three round buttons of one size, each on its own, with no bar behind them: the profile is a circle itself, the
-            // other two sit in the system's round bubbles.
+            // Three buttons, each on its own round glass bubble of one size, as the sidebar button at the top has: nothing
+            // behind them and nothing shared between them (the system's own shape is off, so the bubble is not drawn twice).
             ToolbarItem(placement: .bottomBar) {
-                Button { actions.settings() } label: { Avatar(name: store.userName, size: 44, ring: true) }.buttonStyle(.plain).accessibilityLabel("Settings")
+                Button { actions.settings() } label: { Avatar(name: store.userName, size: 30).bubble() }.buttonStyle(.plain).accessibilityLabel("Settings")
             }
             .sharedBackgroundVisibility(.hidden)
             ToolbarSpacer(.fixed, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { viewMenu }
+            ToolbarItem(placement: .bottomBar) { viewMenu(bubble: true).buttonStyle(.plain) }
+                .sharedBackgroundVisibility(.hidden)
             ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { Button { actions.compose() } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel(mode == .code ? "New Code session" : "New conversation") }
+            ToolbarItem(placement: .bottomBar) {
+                Button { actions.compose() } label: { Image(systemName: "square.and.pencil").font(.system(size: 18, weight: .regular)).foregroundStyle(Theme.clay).bubble() }
+                    .buttonStyle(.plain).accessibilityLabel(mode == .code ? "New Code session" : "New conversation")
+            }
+            .sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .topBarLeading) {
                 Button { actions.settings() } label: { Avatar(name: store.userName, size: 34, ring: true) }
@@ -182,7 +187,7 @@ struct ChatSidebar: View {
                 Picker("Mode", selection: $mode) { ForEach(HomeMode.allCases) { Text($0.rawValue).tag($0) } }
                     .pickerStyle(.segmented).frame(width: 170)
             }
-            ToolbarItem(placement: .topBarTrailing) { viewMenu }
+            ToolbarItem(placement: .topBarTrailing) { viewMenu() }
             if sizeClass != .regular {
                 DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 ToolbarSpacer(.flexible, placement: .bottomBar)
@@ -191,7 +196,7 @@ struct ChatSidebar: View {
         }
     }
 
-    private var viewMenu: some View {
+    private func viewMenu(bubble: Bool = false) -> some View {
         Menu {
             Picker("Group by", selection: Binding(get: { grouping }, set: { setGrouping($0) })) {
                 ForEach(mode == .code ? ChatGrouping.allCases : [ChatGrouping.date, .custom, .state, .none]) { Text($0.title).tag($0) }
@@ -206,7 +211,11 @@ struct ChatSidebar: View {
             Button("Your groups", systemImage: "folder.badge.gearshape") { managing = true }
             Button("Join a co-op session…", systemImage: "person.2") { joining = true }
             Button("Archived", systemImage: "archivebox") { actions.show(.archived) }
-        } label: { Image(systemName: "line.3.horizontal.decrease") }.accessibilityLabel("View options")
+        } label: {
+            if bubble { Image(systemName: "line.3.horizontal.decrease").font(.system(size: 18, weight: .regular)).foregroundStyle(Theme.clay).bubble() }
+            else { Image(systemName: "line.3.horizontal.decrease") }
+        }
+        .accessibilityLabel("View options")
     }
 
     private func setGrouping(_ value: ChatGrouping) {
@@ -628,5 +637,12 @@ struct CodeDevicesStrip: View {
         }
         .padding(.top, 6)
         .listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top: 4, leading: 18, bottom: 6, trailing: 0))
+    }
+}
+
+private extension View {
+    /// A round glass button, 44 points across, the same for every button that takes it.
+    func bubble() -> some View {
+        frame(width: 44, height: 44).glassEffect(.regular.interactive(), in: .circle).contentShape(.circle)
     }
 }
