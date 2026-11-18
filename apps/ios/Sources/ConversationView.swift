@@ -215,6 +215,21 @@ struct ConversationView: View {
             }
         }
         .animation(.smooth(duration: 0.4), value: page)
+        .overlay(alignment: .top) {
+            if page == .greeting, let note = hub.endedNote {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "info.circle").foregroundStyle(Theme.clay)
+                    Text(note).font(.footnote).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button { hub.endedNote = nil } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)) }
+                        .buttonStyle(.plain).foregroundStyle(Theme.inkMuted).accessibilityLabel("Dismiss")
+                }
+                .padding(14).background(Theme.fill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 16).padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: hub.endedNote)
         .onChange(of: isEmpty) { _, empty in if !empty { hub.starting = nil } }
         .task(id: hub.starting?.id) {
             // If nothing came of it (the send failed), the greeting returns after a few seconds.
@@ -433,6 +448,9 @@ struct ConversationView: View {
             do {
                 try await ChatActions.delete(store, id)
                 ChatNav.newConversation(store)
+            } catch let error where AppStore.isGone(error) {
+                // Already gone: nothing is left to delete.
+                ChatNav.newConversation(store)
             } catch { store.error = ChatError.text(error) }
         }
     }
@@ -448,6 +466,8 @@ struct ConversationView: View {
             } catch let MobileError.rpc(code, _, _, _) where code == -32601 {
                 // A server from before this existed doesn't know the call.
                 store.error = "This server needs to be updated before it can keep a temporary chat."
+            } catch let error where AppStore.isGone(error) {
+                store.conversationEnded()
             } catch { store.error = ChatError.text(error) }
         }
     }

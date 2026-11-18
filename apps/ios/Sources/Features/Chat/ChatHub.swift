@@ -20,6 +20,8 @@ import UniformTypeIdentifiers
     // MARK: the list's own state
 
     var listLoaded = false
+    /// Why the conversation the person was in is gone (a temporary chat the system or the server ended), shown on the new-chat page.
+    var endedNote: String?
     /// Why the conversation the person tried to open did not open.
     var openError: String?
     var listError: String?
@@ -440,7 +442,7 @@ enum ChatReactions {
 
     static func switchBranch(_ store: AppStore, to messageId: String) async throws {
         try await store.action("chat.switchBranch", extra: ["messageId": .string(messageId)])
-        if let id = store.selected { try await store.open(id) }
+        if let id = store.selected { do { try await store.open(id) } catch let error where AppStore.isGone(error) { store.conversationEnded() } }
     }
 
     static func react(_ store: AppStore, messageId: String, emoji: String, on: Bool) async throws {

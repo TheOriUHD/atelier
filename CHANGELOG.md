@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **A temporary chat on the phone survives switching apps.** The Atelier app for iPhone and iPad used to lose an open temporary chat when it sat in the background for more than a minute or two (the system pauses the app and drops its connection; the server then deleted the chat), and every action on it answered "That conversation no longer exists." Now the server keeps a phone's temporary chats while the app is only in the background (new `app.launch`), and ends them when you leave or delete them, when iOS closes the app and you open it again, or when the server restarts. If a chat is gone for any reason the app says so and opens a new one instead of showing a screen where everything fails. Needs this server release; older servers keep the one-minute rule.
+
 ## [0.10.2] — 2026-11-17
 
 - **Models that run on your iPhone or iPad.** In the Atelier app, Settings › **On-device models** downloads small models (LFM2.5 1.2B, Gemma 3 1B, Qwen3 1.7B and 4B) from Hugging Face onto the phone, and the model menu of any conversation then offers them under **On this iPhone**. The phone does the thinking; the conversation stays on your server, so you can read it anywhere. You can start a conversation on one, or take over one you started with a server model, and go back to a server model at any time. A model on a phone is only ever offered to that phone: your other devices and browsers don't list it, and a turn on it can't be started from them (they read the conversation and choose another model). It needs Atelier open on the phone while it answers, and a server of this version.

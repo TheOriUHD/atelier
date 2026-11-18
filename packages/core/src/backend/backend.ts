@@ -281,6 +281,8 @@ interface Connection {
   /** Set when a desktop app registered the device this connection comes from. */
   deviceId: string | null;
   origin: string | undefined;
+  /** Set by `app.launch`: which install of a phone app this is and which start of it (see `phoneHeld`). */
+  launch?: { key: string; id: string };
 }
 
 /** What co-op refuses a person, said to them as it is (agent/coop-turns.ts answerWithProblem, chat-service.ts). */
@@ -873,6 +875,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   temporaryTimer.unref();
   /** A window that closed or dropped gets this long to come back (a reload, a reconnect) before its temporary chats go. */
   const TEMPORARY_GRACE_MS = 60_000;
+  /**
+   * Temporary chats a phone app had open when its connection went quiet, by person and install. iOS suspends an app that is only
+   * in the background, which drops its connection without the person having left anything: those chats stay until the same install
+   * announces another start of the app (`app.launch`: the system ended the old process, as a cold start of Grok's or ChatGPT's
+   * app ends theirs), until the person leaves or deletes them, or until the idle sweep. Not kept across a restart of the backend.
+   */
+  const phoneHeld = new Map<string, { launch: string; ids: Set<string> }>();
   const graceTimers = new Set<ReturnType<typeof setTimeout>>();
   const afterGrace = (run: () => Promise<void>) => {
     const timer = setTimeout(() => {
@@ -2250,6 +2259,21 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       reports: settings.effective.reports.enabled,
       ...(ctx.connection().client.network ? { sharedComputer: true } : shareAvailable ? { networkShare: true } : {}),
     }),
+
+    'app.launch': async ({ install, launch }, ctx) => {
+      const key = `${me(ctx).id}|${install}`;
+      ctx.connection().launch = { key, id: launch };
+      const held = phoneHeld.get(key);
+      // Another start of the same install: the system ended the old process, so what it had open is over.
+      if (held && held.launch !== launch) {
+        phoneHeld.delete(key);
+        for (const id of held.ids) {
+          const row = await sessions.getRow(id);
+          if (row?.temporary && !row.parentSessionId && !openAnywhere(id)) await removeTemporary(row);
+        }
+      }
+      return { ok: true as const };
+    },
 
     // ---------------------------------------------------------------- issue reports (ARCHITECTURE §26)
     'reports.prepare': async ({ diagnostics, chatSessionId }, ctx) => {
@@ -3692,7 +3716,19 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         rpc.close();
         connections.delete(connection);
         const open = [...connection.subscriptions];
-        if (open.length) afterGrace(async () => {
+        const phone = connection.launch;
+        if (phone && open.length) {
+          // A phone app that went quiet has not left: its temporary chats wait for it (see `phoneHeld`).
+          void (async () => {
+            const held = phoneHeld.get(phone.key);
+            const ids = held?.launch === phone.id ? held.ids : new Set<string>();
+            for (const id of open) {
+              const row = await sessions.getRow(id);
+              if (row?.temporary && !row.parentSessionId) ids.add(id);
+            }
+            if (ids.size) phoneHeld.set(phone.key, { launch: phone.id, ids });
+          })().catch((e: unknown) => platform.logger.error('holding temporary chats failed', e));
+        } else if (open.length) afterGrace(async () => {
           for (const id of open) {
             const row = await sessions.getRow(id);
             if (row?.temporary && !row.parentSessionId && !openAnywhere(id)) await removeTemporary(row);

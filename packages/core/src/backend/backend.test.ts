@@ -448,6 +448,57 @@ describe('temporary chats', () => {
     expect((await client.call('sessions.keep', { id: temp.id })).id).toBe(temp.id);
   });
 
+  it('stays for a phone app that only goes quiet, until that install starts again', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      /** The phone app: a connection that says which install and which start of the app it is (`app.launch`). */
+      const phone = async (launch: string, install = 'install-0001') => {
+        const { c, close } = await secondWindow();
+        await c.call('app.launch', { install, launch });
+        return { c, close };
+      };
+      const first = await phone('launch-0001');
+      const temp = await first.c.call('sessions.create', { mode: 'chat', temporary: true });
+      await first.c.call('sessions.subscribe', { id: temp.id });
+      // iOS suspends the app: the connection drops. The chat does not go after a minute, nor after an hour.
+      first.close();
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(await exists(client, temp.id)).toBe(true);
+      await vi.advanceTimersByTimeAsync(3600_000);
+      expect(await exists(client, temp.id)).toBe(true);
+
+      // The same start of the app comes back (reconnects, opens the chat again): all as it was.
+      const back = await phone('launch-0001');
+      expect((await back.c.call('sessions.subscribe', { id: temp.id })).session.id).toBe(temp.id);
+      back.close();
+
+      // Another install of the app (the person's iPad) starting does not touch it.
+      const other = await phone('launch-0001', 'install-0002');
+      expect(await exists(client, temp.id)).toBe(true);
+      other.close();
+
+      // The system ended the old process and the app starts again: what it had open is over.
+      const restarted = await phone('launch-0002');
+      expect(await exists(client, temp.id)).toBe(false);
+      restarted.close();
+
+      // A window that does not say it is a phone app keeps the minute (and a chat the person left is simply gone).
+      const window1 = await secondWindow();
+      const plain = await window1.c.call('sessions.create', { mode: 'chat', temporary: true });
+      await window1.c.call('sessions.subscribe', { id: plain.id });
+      window1.close();
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(await exists(client, plain.id)).toBe(false);
+      const leaving = await phone('launch-0003');
+      const left = await leaving.c.call('sessions.create', { mode: 'chat', temporary: true });
+      await leaving.c.call('sessions.subscribe', { id: left.id });
+      expect(await leaving.c.call('sessions.leave', { id: left.id })).toEqual({ deleted: true });
+      leaving.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('is deleted a minute after its window closes, unless a window opens it again', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {

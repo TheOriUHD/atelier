@@ -140,6 +140,7 @@ import UniformTypeIdentifiers
         guard status["user"] != .null else { signedIn = false; connected = false; rpc.close(); throw MobileError.message("Sign in again to this server.") }
         userID = status["user"]["id"].string
         UserDefaults.standard.set(userID, forKey: "userID")
+        await announceLaunch()
         userName = status["user"]["name"].string
         UserDefaults.standard.set(userName, forKey: "userName")
         connectionNote = nil
@@ -153,7 +154,51 @@ import UniformTypeIdentifiers
         DeveloperOptions.shared.noteAttempt(reset: true)
         startPolling()
         try await refresh()
-        if let selected { try await open(selected) }
+        if let selected {
+            // A chat the server no longer has (a temporary one after the system ended the app, or after a restart of the server)
+            // ends here, said plainly, instead of leaving a screen on which everything fails.
+            do { try await open(selected) } catch let error where Self.isGone(error) { conversationEnded() }
+        }
+    }
+
+    // MARK: temporary chats and the app in the background
+
+    /// One start of the app (the process): iOS ends it when it needs the memory, and the next start has another.
+    static let launchID = UUID().uuidString
+    /// This install of the app, for as long as it is installed.
+    static var installID: String {
+        if let known = UserDefaults.standard.string(forKey: "installID") { return known }
+        let made = UUID().uuidString
+        UserDefaults.standard.set(made, forKey: "installID")
+        return made
+    }
+
+    /// Tells the server which install and which start of the app this connection is. The system pauses an app that is only in the
+    /// background and drops its connection; the server then keeps this phone's temporary chats for it (instead of deleting them a
+    /// minute later, as it does for a window that closed) until the app starts again, which means the system ended the old process.
+    /// A server from before this simply does not know the call, and keeps the minute.
+    private func announceLaunch() async {
+        _ = try? await rpc.call("app.launch", ["install": .string(Self.installID), "launch": .string(Self.launchID)])
+    }
+
+    /// Whether the server says the conversation is not there (any more).
+    static func isGone(_ error: Error) -> Bool {
+        guard case MobileError.rpc(_, let code, let message, _) = error else { return false }
+        return code == "not_found" && message.hasPrefix("That conversation")
+    }
+
+    /// The open conversation does not exist any more: leave it, keep what was typed for a new conversation, and say why.
+    func conversationEnded() {
+        let id = selected
+        let temporary = transcript.snapshot["session"]["temporary"] != .null
+        let text = draft, files = attachments
+        selected = nil; project = nil; transcript = Transcript(); artifacts = []; buffered = []
+        pendingSend = nil; uncertainDelivery = false
+        if let id { sessions.removeAll { $0.id == id } }
+        draft = text; attachments = files
+        ChatHub.of(self).endedNote = temporary
+            ? "That temporary chat has ended and was deleted. This happens when iOS closes the app to free memory or when the server restarts."
+            : "That conversation no longer exists."
     }
     private func checkServer(_ url: URL) async throws {
         let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
@@ -211,6 +256,7 @@ import UniformTypeIdentifiers
         saveDraft()
         if let selected { perform { _ = try await self.rpc.call("sessions.unsubscribe", ["id": .string(selected)]) } }
         selected = nil; project = nil; transcript = Transcript(); artifacts = []; attachments = []; draft = loadDraft()
+        ChatHub.of(self).endedNote = nil
     }
     func send() async throws {
         guard connected, !uncertainDelivery else { throw MobileError.message("Reconnect and check the conversation before sending again.") }
@@ -239,7 +285,10 @@ import UniformTypeIdentifiers
             saveDraft()
             _ = try await rpc.call(transcript.status == "running" ? "chat.queue" : "chat.send", params)
             pendingSend = nil; draft = ""; attachments = []; saveDraft()
-        } catch { uncertainDelivery = true; saveDraft(); throw error }
+        } catch {
+            if Self.isGone(error) { conversationEnded(); saveDraft(); return }
+            uncertainDelivery = true; saveDraft(); throw error
+        }
     }
     func reconcileSend() async throws {
         guard let selected else { return }

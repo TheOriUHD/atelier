@@ -497,6 +497,10 @@ across the top shows that you are in one.
 - It is deleted, with its files and artifacts, when you leave it: open something else, start a new chat, press **×** in
   the strip, or close its window. A window that closes or drops has a minute to come back (a reload keeps the chat).
   Any temporary chat nobody has open and that has been idle for 24 hours is removed too.
+- In the iPhone and iPad app a temporary chat stays while the app is only in the background: switching to another app for
+  as long as you like does not end it, because iOS merely pauses the app. It ends when you leave or delete it, or when iOS
+  closes the app to free memory and you open it again (the chat is gone then, as in other chat apps), or when its server
+  restarts. This needs a server of the release that has it; older servers delete it a minute after the app goes quiet.
 - In the iPhone and iPad app there is no strip: the **⋯** menu of a temporary chat starts with **Delete chat now**, which
   deletes it and leaves it, and **Keep chat**, which makes it an ordinary chat that stays in your list (from then on it is
   searched, can be filed in a project and is saved to memory like any other).

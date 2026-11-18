@@ -756,6 +756,8 @@ Keeping: `sessions.keep` (owner only; the iPhone and iPad app's **Keep chat**) c
 
 Deletion (everything goes as with `sessions.delete`: run stopped, messages, files, artifacts, checkpoints, children by cascade): `sessions.leave` (the UI's live-session release, 1 s after the last view lets go) deletes it when no other connection is subscribed; a connection that closes or drops schedules the same check for its subscriptions after 60 s (a reload or reconnect resubscribes in time); the backend sweeps hourly and at start for ones idle over `TEMPORARY_MAX_IDLE_MS` (24 h), and 60 s after start for any left from before that no window reopened.
 
+A phone app is the exception to the 60 s: iOS suspends an app that is only in the background and drops its connection, which is not the person leaving. The app calls `app.launch({ install, launch })` after signing in (`install`: a UUID kept in the app's defaults; `launch`: a UUID made at each start of the process). A connection that has done so does not schedule the 60 s check when it closes; its temporary chats go into `phoneHeld` (by person and install) and stay for that install until it announces a *different* `launch` (iOS ended the old process, as a cold start of ChatGPT's or Grok's app ends theirs: `app.launch` then deletes them unless a window has them open), the person leaves or deletes them, or the idle sweep. `phoneHeld` is memory only, so a restart of the backend still clears them 60 s after start (an app that reconnects and opens its chat in that minute keeps it). Apps that never call `app.launch` (windows, older apps) keep the 60 s.
+
 ## 12. Settings schema and layering
 
 These are the **system settings** (§21), written by admins. Each person's own preferences are a separate document (below).

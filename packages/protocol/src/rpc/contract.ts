@@ -156,6 +156,12 @@ const NewAccount = z.object({ username: Username, name: z.string().trim().min(1)
 export const contract = {
   procedures: {
     'app.info': { input: Empty, output: AppInfo },
+    /**
+     * A phone app says which install of it this connection belongs to and which start of the app. iOS suspends an app that is only
+     * in the background and drops its connection; the temporary chats it had open then stay (instead of going after a minute, as
+     * a closed window's do) until that install starts again, which means the system ended the old process. Not needed by windows.
+     */
+    'app.launch': { input: z.object({ install: z.string().min(8).max(80), launch: z.string().min(8).max(80) }), output: z.object({ ok: z.literal(true) }) },
 
     /**
      * Issue reports and feature requests (ARCHITECTURE §26). `prepare` collects what would be attached: this backend's
