@@ -112,7 +112,7 @@ enum Demo {
         let final = Demo.escape(text)
         json.append(#"{"id":"a3","role":"assistant","kind":"normal","parts":[{"type":"text","text":"\#(running ? "The test is flaky because it starts the server and sends the request in the same tick. On a slow machine" : final)"}],"error":null}"#)
         let todos = #"[{"content":"Reproduce the failure","status":"completed","activeForm":"Reproducing the failure"},{"content":"Find the race in the test helper","status":"completed","activeForm":"Finding the race"},{"content":"Wait for the port before the first request","status":"in_progress","activeForm":"Waiting for the port in the helper"},{"content":"Run the whole suite","status":"pending","activeForm":"Running the whole suite"}]"#
-        return Demo.json(#"{"session":{"id":"s2","status":"\#(running ? "running" : screen == "permission" || screen == "question" ? "waiting" : "idle")","title":"Fix the flaky e2e test","model":"anthropic/opus"},"seq":9,"messages":[\#(json.joined(separator: ","))],"pending":\#(pending),"todos":\#(running || screen == "permission" ? todos : "[]"),"context":{"used":152000,"limit":200000}}"#)
+        return Demo.json(#"{"session":{"id":"s2","status":"\#(running ? "running" : screen == "permission" || screen == "question" ? "waiting" : "idle")","title":"Fix the flaky e2e test","model":"anthropic/opus"},"seq":9,"messages":[\#(json.joined(separator: ","))],"pending":\#(pending),"todos":\#(running || screen == "permission" ? todos : "[]"),"context":{"used":152000,"limit":200000,"threshold":170000,"categories":{"systemPrompt":9000,"systemTools":14000,"mcpTools":6000,"skills":3000,"messages":120000}}}"#)
     }
 
     static func escape(_ text: String) -> String {

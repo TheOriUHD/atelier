@@ -108,6 +108,7 @@ struct RootView: View {
                 case "images": route = .images; showDetail()
                 case "archived": route = .archived; showDetail()
                 case "conversation": showDetail()
+                case "newcode": route = .newCode; showDetail()
                 default: break
                 }
                 #endif

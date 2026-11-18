@@ -43,6 +43,14 @@ struct NewCodeSessionPage: View {
         _system = State(initialValue: CodeSystemSettings(store: store))
     }
 
+    private static var isDemoScreen: Bool {
+        #if DEBUG
+        Demo.requested != nil
+        #else
+        false
+        #endif
+    }
+
     private var caps: CodeCapabilities { CodeCapabilities(store: store) }
     private var selectedFolder: CodeWorkspace? { chosen.flatMap { id in folders.folders.first { $0.id == id } } }
     private var targets: [CodeTarget] { CodeTarget.targets(folders: folders.all, devices: folders.devices) }
@@ -83,7 +91,8 @@ struct NewCodeSessionPage: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { if sizeClass == .regular { ToolbarItem(placement: .principal) { HomeModePicker() } } }
             .task {
-                Task { try? await Task.sleep(for: .milliseconds(450)); focused = true }
+                // The box takes the keyboard when the page opens; the canned demo screens (screenshots) stay without it.
+                Task { try? await Task.sleep(for: .milliseconds(450)); focused = !Self.isDemoScreen }
                 CodeSshPromptCenter.shared.start(store: store)
                 await folders.load(devices: true)
                 await system.load()
@@ -124,14 +133,17 @@ struct NewCodeSessionPage: View {
 
     /// The greeting, where the session will work, and the box to say what it is for.
     private var startPage: some View {
-        VStack(spacing: 0) {
+        // On an iPad the greeting and the box are one group in the middle, as on a new conversation's page; on a phone the box
+        // sits at the bottom, above the keyboard.
+        let wide = sizeClass == .regular
+        return VStack(spacing: 0) {
             Spacer(minLength: 0)
             VStack(spacing: 18) {
                 AtelierMark(size: 46)
                 Text(firstName.isEmpty ? "What shall we build?" : "Hello, \(firstName)")
                     .font(.system(size: 32, weight: .regular, design: .serif)).foregroundStyle(Theme.ink)
             }
-            Spacer(minLength: 0)
+            if wide { Spacer().frame(height: 34) } else { Spacer(minLength: 0) }
             VStack(alignment: .leading, spacing: 12) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -144,7 +156,8 @@ struct NewCodeSessionPage: View {
                     if let model = chosenModel { EffortPanel(store: store, model: model, mode: "code", local: $effort) }
                 }
             }
-            .padding(.horizontal, 16).padding(.bottom, 10)
+            .padding(.horizontal, 16).padding(.bottom, wide ? 0 : 10)
+            if wide { Spacer(minLength: 0); Spacer(minLength: 0) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .paperBehind()
