@@ -76,6 +76,11 @@ struct ChatSidebar: View {
         .environment(\.defaultMinListRowHeight, 1)
         .scrollContentBackground(.hidden)
         .background(Theme.background)
+        // An iPad's three round buttons at the bottom float: no bar and no edge effect behind them, the rows simply run under
+        // their bubbles; the list's end is kept clear of them.
+        .toolbarBackgroundVisibility(isPad ? .hidden : .automatic, for: .bottomBar)
+        .scrollEdgeEffectHidden(isPad, for: .bottom)
+        .contentMargins(.bottom, isPad ? 64 : 0, for: .scrollContent)
         .overlay { overlay }
         .task(id: "\(store.connected)\(mode.rawValue)") {
             guard store.connected, mode == .code else { return }
@@ -157,19 +162,16 @@ struct ChatSidebar: View {
         if isPad {
             ToolbarItem(placement: .topBarLeading) { Text("Atelier").font(.system(.title2, design: .serif, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(1).fixedSize() }
                 .sharedBackgroundVisibility(.hidden)
-            // Three free-standing icons of one size, with nothing behind them.
+            // Three round buttons of one size, each on its own, with no bar behind them: the profile is a circle itself, the
+            // other two sit in the system's round bubbles.
             ToolbarItem(placement: .bottomBar) {
-                Button { actions.settings() } label: { Avatar(name: store.userName, size: 32, ring: true).frame(width: 44, height: 44) }.buttonStyle(.plain).accessibilityLabel("Settings")
+                Button { actions.settings() } label: { Avatar(name: store.userName, size: 44, ring: true) }.buttonStyle(.plain).accessibilityLabel("Settings")
             }
             .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .bottomBar) { viewMenu.font(.system(size: 24, weight: .regular)).frame(width: 44, height: 44) }
-                .sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.fixed, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) { viewMenu }
             ToolbarSpacer(.flexible, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) {
-                Button { actions.compose() } label: { Image(systemName: "square.and.pencil").font(.system(size: 24, weight: .regular)).frame(width: 44, height: 44) }
-                    .accessibilityLabel(mode == .code ? "New Code session" : "New conversation")
-            }
-            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .bottomBar) { Button { actions.compose() } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel(mode == .code ? "New Code session" : "New conversation") }
         } else {
             ToolbarItem(placement: .topBarLeading) {
                 Button { actions.settings() } label: { Avatar(name: store.userName, size: 34, ring: true) }
