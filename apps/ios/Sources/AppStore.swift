@@ -101,7 +101,7 @@ import UniformTypeIdentifiers
                 try await checkServer(url)
                 if signedIn { leaveAccount() }
                 rpc.connect(url, token: nil)
-                let result = try await rpc.call("auth.terminalPoll", ["pollToken": .string(link.token)])
+                let result = try await rpc.call("auth.terminalPoll", ["pollToken": .string(link.token), "device": PairingDevice.json])
                 guard result["state"].string == "approved", !result["token"].string.isEmpty else {
                     rpc.close()
                     throw PairingExpired()
@@ -110,6 +110,7 @@ import UniformTypeIdentifiers
                 address = url.absoluteString; UserDefaults.standard.set(address, forKey: "server")
                 pairing = false
                 try await restore()
+                PairingHaptics.shared.success()
                 return
             } catch is PairingExpired {
                 throw MobileError.message("This code ran out or was already used. Show a new one on your computer and scan it again.")

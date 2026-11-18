@@ -84,7 +84,7 @@ see are hidden in the app.
 | **Content safeguards** *(only where it works)* | Extra limits on what models write for you. Your administrator manages them. |
 | **Active sessions** *(only where it works)* | Browsers and apps signed in to your account. |
 | **Devices** *(only where it works)* | Computers running the Atelier app for your account. They lend their files and tools to your sessions. |
-| **Sign in your phone** *(only where it works)* | Shows a QR code that the Atelier app on your phone scans to sign in as you, with no address or password to type. The code works once, for five minutes. |
+| **Pair mobile app** *(only where it works)* | The QR icon in the Profile heading shows a code that the Atelier app on your phone scans to sign in as you, with no address or password to type. The code works once, for five minutes, and a confirmation tells you which phone signed in. |
 | **Screen lock** *(only where it works)* | Hides Atelier until you enter your PIN or password. Your data on this computer is not encrypted by it. |
 | **PIN or password** *(only where it works)* | Asked for when Atelier starts and whenever you lock it. |
 | **Lock when inactive** *(only where it works)* | Locks Atelier after this long without typing or clicking in any of its windows. |

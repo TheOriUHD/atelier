@@ -2346,9 +2346,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         const c = ctx.connection();
         return terminalSignIns.start(input, c.client, c.origin ?? '');
       }),
-    'auth.terminalPoll': ({ pollToken }, ctx) =>
+    'auth.terminalPoll': ({ pollToken, device }, ctx) =>
       accountErrors(async () => {
-        const result = await terminalSignIns.poll(pollToken, ctx.connection().client);
+        const result = await terminalSignIns.poll(pollToken, ctx.connection().client, (userId) => {
+          // The window that shows the QR code hears who just scanned it.
+          emitToUser(userId, 'account.phonePaired', { name: device?.name ?? '', model: device?.model ?? '', appVersion: device?.appVersion ?? '' });
+        });
         if (result.state === 'approved') await signIn(ctx, result);
         return result;
       }),

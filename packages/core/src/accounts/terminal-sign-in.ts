@@ -125,8 +125,11 @@ export class TerminalSignIns {
     return { pollToken, addresses: [...addresses], expiresAt };
   }
 
-  /** The terminal asks how its request stands; an approved one becomes a sign-in, handed out this once. */
-  async poll(pollToken: string, client: ClientInfo): Promise<TerminalSignInPoll> {
+  /**
+   * The terminal asks how its request stands; an approved one becomes a sign-in, handed out this once. `onPaired` hears
+   * of a QR code that was just redeemed, with the person it belongs to.
+   */
+  async poll(pollToken: string, client: ClientInfo, onPaired?: (userId: string) => void): Promise<TerminalSignInPoll> {
     this.prune();
     const hash = hashToken(pollToken);
     const request = [...this.requests.values()].find((r) => r.pollHash === hash);
@@ -135,6 +138,7 @@ export class TerminalSignIns {
     this.requests.delete(request.code);
     if (!request.decision.approved) return { state: 'denied' };
     const signedIn = await this.accounts.signInAs(request.decision.userId, { ...client, clientKind: client.clientKind === 'mobile' ? 'mobile' : 'cli' }, 'terminal');
+    if (request.pairedBy) onPaired?.(request.pairedBy);
     return { state: 'approved', ...signedIn };
   }
 

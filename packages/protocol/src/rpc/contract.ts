@@ -204,7 +204,14 @@ export const contract = {
     /** Servers: a terminal asks to be signed in through the browser (ARCHITECTURE §25); it shows the code and link it gets. */
     'auth.terminalStart': { input: z.object({ deviceName: z.string().trim().min(1).max(120), platform: z.string().trim().min(1).max(40) }), output: TerminalSignInStart },
     /** The terminal asks how its request stands; once approved, the answer signs this connection in and carries the token, once. */
-    'auth.terminalPoll': { input: z.object({ pollToken: z.string().min(16).max(200) }), output: TerminalSignInPoll },
+    'auth.terminalPoll': {
+      input: z.object({
+        pollToken: z.string().min(16).max(200),
+        /** A phone that signs in by QR code says what it is; the person's other windows show it ("iPhone 17 Pro · Atelier 1.0"). */
+        device: z.object({ name: z.string().trim().max(120).optional(), model: z.string().trim().max(80).optional(), appVersion: z.string().trim().max(40).optional() }).optional(),
+      }),
+      output: TerminalSignInPoll,
+    },
     /** Signed in: what asks with this code, for the /link page. */
     'auth.terminalRequest': { input: z.object({ code: z.string().min(1).max(40) }), output: TerminalSignInRequest },
     /** Signed in: approve the terminal (it is signed in as you) or deny it. */
@@ -880,6 +887,8 @@ export const contract = {
     'workspaces.changed': z.array(WorkspaceSummary),
     /** One of the person's desktop devices came or went, or changed what it lends: read `account.devices` again. */
     'devices.changed': Empty,
+    /** A phone just signed in with the person's QR code (`account.pairStart`): the window that shows the code says so. */
+    'account.phonePaired': z.object({ name: z.string(), model: z.string(), appVersion: z.string() }),
     /** A session's side chats changed (one started, or one's title): its windows read the list again. */
     'sideChats.changed': z.object({ sessionId: z.string() }),
     /** A connection needs the person: trust a host key, or give a password (answer with `ssh.answer`). */

@@ -48,7 +48,7 @@ import { SAFEGUARD_CATEGORIES } from './capabilities-page.tsx';
 import { Cell, DataTable, TableRow } from './data-table.tsx';
 import { InstructionsField } from './instructions-field.tsx';
 import { settingEntry } from './search-index.ts';
-import { PhoneSignInSection } from './phone-sign-in.tsx';
+import { PairPhoneButton } from './phone-sign-in.tsx';
 import { ScreenLockSection } from './screen-lock-section.tsx';
 import { SettingRow, SettingsSection } from './setting-row.tsx';
 import { useDialog } from './use-dialog.ts';
@@ -77,7 +77,6 @@ export function AccountPage() {
       <>
         <ProfileSection account={account} />
         <PersonalInstructionsSection />
-        <PhoneSignInSection />
         <ScreenLockSection />
       </>
     );
@@ -92,7 +91,6 @@ export function AccountPage() {
       <IdentitiesSection />
       <SessionsSection />
       <DevicesSection />
-      <PhoneSignInSection />
     </>
   );
 }
@@ -128,7 +126,7 @@ function ProfileSection({ account }: { account: UserSummary }) {
   const style = usePref<ResponseStyle>(['personalization', 'responseStyle']);
 
   return (
-    <SettingsSection title="Profile">
+    <SettingsSection title="Profile" action={<PairPhoneButton />}>
       <AvatarRow account={account} onChange={(avatar) => update({ avatar })} />
       <SettingRow id="profile.name" error={nameWrite.error}>
         {(label) => <TextField {...label} {...name} placeholder="Your name" maxLength={80} className="w-[253px]" />}

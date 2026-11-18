@@ -135,3 +135,15 @@ html:root:not([data-focus='tab']) {
 @utility app-no-drag {
   -webkit-app-region: no-drag;
 }
+
+/* The confirmation that a phone signed in: the check swells into place (Account › Pair mobile app). */
+@keyframes pairedpop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

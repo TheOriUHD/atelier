@@ -4,7 +4,7 @@ import { settingEntry, type SettingId } from './search-index.ts';
 import type { Setting } from './use-setting.ts';
 
 /** Background flash when search lands on a row: shown instantly, then fades over 1.2s (see `flashRow`). */
-const FLASH_CLASS = 'transition-[background-color] duration-[1200ms] ease-out data-flash:bg-interactive-subtle data-flash:transition-none';
+export const FLASH_CLASS = 'transition-[background-color] duration-[1200ms] ease-out data-flash:bg-interactive-subtle data-flash:transition-none';
 
 export interface SettingsSectionProps {
   title: ReactNode;

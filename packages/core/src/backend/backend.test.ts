@@ -2076,6 +2076,27 @@ describe('account.pairStart', () => {
     expect(sessions.filter((s) => s.clientKind === 'mobile')).toHaveLength(1);
   });
 
+  it('tells the window that shows the code which phone scanned it, once', async () => {
+    const page = from('https://atelier.example.com/', { clientKind: 'web', ip: '10.0.0.2', userAgent: 'test' });
+    await page.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'web' });
+    const heard: { name: string; model: string; appVersion: string }[] = [];
+    page.on('account.phonePaired', (paired) => heard.push(paired));
+    const pair = await page.call('account.pairStart', {});
+    const phone = from('https://atelier.example.com', { clientKind: 'mobile', ip: '10.0.0.3', userAgent: 'Atelier Mobile iOS' });
+    // Still waiting nothing is said; a poll that finds nothing says nothing either.
+    expect(await phone.call('auth.terminalPoll', { pollToken: 'x'.repeat(30) })).toEqual({ state: 'expired' });
+    expect(heard).toEqual([]);
+    expect(await phone.call('auth.terminalPoll', { pollToken: pair.pollToken, device: { name: 'Philipp’s iPhone', model: 'iPhone 17 Pro', appVersion: '1.0' } })).toMatchObject({ state: 'approved' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(heard).toEqual([{ name: 'Philipp’s iPhone', model: 'iPhone 17 Pro', appVersion: '1.0' }]);
+    // An older app says nothing about itself: the window still hears that a phone signed in.
+    const second = await page.call('account.pairStart', {});
+    const older = from('https://atelier.example.com', { clientKind: 'mobile', ip: '10.0.0.4', userAgent: 'Atelier Mobile iOS' });
+    await older.call('auth.terminalPoll', { pollToken: second.pollToken });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(heard[1]).toEqual({ name: '', model: '', appVersion: '' });
+  });
+
   it('refuses a page opened as localhost, which a phone cannot reach', async () => {
     const page = from('http://localhost:5173', { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' });
     await page.call('auth.login', { username: 'ada', password: 'correct horse', clientKind: 'web' });

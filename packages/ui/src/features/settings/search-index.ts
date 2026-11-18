@@ -335,9 +335,9 @@ export const SETTINGS_INDEX = [
   {
     id: 'account.phone',
     page: 'account',
-    label: 'Sign in your phone',
+    label: 'Pair mobile app',
     description:
-      'Shows a QR code that the Atelier app on your phone scans to sign in as you, with no address or password to type. The code works once, for five minutes.',
+      'The QR icon in the Profile heading shows a code that the Atelier app on your phone scans to sign in as you, with no address or password to type. The code works once, for five minutes, and a confirmation tells you which phone signed in.',
     keywords: ['qr', 'qr code', 'mobile', 'iphone', 'ipad', 'ios', 'scan', 'pair', 'app', 'phone'],
     available: () => true,
   },

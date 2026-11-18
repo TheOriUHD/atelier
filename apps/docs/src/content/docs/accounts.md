@@ -221,9 +221,12 @@ code. Approvals and denials go into the [activity log](#the-activity-log) (`sign
 
 ### Signing in a phone
 
-The Atelier app for iPhone and iPad signs in with a QR code. In **Settings › Account › Sign in your phone**, choose **Show
-QR code**; on the phone's sign-in screen choose **Scan QR code**. The phone signs in as the account on your screen, with
-no address or password to type, and shows up under **Active sessions** like any other sign-in.
+The Atelier app for iPhone and iPad signs in with a QR code. In **Settings › Account**, click the QR icon at the right of
+the **Profile** heading (**Pair mobile app**); on the phone's sign-in screen choose **Scan QR code**. The phone signs in
+as the account on your screen, with no address or password to type, and shows up under **Active sessions** like any other
+sign-in. When it has scanned the code, the window turns into a confirmation: "Philipp’s iPhone is logged in!", with the
+phone's model and the app's version underneath. The scanner has a flashlight button, and on a phone with several back
+cameras a choice of lens for codes that are very near or far.
 
 - **One use, five minutes.** The code works once; a new code ends the one before it, and one person can show 10 in 15
   minutes. The phone's sign-in is the account's own, so it ends with **Revoke**, **Log out of all devices** or a
