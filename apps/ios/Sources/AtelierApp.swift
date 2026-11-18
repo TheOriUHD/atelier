@@ -28,11 +28,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #endif
     }
 
-    /// The window itself is the paper colour, so what shows behind the keyboard's rounded top corners is not black.
+    #if DEBUG
+    /// `--dump-views`: prints the views near the top of every window with their background colours (where a black void could come from).
+    @MainActor static func dumpViews() {
+        func describe(_ view: UIView, _ depth: Int) {
+            guard depth < 7 else { return }
+            let color = view.backgroundColor.map { c -> String in var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0; c.resolvedColor(with: view.traitCollection).getRed(&r, green: &g, blue: &b, alpha: &a); return String(format: "#%02X%02X%02X a%.2f", Int(r * 255), Int(g * 255), Int(b * 255), a) } ?? "-"
+            NSLog("VIEWS %@%@ %@ bg=%@ hidden=%d", String(repeating: "  ", count: depth), NSStringFromClass(type(of: view)), NSCoder.string(for: view.frame), color, view.isHidden ? 1 : 0)
+            for sub in view.subviews { describe(sub, depth + 1) }
+        }
+        for scene in UIApplication.shared.connectedScenes { for window in (scene as? UIWindowScene)?.windows ?? [] { NSLog("VIEWS window %@", NSStringFromClass(type(of: window))); describe(window, 0) } }
+    }
+    #endif
+
+    /// The window and the containers UIKit puts under a SwiftUI app are the paper colour, so whatever is ever drawn short of its
+    /// edge (the keyboard's rounded top corners, a page that moved, a bar that gave way) shows the same grey as the page, never
+    /// black. The root hosting view and the split view's own view are opaque black in dark mode by default.
     @MainActor private static func paintWindows() {
-        let paper = UIColor { traits in UIColor(Theme.background).resolvedColor(with: traits) }
         for scene in UIApplication.shared.connectedScenes {
-            for window in (scene as? UIWindowScene)?.windows ?? [] { window.backgroundColor = paper }
+            // Only the app's own windows: the ones UIKit adds for the keyboard and text effects sit above it and are not painted.
+            for window in (scene as? UIWindowScene)?.windows ?? [] where window.windowLevel == .normal { PaperVoid.paint(window) }
         }
     }
 
@@ -40,7 +55,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         WindowGroup {
             content
                 .tint(Theme.clay)
-                .onAppear { Self.paintWindows() }
+                .onReceive(NotificationCenter.default.publisher(for: UIWindow.didBecomeKeyNotification)) { _ in Self.paintWindows() }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in Self.paintWindows() }
+                .onAppear {
+                    Self.paintWindows()
+                    #if DEBUG
+                    if Launch.value("--dump-views") != nil { Task { try? await Task.sleep(for: .seconds(5)); Self.dumpViews() } }
+                    #endif
+                }
                 .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
                 .task {
                     guard !demo else { return }

@@ -23,8 +23,12 @@ extension EnvironmentValues {
 ///
 /// The keyboard is one thing for the whole window, but it is not always the page's: on an iPad the list beside the page
 /// has a search field of its own, and when that one has the keyboard the page must stay as it is. So a height is only
-/// reported while the field that has the keyboard sits inside the page (`Anchor` is the page's own frame: put the probe
+/// reported while the field that has the keyboard belongs to the page (`Anchor` is the page's own frame: put the probe
 /// as the page's background).
+///
+/// "Belongs" is decided by presentation, not by where the field is drawn: the text field of an alert, a sheet or a popover
+/// floats over the page, but its keyboard is that presentation's, and a page that took it for its own lifted its whole
+/// content away from under it (the new-chat page when "New project…" asks for a name).
 struct KeyboardProbe: UIViewRepresentable {
     @Binding var height: CGFloat
 
@@ -35,6 +39,17 @@ struct KeyboardProbe: UIViewRepresentable {
     }
 
     func updateUIView(_ anchor: Anchor, context: Context) { anchor.report = report }
+
+    /// The alert, sheet or popover a view is in (the nearest controller up the chain that was presented), or nil for what is
+    /// on the screen itself.
+    static func presentation(of responder: UIResponder?) -> UIViewController? {
+        var current = responder
+        while let next = current {
+            if let controller = next as? UIViewController, controller.presentingViewController != nil { return controller }
+            current = next.next
+        }
+        return nil
+    }
 
     private var report: (CGFloat, Animation?) -> Void {
         { new, animation in withAnimation(animation) { height = new } }
@@ -71,6 +86,7 @@ struct KeyboardProbe: UIViewRepresentable {
                 guard let self, self.window != nil else { return nil }
                 return self.convert(self.bounds, to: nil)
             }
+            probe.owner = { [weak self] in self }
             window.addSubview(probe)
             self.probe = probe
         }
@@ -86,6 +102,8 @@ struct KeyboardProbe: UIViewRepresentable {
         var report: ((CGFloat, Animation?) -> Void)?
         /// Where the page is, in window coordinates.
         var page: (() -> CGRect?)?
+        /// A view of the page (the anchor): what a field has to share its presentation with to be the page's.
+        var owner: (() -> UIView?)?
         private let marker = UIView()
         private var last: CGFloat = 0
         private var announcedUntil = Date.distantPast
@@ -127,6 +145,8 @@ struct KeyboardProbe: UIViewRepresentable {
         /// Whether the field that has the keyboard is in the page. With no field known, the keyboard is taken as the page's.
         private func servesPage() -> Bool {
             guard let page = page?(), !page.isEmpty, let field = UIResponder.atelierFirstResponder as? UIView, field.window != nil, field.window === window else { return true }
+            // A field in an alert, a sheet or a popover is that presentation's, wherever it floats.
+            if let owner = owner?(), KeyboardProbe.presentation(of: field) !== KeyboardProbe.presentation(of: owner) { return false }
             return page.intersects(field.convert(field.bounds, to: nil))
         }
 
