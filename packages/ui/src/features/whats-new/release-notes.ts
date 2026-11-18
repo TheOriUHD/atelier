@@ -38,6 +38,26 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.3',
+    intro: 'Pairing a phone is easier to find and says when it worked, and a temporary chat on your phone now survives a trip to another app.',
+    highlights: [
+      {
+        icon: Link,
+        title: 'Pair mobile app, at the top of Account',
+        body: 'The QR code is now an icon next to Profile in Settings › Account. When your phone has scanned it, the window tells you which phone signed in, for example “Philipp’s iPhone is logged in!” with its model and the app’s version under it. The code is black on white in every theme.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'Temporary chats stay while the phone app is away',
+        body: 'The Atelier app for iPhone and iPad no longer loses an open temporary chat when you switch to another app for a while. It ends when you leave or delete it, when iOS closes the app to free memory, or when the server restarts.',
+      },
+    ],
+    also: [
+      'The phone’s QR scanner has a lens choice on phones with several cameras, a flashlight button and a haptic confirmation.',
+      'Models on your phone can be paused while they download, and carry on by themselves after a lost connection.',
+    ],
+  },
+  {
     version: '0.10.2',
     intro: 'Your phone gets more of Atelier, and can think for itself.',
     highlights: [
