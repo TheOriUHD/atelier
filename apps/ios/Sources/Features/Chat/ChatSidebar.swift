@@ -76,10 +76,10 @@ struct ChatSidebar: View {
         .environment(\.defaultMinListRowHeight, 1)
         .scrollContentBackground(.hidden)
         .background(Theme.background)
-        // An iPad's three buttons at the bottom float: no bar and no edge effect behind them, the rows simply run under them;
-        // the list's end is kept clear of them.
+        // An iPad's three buttons at the bottom float: no bar behind them, only the soft fade of the rows that run under them,
+        // which is what gives the glass something to stand against; the list's end is kept clear of them.
         .toolbarBackgroundVisibility(isPad ? .hidden : .automatic, for: .bottomBar)
-        .scrollEdgeEffectHidden(isPad, for: .bottom)
+        .scrollEdgeEffectStyle(isPad ? .soft : .automatic, for: .bottom)
         .contentMargins(.bottom, isPad ? 64 : 0, for: .scrollContent)
         .overlay { overlay }
         .task(id: "\(store.connected)\(mode.rawValue)") {
