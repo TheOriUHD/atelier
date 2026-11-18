@@ -657,3 +657,56 @@ final class CodeTargetTests: XCTestCase {
         XCTAssertEqual(CodeTarget.initial(CodeTarget.targets(folders: [], devices: []), remembered: nil)?.id, "server")
     }
 }
+
+final class UltracodeChargeTests: XCTestCase {
+    private let t0 = Date(timeIntervalSinceReferenceDate: 1000)
+    private func at(_ seconds: Double) -> Date { t0.addingTimeInterval(seconds) }
+
+    /// Frames at 30 a second, the slider on or off Ultracode over a stretch of time.
+    private func run(_ charge: inout UltracodeCharge, from start: Double, to end: Double, lit: Bool) -> Double {
+        var level = charge.level
+        var time = start
+        while time <= end + 1e-9 { level = charge.level(at: at(time), lit: lit); time += 1.0 / 30 }
+        return level
+    }
+
+    func testItRisesWhileLitAndFallsToNothingOnceLeft() {
+        var charge = UltracodeCharge()
+        XCTAssertTrue(charge.isEmpty)
+        XCTAssertEqual(run(&charge, from: 0, to: 0.7, lit: true), 1, accuracy: 0.05)
+        XCTAssertFalse(charge.isEmpty)
+        // Left: it falls over 0.85 seconds, and nothing of it is left after.
+        XCTAssertGreaterThan(run(&charge, from: 0.72, to: 1.0, lit: false), 0.5)
+        XCTAssertFalse(charge.isEmpty, "still showing while it falls")
+        XCTAssertEqual(run(&charge, from: 1.03, to: 1.8, lit: false), 0, accuracy: 0.001)
+        XCTAssertTrue(charge.isEmpty, "nothing of the field stays once the slider is off Ultracode")
+    }
+
+    func testAQuickBackAndForthDoesNotJump() {
+        var charge = UltracodeCharge()
+        let rising = run(&charge, from: 0, to: 0.35, lit: true)
+        XCTAssertEqual(rising, 0.5, accuracy: 0.06)
+        let fallen = run(&charge, from: 0.37, to: 0.57, lit: false)
+        XCTAssertLessThan(fallen, rising)
+        XCTAssertGreaterThan(fallen, 0.2, "it fell a little, not to nothing")
+        let again = run(&charge, from: 0.6, to: 0.7, lit: true)
+        XCTAssertGreaterThan(again, fallen, "it rises again from where it was")
+        XCTAssertLessThan(again, 0.9, "and does not start over at full")
+    }
+
+    func testAPatternStartsFreshOnlyWhenChargedFromNothing() {
+        var charge = UltracodeCharge()
+        _ = charge.level(at: at(0), lit: true)
+        let first = charge.waveStart
+        XCTAssertEqual(first, at(0))
+        _ = run(&charge, from: 0.03, to: 0.5, lit: true)
+        _ = run(&charge, from: 0.53, to: 0.7, lit: false)
+        _ = charge.level(at: at(0.73), lit: true)
+        XCTAssertEqual(charge.waveStart, first, "left and back while it still glows: the same waves go on")
+        _ = run(&charge, from: 0.76, to: 1.0, lit: true)
+        _ = run(&charge, from: 1.03, to: 2.2, lit: false)
+        XCTAssertNil(charge.waveStart, "faded to nothing: nothing of the old pattern")
+        _ = charge.level(at: at(3), lit: true)
+        XCTAssertEqual(charge.waveStart, at(3))
+    }
+}
