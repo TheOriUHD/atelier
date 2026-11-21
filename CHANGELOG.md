@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.5] — 2026-11-21
+
 - **A busy or rate-limited model server is tried again within seconds, and for as long as it asks.** A request that fails with 408, 409, 425, 429, 5xx, a stream the server closed early or a timeout waited five seconds before its first retry, which looked like a failure on Mistral's free and Vibe plans (rate limit, then Retry). The waits are now half a second, 1, 2, 4, 8, 15, 30, 60, 120 and 240 seconds (plus up to half as much, so parallel requests don't come back together), or the server's own `Retry-After` when it sends one (nothing is waited for a limit that lasts more than ten minutes: the error says so). An outage (no connection) keeps the old, longer waits. `MessageError` has an optional `retryAfterMs` for it.
 
 - **A reply with no text and no tool call is asked for again.** A model that stops after a tool result without writing anything (all it wrote was thinking, or nothing) left an empty message that looked like Atelier had frozen. The request is now repeated twice, as Mistral's own Vibe does, and if the reply stays empty the message says "The model finished without writing a reply" and suggests another model or a lower reasoning effort.
