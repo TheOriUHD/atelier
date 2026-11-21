@@ -25,7 +25,7 @@ const reviewKit: PluginSummary = { id: 'review-kit@acme', name: 'review-kit', de
 
 const mine: PersonalConnector = { id: 'c1', name: 'notes', type: 'stdio', command: 'npx', args: ['-y', 'notes-mcp'], envKeys: ['NOTES_TOKEN'], headerKeys: [], enabled: true, disabledTools: [] };
 
-function renderPage(role: 'admin' | 'user', url = '/customize', extra: Record<string, () => unknown> = {}) {
+function renderPage(role: 'admin' | 'user', url = '/customize', extra: Record<string, (input: never) => unknown> = {}) {
   resetBackend({
     'account.get': () => user({ role }),
     'settings.get': () => snapshot(),
@@ -83,6 +83,27 @@ describe('CustomizePage', () => {
     expect(await screen.findByText('review-kit')).toBeTruthy();
     expect(screen.queryByRole('switch')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Add from a marketplace' })).toBeNull();
+  });
+
+  it('adds one of your own from the ready-made ones, its token kept as one of its values', async () => {
+    const saved: unknown[] = [];
+    renderPage('user', '/customize?tab=connectors', {
+      'connectors.save': (input: { name: string }) => (saved.push(input), { ...mine, id: 'c2', name: input.name, type: 'http', command: undefined, args: [], url: 'https://api.githubcopilot.com/mcp/', envKeys: [], headerKeys: ['Authorization'] }),
+    });
+    const yours = (await screen.findByRole('heading', { name: 'Your connectors' })).closest('section')!;
+    fireEvent.click(within(yours).getByRole('button', { name: 'Add your own' }));
+    const catalog = within(await screen.findByRole('dialog', { name: 'Add your connector' }));
+    // In a browser, nothing here runs a program on your computer.
+    expect(catalog.getByRole('button', { name: /^Roblox Studio/ }).hasAttribute('disabled')).toBe(true);
+    expect(catalog.getByRole('button', { name: /^Roblox Studio/ }).textContent).toContain('Only in the desktop app');
+    fireEvent.click(catalog.getByRole('button', { name: /^GitHub/ }));
+    const form = within(await screen.findByRole('dialog', { name: 'Add GitHub' }));
+    expect(form.getByText(/Kept encrypted on the server, for you only/)).toBeTruthy();
+    fireEvent.change(form.getByLabelText('Personal access token'), { target: { value: 'ghp_test123' } });
+    fireEvent.click(form.getByRole('button', { name: 'Add connector' }));
+    await waitFor(() => expect(saved).toEqual([{ name: 'github', type: 'http', url: 'https://api.githubcopilot.com/mcp/', env: {}, headers: { Authorization: 'Bearer ghp_test123' } }]));
+    expect(callsTo('secrets.set')).toEqual([]);
+    expect(callsTo('settings.set')).toEqual([]);
   });
 
   it("lists everyone's own connectors with where they run, and the plugins on their computer as theirs to switch", async () => {

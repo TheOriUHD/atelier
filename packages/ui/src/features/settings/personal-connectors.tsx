@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Import, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
-import type { McpImportEntry, McpServerStatus, McpTransport, PersonalConnector, PersonalConnectorView } from '@atelier/protocol';
+import type { ConnectorPreset, McpImportEntry, McpServerStatus, McpTransport, PersonalConnector, PersonalConnectorView } from '@atelier/protocol';
 import {
   Badge,
   Button,
@@ -34,7 +34,7 @@ import { changeLending, isLocalAddress, useLending } from '../../lib/lending.ts'
 import { desktop, openExternal } from '../../lib/platform.ts';
 import { keys, useAppInfo, useMcpStatus } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
-import { EditorForm, TYPE_LABELS, connectorTarget } from './connector-dialogs.tsx';
+import { EditorForm, PresetCatalog, PresetForm, TYPE_LABELS, connectorTarget } from './connector-dialogs.tsx';
 import { Cell, DataTable, TableRow } from './data-table.tsx';
 import { plural } from './provider-wizard.tsx';
 import { SettingsSection } from './setting-row.tsx';
@@ -51,7 +51,7 @@ export async function allowHere(connector: PersonalConnector): Promise<void> {
   }
 }
 
-async function startSignIn(id: string): Promise<void> {
+export async function startSignIn(id: string): Promise<void> {
   const { url } = await rpc().call('connectors.signIn', { id });
   openExternal(url);
 }
@@ -116,9 +116,7 @@ export function PersonalConnectorsSection() {
         )}
       </SettingsSection>
       <Dialog open={add.open} onOpenChange={add.onOpenChange}>
-        <DialogContent title="Add your connector" description="Any MCP server, by its URL or the command that starts it.">
-          <PersonalEditor key={add.key} here={here} taken={taken} onDone={() => add.onOpenChange(false)} />
-        </DialogContent>
+        <PersonalAdd key={add.key} here={here} taken={taken} onDone={() => add.onOpenChange(false)} />
       </Dialog>
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent title={`Edit ${editing?.name ?? ''}`}>{editing && <PersonalEditor existing={editing} here={here} taken={taken} onDone={() => setEditing(null)} />}</DialogContent>
@@ -134,6 +132,29 @@ export function PersonalConnectorsSection() {
         </Dialog>
       )}
     </>
+  );
+}
+
+/**
+ * A ready-made connector or Custom, then its form. One that runs a program is offered where this desktop app runs it
+ * for the server (`here`), set up for this computer's system.
+ */
+function PersonalAdd({ here, taken, onDone }: { here: boolean; taken: ReadonlySet<string>; onDone(): void }) {
+  const [choice, setChoice] = useState<ConnectorPreset | 'custom' | null>(null);
+  const platform = here && desktop ? desktop.platform : null;
+  return (
+    <DialogContent
+      title={choice === null ? 'Add your connector' : choice === 'custom' ? 'Add your own custom connector' : `Add ${choice.name}`}
+      description={choice === null ? 'Connect a service, or any MCP server, with your own keys.' : undefined}
+    >
+      {choice === null ? (
+        <PresetCatalog programs={here} platform={platform} onChoose={setChoice} />
+      ) : choice === 'custom' ? (
+        <PersonalEditor here={here} taken={taken} onBack={() => setChoice(null)} onDone={onDone} />
+      ) : (
+        <PresetForm preset={choice} desktop={false} here={here} platform={platform} personal taken={taken} onBack={() => setChoice(null)} onSaved={onDone} />
+      )}
+    </DialogContent>
   );
 }
 
@@ -267,7 +288,7 @@ const TYPES = [
   { value: 'stdio', label: 'stdio' },
 ] as const satisfies readonly { value: McpTransport; label: string }[];
 
-function PersonalEditor({ existing, here, taken, onDone }: { existing?: PersonalConnector; here: boolean; taken: ReadonlySet<string>; onDone(): void }) {
+function PersonalEditor({ existing, here, taken, onBack, onDone }: { existing?: PersonalConnector; here: boolean; taken: ReadonlySet<string>; onBack?(): void; onDone(): void }) {
   const qc = useQueryClient();
   const [name, setName] = useState(existing?.name ?? '');
   const [type, setType] = useState<McpTransport>(existing?.type ?? 'http');
@@ -313,7 +334,7 @@ function PersonalEditor({ existing, here, taken, onDone }: { existing?: Personal
   const set = (index: number, patch: Partial<Pair>) => setPairs((all) => all.map((p, i) => (i === index ? { ...p, ...patch } : p)));
   const noun = stdio ? 'Variable' : 'Header';
   return (
-    <EditorForm onSubmit={() => void save()} error={error} saving={saving} submitLabel={existing ? 'Save' : 'Add connector'}>
+    <EditorForm onSubmit={() => void save()} error={error} saving={saving} submitLabel={existing ? 'Save' : 'Add connector'} onBack={onBack}>
       <Field label="Name" description={`Its tools appear to models as mcp__${name.trim() || 'name'}__tool.`}>
         <TextField autoFocus={!existing} value={name} spellCheck={false} onChange={(e) => setName(e.target.value)} />
       </Field>
@@ -328,7 +349,7 @@ function PersonalEditor({ existing, here, taken, onDone }: { existing?: Personal
       </div>
       {stdio ? (
         <>
-          <Field label="Command">
+          <Field label="Command" description="The program, or its full path. ${VAR} here and in the arguments is filled in from your computer’s environment.">
             <TextField value={command} placeholder="npx" spellCheck={false} className="font-mono" onChange={(e) => setCommand(e.target.value)} />
           </Field>
           <Field label="Arguments" description="One per line.">

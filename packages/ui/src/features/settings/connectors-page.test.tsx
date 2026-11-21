@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsSchema, type McpImportEntry, type McpServerStatus, type SecretSummary, type Settings, type SettingsPath } from '@atelier/protocol';
 import { Toaster, TooltipProvider } from '../../components/ui/index.ts';
 import { getPath, setPath } from '../../lib/json-path.ts';
@@ -317,6 +317,97 @@ describe('Connectors page', () => {
     } finally {
       platform.desktop = undefined;
     }
+  });
+
+  it('adds Roblox Studio on the desktop app’s own backend: its program for this system, nothing to paste', async () => {
+    resetBackend(connectorsBackend('desktop'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add connector' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Add connector' })).getByRole('button', { name: /^Roblox Studio/ }));
+    const form = within(await screen.findByRole('dialog', { name: 'Add Roblox Studio' }));
+    expect(form.getByText(/Enable Studio as MCP server turned on/)).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Add connector' }));
+
+    expect(await screen.findByRole('heading', { name: 'roblox-studio' })).toBeTruthy();
+    expect(callsTo('secrets.set')).toEqual([]);
+    expect(callsTo('settings.set')).toEqual([
+      { layer: 'global', path: ['mcpServers', 'roblox-studio'], value: { type: 'stdio', command: '/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP', preset: 'roblox-studio' } },
+    ]);
+    // While it fails, its page says what it needs.
+    emit('mcp.changed', [github, notes, { name: 'roblox-studio', type: 'stdio', state: 'error', error: "/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP isn't on this computer: install the program it belongs to, or correct the command.", tools: [] }]);
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining("isn't on this computer"));
+    expect(screen.getByText(/Roblox Studio must be installed and open/)).toBeTruthy();
+  });
+
+  it('offers Roblox Studio only where Studio exists', async () => {
+    resetBackend({ ...connectorsBackend('desktop'), 'app.info': () => ({ name: 'Atelier', version: '0', surface: 'desktop', platform: 'linux', dataDir: '/data' }) });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add connector' }));
+    const roblox = within(await screen.findByRole('dialog', { name: 'Add connector' })).getByRole('button', { name: /^Roblox Studio/ });
+    expect(roblox.hasAttribute('disabled')).toBe(true);
+    expect(roblox.textContent).toContain('Roblox Studio is only on macOS and Windows.');
+  });
+
+  describe('in the desktop app on a server', () => {
+    let lent: unknown[];
+    let saved: { name: string; type: string; command?: string; args?: string[]; env?: Record<string, string> }[];
+    beforeEach(() => {
+      lent = [];
+      saved = [];
+      platform.desktop = { platform: 'win32', lending: { change: async (change: unknown) => (lent.push(change), { scratch: false, ssh: [], connectors: [], http: [], chatgptChat: false, home: true }) } };
+      resetBackend({
+        ...connectorsBackend('web'),
+        'connectors.save': (input: (typeof saved)[number]) => {
+          saved.push(input);
+          return { id: 'c1', name: input.name, type: input.type, command: input.command, args: input.args ?? [], envKeys: Object.keys(input.env ?? {}), headerKeys: [], enabled: true, disabledTools: [] };
+        },
+        'connectors.list': () => [],
+      });
+    });
+    afterEach(() => {
+      platform.desktop = undefined;
+    });
+
+    it('adds a program preset as your own connector that runs on this computer, set up for its system', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Add connector' }));
+      const catalog = within(await screen.findByRole('dialog', { name: 'Add connector' }));
+      expect(catalog.getByRole('button', { name: /^Brave Search/ }).hasAttribute('disabled')).toBe(false);
+      fireEvent.click(catalog.getByRole('button', { name: /^Roblox Studio/ }));
+      const form = within(await screen.findByRole('dialog', { name: 'Add Roblox Studio' }));
+      expect(form.getByText(/it becomes your own connector: it runs on this computer/)).toBeTruthy();
+      fireEvent.click(form.getByRole('button', { name: 'Add connector' }));
+
+      await waitFor(() => expect(lent).toHaveLength(1));
+      // Windows: Studio's launcher, found through this computer's own %LOCALAPPDATA% when it starts.
+      expect(saved).toEqual([{ name: 'roblox-studio', type: 'stdio', command: '${LOCALAPPDATA}\\Roblox\\mcp.bat', args: [], env: {}, headers: {} }]);
+      expect(lent).toEqual([{ kind: 'connector', id: 'c1', name: 'roblox-studio', command: '${LOCALAPPDATA}\\Roblox\\mcp.bat', args: [], envKeys: [], allowed: true }]);
+      expect(settings().mcpServers['roblox-studio']).toBeUndefined();
+    });
+
+    it('adds a custom stdio connector as your own, with its values as they are', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Add connector' }));
+      fireEvent.click(within(await screen.findByRole('dialog', { name: 'Add connector' })).getByRole('button', { name: /^Custom/ }));
+      const form = within(await screen.findByRole('dialog', { name: 'Add a custom connector' }));
+      fireEvent.click(form.getByRole('radio', { name: 'stdio' }));
+      expect(form.getByText(/stdio starts the server as a program on this computer: it becomes your own connector/)).toBeTruthy();
+      fireEvent.change(form.getByLabelText('Name'), { target: { value: 'files' } });
+      fireEvent.change(form.getByLabelText('Command'), { target: { value: 'npx' } });
+      fireEvent.change(form.getByLabelText('Arguments'), { target: { value: '-y\n files-mcp \n' } });
+      fireEvent.click(form.getByRole('button', { name: 'Add variable' }));
+      fireEvent.change(form.getByLabelText('Variable 1 name'), { target: { value: 'FILES_TOKEN' } });
+      fireEvent.change(form.getByLabelText('Variable 1 value'), { target: { value: 'tok-123' } });
+      // Every value of your own connector is your secret: nothing to lock.
+      expect(form.queryByRole('button', { name: 'Keep variable 1 as a secret' })).toBeNull();
+      fireEvent.click(form.getByRole('button', { name: 'Add connector' }));
+
+      await waitFor(() => expect(lent).toHaveLength(1));
+      expect(saved).toEqual([{ name: 'files', type: 'stdio', command: 'npx', args: ['-y', 'files-mcp'], env: { FILES_TOKEN: 'tok-123' } }]);
+      expect(lent).toEqual([{ kind: 'connector', id: 'c1', name: 'files', command: 'npx', args: ['-y', 'files-mcp'], envKeys: ['FILES_TOKEN'], allowed: true }]);
+      expect(callsTo('secrets.set')).toEqual([]);
+      expect(settings().mcpServers.files).toBeUndefined();
+    });
   });
 
   it('edits a connector’s connection and keeps its tool settings', async () => {

@@ -415,8 +415,9 @@ Code compatibility off in **Settings › Admin › Code** if you want the `.clau
 
 ### What are connectors?
 
-MCP servers that give sessions tools from other services, such as Cloudflare, GitHub, Notion, Linear, Brave Search or Home
-Assistant. Admins add them in **Settings › Admin › Connectors** with a token or **Sign in with OAuth**, and each tool can be
+MCP servers that give sessions tools from other services, such as Cloudflare, GitHub, Notion, Linear, Brave Search, Home
+Assistant or Roblox Studio, or from a program on your computer that talks over stdin and stdout. Admins add them in
+**Settings › Admin › Connectors** with a token or **Sign in with OAuth**, and each tool can be
 set to **Always allow**, **Ask** or **Block**. In a conversation, **+ › Connectors** switches them on or off for that
 conversation only. See [Connectors](/connectors/).
 

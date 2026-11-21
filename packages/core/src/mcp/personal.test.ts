@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/client';
@@ -7,10 +9,11 @@ import { connectorFingerprintInput, NO_LENDING, PersonalConnector, type DeviceSt
 import { personalSecretOf } from '../secrets/secret-store.ts';
 import type { ToolContext } from '../tools/types.ts';
 import type { DeviceLinkInfo } from '../workspaces/device-links.ts';
-import { LineTransport, programChannel } from './line-transport.ts';
+import { LineTransport, programChannel, programLine } from './line-transport.ts';
 import { PersonalConnectors, type PersonalConnectorsDeps } from './personal.ts';
 
 const STDIO_SERVER = fileURLToPath(new URL('./__fixtures__/stdio-server.ts', import.meta.url));
+const LEGACY_SERVER = fileURLToPath(new URL('./__fixtures__/legacy-stdio-server.ts', import.meta.url));
 const ctx = (): ToolContext => ({ sessionId: 's1', callId: 'c1', signal: new AbortController().signal }) as ToolContext;
 const print = (command: string, args: string[], envKeys: string[]) => createHash('sha256').update(connectorFingerprintInput(command, args, envKeys)).digest('hex');
 const online = (lending: Partial<DeviceLinkInfo['lending']> = {}): DeviceLinkInfo => ({ services: ['runner', 'mcp', 'http'], lending: { ...NO_LENDING, ...lending }, home: '/home/ada', sep: '/', os: 'darwin', app: '0.3.0' });
@@ -29,6 +32,16 @@ describe('the line transport', () => {
       await client.close();
     }
     await channel.closed;
+  });
+
+  it("fills a command line's ${VAR} in from where it runs, and says when the program isn't there", async () => {
+    const env = (name: string) => ({ LOCALAPPDATA: tmpdir(), NODE: process.execPath })[name];
+    expect(await programLine('${NODE}', ['${HOME_DIR:-/home/ada}/notes', '${secret:kept}'], env)).toEqual({ command: process.execPath, args: ['/home/ada/notes', '${secret:kept}'] });
+    // A program found on the PATH isn't looked for here: starting it says whether it is there.
+    expect(await programLine('npx', ['-y', 'x'], env)).toEqual({ command: 'npx', args: ['-y', 'x'] });
+    const missing = join(tmpdir(), 'Roblox', 'mcp.bat');
+    await expect(programLine(join('${LOCALAPPDATA}', 'Roblox', 'mcp.bat'), [], env, 'Desktop')).rejects.toThrow(`${missing} isn't on Desktop: install the program it belongs to, or correct the command.`);
+    await expect(programLine('${APPDATA}/x', ['${OTHER}', '${APPDATA}'], env)).rejects.toThrow('Missing the environment variable APPDATA, OTHER on this computer.');
   });
 });
 
@@ -110,6 +123,24 @@ describe('personal connectors', () => {
     expect(await people.tools('u1', ['mock'])).toEqual([]);
     // Someone else has none of them.
     expect(await people.tools('u2', [])).toEqual([]);
+  });
+
+  it('speaks the 2025 way to a program there that leaves the modern probe unanswered, or ends on it', async () => {
+    const starts = join(mkdtempSync(join(tmpdir(), 'atelier-legacy-')), 'starts');
+    people = new PersonalConnectors({ ...deps, probeTimeoutMs: 200 });
+    for (const behaviour of ['ignore', 'exit']) {
+      writeFileSync(starts, '');
+      const args = [LEGACY_SERVER, behaviour];
+      const saved = await people.save('u1', { name: `legacy-${behaviour}`, type: 'stdio', command: process.execPath, args, env: { LEGACY_STARTS: starts }, headers: {}, enabled: true, disabledTools: [] });
+      devices.set('mac', online({ connectors: [{ id: saved.id, name: saved.name, fingerprint: print(process.execPath, args, ['LEGACY_STARTS']) }] }));
+      people.devicesChanged('u1');
+      await expect.poll(async () => (await people.status('u1')).find((s) => s.name === saved.name), { timeout: 10_000 }).toMatchObject({ state: 'ready', protocolEra: 'legacy', device: 'MacBook' });
+      const echo = (await people.tools('u1', [])).find((t) => t.name === `mcp__legacy-${behaviour}__echo`)!;
+      expect(await echo.run({ text: 'hello' }, ctx())).toMatchObject({ content: [{ type: 'text', text: 'hello' }] });
+      // One that ended on the probe was started once more; one that ignored it went on in the same process.
+      expect(readFileSync(starts, 'utf8').trim().split('\n')).toHaveLength(behaviour === 'exit' ? 2 : 1);
+      await people.remove('u1', saved.id);
+    }
   });
 
   it('says it changed when the program is no longer the one allowed', async () => {

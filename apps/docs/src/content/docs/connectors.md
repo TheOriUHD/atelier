@@ -4,9 +4,10 @@ description: Give Atelier tools from other services with MCP servers. Add one, s
 ---
 
 A connector is an [MCP](https://modelcontextprotocol.io) server: a program or web service that offers tools the model can
-call. Cloudflare, GitHub, Notion, Linear, Brave Search and Home Assistant have ready-made entries; anything else that
-speaks MCP can be added by its address or by the command that starts it. Once a connector is on, its tools sit beside
-Atelier's own in Chat and Code, and in sub-agents.
+call. Cloudflare, GitHub, Notion, Linear, Brave Search, Home Assistant and Roblox Studio have ready-made entries; anything
+else that speaks MCP can be added by its address or by the command that starts it, including programs that run on your
+own computer and talk over stdin and stdout (stdio). Once a connector is on, its tools sit beside Atelier's own in Chat
+and Code, and in sub-agents.
 
 Connectors belong to the **backend**, not to each person. An admin adds them, signs them in and sets what their tools may
 do; everyone on the server shares one connection and chooses per conversation which connectors it uses. If you run Atelier on your own computer, you are the admin.
@@ -35,17 +36,58 @@ connector**. Pick a service, or **Custom** ("Any MCP server, by its URL or the c
 | **Linear** | Issues, projects and cycles, at `https://mcp.linear.app/mcp` | A personal API key | Yes |
 | **Brave Search** | Web, news and image search through Brave's API | An API key, run with `npx -y @brave/brave-search-mcp-server` (needs Node.js, desktop app only) | No |
 | **Home Assistant** | Devices, sensors and automations, at `<your address>/api/mcp` | The address of your Home Assistant (for example `http://homeassistant.local:8123`) and a long-lived access token from your profile; the "Model Context Protocol Server" integration must be enabled there | No |
+| **Roblox Studio** | The place open in Studio: run Luau, read and edit scripts, insert assets, play-test, take screenshots, through the MCP server that comes with Studio | Roblox Studio on macOS or Windows, open, with the MCP server turned on in Studio (see [Roblox Studio](#roblox-studio)); nothing to paste | No |
 
 Each form asks for a **Name** (up to 64 letters, digits, `-` and `_`; it becomes part of every tool's name, `mcp__name__tool`), then either the token
 (with a link to where to create it) or **Sign in with {service}**, and then **Add connector** or **Add and sign in**. A pasted token is stored encrypted in the
 secret store (**Settings › Admin › Keys & secrets**, with the id `mcp-<name>`), and the connector's settings only refer to
-it as `${secret:mcp-<name>}`; it never appears in a settings file. On a server, Brave Search (which runs a program) is
-disabled with "Only in the desktop app: it runs a program on your computer.", and Notion offers only its sign-in.
+it as `${secret:mcp-<name>}`; it never appears in a settings file.
+
+Brave Search, Roblox Studio and Notion's token setup run a program on your computer. Where that program can run depends
+on how you use Atelier:
+
+| Where you are | Entries that run a program |
+|---|---|
+| The desktop app on **Run on this computer** | Added to this computer's connectors, like the others. |
+| The desktop app signed in to a server | Added as [your own connector](#your-own-connectors-on-a-server), which runs on this computer and only you use. The form says "On a server it becomes your own connector: it runs on this computer, in this desktop app, and only you use it." Notion offers its sign-in first there, which is shared by everyone on the server. |
+| A browser | Disabled with "Only in the desktop app: it runs a program on your computer."; Notion offers only its sign-in. |
+
+An entry whose program exists only for some systems says so on the others: on Linux, Roblox Studio reads "Roblox Studio is
+only on macOS and Windows."
 
 :::note
 Brave Search as a connector gives the model a search tool of its own. Atelier already searches the web without one; to use
 Brave for that, see [Web search](/web-search/#use-my-own-search-service).
 :::
+
+### Roblox Studio
+
+Roblox Studio comes with an MCP server of its own: a small program that connects Atelier to the Studio window that is open
+on your computer. The **Roblox Studio** entry runs it, with nothing to paste.
+
+1. Install Roblox Studio and open a place.
+2. In Studio, open **Assistant**, choose **⋯** › **Manage MCP Servers** and turn on **Enable Studio as MCP server**.
+3. In Atelier, **Add connector** › **Roblox Studio** › **Add connector**. On a server, do this in the desktop app on the
+   computer where Studio is.
+
+Atelier runs the program Roblox documents for each system:
+
+| System | Command |
+|---|---|
+| macOS | `/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` |
+| Windows | `${LOCALAPPDATA}\Roblox\mcp.bat`, the launcher Studio keeps in `%LOCALAPPDATA%\Roblox`. Studio's own folder (`%LOCALAPPDATA%\Roblox\Versions\version-…`) changes with every update; the launcher finds the current one. `${LOCALAPPDATA}` is filled in on your computer when it starts. |
+
+The connector connects while Studio is closed, but its tools only act on a Studio that is open (`list_roblox_studios`
+lists none). If Studio isn't installed where Atelier looks, the connector says so, for example
+"/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP isn't on this computer: install the program it belongs to, or
+correct the command.", and its page shows what Studio needs. If Studio is installed somewhere else, add it as a
+[custom connector](#custom-connectors) with the path to `StudioMCP` (macOS) or `mcp.bat` (Windows).
+
+Before Studio had this built in, Roblox published a separate open-source server,
+[studio-rust-mcp-server](https://github.com/Roblox/studio-rust-mcp-server), which installs a Studio plugin of its own; it
+is archived now, and Roblox points to the built-in one. It still works as a custom stdio connector: the command
+`/Applications/RobloxStudioMCP.app/Contents/MacOS/rbx-studio-mcp` on macOS, or the path to the `rbx-studio-mcp.exe` you
+downloaded on Windows, with the argument `--stdio`. Use it only if your Studio has no **Manage MCP Servers**.
 
 ### Custom connectors
 
@@ -54,10 +96,10 @@ Brave for that, see [Web search](/web-search/#use-my-own-search-service).
 | Field | Meaning |
 |---|---|
 | **Name** | 1 to 64 letters, digits, `-` and `_`. Errors: "Give it a name.", "Use up to 64 letters, digits, - and _.", "There is a connector with this name already." |
-| **Connects over** | **HTTP** (the current MCP transport; if a server only speaks the older HTTP+SSE protocol, Atelier switches to it), **SSE** (that older streaming transport, chosen outright) or **stdio** (Atelier starts the server as a program; desktop app only, greyed out on a server). |
+| **Connects over** | **HTTP** (the current MCP transport; if a server only speaks the older HTTP+SSE protocol, Atelier switches to it), **SSE** (that older streaming transport, chosen outright) or **stdio** (Atelier starts the server as a program and talks to it over its standard input and output). stdio is for the desktop app: on its own backend the program runs there; signed in to a server, the connector becomes [your own](#your-own-connectors-on-a-server) and runs on this computer ("stdio starts the server as a program on this computer: it becomes your own connector, which only you use."). In a browser it is greyed out. |
 | **URL** (HTTP, SSE) | The server's address, such as `https://example.com/mcp`. On an Atelier server these connectors run on the server, so in a browser `localhost` and `127.0.0.1` mean the server itself, and the field says so. Added in the desktop app, a new connector at `localhost` means that computer instead: it becomes [your own connector](#your-own-connectors-on-a-server), reached through that desktop app (an app's local MCP server, such as Fusion's). |
 | **Sign in with OAuth** (HTTP, SSE) | For servers you sign in to instead of giving them a token; signing in starts once it is added. |
-| **Command** and **Arguments** (stdio) | For example `npx` and `-y`, `@scope/mcp-server`, one argument per line. |
+| **Command** and **Arguments** (stdio) | For example `npx` and `-y`, `@scope/mcp-server`, one argument per line, or the full path to a program. `${NAME}` (and `${NAME:-default}`) in either is filled in from the environment of the computer the program runs on when it starts, as Claude Code does, so `${LOCALAPPDATA}\Roblox\mcp.bat` works for every Windows account. A command given as a full path must exist there; otherwise the connector says it isn't on that computer instead of failing to start. |
 | **Headers** (HTTP, SSE) or **Environment variables** (stdio) | Name and value pairs. A value is plain text, a reference to a stored secret (`${secret:id}`) or to an environment variable of the backend (`${NAME}`), filled in only when connecting. The lock beside a value moves it into **Keys & secrets** when you save; names that look like credentials (token, key, secret, password, credential, auth) are locked automatically. `Authorization: Bearer …` keeps its scheme and stores only the token. |
 
 The entry is saved as `mcpServers.<name>` in the backend's global settings file, in Claude Code's shape, so you can also
@@ -116,11 +158,17 @@ On an Atelier server, **Customize › Connectors** has **Your connectors** for e
 use, with keys only you give. They sit beside the admin's in **+ › Connectors**, with the same switches per conversation.
 Your own desktop app's backend has no such section; there, the connectors in **Settings › Connectors** are already yours.
 
-**Add your own** asks for a **Name**, how it **Connects over** (**HTTP**, **SSE** or **stdio**), its **URL** (with **Sign
-in with OAuth**) or its **Command** and **Arguments**, and **Headers** or **Environment variables**. Every value is kept
-encrypted on the server as your own secret, never in your preferences and never shown again: editing a connector shows
-"Unchanged" for a value you leave empty. **⋯** has **Edit**, **Sign in** (OAuth ones) and **Remove**, which forgets its keys
-and sign-in.
+**Add your own** offers the same [ready-made entries](#ready-made-entries) and **Custom**. A ready-made one takes your own
+token (or your own sign-in), and one that runs a program (Brave Search, Roblox Studio, Notion's token setup) is set up for
+the system of the computer you add it on; in a browser those read "Only in the desktop app: it runs a program on your
+computer." **Custom** asks for a **Name**, how it **Connects over** (**HTTP**, **SSE** or **stdio**), its **URL** (with
+**Sign in with OAuth**) or its **Command** and **Arguments**, and **Headers** or **Environment variables**. Every value is
+kept encrypted on the server as your own secret, never in your preferences and never shown again: editing a connector
+shows "Unchanged" for a value you leave empty. **⋯** has **Edit**, **Sign in** (OAuth ones) and **Remove**, which forgets
+its keys and sign-in.
+
+An admin adding a stdio connector, or a ready-made one that runs a program, from **Add connector** in the desktop app gets
+the same: it becomes their own connector, running on their computer, since the server never runs programs.
 
 Where each one runs:
 
@@ -130,9 +178,10 @@ Where each one runs:
 | HTTP or SSE at a public address | On the server. |
 | HTTP or SSE at an address on your computer or its network (`localhost`, `192.168.…`, `*.local`) | Through your desktop app, which allows that address when you add it there (**Reach through this computer** elsewhere). |
 
-A program runs in your home folder with a small set of your environment (`PATH`, `HOME`, `USER` and the like) plus the
-variables you gave it; a value like `${GITHUB_TOKEN}` is filled in from your computer's environment when it starts, never
-the server's. A connector can't set variables that change which code runs (`PATH`, `NODE_OPTIONS`, `LD_*`, `DYLD_*`,
+A program runs in your home folder with a small set of your environment (`PATH`, `HOME`, `USER` and the like, and on
+Windows `APPDATA`, `LOCALAPPDATA`, `USERPROFILE` and the like) plus the variables you gave it; a value like
+`${GITHUB_TOKEN}`, and `${NAME}` in its command and arguments, is filled in from your computer's environment when it
+starts, never the server's. A connector can't set variables that change which code runs (`PATH`, `NODE_OPTIONS`, `LD_*`, `DYLD_*`,
 `PYTHONPATH`, `PERL5LIB`, `npm_config_*`, `GIT_*` and the like). Your computer keeps a fingerprint of the command, its
 arguments and its variables' names: if the connector changes, it says "It changed since you allowed it on {computer}:
 allow it in Customize › Connectors in the Atelier desktop app there again." What the program writes to its error output
@@ -143,6 +192,7 @@ stays in your connector's log.
 | **Ready on {computer}** | It runs on (or through) that computer. |
 | `It runs a program on your computer: allow it in Customize › Connectors in the Atelier desktop app there.` | No computer of yours that is online allows it. |
 | `Offline on {computer}: it runs there.` | The computer it ran on went offline; it starts again when one comes back. |
+| `{path} isn't on {computer}: install the program it belongs to, or correct the command.` | The program it runs isn't installed there (Roblox Studio, for example). Install it, then choose **Run on this computer** or wait: it is tried again. |
 | `An admin's connector is also called {name}: rename yours.` | The admin's connector of that name is used instead. A new connector can't take an admin's name. |
 
 **Import from Claude Code** is offered in the desktop app signed in to a server: it reads Claude Code's connectors on
@@ -262,7 +312,7 @@ you answer.
 | Retrying | After a drop or a failed connection: 1 s, 2 s, 4 s … up to every minute, and whenever a conversation starts. A connector that needs a sign-in waits for an admin instead. |
 | Starting a conversation | A run waits up to 10 seconds for connectors still connecting, then starts without their tools. |
 | One call | 60 seconds, then it is cancelled. Time spent waiting for your answer does not count. |
-| Protocol | MCP 2026-07-28 where the server supports it, the earlier `initialize` handshake otherwise (the connector's page says which: "MCP 2026-07-28" or "MCP 2025 or earlier"). Tool changes the server announces are followed. |
+| Protocol | MCP 2026-07-28 where the server supports it, the earlier `initialize` handshake otherwise (the connector's page says which: "MCP 2026-07-28" or "MCP 2025 or earlier"). A stdio program that leaves the 2026-07-28 question unanswered for 10 seconds gets the earlier handshake; one that quits on it is started again with the earlier handshake, also when it runs on your computer for a server. Tool changes the server announces are followed. |
 | Settings change | The connector restarts; switching tools on or off doesn't reconnect it. |
 
 ## Security
@@ -290,7 +340,8 @@ connectors and extensions**, which reconnects every connector.
 
 | Message | What to do |
 |---|---|
-| `Missing the secret "mcp-github".` or `Missing the environment variable NAME.` | The settings refer to a secret or variable that doesn't exist. Add it in **Keys & secrets**, or fix the reference. |
+| `Missing the secret "mcp-github".` or `Missing the environment variable NAME.` | The settings refer to a secret or variable that doesn't exist. Add it in **Keys & secrets**, or fix the reference. In a stdio connector's command or arguments it reads `Missing the environment variable NAME on {computer}.` |
+| `{path} isn't on this computer: install the program it belongs to, or correct the command.` | A stdio connector's command is a full path that doesn't exist. Install the program (for **Roblox Studio**, Roblox Studio itself), or edit the command. |
 | `This server runs a program on this machine (stdio), which only the desktop app does. …` | Use the service's HTTP address instead, or run the desktop app. |
 | `Can't reach 127.0.0.1:27182: nothing answers there (connection refused).` | Nothing listens at that address where the connector runs: start the app or server behind it, or check the port. On an Atelier server an admin connector runs on the server, where `127.0.0.1` is the server itself; the message says so, and a connector on your own computer belongs under [Your own connectors](#your-own-connectors-on-a-server). Other endings: the name doesn't resolve, the host or network is unreachable, it took too long, its certificate isn't trusted. |
 | `The github connector is not connected: …` | It dropped. Atelier reconnects by itself; open its page and choose **Test connection** to try now. |

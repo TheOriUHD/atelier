@@ -375,6 +375,7 @@ function ConnectorDetail({
           {status.error}
         </p>
       )}
+      {state === 'error' && preset?.setup && <p className="mt-2 text-body text-fg-secondary">{preset.setup}</p>}
       {signIn === 'needed' && <p className="mt-2 text-body text-fg-secondary">Sign in to connect it. Every session then uses this sign-in.</p>}
       {signIn === 'waiting' && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-body text-fg-secondary">

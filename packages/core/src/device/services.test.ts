@@ -531,6 +531,33 @@ describe("a person's connectors run here", () => {
       delete process.env.ATELIER_TEST_TOKEN;
     }
   });
+
+  it('fills ${VAR} in its command and arguments only after checking what was allowed, and says when the program isn’t here', async () => {
+    const run = (command: string, args: string[]) => services().start({ kind: 'mcp', connectorId: 'c1', command, args, env: {} }, () => {});
+    const allowLine = (command: string, args: string[]) => {
+      lending = { ...NO_LENDING, connectors: [{ id: 'c1', name: 'studio', fingerprint: connectorFingerprint(command, args, []) }] };
+    };
+    process.env.ATELIER_TEST_NODE = process.execPath;
+    process.env.ATELIER_TEST_DIR = import.meta.dirname;
+    try {
+      // Allowed as written, the way Roblox Studio's `${LOCALAPPDATA}\Roblox\mcp.bat` is: the same entry on every computer.
+      allowLine('${ATELIER_TEST_NODE}', ['${ATELIER_TEST_DIR}/../mcp/__fixtures__/stdio-server.ts']);
+      // What the variables hold here is not what was allowed.
+      await expect(run(process.execPath, [server])).rejects.toMatchObject({ code: 'refused' });
+      const channel = await run('${ATELIER_TEST_NODE}', ['${ATELIER_TEST_DIR}/../mcp/__fixtures__/stdio-server.ts']);
+      channel.kill();
+      await channel.closed;
+
+      const studio = join(dir, 'Applications', 'RobloxStudio.app', 'Contents', 'MacOS', 'StudioMCP');
+      allowLine(studio, []);
+      await expect(run(studio, [])).rejects.toMatchObject({ code: 'failed', message: `${studio} isn't on Laptop: install the program it belongs to, or correct the command.` });
+      allowLine('${ATELIER_TEST_UNSET}/mcp', []);
+      await expect(run('${ATELIER_TEST_UNSET}/mcp', [])).rejects.toMatchObject({ code: 'failed', message: 'Missing the environment variable ATELIER_TEST_UNSET on Laptop.' });
+    } finally {
+      delete process.env.ATELIER_TEST_NODE;
+      delete process.env.ATELIER_TEST_DIR;
+    }
+  });
 });
 
 describe('the config in the home folder', () => {

@@ -318,6 +318,28 @@ describe('MCP connections', () => {
     expect(m.status()[0]).toMatchObject({ state: 'ready', protocolEra: 'legacy' });
   });
 
+  it("fills ${VAR} in a stdio server's command and arguments, says when its program isn't installed, and speaks 2025 to one that ends on the modern probe", async () => {
+    const m = manager(
+      {
+        mock: { ...stdio, command: '${NODE}', args: ['${FIXTURES}/stdio-server.ts'] },
+        studio: { type: 'stdio', command: '/Applications/NotInstalled.app/Contents/MacOS/StudioMCP' },
+        legacy: { type: 'stdio', command: process.execPath, args: [fileURLToPath(new URL('./__fixtures__/legacy-stdio-server.ts', import.meta.url)), 'exit'] },
+      },
+      { env: { NODE: process.execPath, FIXTURES: fileURLToPath(new URL('./__fixtures__', import.meta.url)) } },
+    );
+    expect(textOf(await call(m, 'mcp__mock__echo', { text: 'found' }))).toBe('found');
+    expect(textOf(await call(m, 'mcp__legacy__echo', { text: 'old' }))).toBe('old');
+    expect(m.status()).toEqual([
+      expect.objectContaining({ name: 'mock', state: 'ready' }),
+      expect.objectContaining({
+        name: 'studio',
+        state: 'error',
+        error: "/Applications/NotInstalled.app/Contents/MacOS/StudioMCP isn't on this computer: install the program it belongs to, or correct the command.",
+      }),
+      expect.objectContaining({ name: 'legacy', state: 'ready', protocolEra: 'legacy' }),
+    ]);
+  });
+
   it('refuses stdio servers on the web, where the server never starts programs', async () => {
     const m = manager({ mock: stdio }, { surface: 'web' });
     expect(await m.tools()).toEqual([]);
