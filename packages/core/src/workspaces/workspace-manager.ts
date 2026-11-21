@@ -448,11 +448,13 @@ export class WorkspaceManager {
         events.add(event);
         c.on(event as never, (payload: never) => handlers.get(event)?.forEach((h) => h(payload)));
       };
-      const current = async (): Promise<Live> => {
+      const current = async (signal?: AbortSignal): Promise<Live> => {
         const fresh = await this.deps.db.select().from(workspaces).where(eq(workspaces.id, id)).get();
         if (!fresh) throw new WorkspaceError('This workspace no longer exists.');
-        // A device's link that blinked comes back within seconds: wait for it rather than failing the task's next step.
-        for (let waited = 0; !this.reachable(fresh) && fresh.deviceId && waited < DEVICE_BACK_MS; waited += 500) await new Promise((r) => setTimeout(r, 500));
+        // A device's link that blinked comes back within seconds: wait for it rather than failing the task's next step
+        // (not past a Stop).
+        for (let waited = 0; !this.reachable(fresh) && fresh.deviceId && waited < DEVICE_BACK_MS && !signal?.aborted; waited += 500) await new Promise((r) => setTimeout(r, 500));
+        if (signal?.aborted) throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
         if (!this.reachable(fresh)) throw new WorkspaceError(`${fresh.name} is on a device that isn't connected.`);
         const now = await this.running(fresh);
         this.touch(now);
@@ -465,7 +467,7 @@ export class WorkspaceManager {
       steady = {
         ...live.workspace,
         runner: {
-          call: (async (method: never, params: never, options?: { signal?: AbortSignal }) => (await current()).client.call(method, params, options)) as RunnerCalls['call'],
+          call: (async (method: never, params: never, options?: { signal?: AbortSignal }) => (await current(options?.signal)).client.call(method, params, options)) as RunnerCalls['call'],
           on: ((event: string, handler: (payload: never) => void) => {
             let set = handlers.get(event);
             if (!set) handlers.set(event, (set = new Set()));

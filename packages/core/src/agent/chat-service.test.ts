@@ -440,6 +440,80 @@ describe('ChatService', () => {
     expect(chat.isRunning(s.id)).toBe(false);
   });
 
+  it('Stop ends a turn whose model request ignores it, the next message runs, and the late answer changes nothing', async () => {
+    // A request that doesn't hear the stop (a device link or model server that stopped answering) until it is let go.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let calls = 0;
+    const adapter: ProviderAdapter = {
+      ...echoAdapter(seen),
+      async *stream(req): AsyncIterable<StreamEvent> {
+        if (req.system.some((b) => b.text.includes('short title'))) return yield* echoAdapter([]).stream(req);
+        if (calls++ > 0) return yield* echoAdapter(seen, 'Second answer').stream(req);
+        yield { type: 'text', delta: 'partial ' };
+        await held;
+        yield { type: 'text', delta: 'late' };
+        yield { type: 'finish', reason: 'end' };
+      },
+    };
+    const logged: string[] = [];
+    const chat = service(undefined, adapter, { stopGraceMs: 50, logError: (m) => logged.push(m) });
+    const s = await repo.create({ mode: 'code' });
+    await chat.send(s.id, [{ type: 'text', text: 'Hi' }]);
+    await until(() => deltas(s.id).length === 1);
+    const started = Date.now();
+    await chat.stop(s.id);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(chat.isRunning(s.id)).toBe(false);
+    expect((await repo.get(s.id))?.status).toBe('idle');
+    expect(logged).toEqual([expect.stringContaining('was let go')]);
+    const stopped = (await chat.snapshot(s.id)).messages.at(-1)!;
+    expect(stopped).toMatchObject({ stopReason: 'aborted', parts: [{ type: 'text', text: 'partial ' }] });
+    expect(events.some((e) => e.sessionId === s.id && e.event.type === 'done' && (e.event as { stopReason: unknown }).stopReason === 'aborted')).toBe(true);
+
+    await chat.send(s.id, [{ type: 'text', text: 'Again' }]);
+    await chat.settle(s.id);
+    expect((await chat.snapshot(s.id)).messages.at(-1)!.parts).toEqual([{ type: 'text', text: 'Second answer' }]);
+
+    // The stuck request answers after all: the stopped turn stays stopped and the session as it is.
+    const before = events.length;
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    const after = await chat.snapshot(s.id);
+    expect(after.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+    expect(after.messages[1]).toMatchObject({ stopReason: 'aborted' });
+    expect(after.messages.at(-1)!.parts).toEqual([{ type: 'text', text: 'Second answer' }]);
+    expect(after.session.status).toBe('idle');
+    expect(events.slice(before).filter((e) => e.sessionId === s.id && ['delta', 'status', 'done'].includes(e.event.type))).toEqual([]);
+  });
+
+  it('Stop ends a turn still preparing on a device that stopped answering (its hooks), and nothing is added when it answers', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let entered = false;
+    const chat = service(undefined, undefined, {
+      stopGraceMs: 50,
+      hooks: async () => {
+        entered = true;
+        await held;
+        throw new Error('C:\\Work is on a device that isn’t connected.');
+      },
+    });
+    const s = await repo.create({ mode: 'code' });
+    await chat.send(s.id, [{ type: 'text', text: 'Hi' }]);
+    await until(() => entered);
+    await chat.stop(s.id);
+    expect(chat.isRunning(s.id)).toBe(false);
+    expect((await repo.get(s.id))?.status).toBe('idle');
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    const snap = await chat.snapshot(s.id);
+    // Only the person's message: no error reply from the late failure, and no request was sent.
+    expect(snap.messages.map((m) => m.role)).toEqual(['user']);
+    expect(snap.session.status).toBe('idle');
+    expect(seen.filter((r) => !r.system.some((b) => b.text.includes('short title')))).toEqual([]);
+  });
+
   it('marks a turn that ran to its end as news until the session is opened, and not one that was stopped', async () => {
     const chat = service();
     const s = await repo.create({ mode: 'code' });

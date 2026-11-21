@@ -196,6 +196,24 @@ export function createUpdates(options: UpdatesOptions) {
   /** A newer download that came to nothing: the update that waits stays offered, else the problem is shown. */
   const fail = (message: string) => set(ready ? { kind: 'downloaded', version: ready } : { kind: 'error', message });
 
+  /** A prerelease belongs to the beta channel only: back on stable, a beta that was found or waits isn't installed. */
+  const belongs = (version: string) => channel === 'beta' || !version.includes('-');
+  /**
+   * After a switch of channel: an update of the other channel that waits is let go (its files too, and Windows and
+   * Linux no longer install it when the app quits), and its notice with it.
+   */
+  const dropForeign = async (): Promise<void> => {
+    if (found && !belongs(found.version)) found = null;
+    if (ready && !belongs(ready) && !swapping) {
+      ready = null;
+      if (mac) {
+        staged = null;
+        if (swap) await swap.remove(swap.staging).catch(() => undefined);
+      } else updater.autoInstallOnAppQuit = false;
+    }
+    if ((state.kind === 'available' || state.kind === 'downloaded' || state.kind === 'saved') && !belongs(state.version)) state = ready ? { kind: 'downloaded', version: ready } : { kind: 'idle' };
+  };
+
   // While an update waits, checks go on quietly: the notice keeps offering it until a newer one replaces it.
   updater.on('checking-for-update', () => void (ready || set({ kind: 'checking' })));
   updater.on('update-not-available', () => {
@@ -269,6 +287,11 @@ export function createUpdates(options: UpdatesOptions) {
       await rm(partial, { force: true });
       // The helper already moves the older bundle in: it must stay where it is.
       if (swapping) return;
+      // The channel was switched while it downloaded: it isn't kept.
+      if (!belongs(version)) {
+        await swap.remove(into).catch(() => undefined);
+        return set(ready ? { kind: 'downloaded', version: ready } : { kind: 'idle' });
+      }
       const older = ready;
       staged = unpacked;
       ready = version;
@@ -319,6 +342,12 @@ export function createUpdates(options: UpdatesOptions) {
   });
   updater.on('download-progress', (progress) => set({ kind: 'downloading', percent: Math.floor(progress.percent), version: fetching ?? found?.version ?? '' }));
   updater.on('update-downloaded', (info) => {
+    // The channel was switched while it downloaded: it isn't installed when the app quits, nor offered.
+    if (!belongs(info.version)) {
+      updater.autoInstallOnAppQuit = false;
+      return set(ready ? { kind: 'downloaded', version: ready } : { kind: 'idle' });
+    }
+    updater.autoInstallOnAppQuit = !mac;
     ready = info.version;
     set({ kind: 'downloaded', version: info.version });
   });
@@ -381,6 +410,7 @@ export function createUpdates(options: UpdatesOptions) {
       channel = next;
       await options.saveChannel(next);
       useFeed();
+      await dropForeign();
       options.onStatus(status());
       await check();
     },

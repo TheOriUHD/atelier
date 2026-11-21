@@ -182,10 +182,13 @@ export class DeviceLinks {
     return this.channel(link, (channel) => ({ t: 'open', channel, root }), OPEN_TIMEOUT_MS);
   }
 
-  /** Starts another kind of channel (a runner on an SSH host through the device); what it writes to stderr goes to `onLog`. */
-  async start(userId: string, deviceId: string, service: DeviceStart, onLog?: (line: string) => void): Promise<RunnerChannel> {
+  /**
+   * Starts another kind of channel (a runner on an SSH host through the device); what it writes to stderr goes to `onLog`.
+   * `signal` gives up waiting for it to open (Stop on a request to a model server the device lends): the device is told to close it.
+   */
+  async start(userId: string, deviceId: string, service: DeviceStart, onLog?: (line: string) => void, signal?: AbortSignal): Promise<RunnerChannel> {
     const link = await this.lending(userId, deviceId, START_SERVICE[service.kind]);
-    return this.channel(link, (channel) => ({ t: 'start', channel, service }), START_TIMEOUT_MS[service.kind], onLog);
+    return this.channel(link, (channel) => ({ t: 'start', channel, service }), START_TIMEOUT_MS[service.kind], onLog, signal);
   }
 
   /** Asks the device something; rejects with a `DeviceLinkError` saying why when it can't or won't. */
@@ -219,8 +222,9 @@ export class DeviceLinks {
     return link;
   }
 
-  private channel(link: Link, frame: (channel: string) => ServerToDevice, timeoutMs: number, onLog?: (line: string) => void): Promise<RunnerChannel> {
+  private channel(link: Link, frame: (channel: string) => ServerToDevice, timeoutMs: number, onLog?: (line: string) => void, signal?: AbortSignal): Promise<RunnerChannel> {
     const id = newId();
+    if (signal?.aborted) return Promise.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
     return new Promise((resolve, reject) => {
       let onLine: ((line: string) => void) | undefined;
       // Lines that come before anyone listens (a quick answer right after `opened`) wait for the listener.
@@ -250,12 +254,25 @@ export class DeviceLinks {
           finish('Closed.');
         },
       };
+      // Given up before it opened: the device closes its side, and the wait ends as an abort.
+      const abandon = () => {
+        if (ended || isOpen) return;
+        link.socket.send({ t: 'close', channel: id });
+        ended = true;
+        clearTimeout(timer);
+        link.channels.delete(id);
+        reject(signal?.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+        resolveClosed({ code: null, signal: null });
+      };
+      signal?.addEventListener('abort', abandon, { once: true });
+      void closed.then(() => signal?.removeEventListener('abort', abandon));
       link.channels.set(id, {
         line: (line) => (onLine ? onLine(line) : early.push(line)),
         log: (line) => onLog?.(line),
         opened: () => {
           isOpen = true;
           clearTimeout(timer);
+          signal?.removeEventListener('abort', abandon);
           resolve(channel);
         },
         finish,

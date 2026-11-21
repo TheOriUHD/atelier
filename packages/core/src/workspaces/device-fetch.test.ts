@@ -29,6 +29,22 @@ function device(respond: (service: Extract<DeviceStart, { kind: 'http' }>, say: 
 }
 
 describe('fetch through a desktop device', () => {
+  it('gives up at once on Stop while a device that stopped answering never opens the request, and tells it to close', async () => {
+    links = new DeviceLinks(() => {});
+    const sent: ServerToDevice[] = [];
+    const link = links.attach('ada', 'laptop', { send: (frame: ServerToDevice) => void sent.push(frame), close: () => link.closed() });
+    link.receive(JSON.stringify({ t: 'hello', hello: { protocol: 2, app: '0.2.8', services: ['runner', 'http'], lending: { scratch: false, ssh: [] }, home: '/Users/ada', sep: '/', os: 'darwin', arch: 'arm64' } }));
+    const stop = new AbortController();
+    const pending = deviceFetch(links, 'ada', 'laptop', 'ollama')('http://localhost:11434/api/chat', { method: 'POST', body: '{}', signal: stop.signal }).catch((e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 10));
+    const start = sent.find((f) => f.t === 'start');
+    expect(start).toBeDefined();
+    stop.abort();
+    const error = await pending;
+    expect((error as Error).name).toBe('AbortError');
+    expect(sent.at(-1)).toEqual({ t: 'close', channel: (start as { channel: string }).channel });
+  });
+
   it('sends the request there and streams the answer back', async () => {
     let asked: Extract<DeviceStart, { kind: 'http' }> | undefined;
     device((service, say, close) => {

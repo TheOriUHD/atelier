@@ -1456,6 +1456,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { where: 'Settings › Connectors', state: status.state, ...(status.error ? { error: status.error } : {}), tools: toolNames(status) };
     },
     hookError: (sessionId, message) => platform.logger.error(`hook failed in session ${sessionId}: ${message}`),
+    logError: (message) => platform.logger.error(message),
     codeContext: async (session) => {
       if (!session.workspaceId || !session.userId) return null;
       const workspace = await workspaceManager.open(session.userId, session.workspaceId);

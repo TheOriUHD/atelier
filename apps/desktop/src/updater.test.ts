@@ -85,6 +85,13 @@ const finds =
     return { isUpdateAvailable: true, updateInfo: info(version), versionInfo: info(version), downloadPromise: Promise.resolve([]) };
   };
 
+/** A check that finds nothing newer than the running version. */
+const nothingNew = (u: FakeUpdater): UpdateCheckResult => {
+  u.emit('checking-for-update');
+  u.emit('update-not-available', info('0.2.0'));
+  return { isUpdateAvailable: false, updateInfo: info('0.2.0'), versionInfo: info('0.2.0') } as UpdateCheckResult;
+};
+
 let downloads: string;
 beforeEach(() => {
   downloads = mkdtempSync(join(tmpdir(), 'atelier-updates-'));
@@ -511,7 +518,57 @@ describe('updates', () => {
     expect(updates.status()).toMatchObject({ channel: 'beta', state: { kind: 'downloaded', version: '0.3.0-beta.1' } });
   });
 
+  it('switched back to stable, let go of the beta that waits: no Restart, and quitting does not install it', async () => {
+    const { updater, updates } = setup({ platform: 'win32' });
+    updates.setServer(SERVER);
+    updater.script = finds('0.3.0-beta.1');
+    await updates.setChannel('beta');
+    await vi.waitFor(() => expect(updates.status().state).toEqual({ kind: 'downloaded', version: '0.3.0-beta.1' }));
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+
+    updater.script = nothingNew;
+    await updates.setChannel('stable');
+    expect(updates.status()).toMatchObject({ channel: 'stable', state: { kind: 'idle' } });
+    expect(updater.autoInstallOnAppQuit).toBe(false);
+    updates.install();
+    expect(updater.installed).toBeNull();
+
+    // A stable release later is downloaded and installs on quit again.
+    updater.script = finds('0.3.0');
+    await updates.check();
+    await vi.waitFor(() => expect(updates.status().state).toEqual({ kind: 'downloaded', version: '0.3.0' }));
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+  });
+
+  it('keeps a stable update that waits when switching to beta', async () => {
+    const { updater, updates } = setup();
+    updates.setServer(SERVER);
+    updater.script = finds('0.3.0');
+    await updates.check();
+    await vi.waitFor(() => expect(updates.status().state.kind).toBe('downloaded'));
+    updater.script = nothingNew;
+    await updates.setChannel('beta');
+    expect(updates.status().state).toEqual({ kind: 'downloaded', version: '0.3.0' });
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+  });
+
   describe('on a Mac that can replace its own app', () => {
+    it('switched back to stable, removes the staged beta and does not swap it in when the app quits', async () => {
+      const { swap, removed, replaced } = fakeSwap();
+      const { updater, updates } = setup({ platform: 'darwin', arch: 'arm64', swap });
+      updates.setServer(SERVER);
+      updater.script = finds('0.3.0-beta.1');
+      await updates.setChannel('beta');
+      await vi.waitFor(() => expect(updates.status().state).toEqual({ kind: 'downloaded', version: '0.3.0-beta.1' }));
+      updater.script = nothingNew;
+      await updates.setChannel('stable');
+      expect(updates.status().state).toEqual({ kind: 'idle' });
+      expect(removed).toContain(swap.staging);
+      updates.installOnQuit();
+      updates.install();
+      expect(replaced).toEqual([]);
+    });
+
     const APP = '/Applications/Atelier.app';
     function fakeSwap(target: BundleSwap['target'] = { bundle: APP }) {
       const unpacked: string[] = [];

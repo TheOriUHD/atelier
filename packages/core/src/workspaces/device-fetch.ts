@@ -33,7 +33,10 @@ export function deviceFetch(links: Pick<DeviceLinks, 'start'>, userId: string, d
     const body = init.body == null ? undefined : Buffer.from(await new Response(init.body).arrayBuffer()).toString('base64');
     const signal = init.signal ?? undefined;
     if (signal?.aborted) throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
-    const channel = await links.start(userId, deviceId, { kind: 'http', target, method, url, headers, ...(body ? { body } : {}) }).catch((e: unknown) => Promise.reject(failed(e)));
+    // The wait for the response's head listens to the signal too: Stop doesn't wait for a device that stopped answering.
+    const channel = await links
+      .start(userId, deviceId, { kind: 'http', target, method, url, headers, ...(body ? { body } : {}) }, undefined, signal)
+      .catch((e: unknown) => Promise.reject(signal?.aborted ? (signal.reason ?? new DOMException('The operation was aborted.', 'AbortError')) : failed(e)));
     return new Promise<Response>((resolve, reject) => {
       let headed = false;
       let done = false;

@@ -246,6 +246,10 @@ export interface ChatServiceDeps {
   hooks?(session: SessionRow): Promise<{ workspace: Workspace; configs: HooksConfig[] } | null>;
   /** Hooks that failed without blocking anything. */
   hookError?(sessionId: string, message: string): void;
+  /** Something for the server's log: a stopped turn that had to be let go. */
+  logError?(message: string): void;
+  /** How long Stop waits for a turn to end by itself (STOP_GRACE_MS; tests shorten it). */
+  stopGraceMs?: number;
   /** The skills and commands a session can use (ARCHITECTURE §10). */
   extensions?(session: SessionRow): Promise<ExtensionCatalog>;
   /**
@@ -965,7 +969,36 @@ export class ChatService {
     run?.controller.abort();
     const background = [...(this.backgroundAgents.get(sessionId) ?? [])];
     for (const [childId] of background) this.agentStops.get(childId)?.abort();
-    await Promise.all([run?.done, ...background.map(([, ended]) => ended)]);
+    const ended = Promise.all([run?.done, ...background.map(([, ended]) => ended)]);
+    if (!(await settlesWithin(ended, this.deps.stopGraceMs ?? STOP_GRACE_MS)) && run && this.runs.get(sessionId) === run) await this.letGo(sessionId, run);
+  }
+
+  /**
+   * Ends a stopped turn that didn't end by itself (STOP_GRACE_MS): its reply as stopped, the session idle, free for the
+   * next message. What it waited on may still finish; the run then sees it was stopped and changes nothing (`isCurrent`).
+   */
+  private async letGo(sessionId: string, run: ActiveRun): Promise<void> {
+    this.deps.logError?.(`A stopped turn in session ${sessionId} did not end within ${(this.deps.stopGraceMs ?? STOP_GRACE_MS) / 1000} s; it was let go.`);
+    this.runs.delete(sessionId);
+    this.wakeTurns.delete(sessionId);
+    this.toolOutputs.delete(sessionId);
+    this.budgets.delete(sessionId);
+    const live = this.live.get(sessionId);
+    this.live.delete(sessionId);
+    if (live) {
+      await this.deps.repo.updateMessage(live.messageId, { parts: [...live.parts], stopReason: 'aborted' }).catch(() => undefined);
+      this.emit(sessionId, { type: 'done', messageId: live.messageId, usage: null, stopReason: 'aborted', error: null });
+    }
+    this.emit(sessionId, { type: 'compacting', active: false });
+    await this.setStatus(sessionId, this.interactions.asking(sessionId) ? 'waiting' : 'idle');
+    // Not waited for: the computer's side may be what doesn't answer.
+    void this.releaseComputer(sessionId).catch(() => undefined);
+    this.afterRun(sessionId, run.controller.signal.aborted);
+  }
+
+  /** Whether the run with `signal` is still the session's: a run that was let go isn't, and leaves the session alone. */
+  private isCurrent(sessionId: string, signal: AbortSignal): boolean {
+    return this.runs.get(sessionId)?.controller.signal === signal;
   }
 
   /**
@@ -1261,10 +1294,13 @@ export class ChatService {
         if (!(await this.compactNow(sessionId, { ...(focus ? { focus } : {}), signal: controller.signal, current: run.model, summaryTokens }))) throw new Error('There is nothing to compact yet.');
         this.emit(sessionId, { type: 'context', context: await this.measure(run, await this.forModel(run), false) });
       } finally {
-        this.emit(sessionId, { type: 'compacting', active: false });
-        this.runs.delete(sessionId);
-        await this.setStatus(sessionId, this.interactions.asking(sessionId) ? 'waiting' : 'idle');
-        this.afterRun(sessionId, controller.signal.aborted);
+        // Let go by Stop: cleaned up then, and the session may have a new run by now.
+        if (this.isCurrent(sessionId, controller.signal)) {
+          this.emit(sessionId, { type: 'compacting', active: false });
+          this.runs.delete(sessionId);
+          await this.setStatus(sessionId, this.interactions.asking(sessionId) ? 'waiting' : 'idle');
+          this.afterRun(sessionId, controller.signal.aborted);
+        }
       }
     })();
     this.runs.set(sessionId, { controller, done: done.catch(() => undefined), startedAt });
@@ -1344,6 +1380,8 @@ export class ChatService {
       }
       await this.run(sessionId, controller.signal, submitted, opts.wake ?? false);
     })().finally(() => {
+      // A run that Stop let go was cleaned up then; the session may have a new run by now.
+      if (!this.isCurrent(sessionId, controller.signal)) return;
       this.runs.delete(sessionId);
       this.wakeTurns.delete(sessionId);
       this.live.delete(sessionId);
@@ -1458,6 +1496,8 @@ export class ChatService {
   private async run(sessionId: string, signal: AbortSignal, submitted: boolean, wake = false): Promise<void> {
     await this.setStatus(sessionId, 'running');
     let finalStatus: 'idle' | 'error' = 'idle';
+    // Stop let this run go while it waited (STOP_GRACE_MS): whatever it waited on finished late, and it adds nothing now.
+    const gone = () => !this.isCurrent(sessionId, signal);
     try {
       const session = await this.requireSession(sessionId);
       // Co-op: whom this turn is for decides its model, who pays and whose limits count (coop-turns.ts).
@@ -1483,10 +1523,13 @@ export class ChatService {
         finalStatus = wake ? 'idle' : 'error';
         return;
       }
+      // The hooks' workspace and the hooks themselves can be on a device (a folder on the person's computer).
       const hooks = await this.deps.hooks?.(session);
+      if (gone()) return;
       // Sub-agents get tool hooks only: their prompt comes from the parent, and their end is the parent's tool result.
       const turnHooks = session.parentSessionId ? undefined : hooks;
       if (turnHooks && !(await this.beforeTurn(session, turnHooks, submitted, signal))) return;
+      if (gone()) return;
       if (submitted && !session.parentSessionId) await this.expandSlash(session);
       let resolved: ResolvedModel;
       const moved: string[] = [];
@@ -1497,13 +1540,16 @@ export class ChatService {
         resolved = await this.resolveSessionModel(session, ref, moved, actor.modelUser);
         if (!session.model && !actor.ref) await this.deps.repo.update(sessionId, { model: ref });
       } catch (error) {
+        if (gone()) return;
         await this.failWithoutModel(sessionId, error);
         finalStatus = 'error';
         return;
       }
+      if (gone()) return;
       // Named from the first message right away, ahead of the reply. In co-op only on the host's own models (helpers are theirs).
       if (!session.parentSessionId && !session.title && !this.titling.has(sessionId) && !actor.ref && actor.payer === session.userId) void this.generateTitle(sessionId, resolved);
       const run = await this.requestContext(session, resolved, signal, true);
+      if (gone()) return;
       if (!session.parentSessionId) await this.announce(session, run);
       for (const note of moved) await this.addContextMessage(sessionId, note);
       // A defined sub-agent's own `maxTurns` wins over the sub-agents' ceiling; a person's own turn has none.
@@ -1532,8 +1578,9 @@ export class ChatService {
         // The person's own runs go first on a busy model server; sub-agents' requests wait a little longer.
         // Side chats queue like sub-agents too: on a one-model local server they share its slot and model and let the main run go first.
         queue: { priority: session.parentSessionId ? 'subagent' : 'foreground', owner: sessionId, onWait: (ahead) => this.emit(sessionId, { type: 'queued', ahead }) },
-        emit: (e) => this.emit(sessionId, e),
-        live: (messageId, parts) => (parts ? this.live.set(sessionId, { messageId, parts }) : this.live.delete(sessionId)),
+        // A run Stop let go stays quiet: the session's window and its next run are no longer its.
+        emit: (e) => void (gone() || this.emit(sessionId, e)),
+        live: (messageId, parts) => void (gone() || (parts ? this.live.set(sessionId, { messageId, parts }) : this.live.delete(sessionId))),
         prepare: () => this.prepareRequest(run),
         recoverOverflow: () => {
           run.threshold = Math.floor(Math.min(run.threshold, run.last?.used ?? run.threshold) * 0.8);
@@ -1590,15 +1637,17 @@ export class ChatService {
       }
     } catch (error) {
       finalStatus = 'error';
-      await this.failWithoutModel(sessionId, error);
+      if (!gone()) await this.failWithoutModel(sessionId, error);
     } finally {
-      this.budgets.delete(sessionId);
-      // A background sub-agent's question may still wait for the person.
-      const asking = this.interactions.asking(sessionId);
-      // A turn that ran to its end is news to anyone who isn't looking (cleared when they open the session).
-      await this.setStatus(sessionId, asking ? 'waiting' : finalStatus, finalStatus === 'idle' && !asking && !signal.aborted);
-      // The turn is over: the person gets their mouse and keyboard back.
-      await this.releaseComputer(sessionId);
+      if (!gone()) {
+        this.budgets.delete(sessionId);
+        // A background sub-agent's question may still wait for the person.
+        const asking = this.interactions.asking(sessionId);
+        // A turn that ran to its end is news to anyone who isn't looking (cleared when they open the session).
+        await this.setStatus(sessionId, asking ? 'waiting' : finalStatus, finalStatus === 'idle' && !asking && !signal.aborted);
+        // The turn is over: the person gets their mouse and keyboard back.
+        await this.releaseComputer(sessionId);
+      }
     }
   }
 
@@ -3691,6 +3740,23 @@ const COMPUTER_SAID_MESSAGES = 20;
 
 /** How often Stop hooks may send the model back to work in one turn. */
 const MAX_STOP_ROUNDS = 3;
+/**
+ * How long Stop waits for a turn to end by itself. A turn that is still going then waits on something that doesn't hear
+ * the stop (a device link that stopped answering, a model server holding the connection): it is let go, so Stop always
+ * stops and the person can carry on.
+ */
+export const STOP_GRACE_MS = 3_000;
+
+/** Whether `promise` settles within `ms`. */
+async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), ms)));
+  try {
+    return await Promise.race([promise.then(() => true, () => true), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 /** Times a turn that ended with open items on its task list goes back to work. */
 const MAX_CONTINUE_ROUNDS = 4;
 
