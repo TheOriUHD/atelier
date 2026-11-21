@@ -28,7 +28,7 @@ test('desktop: Copy diagnostics puts a redacted report with the app log on the c
     expect(text).toMatch(/Electron \d+\.\d+/);
     expect(text).toMatch(/Main log \(last \d+ lines\):/);
     // The main log starts with a line about this very run.
-    expect(text).toMatch(/start \d+\.\d+\.\d+ on (darwin|win32|linux) /);
+    expect(text).toMatch(/start \d+\.\d+\.\d+(-[\w.]+)? on (darwin|win32|linux) /);
     expect(text).toContain('Providers: 1 (ollama)');
     // Nothing that identifies this computer or its folders.
     for (const mine of [userInfo().username, homedir(), configDir]) expect(text).not.toContain(mine);
