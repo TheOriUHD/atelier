@@ -990,6 +990,8 @@ export class ChatService {
     this.wakeTurns.delete(sessionId);
     this.toolOutputs.delete(sessionId);
     this.budgets.delete(sessionId);
+    this.redirects.delete(sessionId);
+    this.screenTaken.delete(sessionId);
     const live = this.live.get(sessionId);
     this.live.delete(sessionId);
     if (live) {
