@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import type { Effort, Part, RunPhase, StopReason, Usage } from '@atelier/protocol';
 import { DEFAULT_CONTEXT, clampEffort, listedModel } from './catalog.ts';
-import { contextMetadata, estimateContext, type ContextMetadata } from './context-estimator.ts';
+import { estimateContext, inspectContext, type ContextMetadata } from './context-estimator.ts';
 import { withPromptedTools } from './prompted-tools.ts';
 import { bearer, classifyError, guardStream, jsonHeaders, postStream, probe, requestJson } from './http.ts';
 import { parseNDJSON } from './ndjson.ts';
@@ -29,6 +29,10 @@ interface ShowInfo {
   capabilities: string[];
   contextLength?: number;
   contextMetadata?: ContextMetadata;
+  /** `general.architecture`, for saying why a model's context can't be sized. */
+  architecture?: string;
+  /** Its metadata has fields the server left out unless asked `verbose` (`/api/show` answers long arrays with null). */
+  needsVerbose?: boolean;
   thinkLevels: string[];
   /**
    * Where replayed reasoning goes when the server renders the model's own Jinja template (Ollama 0.33's
@@ -64,7 +68,7 @@ export function parseShow(json: unknown): ShowInfo {
   const architecture = str(modelInfo['general.architecture']);
   const ctxKey = architecture ? `${architecture}.context_length` : Object.keys(modelInfo).find((k) => k.endsWith('.context_length'));
   const contextLength = ctxKey ? num(modelInfo[ctxKey]) : undefined;
-  const metadata = contextMetadata(modelInfo);
+  const { metadata, needsVerbose, architecture: inspected } = inspectContext(modelInfo);
   const listed = strings(rec(body.thinking).values);
   const details = rec(body.details);
   const families = [str(details.family), ...strings(details.families)].filter((f): f is string => !!f);
@@ -79,7 +83,15 @@ export function parseShow(json: unknown): ShowInfo {
       : /'<\/think>' in (?:message\.)?content/.test(template)
         ? 'think-tags'
         : undefined;
-  return { capabilities, thinkLevels, ...(contextLength ? { contextLength } : {}), ...(metadata ? { contextMetadata: metadata } : {}), ...(replay ? { replay } : {}) };
+  return {
+    capabilities,
+    thinkLevels,
+    ...(contextLength ? { contextLength } : {}),
+    ...(metadata ? { contextMetadata: metadata } : {}),
+    ...(inspected ? { architecture: inspected } : {}),
+    ...(needsVerbose ? { needsVerbose } : {}),
+    ...(replay ? { replay } : {}),
+  };
 }
 
 /**
@@ -214,15 +226,23 @@ export function createOllamaAdapter(instance: ProviderInstance, deps: AdapterDep
   const shows = new Map<string, Promise<ShowInfo | null>>();
   const promptedModels = new Set<string>();
 
+  const showRequest = (model: string, verbose: boolean, signal?: AbortSignal): Promise<ShowInfo | null> =>
+    requestJson(deps, instance, url('/api/show'), {
+      method: 'POST',
+      headers: headers(),
+      body: verbose ? { model, verbose: true } : { model },
+      ...(signal ? { signal } : {}),
+    }).then(parseShow, () => null);
+
   function show(model: string, signal?: AbortSignal): Promise<ShowInfo | null> {
     const cached = shows.get(model);
     if (cached) return cached;
-    const pending = requestJson(deps, instance, url('/api/show'), {
-      method: 'POST',
-      headers: headers(),
-      body: { model },
-      ...(signal ? { signal } : {}),
-    }).then(parseShow, () => null);
+    const pending = showRequest(model, false, signal).then(async (info) => {
+      // `/api/show` answers long arrays (per-layer head counts, the sliding-window pattern) with null unless asked
+      // `verbose`, which also sends the tokenizer (megabytes): only for a model whose context a memory budget sizes.
+      if (!info?.needsVerbose || !instance.vramGiB) return info;
+      return (await showRequest(model, true, signal)) ?? info;
+    });
     shows.set(model, pending);
     void pending.then((info) => {
       if (!info) shows.delete(model);
@@ -335,7 +355,9 @@ export function createOllamaAdapter(instance: ProviderInstance, deps: AdapterDep
       displayName: name,
       contextLength,
       maxOutput: Math.min(contextLength, DEFAULT_CONTEXT),
-      ...(modelBytes && info?.contextMetadata ? { contextEstimate: { modelBytes, metadata: info.contextMetadata } } : {}),
+      ...(modelBytes && info?.contextMetadata
+        ? { contextEstimate: { modelBytes, metadata: info.contextMetadata } }
+        : { contextUnsized: { reason: !info ? ('metadata' as const) : !modelBytes ? ('size' as const) : ('architecture' as const), ...(info?.architecture ? { architecture: info.architecture } : {}) } }),
       capabilities: {
         // Without a capabilities list (old servers) native support is assumed but unverified (source 'default').
         tools: caps.length === 0 || caps.includes('tools') ? 'native' : 'prompted',
@@ -367,6 +389,19 @@ export function createOllamaAdapter(instance: ProviderInstance, deps: AdapterDep
       return infos
         .filter(({ info }) => !info || info.capabilities.length === 0 || info.capabilities.includes('completion'))
         .map(({ name, info, modelBytes }) => toListed(name, info, modelBytes));
+    },
+
+    /** One model again, with its size and metadata read afresh: Settings › Admin › Models › Calculate context. */
+    async refreshModel(modelId, signal) {
+      shows.delete(modelId);
+      const tags = await requestJson(deps, instance, url('/api/tags'), { headers: headers(), ...(signal ? { signal } : {}) });
+      const tag = arr(rec(tags).models)
+        .map(rec)
+        .find((m) => (str(m.name) ?? str(m.model)) === modelId);
+      if (!tag) return null;
+      const info = await show(modelId, signal);
+      if (info && info.capabilities.length > 0 && !info.capabilities.includes('completion')) return null;
+      return toListed(modelId, info, num(tag.size));
     },
 
     health(signal) {

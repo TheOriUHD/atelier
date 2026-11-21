@@ -331,6 +331,9 @@ struct AMModelDetail: View {
     @State private var probing = false
     @State private var probe: (native: Bool, detail: String)?
     @State private var probeError: String?
+    @State private var calculating = false
+    @State private var calculated: String?
+    @State private var calculateError: String?
     @State private var confirmReset = false
     @State private var confirmRemove = false
     @FocusState private var focus: AMOverrideForm.Field?
@@ -422,6 +425,15 @@ struct AMModelDetail: View {
 
         if item.reasoning != "none" { thinking(item) }
 
+        if let label = item.calculationLabel {
+            Section {
+                ValueRow(title: "Context", value: label, subtitle: item.calculationDetail)
+                ActionRow(title: "Calculate context", symbol: "arrow.clockwise", busy: calculating) { Task { await runCalculate() } }
+                if let calculated { AMOutcome(kind: .good, text: calculated) }
+                if let calculateError { AMOutcome(kind: .bad, text: calculateError) }
+            } footer: { Text("Reads this model's size and details from its server again and works out its context from the provider's memory budget.") }
+        }
+
         Section {
             ActionRow(title: "Test tool calling", symbol: "wrench.and.screwdriver", busy: probing) { Task { await runProbe() } }
             if let probe { AMOutcome(kind: probe.native ? .good : .warn, text: probe.detail) }
@@ -465,6 +477,13 @@ struct AMModelDetail: View {
         saving = true
         if await model.save(ref, form: form) { model.store.notify("Saved"); load() }
         saving = false
+    }
+
+    private func runCalculate() async {
+        calculating = true; calculated = nil; calculateError = nil
+        defer { calculating = false }
+        do { calculated = try await model.calculate(ref, providerID: model.model(ref)?.providerID ?? "") }
+        catch is CancellationError {} catch { calculateError = AMFailure.from(error).localizedDescription }
     }
 
     private func runProbe() async {

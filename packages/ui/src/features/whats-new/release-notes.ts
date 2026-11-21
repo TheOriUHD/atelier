@@ -38,6 +38,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.5',
+    intro: 'The memory budget for local models now sizes more of them, and says plainly why a model has no number.',
+    highlights: [
+      {
+        icon: Gauge,
+        title: 'Calculate all now calculates all',
+        body: 'On an Ollama server with a memory budget, Gemma 4, LFM2 and Nemotron models stayed at “Not calculated” however often you pressed Calculate all. Atelier now reads what these architectures need and sizes them too. When a model still has no number, the label under its context says why (it doesn’t fit the budget, its architecture isn’t supported, the server didn’t say how large it is), and Calculate all ends with how many models it calculated instead of saying it worked.',
+      },
+      {
+        icon: Gauge,
+        title: 'Calculate context for one model',
+        body: 'A model’s ⋯ menu in Settings › Admin › Models has Calculate context: it reads that model from its server again, applies the memory budget and tells you what came out.',
+      },
+    ],
+    also: ['The Context column in Settings › Admin › Models is wider so the new labels fit.'],
+  },
+  {
     version: '0.10.4',
     intro: 'Atelier for Chrome is in the Chrome Web Store, and it now works for chats on your server too.',
     highlights: [

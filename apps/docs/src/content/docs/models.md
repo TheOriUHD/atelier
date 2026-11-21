@@ -90,11 +90,11 @@ Each model is one row:
 | Column | What it does |
 |---|---|
 | Name | Editable in place; **Enter** or leaving the field saves. Empty restores the detected name. |
-| **Context** | The context window in tokens (for example `32K`, `200K`, `1M`). Under it, **Calculated** or **Not calculated** appears for a provider with a memory budget (see [Context length](#context-length)). |
+| **Context** | The context window in tokens (for example `32K`, `200K`, `1M`). Under it, a provider with a memory budget says where the calculation stands: **Calculated**, **Doesn't fit the budget**, **mamba9 not supported** (the architecture's name), **Size unknown** or **Not applicable** (see [Context length](#context-length)). Hover it for the reason. |
 | **Capabilities** | **Tools**, **Prompted tools**, **No tools**; **Vision**; **Reasoning**; **Free**. |
 | Star | Favorite: sorts first in the picker. |
 | **Visible** | Whether the model appears in the picker. Hiding deletes nothing. |
-| ⋯ | **Edit overrides…**, **Probe tool calling**, and **Remove** for models you added by id. |
+| ⋯ | **Edit overrides…**, **Calculate context** (reads that one model from its server again and applies the memory budget), **Probe tool calling**, and **Remove** for models you added by id. |
 
 ### Aliases
 
@@ -108,9 +108,12 @@ under `.atelier`, or under `.claude` while Claude Code compatibility is on, whic
 ### Calculate all
 
 **Calculate all** at the top of the list re-checks every enabled provider: it asks each server for its models again,
-recomputes the context windows from the current memory budgets, and keeps your manual overrides. It ends with "Recalculated
-all models", or, when a provider could not be reached, "Recalculated with cached metadata for unavailable providers".
-Use it after pulling a new model, changing a memory budget, or restarting a model server.
+recomputes the context windows from the current memory budgets, and keeps your manual overrides. It ends by saying how many
+models have a calculated context and why each of the others has none, for example "Calculated 22 of 24 models" with "1
+doesn't fit the memory budget; 1 can't be read (mamba9)". When a provider could not be reached it names it and keeps that
+provider's last calculation; when no provider has a memory budget it says so instead of claiming success.
+Use it after pulling a new model, changing a memory budget, or restarting a model server. **Calculate context** in a model's
+⋯ menu does the same for that one model, and says what came out.
 
 ## Edit overrides
 

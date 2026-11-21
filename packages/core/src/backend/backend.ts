@@ -2680,6 +2680,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'providers.refresh': ({ id }) => registry.refresh(id),
     'models.list': async (_input, ctx) => modelsFor(ctx.connection(), await registry.listModels(me(ctx).id)),
     'models.probeTools': ({ ref }) => registry.probeTools(ref),
+    'models.calculate': ({ ref }) => registry.calculate(ref),
 
     // ------------------------------------------------- image providers
     'imageProviders.status': () => imageRegistry.statusList(),

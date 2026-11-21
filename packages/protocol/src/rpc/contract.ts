@@ -336,6 +336,8 @@ export const contract = {
     'providers.refresh': { input: z.object({ id: z.string().optional() }), output: z.array(ProviderStatus) },
     'models.list': { input: Empty, output: z.array(ModelInfo) },
     'models.probeTools': { input: z.object({ ref: z.string() }), output: z.object({ native: z.boolean(), detail: z.string() }) },
+    /** Reads one model's size and metadata from its server again and works out its context from the provider's memory budget. */
+    'models.calculate': { input: z.object({ ref: z.string() }), output: ModelInfo },
     /** Image providers (ARCHITECTURE §23), separate from text providers. */
     'imageProviders.status': { input: Empty, output: z.array(ProviderStatus) },
     'imageProviders.detect': { input: Empty, output: z.array(DetectedImageServer) },
@@ -968,6 +970,7 @@ export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNam
   'providers.remove',
   'providers.refresh',
   'models.probeTools',
+  'models.calculate',
   'imageProviders.status',
   'imageProviders.detect',
   'imageProviders.test',

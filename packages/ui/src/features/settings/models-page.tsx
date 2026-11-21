@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Calculator, MoreHorizontal, Plus, SlidersHorizontal, Star, Trash2, Wrench } from 'lucide-react';
-import { modelRef, type ModelInfo, type ModelOverride, type Settings } from '@atelier/protocol';
+import { modelRef, RpcError, RpcErrorCode, type ModelInfo, type ModelOverride, type Settings } from '@atelier/protocol';
 import {
   Badge,
   Button,
@@ -21,6 +21,7 @@ import { useOpenSettings } from '../../app/navigation.ts';
 import { keys, useModels, useSetSetting, useSettings } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { formatTokens } from '../chat/models.ts';
+import { calculationDetail, calculationLabel, describeCalculation, summarizeCalculation } from './models-calculation.ts';
 import { ModelOverridesDialog } from './model-overrides-dialog.tsx';
 import { isUnavailable, ModelSelect } from './model-select.tsx';
 import { settingEntry, type SettingId } from './search-index.ts';
@@ -51,11 +52,12 @@ export function ModelsPage() {
     setCalculating(true);
     try {
       const statuses = await rpc().call('providers.refresh', {});
+      const fresh = await rpc().call('models.list', {});
       await qc.invalidateQueries({ queryKey: keys.models });
       await qc.invalidateQueries({ queryKey: keys.providers });
-      const unavailable = statuses.filter((status) => !status.ok);
-      if (unavailable.length) toast.warning('Recalculated with cached metadata for unavailable providers', { description: 'Reconnect those providers to refresh missing model metadata. Manual overrides were preserved.' });
-      else toast.success('Recalculated all models', { description: 'Fresh model metadata and current memory budgets applied. Manual overrides were preserved.' });
+      const offline = statuses.filter((status) => !status.ok).map((status) => providerNames.get(status.providerId) ?? status.providerId);
+      const summary = summarizeCalculation(fresh.filter((m) => !m.personal), (settings?.providers ?? []).some((p) => p.enabled && p.vramGiB !== undefined), offline);
+      toast[summary.tone](summary.title, { description: summary.description });
     } catch (error) {
       toast.error(describeError(error).message);
     } finally {
@@ -148,7 +150,7 @@ function ModelSelectRow({
 }
 
 // Narrow screens keep the columns readable and scroll the table sideways.
-const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_72px_216px_32px_44px_32px] items-center gap-x-3 max-md:min-w-160';
+const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_132px_216px_32px_44px_32px] items-center gap-x-3 max-md:min-w-160';
 
 function ModelTable({ providerId, label, models }: { providerId: string; label: string; models: ModelInfo[] }) {
   const { settings } = useSettings();
@@ -302,6 +304,20 @@ function useOverride<K extends keyof ModelOverride>(ref: string, key: K) {
   };
 }
 
+/**
+ * Reads one model from its server again and returns it with its calculated context. A server older than
+ * `models.calculate` can only ask for all of the provider's models, which is what it does then.
+ */
+async function calculateModel(ref: string, providerId: string): Promise<ModelInfo | undefined> {
+  try {
+    return await rpc().call('models.calculate', { ref });
+  } catch (error) {
+    if (!(error instanceof RpcError && error.code === RpcErrorCode.MethodNotFound)) throw error;
+    await rpc().call('providers.refresh', { id: providerId });
+    return (await rpc().call('models.list', {})).find((m) => m.ref === ref);
+  }
+}
+
 const TOOL_LABELS: Record<ModelInfo['capabilities']['tools'], string> = { native: 'Tools', prompted: 'Prompted tools', none: 'No tools' };
 
 function ModelRow({ model }: { model: ModelInfo }) {
@@ -327,6 +343,22 @@ function ModelRow({ model }: { model: ModelInfo }) {
       error: (e: unknown) => describeError(e).message,
     });
 
+  const providerName = settings?.providers.find((provider) => provider.id === model.providerId)?.name ?? model.providerId;
+  const calculate = () => {
+    if (memoryBudget === undefined) {
+      toast.info(`No memory budget for ${providerName}`, { description: 'Set one in Settings › Admin › Providers and Atelier calculates the context of its models.' });
+      return;
+    }
+    toast.promise(calculateModel(model.ref, model.providerId).then(async (updated) => {
+      await qc.invalidateQueries({ queryKey: keys.models });
+      return describeCalculation(updated, name);
+    }), {
+      loading: `Calculating the context of ${name}…`,
+      success: (message) => message,
+      error: (e: unknown) => describeError(e).message,
+    });
+  };
+
   const remove = () =>
     run(async () => {
       await rpc().call('settings.reset', { layer: 'global', path: ['models', 'overrides', model.ref] });
@@ -345,7 +377,11 @@ function ModelRow({ model }: { model: ModelInfo }) {
       </div>
       <span role="cell" className="text-right text-body text-fg-secondary tabular-nums">
         {formatTokens(model.calculatedContextLength ?? context.value ?? model.contextLength)}
-        {model.calculatedContextLength !== undefined ? <span className="block text-caption text-fg-muted" title={`Effective request context: ${formatTokens(context.value ?? model.contextLength)}. Model overrides take priority over the calculated budget.`}>Calculated</span> : memoryBudget !== undefined && <span className="block text-caption text-fg-muted" title="Calculation requires cached model weight size and architecture. Reconnect once to collect missing metadata; VRAM alone is insufficient.">Not calculated</span>}
+        {(model.calculation || memoryBudget !== undefined) && (
+          <span className="block text-caption text-fg-muted" title={calculationDetail(model, formatTokens(context.value ?? model.contextLength))}>
+            {calculationLabel(model)}
+          </span>
+        )}
       </span>
       <div role="cell" className="flex flex-wrap gap-1">
         <Badge tone={caps.tools === 'prompted' ? 'warning' : 'neutral'}>{TOOL_LABELS[caps.tools]}</Badge>
@@ -379,6 +415,9 @@ function ModelRow({ model }: { model: ModelInfo }) {
           <MenuContent align="end">
             <MenuItem icon={SlidersHorizontal} onClick={() => setEditing(true)}>
               Edit overrides…
+            </MenuItem>
+            <MenuItem icon={Calculator} onClick={() => void calculate()}>
+              Calculate context
             </MenuItem>
             <MenuItem icon={Wrench} onClick={() => void probe()}>
               Probe tool calling

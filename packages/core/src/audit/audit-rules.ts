@@ -257,6 +257,7 @@ export const AUDIT_RULES = {
   'providers.test': skip('a trial request; stores nothing'),
   'providers.refresh': skip('asks the providers again; stores nothing'),
   'models.probeTools': skip('a trial request; stores nothing'),
+  'models.calculate': skip('reads one model again from its server; stores nothing a person set'),
   'search.test': skip('a trial search; stores nothing'),
   'imageProviders.save': providerDraft('image') as unknown as AuditRule<'imageProviders.save'>,
   'imageProviders.remove': providerRemoval('image') as unknown as AuditRule<'imageProviders.remove'>,

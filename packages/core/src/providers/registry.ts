@@ -4,7 +4,7 @@
  */
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   DEFAULT_BASE_URLS,
   isDeviceOnlyPlatform,
@@ -29,7 +29,7 @@ import { modelCache } from '../store/schema.ts';
 import { interpolate } from '../util/interpolate.ts';
 import { ModelHiddenError, ModelUnavailableError, type ModelResolver, type ResolvedModel } from '../agent/chat-service.ts';
 import { tierFor } from './catalog.ts';
-import { estimateContext } from './context-estimator.ts';
+import { estimateContextResult } from './context-estimator.ts';
 import { isAbortError, noAnswerError } from './http.ts';
 import { detectLocalServers } from './local-servers.ts';
 import { personalKeyId, type PersonalAccess, type PersonalRow } from './personal.ts';
@@ -68,6 +68,23 @@ const DISCOVERY_TIMEOUT_MS = 15_000;
 function checkError(error: unknown, baseUrl: string, timeoutMs: number): string {
   if (isAbortError(error)) return noAnswerError(baseUrl, timeoutMs);
   return error instanceof Error ? error.message : 'Unreachable';
+}
+
+/** Gigabytes as a person reads them: decimal, one decimal place only where it matters. */
+const gb = (bytes: number): string => String(Number((bytes / 1e9).toFixed(1)));
+
+/** Why a model's weights leave too little of the memory budget for a usable context. */
+function tooLargeDetail(provider: ProviderConfig, modelBytes: number): string {
+  const shared = (provider.modelsAtOnce ?? 1) > 1 ? ` (shared by ${provider.modelsAtOnce} models loaded at once)` : '';
+  return `Its weights are ${gb(modelBytes)} GB, which leaves too little of the ${gb((provider.vramGiB ?? 0) * 1024 ** 3)} GB memory budget${shared} for a usable context. Raise the budget or pick a smaller model.`;
+}
+
+/** What discovery says about a model it could not size (cache rows from before it said anything are `pending`). */
+function unsizedCalculation(why: ModelInfo['contextUnsized']): NonNullable<ModelInfo['calculation']> {
+  if (!why) return { state: 'pending', detail: 'Not worked out yet. Use Calculate context to read its size and metadata from the server.' };
+  if (why.reason === 'size') return { state: 'unknown-size', detail: 'The server didn’t say how large its weights are, so its memory use can’t be worked out.' };
+  if (why.reason === 'metadata') return { state: 'unsupported', detail: 'The server wouldn’t show this model’s metadata, so its memory use can’t be worked out.' };
+  return { state: 'unsupported', detail: `Atelier can’t read the memory use of the ${why.architecture ?? 'model’s'} architecture from its metadata, so no context is calculated.` };
 }
 
 /** Order-independent identity of a provider config (settings normalization may reorder keys). */
@@ -182,10 +199,15 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
 
   // ------------------------------------------------------------- models
 
+  /** The context a provider's memory budget allows the model (Ollama's, from its size and metadata), and where that stands. */
   private calculated(model: DiscoveredModel, provider = this.providers.find((p) => p.id === model.providerId)): DiscoveredModel {
-    const calculatedContextLength = provider?.type === 'ollama' && model.contextEstimate
-      ? estimateContext({ ...provider, ...model.contextEstimate }) : undefined;
-    return calculatedContextLength ? { ...model, contextLength: calculatedContextLength, calculatedContextLength } : model;
+    if (!provider?.vramGiB) return model;
+    if (provider.type !== 'ollama') return { ...model, calculation: { state: 'not-applicable', detail: 'Only Ollama models are sized from a memory budget; this server sets its own context.' } };
+    if (!model.contextEstimate) return { ...model, calculation: unsizedCalculation(model.contextUnsized) };
+    const result = estimateContextResult({ ...provider, ...model.contextEstimate });
+    if ('tokens' in result) return { ...model, contextLength: result.tokens, calculatedContextLength: result.tokens, calculation: { state: 'calculated' } };
+    if (result.reason === 'fit') return { ...model, calculation: { state: 'too-large', detail: tooLargeDetail(provider, model.contextEstimate.modelBytes) } };
+    return { ...model, calculation: { state: 'unsupported', detail: 'The memory settings of this provider are not valid, so its memory use can’t be worked out.' } };
   }
 
   private configured(model: DiscoveredModel): ModelInfo {
@@ -315,6 +337,34 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
     }
   }
 
+  /**
+   * One model's size and metadata read from its server again, and its context worked out from the provider's memory
+   * budget (Settings › Admin › Models › Calculate context). A server whose adapter can't ask for one model alone is
+   * asked for all of that provider's.
+   */
+  async calculate(ref: string): Promise<ModelInfo> {
+    const parsed = parseModelRef(ref);
+    const config = parsed ? this.providers.find((p) => p.id === parsed.providerId) : undefined;
+    if (!parsed || !config?.enabled) throw new ModelUnavailableError(`${ref} isn't available.`, 'settings/models');
+    const adapter = await this.adapterFor(config);
+    if (adapter.refreshModel) {
+      let listed: Awaited<ReturnType<NonNullable<ProviderAdapter['refreshModel']>>>;
+      try {
+        listed = await adapter.refreshModel(parsed.modelId, AbortSignal.timeout(DISCOVERY_TIMEOUT_MS));
+      } catch (error) {
+        throw new Error(checkError(error, config.baseUrl, DISCOVERY_TIMEOUT_MS), { cause: error });
+      }
+      if (!listed) throw new ModelUnavailableError(`${config.name} no longer lists ${parsed.modelId}.`, 'settings/models');
+      await this.storeModel(config.id, listed);
+      this.emit('models', await this.listModels());
+    } else {
+      await this.refresh(config.id);
+    }
+    const model = (await this.sharedModels()).find((m) => m.ref === ref);
+    if (!model) throw new ModelUnavailableError(`${config.name} doesn't list ${parsed.modelId}.`, 'settings/models');
+    return model;
+  }
+
   async refresh(id?: string): Promise<ProviderStatus[]> {
     const targets = this.providers.filter((p) => p.enabled && (!id || p.id === id));
     await Promise.all(targets.map((p) => this.refreshOne(p)));
@@ -350,6 +400,11 @@ export class ProviderRegistry extends EventEmitter<{ status: [ProviderStatus[]];
         checkedAt: Date.now(),
       });
     }
+  }
+
+  private async storeModel(providerId: string, model: DiscoveredModel): Promise<void> {
+    await this.deps.db.delete(modelCache).where(and(eq(modelCache.providerId, providerId), eq(modelCache.modelId, model.modelId)));
+    await this.deps.db.insert(modelCache).values({ providerId, modelId: model.modelId, info: model as unknown as Record<string, unknown>, discoveredAt: Date.now() });
   }
 
   private async storeModels(providerId: string, models: DiscoveredModel[]): Promise<void> {

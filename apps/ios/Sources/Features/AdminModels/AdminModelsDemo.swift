@@ -69,7 +69,7 @@ final class AMDemoWorld {
 enum AMDemoData {
     static let methods: Set<String> = [
         "settings.get", "settings.set", "settings.reset", "providers.status", "providers.detect", "providers.test", "providers.save", "providers.remove",
-        "providers.refresh", "providers.planUsage", "models.list", "models.probeTools", "secrets.list", "secrets.set", "secrets.delete",
+        "providers.refresh", "providers.planUsage", "models.list", "models.probeTools", "models.calculate", "secrets.list", "secrets.set", "secrets.delete",
         "chatgpt.status", "chatgpt.signIn", "chatgpt.cancel", "copilot.status", "copilot.signIn", "copilot.cancel",
         "openrouter.connect", "openrouter.status", "openrouter.cancel",
         "search.status", "search.test", "dictation.status", "dictation.prepare",
@@ -241,6 +241,7 @@ enum AMDemoData {
             return .array(world.statuses)
         case "providers.planUsage": return ["usedPercent": 42, "resetsAt": now(-86400 * 11), "plan": "pro", "overage": false]
         case "models.list": return .array(models(world))
+        case "models.calculate": return models(world).first { $0["ref"].string == params["ref"]?.string } ?? .null
         case "models.probeTools":
             if params["ref"]?.string.contains("llama3") == true { return ["native": false, "detail": "llama3.2:3b ignored the tools it was given, so Atelier describes them in the prompt instead."] }
             return ["native": true, "detail": "Tool calling works natively on this model."]

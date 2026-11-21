@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   chatRequest,
@@ -472,6 +473,57 @@ describe('ollama adapter', () => {
     expect(chatCalls(calls)[1]!.body).toMatchObject({ options: { num_ctx: 65536 } });
     const fallback = await createOllamaAdapter(instance, deps(fetch)).listModels();
     expect(fallback.map((m) => m.contextLength)).toEqual([32768, 32768, 32768]);
+  });
+
+  /** A real Ollama 0.33's `/api/show` of gemma-4-26b: the plain answer has null where verbose has the per-layer arrays. */
+  const GEMMA = JSON.parse(readFileSync(new URL('./__fixtures__/ollama-vm-model-info.json', import.meta.url), 'utf8'))['gemma-4-26b-a4b:q4_0'] as { modelBytes: number; modelInfo: Record<string, unknown>; verboseModelInfo: Record<string, unknown> };
+  const LLAMA = { 'general.architecture': 'llama', 'llama.context_length': 131072, 'llama.block_count': 32, 'llama.embedding_length': 4096, 'llama.attention.head_count': 32, 'llama.attention.head_count_kv': 8 };
+
+  function memoryServer() {
+    return fakeFetch({
+      'GET /api/tags': () => jsonResponse({ models: [{ name: 'gemma', size: GEMMA.modelBytes }, { name: 'strange', size: 4e9 }, { name: 'cloud' }] }),
+      'POST /api/show': (call) => {
+        const { model, verbose } = call.body as { model: string; verbose?: boolean };
+        const info = model === 'gemma' ? (verbose ? GEMMA.verboseModelInfo : GEMMA.modelInfo) : model === 'strange' ? { 'general.architecture': 'mamba9', 'mamba9.context_length': 65536 } : LLAMA;
+        return jsonResponse({ capabilities: ['completion'], model_info: info });
+      },
+    });
+  }
+
+  it('asks /api/show again for the arrays it left out when a memory budget sizes the context, and says why a model has no size', async () => {
+    const { fetch, calls } = memoryServer();
+    const models = await createOllamaAdapter({ ...instance, vramGiB: 29.8 }, deps(fetch)).listModels();
+    expect(calls.filter((c) => c.url.endsWith('/api/show')).map((c) => c.body)).toEqual(
+      expect.arrayContaining([{ model: 'gemma' }, { model: 'gemma', verbose: true }, { model: 'strange' }, { model: 'cloud' }]),
+    );
+    // One verbose request, for the one model whose plain answer had nulls the estimate needs.
+    expect(calls.filter((c) => (c.body as { verbose?: boolean } | undefined)?.verbose)).toHaveLength(1);
+    const [gemma, strange, cloud] = models;
+    expect(gemma!.contextEstimate).toMatchObject({ modelBytes: GEMMA.modelBytes, metadata: { layers: 5, window: { size: 1024 } } });
+    expect(gemma!.contextUnsized).toBeUndefined();
+    expect(gemma!.contextLength).toBe(262144);
+    expect(strange!.contextEstimate).toBeUndefined();
+    expect(strange!.contextUnsized).toEqual({ reason: 'architecture', architecture: 'mamba9' });
+    expect(cloud!.contextUnsized).toEqual({ reason: 'size', architecture: 'llama' });
+
+    const without = memoryServer();
+    await createOllamaAdapter(instance, deps(without.fetch)).listModels();
+    expect(without.calls.filter((c) => (c.body as { verbose?: boolean } | undefined)?.verbose)).toHaveLength(0);
+  });
+
+  it('reads one model again with its size and metadata, or says the server no longer lists it', async () => {
+    let size = GEMMA.modelBytes;
+    const { fetch, calls } = fakeFetch({
+      'GET /api/tags': () => jsonResponse({ models: [{ name: 'gemma', size }] }),
+      'POST /api/show': (call) => jsonResponse({ capabilities: ['completion'], model_info: (call.body as { verbose?: boolean }).verbose ? GEMMA.verboseModelInfo : GEMMA.modelInfo }),
+    });
+    const adapter = createOllamaAdapter({ ...instance, vramGiB: 29.8 }, deps(fetch));
+    expect((await adapter.refreshModel!('gemma'))!.contextEstimate?.modelBytes).toBe(GEMMA.modelBytes);
+    size = 1e10;
+    expect((await adapter.refreshModel!('gemma'))!.contextEstimate?.modelBytes).toBe(1e10);
+    // Each read is afresh: its own plain and verbose requests, not the answer kept from the first.
+    expect(calls.filter((c) => c.url.endsWith('/api/show'))).toHaveLength(4);
+    expect(await adapter.refreshModel!('gone')).toBeNull();
   });
 
   it('refreshes architecture metadata on every explicit model discovery', async () => {

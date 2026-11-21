@@ -131,6 +131,114 @@ describe('ProviderRegistry', () => {
     expect((await r.resolve('gpu/small')).info).toMatchObject({ contextLength: 65536, calculatedContextLength: 119808 });
   });
 
+  it('says where each model\u2019s context calculation stands, in words, only where a memory budget is set', async () => {
+    const GiB = 1024 ** 3;
+    await settings.set('global', ['providers'], [
+      { id: 'gpu', type: 'ollama', name: 'GPU', baseUrl: 'http://localhost:11434', enabled: true, headers: {}, vramGiB: 16 },
+      { id: 'cpp', type: 'llamacpp', name: 'llama.cpp', baseUrl: 'http://localhost:8080', enabled: true, headers: {}, vramGiB: 16 },
+      { id: 'free', type: 'ollama', name: 'Free', baseUrl: 'http://localhost:11435', enabled: true, headers: {} },
+    ]);
+    const base = (await factory({ id: 'gpu', type: 'ollama', name: 'GPU', baseUrl: 'http://localhost:11434', headers: {} }).listModels())[0]!;
+    const metadata = { trainedContext: 131072, layers: 32, kvHeads: 8, keyLength: 128, valueLength: 128 };
+    const row = (providerId: string, modelId: string, extra: object) =>
+      db.insert(modelCache).values({ providerId, modelId, discoveredAt: Date.now(), info: { ...base, ref: `${providerId}/${modelId}`, providerId, modelId, ...extra } });
+    await row('gpu', 'fits', { contextEstimate: { modelBytes: 8 * GiB, metadata } });
+    await row('gpu', 'huge', { contextEstimate: { modelBytes: 40 * GiB, metadata } });
+    await row('gpu', 'strange', { contextUnsized: { reason: 'architecture', architecture: 'mamba9' } });
+    await row('gpu', 'nosize', { contextUnsized: { reason: 'size', architecture: 'llama' } });
+    await row('gpu', 'noshow', { contextUnsized: { reason: 'metadata' } });
+    await row('gpu', 'old', {});
+    await row('cpp', 'local', {});
+    await row('free', 'plain', { contextEstimate: { modelBytes: 8 * GiB, metadata } });
+    const byRef = Object.fromEntries((await registry().listModels()).map((m) => [m.ref, m]));
+    expect(byRef['gpu/fits']).toMatchObject({ calculatedContextLength: 57600, calculation: { state: 'calculated' } });
+    expect(byRef['gpu/huge']!.calculatedContextLength).toBeUndefined();
+    expect(byRef['gpu/huge']!.calculation).toEqual({ state: 'too-large', detail: expect.stringMatching(/^Its weights are 42\.9 GB, which leaves too little of the 17\.2 GB memory budget for a usable context\./) });
+    expect(byRef['gpu/strange']!.calculation).toEqual({ state: 'unsupported', detail: expect.stringContaining('mamba9 architecture') });
+    expect(byRef['gpu/nosize']!.calculation).toMatchObject({ state: 'unknown-size' });
+    expect(byRef['gpu/noshow']!.calculation).toMatchObject({ state: 'unsupported', detail: expect.stringContaining('metadata') });
+    expect(byRef['gpu/old']!.calculation).toMatchObject({ state: 'pending', detail: expect.stringContaining('Calculate context') });
+    expect(byRef['cpp/local']!.calculation).toMatchObject({ state: 'not-applicable' });
+    // No budget, nothing to say (and nothing calculated).
+    expect(byRef['free/plain']!.calculation).toBeUndefined();
+    expect(byRef['free/plain']!.calculatedContextLength).toBeUndefined();
+  });
+
+  describe('calculate one model', () => {
+    const GiB = 1024 ** 3;
+    const metadata = { trainedContext: 131072, layers: 32, kvHeads: 8, keyLength: 128, valueLength: 128 };
+    /** An Ollama-like adapter whose `refreshModel` reads one model's (changing) size, counting what it was asked. */
+    function oneModel(withRefreshModel: boolean) {
+      const asked = { refreshModel: [] as string[], listModels: 0 };
+      let bytes = 8 * GiB;
+      const make = (instance: ProviderInstance): ProviderAdapter => {
+        const adapter = factory(instance);
+        return {
+          ...adapter,
+          listModels: async () => {
+            asked.listModels += 1;
+            const [small] = await factory(instance).listModels();
+            return [{ ...small!, contextEstimate: { modelBytes: bytes, metadata } }];
+          },
+          ...(withRefreshModel
+            ? {
+                refreshModel: async (id: string) => {
+                  asked.refreshModel.push(id);
+                  if (id !== 'small') return null;
+                  const [small] = await factory(instance).listModels();
+                  return { ...small!, contextEstimate: { modelBytes: bytes, metadata } };
+                },
+              }
+            : {}),
+        };
+      };
+      return { asked, grow: (to: number) => (bytes = to), r: new ProviderRegistry({ db, settings, secrets, env: {}, createAdapter: make, adapterDeps: { fetch: offline, readBlob: async () => new Uint8Array() } }) };
+    }
+    const provider = { id: 'gpu', type: 'ollama' as const, name: 'GPU', baseUrl: 'http://localhost:11434', enabled: true, headers: {}, vramGiB: 16 };
+
+    it('reads just that model again, stores it and tells the models changed', async () => {
+      const { r, asked, grow } = oneModel(true);
+      await r.save(provider);
+      expect((await r.listModels())[0]).toMatchObject({ calculatedContextLength: 57600 });
+      grow(12 * GiB);
+      const changed = vi.fn();
+      r.on('models', changed);
+      const before = asked.listModels;
+      const model = await r.calculate('gpu/small');
+      expect(model).toMatchObject({ ref: 'gpu/small', calculation: { state: 'calculated' } });
+      expect(model.calculatedContextLength).toBeLessThan(57600);
+      expect(asked).toMatchObject({ refreshModel: ['small'], listModels: before });
+      expect(changed).toHaveBeenCalled();
+      expect((await r.listModels())[0]?.calculatedContextLength).toBe(model.calculatedContextLength);
+      grow(40 * GiB);
+      expect((await r.calculate('gpu/small')).calculation).toMatchObject({ state: 'too-large' });
+    });
+
+    it('asks the provider for all its models when its adapter can\u2019t ask for one, and refuses what isn\u2019t there', async () => {
+      const { r, asked } = oneModel(false);
+      await r.save(provider);
+      const before = asked.listModels;
+      expect(await r.calculate('gpu/small')).toMatchObject({ calculation: { state: 'calculated' } });
+      expect(asked.listModels).toBe(before + 1);
+      await expect(r.calculate('gpu/missing')).rejects.toBeInstanceOf(ModelUnavailableError);
+      await expect(r.calculate('nowhere/small')).rejects.toBeInstanceOf(ModelUnavailableError);
+      const one = oneModel(true);
+      await one.r.save(provider);
+      await expect(one.r.calculate('gpu/gone')).rejects.toThrow('no longer lists gone');
+    });
+
+    it('turns a server that can\u2019t be reached into a message', async () => {
+      const { r } = oneModel(true);
+      await r.save(provider);
+      const failing = new ProviderRegistry({
+        db, settings, secrets, env: {}, adapterDeps: { fetch: offline, readBlob: async () => new Uint8Array() },
+        createAdapter: (instance) => ({ ...factory(instance), refreshModel: async () => { throw new TypeError('Cannot reach http://localhost:11434.'); } }),
+      });
+      await failing.refresh();
+      await expect(failing.calculate('gpu/small')).rejects.toThrow('Cannot reach http://localhost:11434.');
+    });
+  });
+
   it('round-trips memory and concurrency budgets through test, save and settings edits, preserving model overrides', async () => {
     const r = registry();
     const draft = { id: 'gpu', type: 'ollama' as const, name: 'GPU', baseUrl: 'http://localhost:11434', headers: {}, enabled: true, vramGiB: 24.5, parallelRequests: 2, modelsAtOnce: 3 };

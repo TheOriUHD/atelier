@@ -117,6 +117,8 @@ export interface ProviderAdapter {
   readonly type: ProviderType;
   /** Discover models with best-known capabilities (before user overrides are applied). */
   listModels(signal?: AbortSignal): Promise<ListedModel[]>;
+  /** One model again, discovered afresh (its size and metadata); null when the server no longer lists it. */
+  refreshModel?(modelId: string, signal?: AbortSignal): Promise<ListedModel | null>;
   health(signal?: AbortSignal): Promise<HealthResult>;
   stream(request: ChatRequest): AsyncIterable<StreamEvent>;
   /** Exact input token count when the provider exposes one (Anthropic count_tokens, llama.cpp /tokenize). */

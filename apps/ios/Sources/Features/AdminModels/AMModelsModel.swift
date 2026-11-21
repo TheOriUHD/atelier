@@ -22,6 +22,11 @@ struct AMModel: Identifiable, Equatable, Sendable {
     let recommended: [String: String]
     let temperature: Double?
     let personal: Bool
+    /// Where the memory budget's calculation of its context stands: "calculated", "too-large", "unsupported", "unknown-size",
+    /// "not-applicable" or "pending". Nil when its provider has no budget, or the server is older than the calculation.
+    let calculation: String?
+    let calculationDetail: String?
+    let unsizedArchitecture: String?
     var id: String { ref }
 
     init(json: JSON) {
@@ -46,6 +51,22 @@ struct AMModel: Identifiable, Equatable, Sendable {
         self.recommended = recommended
         temperature = json["temperature"].doubleOrNil
         personal = json["personal"] != .null
+        calculation = json["calculation"]["state"].stringOrNil
+        calculationDetail = json["calculation"]["detail"].stringOrNil
+        unsizedArchitecture = json["contextUnsized"]["architecture"].stringOrNil
+    }
+
+    /// Under the context length: why the number is what it is, for a provider with a memory budget.
+    var calculationLabel: String? {
+        switch calculation ?? "" {
+        case "calculated": "Calculated from the memory budget"
+        case "too-large": "Doesn't fit the memory budget"
+        case "unsupported": unsizedArchitecture.map { "\($0) isn't supported" } ?? "Metadata unreadable"
+        case "unknown-size": "Size unknown"
+        case "not-applicable": "Not applicable"
+        case "pending": "Not calculated yet"
+        default: nil
+        }
     }
 
     var toolsLabel: String { tools == "prompted" ? "Prompted tools" : tools == "none" ? "No tools" : "Tools" }
@@ -255,8 +276,34 @@ struct AMOverrideForm: Equatable {
             await resource.reload()
             await refreshAppModels()
             let down = statuses.filter { !$0.ok }.count
-            return down > 0 ? "Recalculated. \(AMFormat.plural(down, "provider")) couldn't be reached, so their cached details were used." : "Recalculated all models."
+            return AMModelsModel.calculationSummary(resource.value?.models ?? [], unreachable: down)
         } catch is CancellationError { return nil } catch { store.error = AMFailure.from(error).localizedDescription; return nil }
+    }
+
+    /// What "Recalculate all" tells: how many models have a calculated context and why the others don't, not that it ran.
+    static func calculationSummary(_ models: [AMModel], unreachable: Int) -> String {
+        let down = unreachable > 0 ? " \(AMFormat.plural(unreachable, "provider")) couldn't be reached, so their last calculation was kept." : ""
+        let sized = models.filter { !$0.personal && $0.calculation != nil && $0.calculation != "not-applicable" }
+        guard !sized.isEmpty else { return "Nothing to calculate: no provider has a memory budget for its models, or this server is older than the calculation." + down }
+        let done = sized.filter { $0.calculation == "calculated" }.count
+        let tooLarge = sized.filter { $0.calculation == "too-large" }.count
+        let other = sized.count - done - tooLarge
+        var why: [String] = []
+        if tooLarge > 0 { why.append("\(tooLarge) \(tooLarge == 1 ? "doesn't" : "don't") fit the memory budget") }
+        if other > 0 { why.append("\(other) can't be sized") }
+        return "Calculated \(done) of \(sized.count) models." + (why.isEmpty ? "" : " " + why.joined(separator: "; ") + ".") + down
+    }
+
+    /// One model read from its server again and sized from the provider's memory budget; a server older than
+    /// `models.calculate` can only refresh all of that provider's models, which it does then.
+    func calculate(_ ref: String, providerID: String) async throws -> String {
+        do { _ = try await api.call("models.calculate", ["ref": .string(ref)]) }
+        catch AMFailure.unsupported { _ = try await api.call("providers.refresh", ["id": .string(providerID)]) }
+        await resource.reload()
+        await refreshAppModels()
+        guard let item = resource.value?.models.first(where: { $0.ref == ref }) else { return "This model is no longer listed by its server." }
+        if item.calculation == "calculated" { return "\(AMFormat.tokens(item.calculatedContext ?? item.contextLength)) tokens of context fit the memory budget." }
+        return item.calculationDetail ?? item.calculationLabel ?? "Read the model again from its server."
     }
 
     func probe(_ ref: String) async throws -> (native: Bool, detail: String) {

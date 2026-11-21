@@ -240,6 +240,21 @@ import XCTest
         XCTAssertTrue(local.hidden)
     }
 
+    func testRecalculateAllSaysHowManyModelsItCalculatedAndWhyTheOthersHaveNoNumber() {
+        func sized(_ id: String, _ calculation: String?) -> AMModel {
+            let extra = calculation.map { #","calculation":{"state":"\#($0)"}"# } ?? ""
+            return model(#"{"ref":"gpu/\#(id)","providerId":"gpu","modelId":"\#(id)","displayName":"\#(id)","contextLength":8192,"maxOutput":2048,"capabilities":{"tools":"native","vision":false,"pdf":false,"reasoning":"none","caching":false},"tier":"compact","source":"detected","hidden":false,"favorite":false,"order":1\#(extra)}"#)
+        }
+        let mixed = [sized("a", "calculated"), sized("b", "too-large"), sized("c", "unsupported"), sized("d", "not-applicable")]
+        XCTAssertEqual(AMModelsModel.calculationSummary(mixed, unreachable: 0), "Calculated 1 of 3 models. 1 doesn't fit the memory budget; 1 can't be sized.")
+        XCTAssertEqual(AMModelsModel.calculationSummary([sized("a", "calculated")], unreachable: 2), "Calculated 1 of 1 models. 2 providers couldn't be reached, so their last calculation was kept.")
+        XCTAssertTrue(AMModelsModel.calculationSummary([sized("a", nil)], unreachable: 0).hasPrefix("Nothing to calculate"), "no budget, or an older server: nothing is claimed")
+        let gemma = model(#"{"ref":"gpu/g","providerId":"gpu","modelId":"g","displayName":"g","contextLength":32768,"maxOutput":2048,"capabilities":{"tools":"native","vision":false,"pdf":false,"reasoning":"none","caching":false},"tier":"compact","source":"detected","hidden":false,"favorite":false,"order":1,"calculation":{"state":"unsupported","detail":"No."},"contextUnsized":{"reason":"architecture","architecture":"mamba9"}}"#)
+        XCTAssertEqual(gemma.calculationLabel, "mamba9 isn't supported")
+        XCTAssertEqual(gemma.calculationDetail, "No.")
+        XCTAssertNil(sized("z", nil).calculationLabel)
+    }
+
     func testTheModelListFiltersBySearchScopeAndAbility() {
         let a = model(#"{"ref":"p/a","providerId":"p","modelId":"alpha","displayName":"Alpha","contextLength":1000,"maxOutput":1,"capabilities":{"tools":"native","vision":true,"pdf":false,"reasoning":"none","caching":false},"tier":"full","source":"detected","hidden":false,"favorite":true,"order":1}"#)
         let b = model(#"{"ref":"p/b","providerId":"p","modelId":"beta","displayName":"Beta","contextLength":1000,"maxOutput":1,"capabilities":{"tools":"none","vision":false,"pdf":false,"reasoning":"toggle","caching":false},"tier":"full","source":"detected","hidden":true,"favorite":false,"order":1,"free":true}"#)

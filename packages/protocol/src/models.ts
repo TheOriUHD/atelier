@@ -103,9 +103,31 @@ export const ModelInfo = z.object({
   /** Cached discovery inputs keep memory estimates available while a provider is offline. */
   contextEstimate: z.object({
     modelBytes: z.number().positive(),
-    metadata: z.object({ trainedContext: z.number().positive(), layers: z.number().positive(), kvHeads: z.number().positive(), keyLength: z.number().positive(), valueLength: z.number().positive() }),
+    metadata: z.object({
+      trainedContext: z.number().positive(),
+      layers: z.number().positive(),
+      kvHeads: z.number().positive(),
+      keyLength: z.number().positive(),
+      valueLength: z.number().positive(),
+      /** Sliding-window layers, per-layer head counts and recurrent state, for architectures that have them (gemma4, lfm2, nemotron_h). */
+      kvBytesPerToken: z.number().positive().optional(),
+      window: z.object({ size: z.number().positive(), kvBytesPerToken: z.number().positive() }).optional(),
+      stateBytes: z.number().positive().optional(),
+    }),
   }).optional(),
+  /** Why discovery could not gather what a memory budget needs to size this model's context (`calculation` says it in words). */
+  contextUnsized: z.object({ reason: z.enum(['architecture', 'size', 'metadata']), architecture: z.string().optional() }).optional(),
   calculatedContextLength: z.number().int().positive().optional(),
+  /**
+   * Where the memory budget's context calculation stands for this model, set only where its provider has a budget:
+   * `calculated`, `too-large` (the weights leave too little of the budget for a usable context), `unsupported` (its
+   * architecture's metadata can't be read), `unknown-size` (the server didn't say how large the weights are),
+   * `not-applicable` (a provider kind that sets its own context) or `pending` (not discovered since the budget was set).
+   * `detail` is one plain sentence for the person.
+   */
+  calculation: z
+    .object({ state: z.enum(['calculated', 'too-large', 'unsupported', 'unknown-size', 'not-applicable', 'pending']), detail: z.string().optional() })
+    .optional(),
   capabilities: Capabilities,
   tier: PromptTier,
   /** Where the capability data came from. */

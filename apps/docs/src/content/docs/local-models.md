@@ -125,13 +125,19 @@ For each model Atelier works out, in order:
 1. **Memory** you entered, minus a reserve of 5% (at least 512 MiB), divided by **Models at once** (default 1).
 2. Minus the model's **weights**, counted as 102% of their size on disk. What is left is the room for the KV cache.
 3. The **KV cost of one token**: layers × KV heads × (key length + value length) × 2 bytes (16-bit), times **Requests at
-   once** (default 1). For Qwen's hybrid models only the full-attention layers count.
+   once** (default 1). Models that mix kinds of layers are counted layer by layer: only the full-attention layers cost
+   more per token of context (Qwen's hybrid models, LFM2, Nemotron-H's few attention layers); layers that look at a sliding
+   window (Gemma 4) cost a fixed amount for their window plus one batch of tokens, and recurrent layers (Mamba, short
+   convolutions) a fixed state for each request in flight. Ollama only gives the per-layer lists these need when asked
+   for them in full (they come back empty otherwise), so Atelier asks again for the models that need it.
 4. The context is the room divided by that cost, rounded down to a multiple of 256, and **never more than the context the model
    was trained for**.
 
 If the result would be under 2,048 tokens (or under the trained context, if that is smaller), Atelier falls back to the
 model's own context length capped at 32,768, as without a budget; a window that small is not an allocation recommendation,
-and the model may need CPU offloading. A model with incomplete metadata falls back the same way. The estimate is
+and the model may need CPU offloading. The model row says so: **Doesn't fit the budget**. A model whose architecture's
+metadata Atelier cannot read falls back the same way and says, for example, **mamba9 not supported**; one whose weight size the
+server does not report says **Size unknown**. The estimate is
 conservative and no guarantee the server can load the model: it assumes a 16-bit KV cache, so a server that quantizes its
 cache has more room than the number says.
 
@@ -150,11 +156,20 @@ of 131,072, the formula gives:
 
 ### Where you see it
 
-In **Settings › Admin › Models**, the **Context** column shows the number. Under it **Calculated** appears when it came from the
-memory budget, or **Not calculated** when the model's weight size or architecture is not known yet ("Calculation requires
-cached model weight size and architecture. Reconnect once to collect missing metadata; VRAM alone is insufficient."). A
-model's number updates when you save the provider; **Calculate all** re-reads every provider and applies the current budgets.
-An override you set on a model is what Atelier sends, whatever the column shows.
+In **Settings › Admin › Models**, the **Context** column shows the number. Under it a provider with a budget says where the
+calculation stands, and hovering it gives the reason:
+
+| Under the number | Meaning |
+|---|---|
+| **Calculated** | The number came from the memory budget. |
+| **Doesn't fit the budget** | The weights leave too little of the budget for a usable context (under 2,048 tokens). Raise the budget or pick a smaller model. |
+| **mamba9 not supported** (the architecture's name) | Atelier cannot read this architecture's memory use from the server's metadata. |
+| **Size unknown** | The server did not say how large the weights are (some cloud models). |
+| **Not applicable** | A server that is not Ollama and sets its own context. |
+
+A model's number updates when you save the provider; **Calculate all** re-reads every provider and applies the current
+budgets, and a model's ⋯ menu has **Calculate context** for just that model. Both say how it went. An override you set on a
+model is what Atelier sends, whatever the column shows.
 
 Atelier does **not** set Ollama's server options (parallel requests, flash attention, cache type, how many layers go to the
 GPU). The budget only chooses `num_ctx`. If you run Ollama with several slots or a quantized cache, set **Requests at once**
