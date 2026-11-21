@@ -170,24 +170,38 @@ function PermissionRow({ id, granted, kind }: { id: SettingId; granted: boolean;
 
 /** The extension's page in the Chrome Web Store (Brave, Edge, Arc and Vivaldi install from it too). */
 const CHROME_STORE = 'https://chromewebstore.google.com/detail/atelier-for-chrome/efpchbhecdgeeadmefahpgidnfplajln';
+/** Atelier for Firefox on addons.mozilla.org. */
+const FIREFOX_ADDONS = 'https://addons.mozilla.org/firefox/addon/atelier-for-firefox/';
+
+/** "Connected in Firefox 158", and the other browsers connected at the same time. */
+export function browserDetail(status: { connected: boolean; browser?: string; others?: { browser: string }[] }): string | undefined {
+  if (!status.connected) return undefined;
+  const here = `Connected in ${status.browser ?? 'your browser'}`;
+  if (!status.others?.length) return here;
+  return `${here}, and in ${status.others.map((o) => o.browser).join(' and ')}: Atelier works in the browser you used last, and a chat’s tabs stay where they are`;
+}
 
 /**
- * Atelier for Chrome: connected (and in which browser), or how to install it: from the Chrome Web Store, or unpacked
- * from the app's own folder (a browser that doesn't take the store's extensions).
+ * Atelier for Chrome or Atelier for Firefox: connected (and in which browser), or how to install it: from the Chrome Web
+ * Store or addons.mozilla.org, or unpacked from the app's own folder (a Chromium browser that doesn't take the store's
+ * extensions).
  */
 function BrowserRow() {
   const { data: browser } = useQuery({ queryKey: ['desktop', 'browser'], queryFn: () => desktop!.browserExtension!.status(), refetchInterval: 5_000 });
   if (!browser) return null;
   return (
-    <SettingRow id="system.computerBrowser" stacked detail={browser.connected ? `Connected in ${browser.browser ?? 'your browser'}` : undefined}>
+    <SettingRow id="system.computerBrowser" stacked detail={browserDetail(browser)}>
       {!browser.connected && (
         <div className="flex flex-col gap-2 text-body text-fg-muted">
           <p>{browser.problem ?? 'Not connected.'}</p>
-          <p>Add Atelier for Chrome from the Chrome Web Store, in Chrome or Brave, Edge or Arc. This row says Connected within a few seconds of adding it.</p>
+          <p>Add Atelier for Chrome from the Chrome Web Store (in Chrome, Brave, Edge or Arc), or Atelier for Firefox from Firefox Add-ons. This row says Connected within a few seconds of adding it.</p>
           <p>While the extension is new, Chrome may say it is “not trusted by Enhanced Safe Browsing”. That is about its publisher having no track record yet: choose Continue to install.</p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => openExternal(CHROME_STORE)}>
               Open the Chrome Web Store
+            </Button>
+            <Button size="sm" onClick={() => openExternal(FIREFOX_ADDONS)}>
+              Get Atelier for Firefox
             </Button>
             <Button size="sm" variant="ghost" onClick={() => void desktop!.browserExtension!.reveal()}>
               Show the folder to load it by hand

@@ -750,10 +750,10 @@ export const SETTINGS_INDEX = [
   {
     id: 'system.computerBrowser',
     page: 'computer',
-    label: 'Atelier for Chrome',
+    label: 'Browser extension',
     description:
-      'The browser extension through which Atelier works in web pages, in tabs of its own in an “Atelier” group, in the background: it reads pages instead of looking at them, and never uses your own tabs. Works in Chrome, Brave, Edge and Arc. Chrome shows “started debugging this browser” while it acts in a page.',
-    keywords: ['computer use', 'browser', 'chrome', 'brave', 'edge', 'arc', 'extension', 'web pages', 'tabs'],
+      'Atelier for Chrome (Chrome, Brave, Edge, Arc) and Atelier for Firefox: the browser extension through which Atelier works in web pages, in tabs of its own in an orange group named after the chat, in the background. It reads pages instead of looking at them, and never uses your own tabs. With both connected, Atelier works in the browser you used last.',
+    keywords: ['computer use', 'browser', 'chrome', 'brave', 'edge', 'arc', 'firefox', 'mozilla', 'extension', 'add-on', 'web pages', 'tabs'],
     available: () => !!desktop?.browserExtension,
   },
   {

@@ -306,7 +306,7 @@ export function deviceServices(o: DeviceServicesOptions) {
           if (!o.computer) throw new Refusal('unsupported', `${o.deviceName}'s desktop app can't use the computer.`);
           return o.computer(request.sessionId, request.method, request.params);
         case 'browser':
-          if (!o.browser) throw new Refusal('unsupported', `${o.deviceName}'s desktop app has no Atelier for Chrome.`);
+          if (!o.browser) throw new Refusal('unsupported', `${o.deviceName}'s desktop app has no browser extension connection (Atelier for Chrome or Atelier for Firefox).`);
           return o.browser(request.method, request.params);
         case 'home.scan':
           await allowHome();

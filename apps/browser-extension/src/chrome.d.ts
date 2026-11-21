@@ -1,5 +1,6 @@
-// The parts of the Chrome extension APIs Atelier for Chrome uses (Manifest V3), written out so the package needs no
-// @types/chrome. Shapes follow https://developer.chrome.com/docs/extensions/reference/api.
+// The parts of the extension APIs Atelier for Chrome and Atelier for Firefox use (Manifest V3), written out so the package
+// needs no @types/chrome. Shapes follow https://developer.chrome.com/docs/extensions/reference/api; Firefox has the same
+// ones as `browser` (worker.ts `ext`), and a few of its own, marked below.
 
 declare namespace chrome {
   export namespace runtime {
@@ -15,6 +16,14 @@ declare namespace chrome {
     function getManifest(): { version: string; name: string };
     const onStartup: Event<() => void>;
     const onInstalled: Event<(details: { reason: string }) => void>;
+    /** Firefox only: its name and version. */
+    const getBrowserInfo: (() => Promise<{ name: string; vendor: string; version: string }>) | undefined;
+  }
+
+  export namespace windows {
+    const WINDOW_ID_NONE: number;
+    function getLastFocused(): Promise<{ id?: number; focused: boolean }>;
+    const onFocusChanged: Event<(windowId: number) => void>;
   }
 
   export interface Event<T extends (...args: never[]) => unknown> {
@@ -42,6 +51,8 @@ declare namespace chrome {
     function group(options: { tabIds: number | number[]; groupId?: number; createProperties?: { windowId?: number } }): Promise<number>;
     const onUpdated: Event<(tabId: number, change: { status?: string; url?: string; title?: string }, tab: Tab) => void>;
     const onRemoved: Event<(tabId: number) => void>;
+    /** Firefox only: a picture of any tab, a background one too (needs host permission for its page). A data: URL. */
+    const captureTab: ((tabId: number, options?: { format?: 'jpeg' | 'png'; quality?: number; scale?: number; rect?: { x: number; y: number; width: number; height: number } }) => Promise<string>) | undefined;
   }
 
   export namespace tabGroups {

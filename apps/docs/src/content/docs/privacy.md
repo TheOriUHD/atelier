@@ -31,7 +31,7 @@ no cookies of their own.
 | ChatGPT Plan model list | `registry.npmjs.org`, besides `chatgpt.com` | A GET of the `@openai/codex` package's latest metadata, to learn the current Codex version the model list is asked with, at most every 6 hours. Nothing about you. | Do not use ChatGPT Plan |
 | **ChatGPT Chat** | `chatgpt.com`, in a hidden browser window | Your messages and attachments typed into the page, plus everything the chatgpt.com page itself loads | Do not use that provider. **Remove** it from **Settings › Admin › Providers** to clear its browser session |
 | Code Browser pane | The pages you open in it, and their icons | Ordinary page requests | Do not open pages in it |
-| **Atelier for Chrome** | The pages the assistant opens in its own tabs of your browser | Ordinary page loads from your browser, with its cookies for those sites. What the extension reads there goes to the desktop app on this computer, then to your model as a tool result | Remove the extension, or don't add it ([below](#atelier-for-chrome)) |
+| **Atelier for Chrome** and **Atelier for Firefox** | The pages the assistant opens in its own tabs of your browser | Ordinary page loads from your browser, with its cookies for those sites. What the extension reads there goes to the desktop app on this computer, then to your model as a tool result | Remove the extension, or don't add it ([Chrome](#atelier-for-chrome), [Firefox](#atelier-for-firefox)) |
 | Finding servers on your network | The private /24 networks of this computer, port 7340 (first-run screen only) | `GET /api/health` | It runs only on the **Connect to a server** form |
 | Your Atelier server | The server you connected the desktop app or the terminal app to | Everything you do in the app | Choose **Run on this computer** (in the terminal: **Only this computer**) |
 | **Terminal app update check** | `updates.atelierhq.dev/<stable or beta>/atelier-cli.json`, at most once a day, only for a copy the installer put there; `atelier update` also asks the server's `/updates` when connected | A GET; your IP. An update then fetches its `.sig` and the package. | `ATELIER_NO_UPDATE_CHECK=1` |
@@ -134,8 +134,8 @@ kept in the app's profile folder. See [ChatGPT](/chatgpt/).
 ## Atelier for Chrome
 
 [Atelier for Chrome](/computer-use/#web-pages-atelier-for-chrome) is a browser extension that lets the assistant work in web pages.
-It works only in tabs it opened itself (the orange **Atelier** group), never in your own tabs, and closes them when the
-reply ends.
+It works only in tabs it opened itself (an orange tab group named after the chat), never in your own tabs. Its tabs stay
+open after the reply and close when you delete or archive the chat.
 
 - **What it reads:** the text, links, buttons and fields of a page in those tabs, and a screenshot of it, when the
   assistant asks. It doesn't read your other tabs, your history or your bookmarks.
@@ -146,6 +146,26 @@ reply ends.
   no code from anywhere.
 - **What it stores:** the numbers of its own tabs, in the browser's session storage, which the browser clears when it
   closes.
+- **Your sign-ins:** pages in its tabs load with your browser's cookies, so the assistant can see what you see there when
+  you're signed in. It never types passwords or completes a purchase, and it asks before it accepts terms or sends
+  anything.
+
+## Atelier for Firefox
+
+[Atelier for Firefox](/computer-use/#atelier-for-firefox) is the same extension for Firefox: it lets the assistant work
+in web pages, only in tabs it opened itself (an orange tab group named after the chat), never in your own tabs. Its tabs
+stay open after the reply and close when you delete or archive the chat.
+
+- **What it reads:** the text, links, buttons and fields of a page in those tabs, and a picture of it, when the assistant
+  asks. It doesn't read your other tabs, your history or your bookmarks.
+- **Where that goes:** only to the Atelier desktop app on the same computer, through Firefox's native messaging (a local
+  program the app registers; no network port). The app adds it to the conversation, so it reaches the model provider you
+  chose like any tool result. This is why Firefox asks you, when you add it, to allow it to send website content, and the
+  personal details, payment information and messages such pages can show: the extension can't work without it.
+- **What it sends itself:** nothing else. The extension makes no network requests of its own, carries no analytics and
+  loads no code from anywhere; its source is public.
+- **What it stores:** the numbers of its own tabs and its chats' tab groups, in the browser's session storage, which the
+  browser clears when it closes.
 - **Your sign-ins:** pages in its tabs load with your browser's cookies, so the assistant can see what you see there when
   you're signed in. It never types passwords or completes a purchase, and it asks before it accepts terms or sends
   anything.

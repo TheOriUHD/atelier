@@ -1,9 +1,11 @@
-// Atelier for Chrome's service worker: connects to the desktop app through the native messaging host and runs its calls in
-// tabs of Atelier's own. It never acts in the person's tabs: every page call checks the tab is one it opened.
+// Atelier for Chrome's service worker, and Atelier for Firefox's background script (the same code, built twice:
+// scripts/build.mjs): connects to the desktop app through the native messaging host and runs its calls in tabs of
+// Atelier's own. It never acts in the person's tabs: every page call checks the tab is one it opened.
 //
-// Input goes through Chrome's debugger on that tab (trusted clicks and typing that work while the tab is in the
+// In Chrome, input goes through its debugger on that tab (trusted clicks and typing that work while the tab is in the
 // background); Chrome shows its "started debugging this browser" bar while it is attached, and it is detached again
-// after 20 idle seconds. Reading goes through a script in the page.
+// after 20 idle seconds. Firefox has no debugger for extensions: there input happens inside the page (page-input.ts) and
+// screenshots come from its own tabs.captureTab. Reading goes through a script in the page in both.
 //
 // Each chat's tabs are in a tab group of their own, named after the chat; they stay open after a reply and close when the
 // chat is deleted (or when the model closes them). The tab a chat works in glows orange and shows, bottom left, what it is
@@ -14,6 +16,12 @@ import { BROWSER_HOST_NAME, BROWSER_PROTOCOL_VERSION, type BrowserMethods, type 
 import { parseChord, reachesTheBrowser } from './keys.ts';
 import { hideOverlay, removeOverlay, showOverlay, type OverlayView } from './overlay.ts';
 import { chooseOption, keepInThisTab, locate, selectAll, snapshot, type Snapshot } from './page.ts';
+import { pageClick, pageInsertText, pagePress, pageScroll, viewportSize, type PageChord } from './page-input.ts';
+
+/** The extension APIs: Firefox's `browser` (promises everywhere), else Chrome's `chrome`. */
+const ext: typeof chrome = (globalThis as { browser?: typeof chrome }).browser ?? chrome;
+/** Firefox (it alone has getBrowserInfo): input inside the page, screenshots with captureTab. */
+const firefox = typeof ext.runtime.getBrowserInfo === 'function';
 
 /** The group of tabs opened without a chat (by an app older than this extension). */
 const GROUP_TITLE = 'Atelier';
@@ -36,7 +44,7 @@ function connect(): void {
   if (port) return;
   clearTimeout(retryTimer);
   try {
-    port = chrome.runtime.connectNative(BROWSER_HOST_NAME);
+    port = ext.runtime.connectNative(BROWSER_HOST_NAME);
   } catch {
     port = null;
     return scheduleRetry();
@@ -54,9 +62,18 @@ function connect(): void {
     if (used) void endAllOverlays();
     scheduleRetry();
   });
-  current.postMessage({ hello: { protocol: BROWSER_PROTOCOL_VERSION, extensionVersion: chrome.runtime.getManifest().version, browser: browserName() } });
+  current.postMessage({ hello: { protocol: BROWSER_PROTOCOL_VERSION, extensionVersion: ext.runtime.getManifest().version, browser: browserName(), engine: firefox ? 'gecko' : 'chromium', input: firefox ? 'page' : 'trusted' } });
   retryIn = 1_000;
+  // Whether this browser is the one in use right now: with several connected, the app works in the one used last.
+  void ext.windows
+    .getLastFocused()
+    .then((w) => w.focused && port === current && current.postMessage({ focus: true }))
+    .catch(() => undefined);
 }
+
+ext.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== ext.windows.WINDOW_ID_NONE) port?.postMessage({ focus: true });
+});
 
 function scheduleRetry(): void {
   clearTimeout(retryTimer);
@@ -65,6 +82,10 @@ function scheduleRetry(): void {
 }
 
 function browserName(): string {
+  if (firefox) {
+    const version = /Firefox\/(\d+)/.exec(navigator.userAgent)?.[1];
+    return version ? `Firefox ${version}` : 'Firefox';
+  }
   const brands = navigator.userAgentData?.brands ?? [];
   const named = brands.find((b) => !/not.?a.?brand|chromium/i.test(b.brand)) ?? brands.find((b) => /chromium/i.test(b.brand));
   return named ? `${named.brand} ${named.version}` : 'Chromium';
@@ -98,7 +119,7 @@ async function answer(to: chrome.runtime.Port, request: BrowserRequest): Promise
 const ours = new Map<number, string>();
 /** Each chat's tab group, and the name it was given (a group the person renamed keeps their name). */
 const groups = new Map<string, { id: number; title: string }>();
-const remembered = chrome.storage.session.get(['tabs', 'groups']).then((stored) => {
+const remembered = ext.storage.session.get(['tabs', 'groups']).then((stored) => {
   // 0.1.0 kept the tab ids alone.
   for (const entry of (stored.tabs as (number | [number, string])[] | undefined) ?? []) {
     if (Array.isArray(entry)) ours.set(entry[0], entry[1]);
@@ -106,14 +127,14 @@ const remembered = chrome.storage.session.get(['tabs', 'groups']).then((stored) 
   }
   for (const [session, group] of Object.entries((stored.groups as Record<string, { id: number; title: string }> | undefined) ?? {})) groups.set(session, group);
 });
-const save = () => chrome.storage.session.set({ tabs: [...ours], groups: Object.fromEntries(groups) });
+const save = () => ext.storage.session.set({ tabs: [...ours], groups: Object.fromEntries(groups) });
 
 async function own(tab: number): Promise<void> {
   await remembered;
   if (!ours.has(tab)) throw new Error(`Tab ${tab} isn't one of Atelier's tabs: open a page with open first (the person's own tabs aren't used).`);
 }
 
-chrome.tabs.onRemoved.addListener((tab) => {
+ext.tabs.onRemoved.addListener((tab) => {
   if (ours.delete(tab)) void save();
   attached.delete(tab);
   running.delete(tab);
@@ -122,18 +143,18 @@ chrome.tabs.onRemoved.addListener((tab) => {
 });
 
 // Links that would open a tab open in the same one, from the first moment of every page in Atelier's tabs.
-chrome.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
+ext.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
   if (frameId === 0 && ours.has(tabId)) void keepLinksHere(tabId);
 });
 
 // A new page in a tab a chat works in gets the glow and the steps again (the old page took them with it).
-chrome.webNavigation.onDOMContentLoaded.addListener(({ tabId, frameId }) => {
+ext.webNavigation.onDOMContentLoaded.addListener(({ tabId, frameId }) => {
   if (frameId !== 0) return;
   for (const overlay of overlays.values()) if (overlay.tab === tabId && overlay.view.state !== 'done') void paint(overlay);
 });
 
 async function keepLinksHere(tab: number): Promise<void> {
-  await chrome.scripting.executeScript({ target: { tabId: tab }, func: keepInThisTab, world: 'MAIN', injectImmediately: true }).catch(() => undefined);
+  await ext.scripting.executeScript({ target: { tabId: tab }, func: keepInThisTab, world: 'MAIN', injectImmediately: true }).catch(() => undefined);
 }
 
 /** A chat's name as its group's title: on one line, and short enough for the tab strip. */
@@ -147,7 +168,7 @@ async function sessionGroup(session: string): Promise<chrome.tabGroups.TabGroup 
   const known = groups.get(session);
   if (!known) return null;
   try {
-    return await chrome.tabGroups.get(known.id);
+    return await ext.tabGroups.get(known.id);
   } catch {
     groups.delete(session);
     return null;
@@ -157,21 +178,21 @@ async function sessionGroup(session: string): Promise<chrome.tabGroups.TabGroup 
 /** Puts a new tab in its chat's group (made, orange and collapsed, in the tab's window when there is none there yet). */
 async function intoGroup(tab: chrome.tabs.Tab, session?: BrowserSession): Promise<void> {
   if (!session) {
-    const [group] = await chrome.tabGroups.query({ title: GROUP_TITLE, windowId: tab.windowId });
-    const groupId = await chrome.tabs.group(group ? { tabIds: tab.id!, groupId: group.id } : { tabIds: tab.id!, createProperties: { windowId: tab.windowId } });
-    if (!group) await chrome.tabGroups.update(groupId, { title: GROUP_TITLE, color: 'orange', collapsed: true });
+    const [group] = await ext.tabGroups.query({ title: GROUP_TITLE, windowId: tab.windowId });
+    const groupId = await ext.tabs.group(group ? { tabIds: tab.id!, groupId: group.id } : { tabIds: tab.id!, createProperties: { windowId: tab.windowId } });
+    if (!group) await ext.tabGroups.update(groupId, { title: GROUP_TITLE, color: 'orange', collapsed: true });
     return;
   }
   const group = await sessionGroup(session.id);
   if (group && group.windowId === tab.windowId) {
-    await chrome.tabs.group({ tabIds: tab.id!, groupId: group.id });
+    await ext.tabs.group({ tabIds: tab.id!, groupId: group.id });
     return void (await retitle(session));
   }
-  const groupId = await chrome.tabs.group({ tabIds: tab.id!, createProperties: { windowId: tab.windowId } });
+  const groupId = await ext.tabs.group({ tabIds: tab.id!, createProperties: { windowId: tab.windowId } });
   const title = groupTitle(session.title);
   groups.set(session.id, { id: groupId, title });
   await save();
-  await chrome.tabGroups.update(groupId, { title, color: 'orange', collapsed: true });
+  await ext.tabGroups.update(groupId, { title, color: 'orange', collapsed: true });
 }
 
 /** The chat got its name (titles come after the first reply) or a new one: its group follows, unless the person renamed it. */
@@ -181,7 +202,7 @@ async function retitle(session: BrowserSession): Promise<void> {
   if (!known || known.title === title) return;
   const group = await sessionGroup(session.id);
   if (!group) return;
-  if (group.title === known.title) await chrome.tabGroups.update(group.id, { title });
+  if (group.title === known.title) await ext.tabGroups.update(group.id, { title });
   groups.set(session.id, { id: group.id, title });
   await save();
 }
@@ -203,11 +224,11 @@ const running = new Map<number, number>();
 const thinkingTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
 async function paint(overlay: Overlay): Promise<void> {
-  await chrome.scripting.executeScript({ target: { tabId: overlay.tab }, func: showOverlay, args: [overlay.view] }).catch(() => undefined);
+  await ext.scripting.executeScript({ target: { tabId: overlay.tab }, func: showOverlay, args: [overlay.view] }).catch(() => undefined);
 }
 
 async function unpaint(tab: number): Promise<void> {
-  await chrome.scripting.executeScript({ target: { tabId: tab }, func: removeOverlay }).catch(() => undefined);
+  await ext.scripting.executeScript({ target: { tabId: tab }, func: removeOverlay }).catch(() => undefined);
 }
 
 /** A step as the pill shows it: one line, not too long. */
@@ -256,36 +277,41 @@ async function sweepOverlays(): Promise<void> {
   }
 }
 
-function waitLoaded(tab: number, timeout = LOAD_TIMEOUT): Promise<void> {
+/**
+ * Until the tab's page has loaded. `leaving` is the address it is moving away from (a new tab's about:blank, which Firefox
+ * reports as loaded before the page it opens has started): that one being complete doesn't count.
+ */
+function waitLoaded(tab: number, timeout = LOAD_TIMEOUT, leaving = 'about:blank'): Promise<void> {
   return new Promise((resolve) => {
     const done = () => {
       clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(listener);
+      ext.tabs.onUpdated.removeListener(listener);
       resolve();
     };
-    const listener = (id: number, change: { status?: string }) => {
-      if (id === tab && change.status === 'complete') done();
+    const loaded = (t: { status?: string; url?: string }) => t.status === 'complete' && (t.url ?? '') !== leaving;
+    const listener = (id: number, change: { status?: string }, t: chrome.tabs.Tab) => {
+      if (id === tab && change.status === 'complete' && loaded(t)) done();
     };
     const timer = setTimeout(done, timeout);
-    chrome.tabs.onUpdated.addListener(listener);
-    void chrome.tabs.get(tab).then((t) => t.status === 'complete' && done(), done);
+    ext.tabs.onUpdated.addListener(listener);
+    void ext.tabs.get(tab).then((t) => loaded(t) && done(), done);
   });
 }
 
 async function describe(tab: number): Promise<BrowserTab> {
-  const t = await chrome.tabs.get(tab);
+  const t = await ext.tabs.get(tab);
   return { tab, url: t.url ?? t.pendingUrl ?? '', title: t.title ?? '' };
 }
 
 /** After an action: a moment for the page to react, then the load it started, if any. */
 async function settle(tab: number): Promise<BrowserTab> {
   await new Promise((r) => setTimeout(r, 250));
-  if ((await chrome.tabs.get(tab)).status === 'loading') await waitLoaded(tab, 10_000);
+  if ((await ext.tabs.get(tab)).status === 'loading') await waitLoaded(tab, 10_000);
   return describe(tab);
 }
 
 async function inPage<A extends unknown[], R>(tab: number, func: (...args: A) => R, args: A): Promise<Awaited<R>> {
-  const [first] = await chrome.scripting.executeScript({ target: { tabId: tab }, func, args });
+  const [first] = await ext.scripting.executeScript({ target: { tabId: tab }, func, args });
   return first?.result as Awaited<R>;
 }
 
@@ -295,23 +321,25 @@ const attached = new Set<number>();
 const stoppedByPerson = new Set<number>();
 const idleTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
-chrome.debugger.onDetach.addListener((source, reason) => {
-  if (source.tabId === undefined) return;
-  attached.delete(source.tabId);
-  if (reason === 'canceled_by_user') stoppedByPerson.add(source.tabId);
-});
+if (!firefox) {
+  ext.debugger.onDetach.addListener((source, reason) => {
+    if (source.tabId === undefined) return;
+    attached.delete(source.tabId);
+    if (reason === 'canceled_by_user') stoppedByPerson.add(source.tabId);
+  });
+}
 
 async function cdp(tab: number, method: string, params: object = {}): Promise<unknown> {
   if (stoppedByPerson.has(tab)) throw new Error('The person stopped Atelier in this tab (Cancel on Chrome’s debugging bar): ask them before going on.');
   if (!attached.has(tab)) {
-    await chrome.debugger.attach({ tabId: tab }, '1.3');
+    await ext.debugger.attach({ tabId: tab }, '1.3');
     attached.add(tab);
     // A tab in the background isn't focused: without this, clicks and typing in it are dropped.
-    await chrome.debugger.sendCommand({ tabId: tab }, 'Emulation.setFocusEmulationEnabled', { enabled: true });
+    await ext.debugger.sendCommand({ tabId: tab }, 'Emulation.setFocusEmulationEnabled', { enabled: true });
   }
   clearTimeout(idleTimers.get(tab));
-  idleTimers.set(tab, setTimeout(() => void chrome.debugger.detach({ tabId: tab }).catch(() => undefined), DETACH_AFTER));
-  return chrome.debugger.sendCommand({ tabId: tab }, method, params);
+  idleTimers.set(tab, setTimeout(() => void ext.debugger.detach({ tabId: tab }).catch(() => undefined), DETACH_AFTER));
+  return ext.debugger.sendCommand({ tabId: tab }, method, params);
 }
 
 async function pointOf(target: BrowserTarget): Promise<{ x: number; y: number }> {
@@ -325,6 +353,12 @@ async function pointOf(target: BrowserTarget): Promise<{ x: number; y: number }>
 }
 
 async function click(target: BrowserTarget, count = 1): Promise<BrowserTab> {
+  if (firefox) {
+    if (target.ref === undefined && (target.x === undefined || target.y === undefined)) throw new Error('Name an element (ref) or a point (x and y).');
+    const at = await inPage(target.tab, pageClick, [{ ...(target.ref !== undefined ? { ref: target.ref } : { x: target.x!, y: target.y! }), count }]);
+    if (!at) throw new Error(target.ref !== undefined ? `Element ${target.ref} isn't on the page any more: read the page again.` : `Nothing is at ${target.x}, ${target.y}.`);
+    return settle(target.tab);
+  }
   const { x, y } = await pointOf(target);
   await cdp(target.tab, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
   for (let n = 1; n <= count; n++) {
@@ -338,6 +372,11 @@ async function press(tab: number, keys: string[]): Promise<void> {
   const chord = parseChord(keys);
   if (reachesTheBrowser(chord)) throw new Error(`${keys.join('+')} would reach the browser itself (a tab, a window, the address bar), not the page: use open, navigate or close instead.`);
   const { key, modifiers } = chord;
+  if (firefox) {
+    const pageChord: PageChord = { key: key.key, code: key.code, keyCode: key.windowsVirtualKeyCode, ...(key.text ? { text: key.text } : {}), alt: !!(modifiers & 1), ctrl: !!(modifiers & 2), meta: !!(modifiers & 4), shift: !!(modifiers & 8) };
+    await inPage(tab, pagePress, [pageChord]);
+    return;
+  }
   const base = { modifiers, key: key.key, code: key.code, windowsVirtualKeyCode: key.windowsVirtualKeyCode, nativeVirtualKeyCode: key.windowsVirtualKeyCode };
   await cdp(tab, 'Input.dispatchKeyEvent', { ...base, type: key.text ? 'keyDown' : 'rawKeyDown', ...(key.text ? { text: key.text, unmodifiedText: key.text } : {}) });
   await cdp(tab, 'Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
@@ -355,17 +394,17 @@ async function handle<M extends keyof BrowserMethods>(method: M, params: Params<
 }
 
 const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Result<M>> } = {
-  status: async () => ({ connected: true, browser: browserName(), extensionVersion: chrome.runtime.getManifest().version }),
+  status: async () => ({ connected: true, browser: browserName(), extensionVersion: ext.runtime.getManifest().version }),
 
   'tabs.open': async ({ url, session }) => {
     await remembered;
     // A chat's tabs stay together: a new one opens in the window its group is in.
     const group = session ? await sessionGroup(session.id) : null;
-    const created = await chrome.tabs.create({ url, active: false, ...(group ? { windowId: group.windowId } : {}) });
+    const created = await ext.tabs.create({ url, active: false, ...(group ? { windowId: group.windowId } : {}) });
     ours.set(created.id!, session?.id ?? '');
     await save();
     await intoGroup(created, session).catch(() => undefined);
-    await waitLoaded(created.id!);
+    await waitLoaded(created.id!, LOAD_TIMEOUT, url === 'about:blank' ? '' : 'about:blank');
     await keepLinksHere(created.id!);
     return describe(created.id!);
   },
@@ -376,7 +415,9 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
     for (const [id, owner] of [...ours]) {
       if (session !== undefined && owner !== session) continue;
       try {
-        tabs.push(await describe(id));
+        const t = await ext.tabs.get(id);
+        const group = t.groupId >= 0 ? await ext.tabGroups.get(t.groupId).then((g) => g.title, () => undefined) : undefined;
+        tabs.push({ ...(await describe(id)), ...(group ? { group } : {}) });
       } catch {
         ours.delete(id);
       }
@@ -387,7 +428,7 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
 
   'tabs.close': async ({ tab }) => {
     await own(tab);
-    await chrome.tabs.remove(tab);
+    await ext.tabs.remove(tab);
     ours.delete(tab);
     await save();
     return {};
@@ -403,7 +444,7 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
     let closed = 0;
     for (const id of tabs) {
       try {
-        await chrome.tabs.remove(id);
+        await ext.tabs.remove(id);
         closed++;
       } catch {
         // Closed already.
@@ -445,7 +486,7 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
 
   'page.navigate': async ({ tab, url }) => {
     await own(tab);
-    await chrome.tabs.update(tab, { url });
+    await ext.tabs.update(tab, { url });
     await new Promise((r) => setTimeout(r, 100));
     await waitLoaded(tab);
     return describe(tab);
@@ -453,7 +494,7 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
 
   'page.back': async ({ tab }) => {
     await own(tab);
-    await chrome.tabs.goBack(tab);
+    await ext.tabs.goBack(tab);
     await new Promise((r) => setTimeout(r, 100));
     await waitLoaded(tab);
     return describe(tab);
@@ -481,7 +522,9 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
     const hasTarget = target.ref !== undefined || (target.x !== undefined && target.y !== undefined);
     if (hasTarget) await click(target);
     if (replace) await inPage(target.tab, selectAll, [target.ref ?? null]);
-    await cdp(target.tab, 'Input.insertText', { text });
+    if (firefox) {
+      if (!(await inPage(target.tab, pageInsertText, [text, target.ref ?? null]))) throw new Error('Nothing to type into: click a field first (or name it with ref).');
+    } else await cdp(target.tab, 'Input.insertText', { text });
     if (submit) await press(target.tab, ['Enter']);
     return settle(target.tab);
   },
@@ -494,6 +537,10 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
 
   'page.scroll': async ({ dy, ...target }) => {
     await own(target.tab);
+    if (firefox) {
+      await inPage(target.tab, pageScroll, [{ ...(target.ref !== undefined ? { ref: target.ref } : {}), ...(target.x !== undefined && target.y !== undefined ? { x: target.x, y: target.y } : {}), dy }]);
+      return settle(target.tab);
+    }
     const point =
       target.ref !== undefined || target.x !== undefined
         ? await pointOf(target)
@@ -512,11 +559,12 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
 
   'page.screenshot': async ({ tab, maxWidth = 1280 }) => {
     await own(tab);
+    if (firefox) return firefoxScreenshot(tab, maxWidth);
     const metrics = (await cdp(tab, 'Page.getLayoutMetrics')) as { cssVisualViewport: { pageX: number; pageY: number; clientWidth: number; clientHeight: number } };
     const view = metrics.cssVisualViewport;
     const scale = Math.min(1, maxWidth / view.clientWidth);
     // The glow and the pill aren't part of the page: the model sees it without them.
-    await chrome.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [true] }).catch(() => undefined);
+    await ext.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [true] }).catch(() => undefined);
     let shot: { data: string };
     try {
       shot = (await cdp(tab, 'Page.captureScreenshot', {
@@ -525,20 +573,37 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
         clip: { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale },
       })) as { data: string };
     } finally {
-      await chrome.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [false] }).catch(() => undefined);
+      await ext.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [false] }).catch(() => undefined);
     }
     const page = await describe(tab);
     return { data: shot.data, width: Math.round(view.clientWidth * scale), height: Math.round(view.clientHeight * scale), ...page };
   },
 };
 
+/** Firefox: what the tab shows, from its own captureTab (a background tab too), without the glow and the pill. */
+async function firefoxScreenshot(tab: number, maxWidth: number): Promise<Result<'page.screenshot'>> {
+  const capture = ext.tabs.captureTab;
+  if (!capture) throw new Error('This browser can’t take a picture of a tab: read the page instead.');
+  const view = await inPage(tab, viewportSize, []);
+  const scale = Math.min(1, maxWidth / Math.max(1, view.width));
+  await ext.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [true] }).catch(() => undefined);
+  let url: string;
+  try {
+    url = await capture(tab, { format: 'jpeg', quality: 70, scale });
+  } finally {
+    await ext.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [false] }).catch(() => undefined);
+  }
+  const page = await describe(tab);
+  return { data: url.slice(url.indexOf(',') + 1), width: Math.round(view.width * scale), height: Math.round(view.height * scale), ...page };
+}
+
 // ---------------------------------------------------------------- start
 
 // A service worker only starts for an event it listens to: these bring it up with the browser and after an install.
-chrome.runtime.onStartup.addListener(connect);
-chrome.runtime.onInstalled.addListener(connect);
-chrome.alarms.create('connect', { periodInMinutes: 1 });
-chrome.alarms.onAlarm.addListener(() => {
+ext.runtime.onStartup.addListener(connect);
+ext.runtime.onInstalled.addListener(connect);
+ext.alarms.create('connect', { periodInMinutes: 1 });
+ext.alarms.onAlarm.addListener(() => {
   connect();
   void sweepOverlays();
 });

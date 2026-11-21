@@ -76,7 +76,7 @@ export interface SettingsPage {
 /** Nav order. Only pages that work end to end are listed. */
 export const SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'general', label: 'General', icon: SettingsIcon, group: 'Settings' },
-  // The desktop app: the assistant using this computer's apps and Atelier for Chrome (main keeps it, not the account).
+  // The desktop app: the assistant using this computer's apps and the browser extension (main keeps it, not the account).
   {
     id: 'computer',
     label: 'Computer use',

@@ -47,7 +47,7 @@ see are hidden in the app.
 | **Denied apps** *(only where it works)* | Atelier never uses these apps: asking for them is turned down without a question. |
 | **Apps allowed for good** *(only where it works)* | Apps you allowed with “Always allow on this computer”; every session may use them. |
 | **Accessibility** *(only where it works)* | macOS lets Atelier use the mouse and keyboard, and read what is under them, with this permission. |
-| **Atelier for Chrome** *(only where it works)* | The browser extension through which Atelier works in web pages, in tabs of its own in an “Atelier” group, in the background: it reads pages instead of looking at them, and never uses your own tabs. Works in Chrome, Brave, Edge and Arc. Chrome shows “started debugging this browser” while it acts in a page. |
+| **Browser extension** *(only where it works)* | Atelier for Chrome (Chrome, Brave, Edge, Arc) and Atelier for Firefox: the browser extension through which Atelier works in web pages, in tabs of its own in an orange group named after the chat, in the background. It reads pages instead of looking at them, and never uses your own tabs. With both connected, Atelier works in the browser you used last. |
 | **Screen recording** *(only where it works)* | macOS lets Atelier take screenshots of the apps you allow with this permission. macOS asks again from time to time. |
 
 ## Settings › Connection

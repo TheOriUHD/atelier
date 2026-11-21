@@ -39,7 +39,7 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.10.7',
-    intro: 'Notifications for every conversation, on Windows too, a Stop that always stops, Roblox Studio and any other program as a connector, and an Auto mode that points to the gentler way. Browsing with Atelier for Chrome is easier to follow, too.',
+    intro: 'Atelier for Firefox, notifications for every conversation (on Windows too), a Stop that always stops, Roblox Studio and any other program as a connector, and an Auto mode that points to the gentler way.',
     highlights: [
       {
         icon: Bell,
@@ -60,6 +60,11 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         icon: ShieldCheck,
         title: 'Auto mode points to the gentler way',
         body: 'Auto mode now also catches actions that are needlessly intrusive, not only risky ones. When the assistant would take a screenshot of your whole screen or take over the mouse to check an app it builds, it is pointed to a plainer way, such as capturing just that app’s window or running its tests, and keeps working. If it still needs to do it its way, you are asked.',
+      },
+      {
+        icon: Globe,
+        title: 'Atelier for Firefox',
+        body: 'The browser extension now works in Firefox too: add Atelier for Firefox from Firefox Add-ons, and the assistant works in web pages there, in tabs of its own grouped by chat, with the same glow and label. With Chrome and Firefox both connected, it works in the one you used last. In Firefox, clicks and typing happen inside the page, which a few sites that need real input ignore; the assistant tells you when that happens.',
       },
       {
         icon: Eye,

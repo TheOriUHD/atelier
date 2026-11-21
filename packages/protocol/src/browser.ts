@@ -1,10 +1,10 @@
 /**
- * Atelier for Chrome (docs/ARCHITECTURE.md §22): the browser extension that works in web pages for computer use, in tabs
- * of its own. The core's Browser tool asks the desktop app's main process, which passes each call through the native
- * messaging host to the extension. The same methods are used on every hop.
+ * Atelier for Chrome and Atelier for Firefox (docs/ARCHITECTURE.md §22): the browser extension that works in web pages for
+ * computer use, in tabs of its own. The core's Browser tool asks the desktop app's main process, which passes each call
+ * through the native messaging host to the extension. The same methods are used on every hop.
  */
 
-/** The native messaging host's name, as registered in each Chromium browser's `NativeMessagingHosts` folder. */
+/** The native messaging host's name, as registered with each browser (Chromium's and Firefox's `NativeMessagingHosts`). */
 export const BROWSER_HOST_NAME = 'dev.atelier.browser';
 
 /**
@@ -12,6 +12,19 @@ export const BROWSER_HOST_NAME = 'dev.atelier.browser';
  * same on every computer) and the Chrome Web Store's (apps/browser-extension/store/listing.md).
  */
 export const BROWSER_EXTENSION_IDS = ['ehblmofeglpkfcaejllehbbhhddchefk', 'efpchbhecdgeeadmefahpgidnfplajln'] as const;
+
+/**
+ * Atelier for Firefox's add-on id (its manifest's `browser_specific_settings.gecko.id`): the same for the build on
+ * addons.mozilla.org and one loaded by hand, and the one Firefox's host manifest allows (`allowed_extensions`).
+ */
+export const FIREFOX_EXTENSION_ID = 'atelier@atelierhq.dev';
+
+/**
+ * How the extension's browser runs input: `trusted` through Chrome's debugger (clicks and typing as from the person, in a
+ * background tab too), `page` inside the page (Firefox, which has no debugger for extensions: ordinary events that most
+ * sites take, but that a few ignore).
+ */
+export type BrowserInput = 'trusted' | 'page';
 
 /** Protocol version, sent in the extension's hello; a mismatch is reported in Settings, not guessed around. */
 export const BROWSER_PROTOCOL_VERSION = 1;
@@ -64,6 +77,8 @@ export interface BrowserTab {
   tab: number;
   url: string;
   title: string;
+  /** In `tabs.list` (0.3.0 on): the name of the tab group it is in, its chat's. */
+  group?: string;
 }
 
 export interface BrowserPage extends BrowserTab {
@@ -127,9 +142,13 @@ export interface BrowserMethods {
 
 export interface BrowserStatus {
   connected: boolean;
-  /** "Google Chrome 132", "Brave 1.74" … as the extension reports it. */
+  /** "Google Chrome 132", "Brave 1.74", "Firefox 158" … as the extension reports it. */
   browser?: string;
   extensionVersion?: string;
+  /** How it runs input (absent from extensions before 0.3.0, which are all Chrome's: trusted). */
+  input?: BrowserInput;
+  /** Other browsers connected at the same time: Atelier uses the one the person used last (and a chat's tabs stay where they are). */
+  others?: { browser: string; extensionVersion: string }[];
   /** Why it isn't connected, in the person's words ("The extension isn't installed", "Atelier for Chrome is out of date"). */
   problem?: string;
 }
@@ -149,7 +168,12 @@ export interface BrowserResponse {
   error?: string;
 }
 
-/** The extension's first message once connected. */
+/** The extension's first message once connected; `engine` and `input` from 0.3.0 on. */
 export interface BrowserHello {
-  hello: { protocol: number; extensionVersion: string; browser: string };
+  hello: { protocol: number; extensionVersion: string; browser: string; engine?: 'chromium' | 'gecko'; input?: BrowserInput };
+}
+
+/** Sent by the extension (0.3.0 on) when one of its browser's windows gets the focus: the browser the person is using now. */
+export interface BrowserFocus {
+  focus: true;
 }

@@ -1427,7 +1427,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
               call: async (sessionId, method, params) => {
                 const row = await sessions.getRow(sessionId);
                 const { device } = row ? await computerDevice(row, 'browser') : { device: null };
-                if (!device || !row?.userId) throw new Error('No computer of yours has Atelier for Chrome connected: open the Atelier desktop app with the extension installed in Chrome.');
+                if (!device || !row?.userId) throw new Error('No computer of yours has the Atelier browser extension connected: open the Atelier desktop app with Atelier for Chrome or Atelier for Firefox installed in your browser.');
                 return (await links.request(row.userId, device, { op: 'browser', method, params }, BROWSER_CALL_MS)) as never;
               },
             },

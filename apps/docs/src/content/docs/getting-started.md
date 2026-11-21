@@ -240,7 +240,7 @@ name. The pages in the **Settings** group are for everyone:
 | Page | What it is for |
 |---|---|
 | **General** | Theme, chat font, transcript text size and width, motion; your own **Default model** for new chats; notifications when a reply finishes or Atelier needs you. |
-| **Computer use** (desktop app only) | **Enable computer use**, how the assistant uses the apps you allow, the apps allowed for good, and Atelier for Chrome. See [Computer use](/computer-use/). |
+| **Computer use** (desktop app only) | **Enable computer use**, how the assistant uses the apps you allow, the apps allowed for good, and the browser extension (Atelier for Chrome and Atelier for Firefox). See [Computer use](/computer-use/). |
 | **Account** | Your photo, name, what Atelier calls you, personal **Instructions**, **Personality**, **Response style** and **Your ATELIER.md**. On this computer also **Screen lock** and **Setup**; on a server your password, passkeys, active sessions, devices, **Remote control** and **Log out**. |
 | **Privacy** | **Keep conversations** (automatic deletion after a number of days), **Temporary chats**, **Export your data**, **Delete all conversations**. |
 | **Memory** | What Atelier remembers across chats, and whether it may. See [Memory](/memory/). |

@@ -330,7 +330,7 @@ If the folder's computer is offline the preview says "This folder's computer is 
 | Knowledge | **Skill**, **WebSearch** and **WebFetch** (when an admin has them on), memory and past-chat search, tools of your [connectors](/connectors/), and **AddConnector** for an MCP server you give it |
 | Showing | **artifact** (see [Artifacts](/artifacts/)) and **inline_visual** (a small explainer in the conversation) |
 | Making media | Image, video and audio generation where a model for it is set up: [images](/image-generation/), [video](/video-generation/), [audio](/audio-generation/) |
-| Your computer | **ComputerAccess**, **Screenshot**, **ComputerAction** and the rest of [computer use](/computer-use/), and the **Browser** tool ([Atelier for Chrome](/computer-use/#web-pages-atelier-for-chrome)), in the desktop app where you turned computer use on |
+| Your computer | **ComputerAccess**, **Screenshot**, **ComputerAction** and the rest of [computer use](/computer-use/), and the **Browser** tool ([Atelier for Chrome](/computer-use/#web-pages-atelier-for-chrome) or [Atelier for Firefox](/computer-use/#atelier-for-firefox)), in the desktop app where you turned computer use on |
 
 Every tool, with its description and parameters, is in the [tool reference](/reference/tools/).
 

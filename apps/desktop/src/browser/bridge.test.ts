@@ -3,7 +3,7 @@ import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BROWSER_EXTENSION_IDS, BROWSER_HOST_NAME, BROWSER_PROTOCOL_VERSION } from '@atelier/protocol';
+import { BROWSER_EXTENSION_IDS, BROWSER_HOST_NAME, BROWSER_PROTOCOL_VERSION, FIREFOX_EXTENSION_ID } from '@atelier/protocol';
 import { browserHomes, hostManifest, hostScript, startBrowserBridge, type BrowserBridge } from './bridge.ts';
 import { frame, readFrames } from './host.ts';
 
@@ -32,6 +32,11 @@ describe('Atelier for Chrome: the host manifest and script', () => {
     });
   });
 
+  it('allows Atelier for Firefox by its add-on id in Firefox’s manifest', () => {
+    const manifest = JSON.parse(hostManifest('/x/atelier-browser-host', true));
+    expect(manifest).toEqual({ name: BROWSER_HOST_NAME, description: expect.stringContaining('Firefox'), path: '/x/atelier-browser-host', type: 'stdio', allowed_extensions: [FIREFOX_EXTENSION_ID] });
+  });
+
   it('runs Atelier as Node with the socket and token, quoted', () => {
     const script = hostScript('darwin', "/Applications/At'elier.app/Contents/MacOS/Atelier", '/r/browser-host.cjs', '/h/.atelier/run/browser.sock', '/h/.atelier/run/browser.token');
     expect(script).toContain('ELECTRON_RUN_AS_NODE=1');
@@ -46,6 +51,26 @@ describe('Atelier for Chrome: the host manifest and script', () => {
     expect(mac).toContain('/Users/me/Library/Application Support/BraveSoftware/Brave-Browser');
     expect(browserHomes('linux', '/home/me').map((b) => b.dir)).toContain(join(process.env.XDG_CONFIG_HOME || '/home/me/.config', 'google-chrome'));
     expect(browserHomes('win32', 'C:\\Users\\me')[0]?.registry).toBe('HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts');
+    expect(browserHomes('win32', 'C:\\Users\\me').find((b) => b.firefox)?.registry).toBe('HKCU\\Software\\Mozilla\\NativeMessagingHosts');
+    expect(browserHomes('linux', '/home/me').find((b) => b.firefox)?.hosts).toBe('/home/me/.mozilla/native-messaging-hosts');
+    expect(browserHomes('darwin', '/Users/me').find((b) => b.firefox)?.dir).toBe('/Users/me/Library/Application Support/Mozilla');
+  });
+
+  it('registers with Firefox in its own folder, allowing the add-on by id, once Firefox has run', () => {
+    if (process.platform === 'win32') return;
+    const mac = temp();
+    mkdirSync(join(mac, 'Library', 'Application Support', 'Firefox'), { recursive: true });
+    bridges.push(startBrowserBridge({ configDir: join(mac, 'config'), executable: '/bin/atelier', hostJs: '/r/host.cjs', platform: 'darwin', home: mac }));
+    const written = JSON.parse(readFileSync(join(mac, 'Library', 'Application Support', 'Mozilla', 'NativeMessagingHosts', `${BROWSER_HOST_NAME}.json`), 'utf8'));
+    expect(written).toMatchObject({ allowed_extensions: [FIREFOX_EXTENSION_ID], path: join(mac, 'config', 'browser', 'atelier-browser-host') });
+    const linux = temp();
+    mkdirSync(join(linux, 'snap', 'firefox'), { recursive: true });
+    bridges.push(startBrowserBridge({ configDir: join(linux, 'config'), executable: '/bin/atelier', hostJs: '/r/host.cjs', platform: 'linux', home: linux }));
+    expect(JSON.parse(readFileSync(join(linux, '.mozilla', 'native-messaging-hosts', `${BROWSER_HOST_NAME}.json`), 'utf8'))).toMatchObject({ allowed_extensions: [FIREFOX_EXTENSION_ID] });
+    // Without Firefox, nothing of Mozilla's is made.
+    const none = temp();
+    bridges.push(startBrowserBridge({ configDir: join(none, 'config'), executable: '/bin/atelier', hostJs: '/r/host.cjs', platform: 'linux', home: none }));
+    expect(existsSync(join(none, '.mozilla'))).toBe(false);
   });
 
   it('registers with installed browsers only, and with Chrome’s folder for Brave on a Mac', () => {
@@ -94,7 +119,7 @@ describe('Atelier for Chrome: the socket', () => {
     await new Promise((r) => client.on('connect', r));
     client.write(`${JSON.stringify({ auth: token })}\n${JSON.stringify({ hello: { protocol: BROWSER_PROTOCOL_VERSION, extensionVersion: '0.1.0', browser: 'Brave 1.74' } })}\n`);
     await until(() => bridge.status().connected);
-    expect(bridge.status()).toEqual({ connected: true, browser: 'Brave 1.74', extensionVersion: '0.1.0' });
+    expect(bridge.status()).toEqual({ connected: true, browser: 'Brave 1.74', extensionVersion: '0.1.0', input: 'trusted' });
     // A call goes out with an id; the answer with that id settles it.
     client.setEncoding('utf8');
     client.on('data', (line: string) => {
@@ -105,6 +130,55 @@ describe('Atelier for Chrome: the socket', () => {
     client.destroy();
     await until(() => !bridge.status().connected);
     expect(bridge.status().connected).toBe(false);
+  });
+
+  it('works in the browser used last when two are connected, and keeps a chat’s tabs where they were opened', async () => {
+    let clock = 1000;
+    const home = temp();
+    const config = join(home, 'c');
+    const bridge = startBrowserBridge({ configDir: config, executable: '/bin/atelier', hostJs: '/r/host.cjs', platform: process.platform, home, register: false, now: () => clock });
+    bridges.push(bridge);
+    const token = readFileSync(join(config, 'run', 'browser.token'), 'utf8');
+    const seen: Record<string, string[]> = { chrome: [], firefox: [] };
+    const join_ = async (name: 'chrome' | 'firefox', hello: object, tabBase: number) => {
+      const client = connect(join(config, 'run', 'browser.sock'));
+      await new Promise((r) => client.on('connect', r));
+      client.setEncoding('utf8');
+      client.on('data', (chunk: string) => {
+        for (const line of chunk.split('\n').filter(Boolean)) {
+          const request = JSON.parse(line) as { id: number; method: string; params: { tab?: number } };
+          seen[name]!.push(`${request.method}${request.params?.tab !== undefined ? `:${request.params.tab}` : ''}`);
+          const result = request.method === 'tabs.open' ? { tab: tabBase, url: 'https://example.com/', title: '' } : request.method === 'tabs.closeSession' ? { closed: 1 } : { tab: request.params.tab ?? 0, url: '', title: '' };
+          client.write(`${JSON.stringify({ id: request.id, result })}\n`);
+        }
+      });
+      client.write(`${JSON.stringify({ auth: token })}\n${JSON.stringify({ hello })}\n`);
+      return client;
+    };
+    const chrome = await join_('chrome', { protocol: BROWSER_PROTOCOL_VERSION, extensionVersion: '0.3.0', browser: 'Google Chrome 142', input: 'trusted' }, 100);
+    await until(() => bridge.status().connected);
+    clock = 2000;
+    const firefox = await join_('firefox', { protocol: BROWSER_PROTOCOL_VERSION, extensionVersion: '0.3.0', browser: 'Firefox 158', input: 'page' }, 7);
+    await until(() => bridge.status().browser === 'Firefox 158');
+    // The one that came last is in use until a window says otherwise; the other is listed.
+    expect(bridge.status()).toEqual({ connected: true, browser: 'Firefox 158', extensionVersion: '0.3.0', input: 'page', others: [{ browser: 'Google Chrome 142', extensionVersion: '0.3.0' }] });
+    await bridge.call('tabs.open', { url: 'https://example.com/', session: { id: 'chat-1', title: 'Shopping' } });
+    // The person goes back to Chrome: new work goes there, chat-1's tab stays in Firefox.
+    clock = 3000;
+    chrome.write(`${JSON.stringify({ focus: true })}\n`);
+    await until(() => bridge.status().browser === 'Google Chrome 142');
+    await bridge.call('page.read', { tab: 7 });
+    await bridge.call('tabs.open', { url: 'https://example.org/', session: { id: 'chat-2', title: 'Train times' } });
+    await bridge.call('tabs.list', { session: 'chat-1' });
+    expect(seen.firefox).toEqual(['tabs.open', 'page.read:7', 'tabs.list']);
+    expect(seen.chrome).toEqual(['tabs.open']);
+    // Deleting a chat closes its tabs in every browser.
+    await expect(bridge.call('tabs.closeSession', { session: 'chat-1' })).resolves.toEqual({ closed: 2 });
+    // Firefox goes: Chrome stays connected and takes the calls.
+    firefox.destroy();
+    await until(() => !bridge.status().others);
+    expect(bridge.status()).toMatchObject({ connected: true, browser: 'Google Chrome 142' });
+    chrome.destroy();
   });
 
   it('drops a connection without the right token', async () => {

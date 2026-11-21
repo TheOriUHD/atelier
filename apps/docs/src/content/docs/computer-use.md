@@ -148,7 +148,7 @@ browser itself instead of its pictures:
   chat before accepting terms or sending anything. A permission rule you wrote (`Browser`) still applies.
 
 Install it from the [Chrome Web Store](https://chromewebstore.google.com/detail/atelier-for-chrome/efpchbhecdgeeadmefahpgidnfplajln)
-(Brave, Edge and Arc take it from there too). **Settings › Computer use › Atelier for Chrome** says **Connected in …**
+(Brave, Edge and Arc take it from there too). **Settings › Computer use › Browser extension** says **Connected in …**
 within a few seconds. While the extension is new, Chrome may show "This extension is not trusted by Enhanced Safe
 Browsing": that is about its publisher having no track record yet, and **Continue to install** is the way on. If your
 browser won't take it from the store, the same row shows the extension's folder to load by hand (`chrome://extensions`,
@@ -161,6 +161,30 @@ link as computer use, while **Computer use** is on in the desktop app. The serve
 The chat tab groups, the glow and the label need Atelier for Chrome 0.2.0 or later; with 0.1.0 the tabs go in one
 orange **Atelier** group, also staying open, and nothing shows in the page. Chrome updates extensions from the store
 by itself within a few hours, or at once with **Update** on `chrome://extensions` (Developer mode).
+
+### Atelier for Firefox
+
+**Atelier for Firefox** is the same extension for Firefox 140 or later: its own tabs in an orange group named after the
+chat, the glow and the label, reading pages by name, and the same limits (never passwords or purchases, it asks before
+terms or sending). Install it from [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/atelier-for-firefox/);
+**Settings › Computer use › Browser extension** says **Connected in Firefox …** within a few seconds. Firefox asks you to
+allow the data it sends to the Atelier app (the pages it works in) when you add it.
+
+What is different in Firefox:
+
+- **Clicks and typing happen inside the page.** Firefox has no debugger for extensions, so there is no "started
+  debugging" bar, and the extension clicks, types, presses keys and scrolls through the page itself. Almost every site
+  takes that (forms, shops, web apps, rich text editors), but a page that only accepts real input can ignore it: drag and
+  drop, file pickers, some canvas-based editors and anti-bot checks. The assistant then tells you, and you can do that step
+  yourself or use Chrome.
+- **Screenshots** of its tabs come from Firefox itself, also while the tab is in the background.
+- **On Linux**, Firefox from a Snap package (Ubuntu's) reaches the Atelier app through the desktop portal Ubuntu ships;
+  Firefox from a Flatpak can't reach programs outside its sandbox, so use Firefox from your distribution's packages or
+  Mozilla's there.
+
+With Atelier for Chrome and Atelier for Firefox both connected, Atelier works in the browser you used last, and a chat's
+tabs stay in the browser that opened them. **Settings › Computer use › Browser extension** lists both. Atelier needs
+version 0.10.7 or later of the desktop app for Firefox.
 
 ### Denied apps
 

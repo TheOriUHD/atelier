@@ -142,7 +142,7 @@ interface DesktopBridge {
     cancel(id: number): void;
     onUpdate(listener: (update: unknown) => void): () => void;
   };
-  /** Atelier for Chrome (ARCHITECTURE §22): whether the extension is connected, and its folder for "Load unpacked". */
+  /** Atelier for Chrome or Atelier for Firefox (ARCHITECTURE §22): whether the extension is connected (and in which browsers), and the Chrome build's folder for "Load unpacked". */
   browserExtension?: {
     status(): Promise<BrowserStatus & { extensionDir: string }>;
     reveal(): Promise<void>;

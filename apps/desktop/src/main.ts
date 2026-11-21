@@ -413,7 +413,7 @@ function startBackend(): void {
       // computer through the device link, where the person turned computer use on, as the row in Settings is shown).
       try {
         if (connection?.mode !== 'local' && connection?.mode !== 'server') throw new Error('The browser is for this computer’s own sessions.');
-        if (!browserBridge) throw new Error('Atelier for Chrome isn’t available in this app.');
+        if (!browserBridge) throw new Error('The Atelier browser extension isn’t available in this app.');
         if (connection.mode === 'server' && !(await computer.available())) throw new Error('Computer use is turned off in the desktop app there: turn it on under Settings › Computer use.');
         const value = m.method === 'status' ? browserBridge.status() : await browserBridge.call(m.method as keyof BrowserMethods, m.params as never);
         child.postMessage({ kind: 'res', id: m.id, ok: true, value: JSON.stringify(value) } satisfies MainToBackend);
@@ -759,7 +759,7 @@ function registerComputerIpc(): void {
   const Backend = z.string().min(1).max(2048);
   const SessionId = z.string().min(1).max(100);
   ipcMain.handle('computer:status', () => computer.status());
-  ipcMain.handle('browserExtension:status', () => ({ ...(browserBridge?.status() ?? { connected: false, problem: 'Atelier for Chrome isn’t available in this app.' }), extensionDir: browserExtensionDir }));
+  ipcMain.handle('browserExtension:status', () => ({ ...(browserBridge?.status() ?? { connected: false, problem: 'The Atelier browser extension isn’t available in this app.' }), extensionDir: browserExtensionDir }));
   ipcMain.handle('browserExtension:reveal', () => shell.showItemInFolder(join(browserExtensionDir, 'manifest.json')));
   ipcMain.handle('computer:settings', (_e, input: unknown) => {
     const patch = z.object({ enabled: z.boolean().optional(), mode: ComputerMode.optional(), unhideOnFinish: z.boolean().optional(), moveAway: z.boolean().optional() }).strict().parse(input);
@@ -1224,7 +1224,7 @@ async function repairOwnShortcuts(): Promise<void> {
   await writeFile(marker, app.getVersion()).catch(() => {});
 }
 
-/** Atelier for Chrome: the extension's folder (for "Load unpacked") and its native host, started with the app. */
+/** Atelier for Chrome and Atelier for Firefox: the Chrome build's folder (for "Load unpacked") and the native host, started with the app. */
 let browserBridge: BrowserBridge | null = null;
 const browserExtensionDir = app.isPackaged ? join(process.resourcesPath, 'browser-extension') : join(import.meta.dirname, '..', '..', 'browser-extension', 'dist');
 function startBrowser(): void {
