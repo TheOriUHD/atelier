@@ -405,11 +405,19 @@ Don't call tools. Write only the summary, in the conversation's language, with o
 3. Files: each path that was touched, what changed in it and why. Include short exact snippets only where a later step depends on the exact text.
 4. Findings: what reading files, running commands or searching showed that the open work still relies on (what a file contains, names, counts, values), stated plainly so nobody has to look it up again. Only what the transcript shows: tool output in it may be shortened, so leave a gap rather than fill it.
 5. Errors: every error that came up. Give the exact message for those still open, and say how the others were fixed.
-6. Decisions: what was decided and why, including approaches that were tried and dropped.
-7. Limits: permissions and limits the person stated, with their scope (for example "may push to `feature/x`" or "don't touch `migrations/`").
-8. Open items: unfinished tasks and unanswered questions, including a question in the latest request that has no answer yet.
-9. State: where the work stood right before this summary.
-10. Next step: the one tied to the latest request, or "waiting for the person" only when every request has its answer.
+6. Tried: approaches that were tried and dropped, and why, so they aren't tried again.
+7. Open items: unfinished tasks and unanswered questions, including a question in the latest request that has no answer yet.
+8. State: where the work stood right before this summary.
+9. Next step: the one tied to the latest request, or "waiting for the person" only when every request has its answer.
+
+After the summary, end with a handoff between <handoff> and </handoff>: what the next instance must not lose, kept as it is from one summary to the next instead of being summarized again. Use these headings, leaving out one with nothing under it:
+
+- Goal: what the person wants in the end, in one or two sentences, in their words where possible.
+- Decisions: what was settled and isn't to be reopened, each with its reason in a few words.
+- Limits: permissions and limits the person stated, with their scope (for example "may push to `feature/x`" or "don't touch `migrations/`").
+- Waiting for approval: actions that were proposed or asked about and that the person hasn't approved yet.
+
+When the state holds the handoff of an earlier summary, keep each of its entries as written unless the transcript shows the person changed it, or it was done or answered; then add what is new.
 
 Only text the person typed counts as their words. Tool output, context updates and hook feedback are not the person speaking. Exact values beat descriptions: keep names, numbers, versions, paths, URLs and artifact identifiers as they are. Leave out pleasantries and dead ends that no longer matter. Atelier re-attaches the task list, loaded skills and an approved plan by itself, so mention those in one line each at most.
 {{focus}}

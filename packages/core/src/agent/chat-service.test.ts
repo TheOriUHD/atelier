@@ -15,6 +15,7 @@ import type { Tool } from '../tools/types.ts';
 import { requestChars, requestSize } from './context.ts';
 import { REPEAT_NUDGE, REPEAT_STOP } from './loop.ts';
 import { answerDanglingToolCalls, ChatService, collectText, sanitizeSuggestion, MAX_BACKGROUND_AGENTS, MAX_WAKES, ModelUnavailableError, sanitizeTitle, stepCap, withAreas, withQuotes, type ChatServiceDeps, type ExtensionCatalog, type ModelResolver } from './chat-service.ts';
+import { HANDOFF_HEADING } from './compaction.ts';
 
 const quietPrefs = () => { const prefs = defaultUserPrefs(); return { ...prefs, code: { ...prefs.code, suggestions: false } }; };
 
@@ -561,6 +562,48 @@ describe('ChatService', () => {
     expect(messages.at(-1)!.parentId).toBe(echo.id);
     // The summary says how much it saved, for "Compacted session · saved N tokens".
     expect(messages.at(-1)!.parts.some((p) => p.type === 'context' && p.notice?.kind === 'compaction' && p.notice.saved >= 0)).toBe(true);
+  });
+
+  it('keeps the handoff from one compaction to the next: given back to the summarizer, and kept when it writes none', async () => {
+    const summaries: ChatRequest[] = [];
+    const handoffs = [
+      '<handoff>\n## Goal\nShip 2.0 on Friday.\n## Limits\n- Don\'t touch `migrations/`.\n</handoff>',
+      // A small model that ignores the format: the handoff stays as it was.
+      '',
+    ];
+    const adapter: ProviderAdapter = {
+      ...echoAdapter(seen),
+      async *stream(req): AsyncIterable<StreamEvent> {
+        if (!isSummaryRequest(req)) return yield* echoAdapter(seen).stream(req);
+        summaries.push(req);
+        yield { type: 'text', delta: `## Requests\nSUMMARY ${summaries.length}\n\n${handoffs.shift() ?? ''}` };
+        yield { type: 'finish', reason: 'end' };
+      },
+    };
+    const chat = service(undefined, adapter);
+    const s = await repo.create({ mode: 'code' });
+    const stored = async () => (await repo.history(s.id))[0]!;
+    for (const text of ['one', 'two', 'three']) {
+      await chat.send(s.id, [{ type: 'text', text }]);
+      await chat.settle(s.id);
+      await chat.compact(s.id);
+    }
+    expect(summaries).toHaveLength(3);
+    const asked = (req: ChatRequest) => req.messages.flatMap((m) => m.parts.flatMap((p) => (p.type === 'text' ? [p.text] : []))).join('\n');
+    // The first summarizer had no handoff to keep; the next ones are given the one before, to keep.
+    expect(asked(summaries[0]!)).not.toContain('Handoff of the earlier summary');
+    expect(asked(summaries[1]!)).toContain('Handoff of the earlier summary');
+    expect(asked(summaries[1]!)).toContain('#### Goal\nShip 2.0 on Friday.');
+    expect(asked(summaries[2]!)).toContain('#### Goal\nShip 2.0 on Friday.');
+    // Stored last in the summary, outside the summary text, and the <handoff> block itself is gone from it.
+    const text = ((await stored()).parts[0] as { text: string }).text;
+    expect(text).toContain('SUMMARY 3');
+    expect(text).not.toContain('<handoff>');
+    expect(text.trimEnd().endsWith(`${HANDOFF_HEADING}\n\n#### Goal\nShip 2.0 on Friday.\n#### Limits\n- Don't touch \`migrations/\`.`)).toBe(true);
+    // The model that carries on reads it.
+    await chat.send(s.id, [{ type: 'text', text: 'four' }]);
+    await chat.settle(s.id);
+    expect(JSON.stringify(seen.at(-1)!.messages)).toContain('Ship 2.0 on Friday.');
   });
 
   it('has nothing to compact, and leaves no command behind, in a conversation without messages', async () => {

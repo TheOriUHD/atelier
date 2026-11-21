@@ -128,7 +128,7 @@ import type { CodeContext } from '../workspaces/code-context.ts';
 import { isTrusted, type Workspace } from '../workspaces/workspace.ts';
 import { runTurn, type PreparedRequest } from './loop.ts';
 import { actorFor, answerWithProblem, COOP_QUESTION_TIMEOUT_MS, guestMode, guestParts, keptOnStop, mayHandle, nextTurn, senderTag, soloActor, takenByTurn, type TurnActor, type TurnParticipant } from './coop-turns.ts';
-import { renderForSummary, renderState, summarize, type CarriedState } from './compaction.ts';
+import { handoffForSummarizer, handoffOf, renderForSummary, renderHandoff, renderState, splitHandoff, summarize, type CarriedState } from './compaction.ts';
 import { afterCompaction, announcedState, todoNudge, todosOpen, turnNote, type GitSnapshot, type NoteState } from './context-notes.ts';
 import { isSideChat, mainTranscript, SIDE_CHAT_EFFORT, SIDE_CHAT_KEY, sideChatNote, sideChatTitle, sideChatTools, withSideChatNote } from './side-chat.ts';
 import {
@@ -3415,9 +3415,15 @@ export class ChatService {
     const summarized = history.slice(0, start);
     if (!summarized.some((m) => m.kind !== 'compaction_summary')) return false;
     const state = renderState(await this.carriedState(session, summarized, history.slice(start)));
+    // The handoff of the summary before this one goes to the summarizer to keep (compaction.ts, HANDOFF_HEADING).
+    const earlier = handoffOf(summarized.findLast((m) => m.kind === 'compaction_summary'));
     this.emit(sessionId, { type: 'compacting', active: true });
     try {
-      const { text, model } = await this.summarizeWith(session, opts.current, summarized, state, opts);
+      const written = await this.summarizeWith(session, opts.current, summarized, [state, earlier && handoffForSummarizer(earlier)].filter(Boolean).join('\n\n'), opts);
+      const { model } = written;
+      // A summarizer that wrote no handoff (or was cut off in it) leaves the earlier one as it was, never none.
+      const { summary: text, handoff: fresh } = splitHandoff(written.text);
+      const handoff = fresh ?? earlier;
       const through = summarized.at(-1)!.id;
       const tail = history[start];
       const stored = await this.storedSnapshot(sessionId);
@@ -3429,7 +3435,9 @@ export class ChatService {
         },
         this.deps.promptOverrides(),
       );
-      const body = `This conversation was compacted. Summary of everything before this point:\n\n${text}${state ? `\n\n## Carried over verbatim\n\n${state}` : ''}`;
+      // The handoff goes last: everything after its heading is the handoff (handoffOf).
+      const verbatim = [state, handoff && renderHandoff(handoff)].filter(Boolean).join('\n\n');
+      const body = `This conversation was compacted. Summary of everything before this point:\n\n${text}${verbatim ? `\n\n## Carried over verbatim\n\n${verbatim}` : ''}`;
       // What it saved: the messages it replaces against its own size, in this model's characters per token.
       const perToken = this.calibration.charsPerToken(opts.current.info.ref) || DEFAULT_CHARS_PER_TOKEN;
       const saved = Math.max(0, Math.round((requestChars(requestSize([], [], summarized)) - body.length) / perToken));

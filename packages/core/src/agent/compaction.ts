@@ -84,6 +84,50 @@ export function renderState(state: CarriedState): string {
 }
 
 /**
+ * The handoff (compaction.md): the goal, settled decisions, the person's limits and what waits for their approval,
+ * written by the summarizer after its summary and stored under this heading, last in the summary message. The next
+ * compaction gets it back as it is, to keep, so these facts aren't summarized again and again until they're gone.
+ */
+export const HANDOFF_HEADING = '### Handoff (kept from summary to summary)';
+/** A handoff longer than this is shortened (a summarizer that put the whole summary in it). */
+const HANDOFF_MAX_CHARS = 6_000;
+
+/**
+ * The summarizer's reply split into the summary and its handoff (the last `<handoff>` block). The handoff is null when
+ * there is none, or when the reply ended inside it (cut off): the earlier handoff is kept then, rather than half of one.
+ */
+export function splitHandoff(text: string): { summary: string; handoff: string | null } {
+  const blocks = [...text.matchAll(/<handoff>([\s\S]*?)<\/handoff>/gi)];
+  const last = blocks.at(-1);
+  if (!last) {
+    const open = text.search(/<handoff>/i);
+    return { summary: (open < 0 ? text : text.slice(0, open)).trim(), handoff: null };
+  }
+  const summary = blocks.reduceRight((rest, b) => rest.slice(0, b.index) + rest.slice(b.index! + b[0].length), text).trim();
+  // Its headings sit below the heading it is stored under.
+  const body = last[1]!.replace(/^#{1,6}[ \t]+/gm, '#### ').trim();
+  return { summary, handoff: body ? headTail(body, HANDOFF_MAX_CHARS, (cut) => `[… ${cut} characters left out …]`) : null };
+}
+
+/** The handoff stored in a compaction summary, or null. */
+export function handoffOf(message: Message | undefined): string | null {
+  if (message?.kind !== 'compaction_summary') return null;
+  const text = message.parts.find((p) => p.type === 'text')?.text ?? '';
+  const at = text.indexOf(HANDOFF_HEADING);
+  return at < 0 ? null : text.slice(at + HANDOFF_HEADING.length).trim() || null;
+}
+
+/** The handoff as the summary stores it. */
+export function renderHandoff(handoff: string): string {
+  return `${HANDOFF_HEADING}\n\n${handoff}`;
+}
+
+/** What the summarizer gets besides the state: the earlier summary's handoff, to keep. */
+export function handoffForSummarizer(handoff: string): string {
+  return `### Handoff of the earlier summary (keep its entries unless the person changed them or they were done)\n${handoff}`;
+}
+
+/**
  * Summarizes `blocks` (rendered messages, oldest first). `state` joins every request that produces the final summary.
  * `scale` below 1 makes chunks smaller (a retry after the summarizer rejected one).
  */
