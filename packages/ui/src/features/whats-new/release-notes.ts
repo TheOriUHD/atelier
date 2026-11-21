@@ -2,7 +2,7 @@ import { compareVersions } from '@atelier/protocol';
 // Clips are recorded from the real apps on throwaway data: apps/cli/scripts/record-clip.ts (see media/README.md).
 import cliClip from './media/atelier-cli.mp4';
 import cliPoster from './media/atelier-cli.jpg';
-import { AppWindow, Blocks, Bug, Lightbulb, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, Mic, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
+import { AppWindow, Bell, Blocks, Bug, CircleStop, Lightbulb, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, Mic, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /**
  * A clip or picture that shows a larger feature off: it takes the dialog's full width above the feature's title. Clips are
@@ -39,8 +39,28 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.10.7',
-    intro: 'Browsing with Atelier for Chrome is easier to follow and more thorough: tabs stay open, each chat has its own tab group, and the page shows what the assistant is doing.',
+    intro: 'Notifications for every conversation, on Windows too, a Stop that always stops, Roblox Studio and any other program as a connector, and an Auto mode that points to the gentler way. Browsing with Atelier for Chrome is easier to follow, too.',
     highlights: [
+      {
+        icon: Bell,
+        title: 'Know when it’s done or needs you',
+        body: 'While you are in another window, a notification says when a Code session, a task or a chat finishes its reply, fails, or waits for your answer or a permission, and clicking it opens the conversation. Before, only tasks did, and on Windows the notifications never showed. Both switches are in Settings › General and on by default.',
+      },
+      {
+        icon: CircleStop,
+        title: 'Stop always stops',
+        body: 'A reply that waited on something that didn’t hear the stop, such as a folder on a computer whose connection hung, kept going after Stop, Esc or switching chats. Now a reply that hasn’t ended three seconds after Stop is stopped anyway, and you can send your next message at once.',
+      },
+      {
+        icon: Plug,
+        title: 'Roblox Studio and other programs as connectors',
+        body: 'Connectors that run as a program on your computer (an MCP server that talks over its input and output, like Roblox Studio’s) can now be added from the desktop app, also when it is signed in to a server: the program runs on your computer, never on the server. Roblox Studio is in the catalog: turn on Enable Studio as MCP server in Studio’s Assistant settings, keep Studio open, and add it.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'Auto mode points to the gentler way',
+        body: 'Auto mode now also catches actions that are needlessly intrusive, not only risky ones. When the assistant would take a screenshot of your whole screen or take over the mouse to check an app it builds, it is pointed to a plainer way, such as capturing just that app’s window or running its tests, and keeps working. If it still needs to do it its way, you are asked.',
+      },
       {
         icon: Eye,
         title: 'Watch it work in the page',
@@ -52,12 +72,16 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
         body: 'The pages it opened no longer close when the reply ends. They stay in an orange tab group named after the chat, for you to look at and for your next message to go on in. A chat keeps at most ten, it closes the ones it no longer needs, and a chat’s tabs close when you archive or delete it.',
       },
       {
-        icon: Globe,
-        title: 'Answers from more than one page',
-        body: 'When it looks something up in the browser, it reads several results instead of stopping at the first, follows links that lead closer, reads long pages to the end, and answers with what it found, linked to the pages it came from.',
+        icon: ListChecks,
+        title: 'Long tasks keep their goal',
+        body: 'When a long conversation is summarized to fit the model’s window, the summary now ends with a handoff: the goal, the decisions already made, the limits you set and what still waits for your OK. Each later summary keeps it as it is, so these no longer fade on a small model that summarizes often.',
       },
     ],
-    also: ['The media kit at media.atelierhq.dev has the logos, app icons, banners, screenshots and colours, linked from the website’s footer.'],
+    also: [
+      'When it looks something up in the browser, it reads several results, follows links that lead closer and answers with what it found, linked to its sources.',
+      'Switching the update channel back to Stable drops a beta that was already downloaded, so it is no longer installed when Atelier quits.',
+      'The media kit at media.atelierhq.dev has the logos, app icons, banners, screenshots and colours, linked from the website’s footer.',
+    ],
   },
   {
     version: '0.10.6',
