@@ -39,7 +39,7 @@ prompts or replies.
 | [`chat.full.memory-explicit`](/prompts/assembled/chat.full.memory-explicit.txt) | Chat with memory where “Generate memory from chats” and chat search are off. | 40 KB |
 | [`chat.compact.memory`](/prompts/assembled/chat.compact.memory.txt) | Chat, compact tier, with memory. | 20 KB |
 | [`chat.full.computer`](/prompts/assembled/chat.full.computer.txt) | Chat in the desktop app with computer use on: the computer use tools. | 60 KB |
-| [`chat.full.browser`](/prompts/assembled/chat.full.browser.txt) | Chat with computer use on and Atelier for Chrome connected: the Browser tool. | 64 KB |
+| [`chat.full.browser`](/prompts/assembled/chat.full.browser.txt) | Chat with computer use on and Atelier for Chrome connected: the Browser tool. | 65 KB |
 | [`chat.full.images`](/prompts/assembled/chat.full.images.txt) | Chat with an image model: GenerateImage and how to use it. | 40 KB |
 | [`code.full.images`](/prompts/assembled/code.full.images.txt) | Code with an image model: GenerateImage and SaveImage. | 58 KB |
 | [`code.compact.images`](/prompts/assembled/code.compact.images.txt) | Code, compact tier, with an image model: the shorter GenerateImage schema. | 24 KB |
