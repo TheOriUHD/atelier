@@ -470,9 +470,11 @@ async function runQa({ log }) {
     '(pnpm typecheck > typecheck.log 2>&1; echo $? > typecheck.code) &',
     '(pnpm lint > lint.log 2>&1; echo $? > lint.code) &',
     '(pnpm setup:test > setup.log 2>&1; echo $? > setup.code) &',
-    // One retry per failing test: a few of them time real seconds, and 24 cores running them at once can miss a window.
-    '(pnpm test --retry=1 > unit.log 2>&1; echo $? > unit.code) &',
     'wait',
+    // The unit tests on their own and with fewer workers than cores: the machine has 18 cores and 2.7 GB, and a worker per
+    // core next to a typecheck and a lint pushed it into swap (0.10.5: nine files timed out at 10 to 30 seconds each).
+    // One retry per failing test: a few of them time real seconds.
+    'pnpm test --retry=1 --maxWorkers=6 > unit.log 2>&1; echo $? > unit.code',
     'bad=0; for c in typecheck lint setup unit; do if [ "$(cat $c.code)" != 0 ]; then echo "--- $c failed"; tail -40 $c.log; bad=1; else echo "$c ok: $(grep -E "Tests .*passed" $c.log | tail -1)"; fi; done',
     // The terminal app in a real pseudo-terminal, as the end-to-end step runs it (CI is set): its tests skip themselves
     // without the bundles, so the unit run above leaves them out. They run here alone, on a quiet machine.
