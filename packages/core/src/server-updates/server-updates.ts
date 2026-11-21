@@ -34,6 +34,8 @@ export class ServerUpdateError extends Error {
 interface UpdaterStatus {
   services: { atelier?: { image: string; source: boolean } | null };
   job: ServerUpdateJob;
+  /** What the updater can do beyond pulling and restarting in one go ('pull': download ahead, install later); absent before 0.10.6. */
+  features?: string[];
 }
 
 const CACHE_MS = 10 * 60_000;
@@ -67,6 +69,11 @@ export class ServerUpdates {
     this.now = options.now ?? Date.now;
   }
 
+  /** The version this server runs. */
+  get version(): string {
+    return this.options.version;
+  }
+
   async status(refresh = false): Promise<ServerUpdateStatus> {
     const [, updater] = await Promise.all([this.checkLatest(refresh), this.askUpdater()]);
     const stamped = !!this.options.image;
@@ -96,6 +103,41 @@ export class ServerUpdates {
       throw new ServerUpdateError(answer.status === 422 ? 'source_build' : 'updater_failed', body?.error ?? `The updater answered ${answer.status}.`);
     }
     return this.status();
+  }
+
+  /** The newest version the feed names right now (a fresh lookup), or null when it can't be read. */
+  async refreshLatest(): Promise<string | null> {
+    await this.checkLatest(true);
+    return this.latestCache?.version ?? null;
+  }
+
+  /** What the updater says (its job, and whether it downloads ahead), without looking for a new version. */
+  async updaterState(): Promise<{ ok: true; job: ServerUpdateJob; downloadsAhead: boolean; source: boolean } | { ok: false; error: string | null }> {
+    const answer = await this.askUpdater();
+    if (!answer.ok) return answer;
+    return { ok: true, job: answer.status.job, downloadsAhead: answer.status.features?.includes('pull') ?? false, source: !!answer.status.services.atelier?.source };
+  }
+
+  /** Has the updater download the new images without installing them. `unsupported`: an updater from before 0.10.6. */
+  async pull(): Promise<'started' | 'running' | 'unsupported'> {
+    const answer = await this.call('POST', '/pull');
+    if (answer.status === 404) return 'unsupported';
+    if (answer.status === 409) return 'running';
+    if (!answer.ok) {
+      const body = (await answer.json().catch(() => null)) as { error?: string } | null;
+      throw new ServerUpdateError('updater_failed', body?.error ?? `The updater answered ${answer.status}.`);
+    }
+    return 'started';
+  }
+
+  /** Has the updater recreate the server from the images it downloaded (`pulled`), or download and recreate in one go. */
+  async install(pulled: boolean): Promise<void> {
+    const answer = await this.call('POST', pulled ? '/update?pull=false' : '/update');
+    // 409: an update is already running, which is what was asked for.
+    if (!answer.ok && answer.status !== 409) {
+      const body = (await answer.json().catch(() => null)) as { error?: string } | null;
+      throw new ServerUpdateError(answer.status === 422 ? 'source_build' : 'updater_failed', body?.error ?? `The updater answered ${answer.status}.`);
+    }
   }
 
   private async checkLatest(refresh: boolean): Promise<void> {
@@ -144,7 +186,7 @@ export class ServerUpdates {
       if (!r.ok) return { ok: false, error: `The updater answered ${r.status}.` };
       const body = (await r.json()) as UpdaterStatus;
       if (!body.services?.atelier) return { ok: false, error: 'The updater found no `atelier` service in its compose project.' };
-      return { ok: true, status: { services: body.services, job: ServerUpdateJob.parse(body.job) } };
+      return { ok: true, status: { services: body.services, job: ServerUpdateJob.parse(body.job), features: Array.isArray(body.features) ? body.features.filter((f): f is string => typeof f === 'string') : [] } };
     } catch (e) {
       return { ok: false, error: `The updater can’t be reached at ${this.options.updater.url}: ${e instanceof Error ? e.message : String(e)}` };
     }

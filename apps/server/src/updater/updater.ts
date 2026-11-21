@@ -7,6 +7,9 @@ import { createServer } from 'node:http';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, relative } from 'node:path';
 
+/** What this updater can do beyond the first version's pull-and-restart in one go; `GET /status` lists it. */
+export const FEATURES = ['pull'] as const;
+
 /** The only services it ever touches. */
 export const SERVICES = ['atelier', 'sandbox'] as const;
 
@@ -17,6 +20,8 @@ export interface Job {
   finishedAt: number | null;
   /** While pulling: how much of the new images has come down, once the first layer's size is known. */
   progress: Progress | null;
+  /** When the new images finished coming down and wait for the install (a pull without a restart); null otherwise. */
+  pulledAt: number | null;
 }
 
 /** Bytes downloaded of the bytes to download, and the share as a whole percent that never goes back. */
@@ -156,7 +161,7 @@ export function manifestSizes(answer: unknown, platform: string): Map<string, nu
 }
 
 export function createUpdater({ docker, self, secret, projectMount = '/project', link = linkProject, now = Date.now }: UpdaterOptions) {
-  let job: Job = { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null };
+  let job: Job = { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null, pulledAt: null };
   let running: Promise<void> = Promise.resolve();
 
   const inspect = async <T>(...args: string[]): Promise<T[]> => JSON.parse(await docker(['inspect', ...args])) as T[];
@@ -186,7 +191,8 @@ export function createUpdater({ docker, self, secret, projectMount = '/project',
     return found;
   };
 
-  const run = async () => {
+  /** `pull`: download the new images; `restart`: recreate the server and the sandbox from the images on this host. */
+  const run = async ({ pull, restart }: { pull: boolean; restart: boolean }) => {
     try {
       const { name, dir, files } = await project();
       const present = await services(name);
@@ -197,18 +203,27 @@ export function createUpdater({ docker, self, secret, projectMount = '/project',
       const outside = files.find((f) => relative(dir, f).startsWith('..') || !isAbsolute(f));
       if (outside) throw new Error(`The compose file ${outside} is outside the project folder the updater can see.`);
       const compose = ['compose', '--project-name', name, '--project-directory', dir, ...files.flatMap((f) => ['--file', f])];
-      // The pull as JSON, a line an event, added up into the share downloaded so far against the layers' sizes.
-      const pulled = pullProgress(await layerSizes(compose, names));
-      await docker([...compose, '--progress', 'json', 'pull', ...names], (line) => {
-        if (!line.trim()) return;
-        pulled.line(line);
-        job = { ...job, progress: pulled.get() };
-      });
-      job = { ...job, state: 'restarting', message: null, progress: pulled.get(true) };
+      let progress: Progress | null = null;
+      if (pull) {
+        // The pull as JSON, a line an event, added up into the share downloaded so far against the layers' sizes.
+        const pulled = pullProgress(await layerSizes(compose, names));
+        await docker([...compose, '--progress', 'json', 'pull', ...names], (line) => {
+          if (!line.trim()) return;
+          pulled.line(line);
+          job = { ...job, progress: pulled.get() };
+        });
+        progress = pulled.get(true);
+      }
+      if (!restart) {
+        // Downloaded and waiting: the install is another request, and takes seconds because nothing is left to fetch.
+        job = { state: 'idle', message: null, startedAt: job.startedAt, finishedAt: now(), progress, pulledAt: now() };
+        return;
+      }
+      job = { ...job, state: 'restarting', message: null, progress, pulledAt: null };
       await docker([...compose, 'up', '--detach', '--no-deps', ...names], (line) => line.trim() && (job = { ...job, message: line.trim() }));
       job = { ...job, state: 'done', message: null, finishedAt: now() };
     } catch (e) {
-      job = { ...job, state: 'failed', message: e instanceof Error ? e.message : String(e), finishedAt: now() };
+      job = { ...job, state: 'failed', message: e instanceof Error ? e.message : String(e), finishedAt: now(), pulledAt: null };
     }
   };
 
@@ -247,21 +262,26 @@ export function createUpdater({ docker, self, secret, projectMount = '/project',
     job: () => job,
     /** Resolves when the current update has finished (tests). */
     settled: () => running,
-    async handle(method: string, path: string, authorization: string | undefined): Promise<Answer> {
+    /** `target` is the request's path, with its query. */
+    async handle(method: string, target: string, authorization: string | undefined): Promise<Answer> {
       if (!(await authorized(authorization))) return { status: 401, body: { error: 'Unauthorized.' } };
+      const { pathname: path, searchParams } = new URL(target, 'http://updater');
       if (method === 'GET' && path === '/status') {
         try {
           const { name } = await project();
-          return { status: 200, body: { project: name, services: await services(name), job } };
+          return { status: 200, body: { project: name, services: await services(name), job, features: FEATURES } };
         } catch (e) {
           return { status: 500, body: { error: e instanceof Error ? e.message : String(e) } };
         }
       }
-      if (method === 'POST' && path === '/update') {
+      if (method === 'POST' && (path === '/update' || path === '/pull')) {
         if (job.state === 'pulling' || job.state === 'restarting') return { status: 409, body: { error: 'An update is already running.', job } };
-        job = { state: 'pulling', message: null, startedAt: now(), finishedAt: null, progress: null };
+        // `/pull` only downloads. `/update` downloads and installs, or with `?pull=false` installs what a `/pull` fetched.
+        const pull = path === '/pull' || searchParams.get('pull') !== 'false';
+        const restart = path === '/update';
+        job = { state: pull ? 'pulling' : 'restarting', message: null, startedAt: now(), finishedAt: null, progress: null, pulledAt: pull ? null : job.pulledAt };
         // Answered before the work is done: recreating the server ends the connection that asked.
-        running = run();
+        running = run({ pull, restart });
         return { status: 202, body: { job } };
       }
       return { status: 404, body: { error: 'Not found.' } };
@@ -331,8 +351,7 @@ export function main(env: Record<string, string | undefined> = process.env): voi
   const port = Number(env.ATELIER_UPDATER_PORT ?? 7341);
   createServer((req, res) => {
     req.resume();
-    const path = new URL(req.url ?? '/', 'http://updater').pathname;
-    void updater.handle(req.method ?? 'GET', path, req.headers.authorization).then(({ status, body }) => {
+    void updater.handle(req.method ?? 'GET', req.url ?? '/', req.headers.authorization).then(({ status, body }) => {
       res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
     });
   }).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ level: 'info', message: 'updater listening', port })));

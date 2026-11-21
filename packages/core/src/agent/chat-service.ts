@@ -55,7 +55,7 @@ import {
   type Usage,
   type UserPrefs,
 } from '@atelier/protocol';
-import { imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLentToolName, REACTIONS, type ClientKind, type CoopSettings, type ImageProgress } from '@atelier/protocol';
+import { appError, imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLentToolName, REACTIONS, UPDATING_ERROR_CODE, type ClientKind, type CoopSettings, type ImageProgress } from '@atelier/protocol';
 import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
@@ -555,6 +555,7 @@ export class ChatService {
   private discarding = new Set<string>();
   /** The backend is shutting down: no turn starts on its own any more. */
   private closing = false;
+  private updating = false;
 
   private readonly webFetch: Tool;
   private readonly webSearch: Tool;
@@ -706,6 +707,22 @@ export class ChatService {
 
   isRunning(sessionId: string): boolean {
     return this.runs.has(sessionId);
+  }
+
+  /**
+   * What a restart of the server would cut off right now: turns being written (a sub-agent's among them), summaries
+   * being made, and commands and sub-agents running in the background. The automatic update waits until it is nothing.
+   */
+  activity(): { turns: number; background: number } {
+    return { turns: this.runs.size + this.compacting.size, background: this.tasks.runningWork() };
+  }
+
+  /**
+   * While the server installs an update no turn starts: the person gets the `updating` error, which the apps show as a
+   * note and not as a failure, and nothing they typed is stored. The server restarts a few seconds later.
+   */
+  setUpdating(on: boolean): void {
+    this.updating = on;
   }
 
   /** Waits for a session's current run (sub-agents, tests and shutdown). */
@@ -1294,6 +1311,7 @@ export class ChatService {
    * `before` has, with its error.
    */
   private start(sessionId: string, submitted = false, opts: { before?(): Promise<void>; wake?: boolean } = {}): Promise<void> {
+    if (this.updating) return Promise.reject(appError(UPDATING_ERROR_CODE, UPDATING_MESSAGE));
     if (this.runs.has(sessionId)) return Promise.reject(new Error('A response is still being generated'));
     const controller = new AbortController();
     const startedAt = Date.now();
@@ -3679,6 +3697,8 @@ export interface ExtensionCatalog {
 }
 /** How much of a running tool's live output a reconnecting client gets. */
 const OUTPUT_TAIL_CHARS = 30_000;
+/** What a person is told when they start a turn while the server installs an update: it takes a few seconds. */
+export const UPDATING_MESSAGE = 'Atelier is installing an update right now. It takes a few seconds: send your message again in a moment.';
 
 /**
  * Every tool call needs a result right after it, or providers reject the whole history (Anthropic 400s on

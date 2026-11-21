@@ -2179,6 +2179,39 @@ describe('one run at a time', () => {
   }, 30_000);
 });
 
+describe('an update being installed', () => {
+  it('counts what a restart would cut off, and turns a turn that starts meanwhile away with the `updating` error', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const adapter: ProviderAdapter = {
+      ...echoAdapter([]),
+      async *stream(req): AsyncIterable<StreamEvent> {
+        if (req.system.some((b) => b.text.includes('short title'))) return yield { type: 'finish', reason: 'end' };
+        await gate;
+        yield* [{ type: 'text', delta: 'Done.' }, { type: 'finish', reason: 'end' }] as StreamEvent[];
+      },
+    };
+    const chat = service({ resolve: async () => ({ adapter, info }) });
+    const s = await repo.create({ mode: 'code' });
+    expect(chat.activity()).toEqual({ turns: 0, background: 0 });
+    await chat.send(s.id, [{ type: 'text', text: 'hello' }]);
+    expect(chat.activity()).toEqual({ turns: 1, background: 0 });
+    release();
+    await vi.waitFor(() => expect(chat.activity().turns).toBe(0));
+
+    chat.setUpdating(true);
+    const refused = await chat.send(s.id, [{ type: 'text', text: 'again' }]).then(() => null, (e: unknown) => e);
+    expect(refused).toMatchObject({ code: -32000, data: { code: 'updating' } });
+    expect((refused as Error).message).toMatch(/installing an update/);
+    // Nothing of the refused message was stored.
+    expect((await repo.branch(s.id)).messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    chat.setUpdating(false);
+    await chat.send(s.id, [{ type: 'text', text: 'again' }]);
+    await vi.waitFor(() => expect(chat.activity().turns).toBe(0));
+    expect((await repo.branch(s.id)).messages).toHaveLength(4);
+  });
+});
+
 describe('answerDanglingToolCalls', () => {
   const msg = (id: string, role: Message['role'], parts: Message['parts'], stopReason: Message['stopReason'] = null): Message => ({
     id,

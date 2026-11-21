@@ -43,6 +43,13 @@ export class BackgroundTasks {
     return [...(this.sessions.get(sessionId)?.values() ?? [])].map((e) => e.task);
   }
 
+  /** Commands and sub-agents still running in any session, which a restart of the server would cut off (loops end with a restart by design). */
+  runningWork(): number {
+    let n = 0;
+    for (const entries of this.sessions.values()) for (const e of entries.values()) if (e.task.status === 'running' && e.task.kind !== 'loop') n++;
+    return n;
+  }
+
   /** How many of a session's tasks are still running. */
   running(sessionId: string): number {
     return this.list(sessionId).filter((t) => t.status === 'running').length;

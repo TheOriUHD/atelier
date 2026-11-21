@@ -33,6 +33,18 @@ function setup() {
 }
 
 describe('BackgroundTasks', () => {
+  it('counts the commands and sub-agents a restart would cut off, in every session, and not the loops', () => {
+    const { ws, execs, tasks } = setup();
+    expect(tasks.runningWork()).toBe(0);
+    execs.set('e1', { output: '', running: true, exitCode: null });
+    tasks.addCommand('s1', ws, { execId: 'e1', command: 'npm run dev' });
+    tasks.addAgent('s2', { childSessionId: 'c1', description: 'Review the diff' });
+    tasks.addLoop('s3', { id: 'l1', prompt: 'check the build', schedule: { intervalMs: 60_000, nextAt: 0, runs: 0, maxRuns: 10 } as never, stop: async () => {} });
+    expect(tasks.runningWork()).toBe(2);
+    tasks.endAgent('s2', [...tasks.list('s2')][0]!.id, 'done');
+    expect(tasks.runningWork()).toBe(1);
+  });
+
   it('lists background commands, counts the running ones and notices when they end', async () => {
     const { ws, execs, tasks, changes, tick } = setup();
     execs.set('e1', { output: 'serving on :3000\n', running: true, exitCode: null });

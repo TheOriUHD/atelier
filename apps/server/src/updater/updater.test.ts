@@ -82,7 +82,8 @@ describe('the updater service', () => {
     expect(body).toEqual({
       project: 'atelier',
       services: { atelier: { image: 'ghcr.io/theoriuhd/atelier:latest', source: false }, sandbox: { image: 'ghcr.io/theoriuhd/atelier-sandbox:latest', source: false } },
-      job: { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null },
+      job: { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null, pulledAt: null },
+      features: ['pull'],
     });
   });
 
@@ -98,7 +99,37 @@ describe('the updater service', () => {
       [...compose, 'up', '--detach', '--no-deps', 'atelier', 'sandbox'],
     ]);
     expect(link).toHaveBeenCalledWith('/home/ada/atelier', '/project');
-    expect(updater.job()).toEqual({ state: 'done', message: null, startedAt: 1000, finishedAt: 1000, progress: { done: 200, total: 200, percent: 100, unpacking: false } });
+    expect(updater.job()).toEqual({ state: 'done', message: null, startedAt: 1000, finishedAt: 1000, progress: { done: 200, total: 200, percent: 100, unpacking: false }, pulledAt: null });
+  });
+
+  it('can download ahead, and then install without fetching again', async () => {
+    const { updater, calls } = setup();
+    const compose = ['compose', '--project-name', 'atelier', '--project-directory', '/home/ada/atelier', '--file', '/home/ada/atelier/compose.yaml'];
+    expect((await updater.handle('POST', '/pull', AUTH)).status).toBe(202);
+    await updater.settled();
+    // Down and waiting: nothing was recreated, and the job says when it finished, in a state the old apps call idle.
+    expect(calls.some((c) => c.includes('up'))).toBe(false);
+    expect(updater.job()).toMatchObject({ state: 'idle', pulledAt: 1000, progress: { percent: 100 } });
+    calls.length = 0;
+    expect((await updater.handle('POST', '/update?pull=false', AUTH)).status).toBe(202);
+    expect(updater.job().state).toBe('restarting');
+    await updater.settled();
+    expect(calls.filter((c) => c[0] === 'compose')).toEqual([[...compose, 'up', '--detach', '--no-deps', 'atelier', 'sandbox']]);
+    expect(updater.job()).toMatchObject({ state: 'done', pulledAt: null });
+  });
+
+  it('does not start a pull while another job runs', async () => {
+    const { updater } = setup();
+    await updater.handle('POST', '/update', AUTH);
+    expect((await updater.handle('POST', '/pull', AUTH)).status).toBe(409);
+    await updater.settled();
+  });
+
+  it('keeps a failed pull from counting as downloaded', async () => {
+    const { updater } = setup({ failPull: true });
+    await updater.handle('POST', '/pull', AUTH);
+    await updater.settled();
+    expect(updater.job()).toMatchObject({ state: 'failed', message: 'manifest unknown', pulledAt: null });
   });
 
   it('runs one update at a time', async () => {

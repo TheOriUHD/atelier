@@ -3,7 +3,7 @@ import type { BrowserCall } from '../tools/browser.ts';
  * The whole app backend, shared by the Electron utility process and the web server. `platform`
  * injects the only surface-specific pieces; everything else is identical on desktop and web.
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, hostname, userInfo } from 'node:os';
 import { z } from 'zod';
 import { basename, dirname, join, posix, win32 } from 'node:path';
@@ -163,6 +163,7 @@ import { BlobAccess } from '../store/blob-access.ts';
 import { BlobStore } from '../store/blobs.ts';
 import { MemoryEditingOffError, MemoryInvalidError, MemoryNotFoundError, MemoryService, ModelChoiceError } from '../memory/memory-service.ts';
 import { openDatabase } from '../store/db.ts';
+import { AutoUpdate } from '../server-updates/auto-update.ts';
 import { ServerUpdateError, serverUpdatesFromEnv, type ServerUpdates } from '../server-updates/server-updates.ts';
 import { coopRooms, usageEvents, users } from '../store/schema.ts';
 import { isNull } from 'drizzle-orm';
@@ -1920,6 +1921,46 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       throw e;
     }
   };
+  const announceUpdating = (event: { installing: boolean; version: string | null }) => {
+    for (const c of connections) if (c.auth) c.rpc.emit('server.updating', event);
+  };
+  // Settings › Admin › Server › Update automatically: downloads a new version as soon as it is out, installs it when no turn runs.
+  const autoUpdate = serverUpdates
+    ? new AutoUpdate({
+        source: serverUpdates,
+        enabled: () => settings.effective.server.autoUpdate,
+        activity: () => chat.activity(),
+        hold: (on) => chat.setUpdating(on),
+        announce: announceUpdating,
+        log: (message) => platform.logger.info(message),
+        memory: {
+          load: async () => {
+            try {
+              const saved = JSON.parse(await readFile(join(platform.dataDir, 'auto-update.json'), 'utf8')) as { target?: unknown; at?: unknown };
+              return typeof saved.target === 'string' && typeof saved.at === 'number' ? { target: saved.target, at: saved.at } : null;
+            } catch {
+              return null;
+            }
+          },
+          save: async (value) => {
+            const file = join(platform.dataDir, 'auto-update.json');
+            if (value) await writeFile(file, JSON.stringify(value));
+            else await rm(file, { force: true });
+          },
+        },
+        ...(platform.env.ATELIER_AUTO_UPDATE_CHECK_SECONDS ? { intervalMs: Math.max(30, Number(platform.env.ATELIER_AUTO_UPDATE_CHECK_SECONDS) || 60) * 1000 } : {}),
+        // The pace of the wait for a quiet server, which tests shorten.
+        ...(platform.env.ATELIER_AUTO_UPDATE_WATCH_MS ? { watchMs: Math.max(20, Number(platform.env.ATELIER_AUTO_UPDATE_WATCH_MS) || 3000), quietMs: Math.max(0, Number(platform.env.ATELIER_AUTO_UPDATE_QUIET_MS) || 0) } : {}),
+      })
+    : null;
+  let autoUpdateWas = settings.effective.server.autoUpdate;
+  settings.on('change', () => {
+    const now = settings.effective.server.autoUpdate;
+    if (now === autoUpdateWas) return;
+    autoUpdateWas = now;
+    autoUpdate?.poke();
+  });
+  autoUpdate?.start();
 
   // ---------------------------------------------------------------- co-op parallel tracks (ARCHITECTURE §24)
   const trackErrors = async <T>(action: () => Promise<T>): Promise<T> => {
@@ -3160,11 +3201,23 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return { context: await chat.contextUsage(sessionId), usage: sessionUsage(db, sessionId) };
     },
 
-    'server.updates': ({ refresh }) => serverUpdates?.status(refresh) ?? null,
+    'server.updates': async ({ refresh }) => {
+      const status = await serverUpdates?.status(refresh);
+      return status ? { ...status, auto: autoUpdate?.snapshot() ?? null } : null;
+    },
     'server.update': () =>
-      serverUpdateErrors(() => {
+      serverUpdateErrors(async () => {
         if (!serverUpdates) throw appError('not_supported', 'This app updates itself: see Settings › System.');
-        return serverUpdates.update();
+        // The server restarts in a moment: from here until then no turn starts, and the apps say why.
+        chat.setUpdating(true);
+        announceUpdating({ installing: true, version: null });
+        try {
+          return await serverUpdates.update();
+        } catch (e) {
+          chat.setUpdating(false);
+          announceUpdating({ installing: false, version: null });
+          throw e;
+        }
       }),
     'instructions.get': async () => ({ content: (await fs.read(join(platform.configDir, 'AGENTS.md'))) ?? '' }),
     'instructions.set': async ({ content }) => {
@@ -3794,6 +3847,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       return links.attach(auth.user.id, device.id, socket);
     },
     async dispose(options) {
+      autoUpdate?.stop();
       await stopSharing();
       clearInterval(cleanupTimer);
       await audit.idle();

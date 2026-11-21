@@ -13,7 +13,7 @@ beforeEach(async () => (dir = await mkdtemp(join(tmpdir(), 'atelier-server-updat
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
 /** The public feed and an updater service, recording what each was asked. */
-function fakeNetwork({ feedVersion = '0.1.9', feedUp = true, updater = 'registry' as 'registry' | 'source' | 'down' | 'busy' } = {}) {
+function fakeNetwork({ feedVersion = '0.1.9', feedUp = true, updater = 'registry' as 'registry' | 'source' | 'down' | 'busy' | 'old' } = {}) {
   const requests: { url: string; method: string; auth: string | null }[] = [];
   const state = { feedVersion, feedUp, updater };
   const fetch: typeof globalThis.fetch = async (input, init) => {
@@ -28,9 +28,11 @@ function fakeNetwork({ feedVersion = '0.1.9', feedUp = true, updater = 'registry
       if (state.updater === 'down') throw new TypeError('fetch failed');
       if (url.endsWith('/status')) {
         const image = state.updater === 'source' ? 'atelier:local' : 'ghcr.io/theoriuhd/atelier:latest';
-        return Response.json({ project: 'atelier', services: { atelier: { image, source: state.updater === 'source' } }, job: IDLE });
+        return Response.json({ project: 'atelier', services: { atelier: { image, source: state.updater === 'source' } }, job: IDLE, ...(state.updater === 'old' ? {} : { features: ['pull'] }) });
       }
-      if (url.endsWith('/update')) {
+      // An updater from before 0.10.6 doesn't know the download-ahead step.
+      if (url.endsWith('/pull')) return state.updater === 'old' ? new Response('not found', { status: 404 }) : state.updater === 'busy' ? Response.json({ error: 'An update is already running.' }, { status: 409 }) : Response.json({ job: { ...IDLE, state: 'pulling' } }, { status: 202 });
+      if (url.endsWith('/update') || url.endsWith('/update?pull=false')) {
         if (state.updater === 'busy') return Response.json({ error: 'An update is already running.' }, { status: 409 });
         return Response.json({ job: { ...IDLE, state: 'pulling' } }, { status: 202 });
       }
@@ -154,5 +156,44 @@ describe('how the server can be updated', () => {
     expect(status).toMatchObject({ install: 'manual', job: null });
     expect(status.updaterError).toMatch(/can’t be reached at http:\/\/updater:7341/);
     await expect(updates.update()).rejects.toMatchObject({ code: 'updater_failed' });
+  });
+});
+
+describe('downloading ahead and installing', () => {
+  it('tells whether the updater downloads ahead, and what its job is', async () => {
+    const { updates } = make(withUpdater());
+    expect(await updates.updaterState()).toMatchObject({ ok: true, downloadsAhead: true, source: false, job: { state: 'idle', pulledAt: null } });
+    const old = make(withUpdater(), fakeNetwork({ updater: 'old' }));
+    expect(await old.updates.updaterState()).toMatchObject({ ok: true, downloadsAhead: false });
+    const down = make(withUpdater(), fakeNetwork({ updater: 'down' }));
+    expect(await down.updates.updaterState()).toMatchObject({ ok: false, error: expect.stringContaining('can’t be reached') });
+  });
+
+  it('asks the updater to download, and knows when it can’t or already does', async () => {
+    const { updates, network } = make(withUpdater());
+    expect(await updates.pull()).toBe('started');
+    expect(network.requests.at(-1)).toMatchObject({ method: 'POST', url: `${UPDATER}/pull` });
+    expect(await make(withUpdater(), fakeNetwork({ updater: 'old' })).updates.pull()).toBe('unsupported');
+    expect(await make(withUpdater(), fakeNetwork({ updater: 'busy' })).updates.pull()).toBe('running');
+  });
+
+  it('installs what was downloaded without fetching it again, or downloads and installs in one go', async () => {
+    const { updates, network } = make(withUpdater());
+    await updates.install(true);
+    expect(network.requests.at(-1)).toMatchObject({ method: 'POST', url: `${UPDATER}/update?pull=false` });
+    await updates.install(false);
+    expect(network.requests.at(-1)).toMatchObject({ method: 'POST', url: `${UPDATER}/update` });
+    // An update that is already running is what was asked for.
+    await expect(make(withUpdater(), fakeNetwork({ updater: 'busy' })).updates.install(false)).resolves.toBeUndefined();
+  });
+
+  it('looks for the newest version again whatever its cache says', async () => {
+    const { updates, network } = make(withUpdater());
+    expect(await updates.refreshLatest()).toBe('0.1.9');
+    network.state.feedVersion = '0.2.0';
+    expect(await updates.refreshLatest()).toBe('0.2.0');
+    network.state.feedUp = false;
+    // Offline: the last version found stays.
+    expect(await updates.refreshLatest()).toBe('0.2.0');
   });
 });

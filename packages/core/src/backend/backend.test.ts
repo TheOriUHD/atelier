@@ -1834,6 +1834,62 @@ describe('server updates', () => {
     }
   });
 
+  it('download a new version by themselves, install it when nothing runs, and turn away a turn that starts meanwhile', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-auto-update-'));
+    const asked: string[] = [];
+    let job: Record<string, unknown> = { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null, pulledAt: null };
+    const serverUpdates = new ServerUpdates({
+      version: '0.1.8',
+      feed: 'https://feed.test',
+      updater: { url: 'http://updater:7341', secretFile: join(home, 'updater-secret') },
+      image: 'ghcr.io/theoriuhd/atelier',
+      fetch: async (input, init) => {
+        const url = String(input);
+        asked.push(`${init?.method ?? 'GET'} ${url}`);
+        if (url.endsWith('latest.yml')) return new Response('version: 0.1.9\n');
+        if (url.endsWith('/status')) return Response.json({ services: { atelier: { image: 'ghcr.io/theoriuhd/atelier:latest', source: false } }, job, features: ['pull'] });
+        if (url.endsWith('/pull')) {
+          job = { ...job, state: 'pulling', startedAt: 1, pulledAt: null };
+          setTimeout(() => (job = { ...job, state: 'idle', pulledAt: 2 }), 80);
+        }
+        if (url.endsWith('/update?pull=false')) job = { ...job, state: 'restarting' };
+        return Response.json({}, { status: 202 });
+      },
+    });
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: { ATELIER_AUTO_UPDATE_WATCH_MS: '40', ATELIER_AUTO_UPDATE_QUIET_MS: '0' },
+      logger: { info: () => {}, error: () => {} },
+      serverUpdates,
+    });
+    try {
+      const [clientSide, serverSide] = createMemoryTransportPair();
+      server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+      const ada = createRpcClient(contract, clientSide);
+      await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      const announced: { installing: boolean; version: string | null }[] = [];
+      ada.on('server.updating', (event) => announced.push(event));
+      const session = await ada.call('sessions.create', { mode: 'chat' });
+      // Off by default: nothing is downloaded however long it waits.
+      expect(await ada.call('server.updates', {})).toMatchObject({ auto: { enabled: false, state: 'idle' } });
+      await ada.call('settings.set', { layer: 'global', path: ['server', 'autoUpdate'], value: true });
+      await vi.waitFor(() => expect(asked).toContain('POST http://updater:7341/update?pull=false'), { timeout: 5000 });
+      expect(asked.indexOf('POST http://updater:7341/pull')).toBeGreaterThan(-1);
+      expect(asked.indexOf('POST http://updater:7341/pull')).toBeLessThan(asked.indexOf('POST http://updater:7341/update?pull=false'));
+      expect(announced).toEqual([{ installing: true, version: '0.1.9' }]);
+      // A turn that starts while the server restarts is turned away calmly, and nothing of it is stored.
+      expect(await code(ada.call('chat.send', { sessionId: session.id, parts: [{ type: 'text', text: 'hello' }] }))).toBe('updating');
+      expect((await ada.call('sessions.subscribe', { id: session.id })).messages).toHaveLength(0);
+      expect(await ada.call('server.updates', {})).toMatchObject({ auto: { enabled: true, state: 'installing', version: '0.1.9' } });
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   it('turn a source-built server’s update into a clear refusal', async () => {
     const home = await mkdtemp(join(tmpdir(), 'atelier-server-updates-'));
     const server = await createBackend({
