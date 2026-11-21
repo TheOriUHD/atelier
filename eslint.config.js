@@ -17,7 +17,7 @@ export default tseslint.config(
     },
   },
   // The website's scripts run in the visitor's browser, as plain scripts.
-  { files: ['apps/site/public/**/*.js'], languageOptions: { globals: { ...globals.browser }, sourceType: 'script' } },
+  { files: ['apps/site/public/**/*.js', 'apps/media/public/**/*.js'], languageOptions: { globals: { ...globals.browser }, sourceType: 'script' } },
   {
     files: ['packages/ui/**/*.{ts,tsx}', 'apps/admin/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },

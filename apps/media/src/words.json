@@ -1,0 +1,57 @@
+{
+  "blocks": [
+    {
+      "id": "tagline",
+      "title": "Tagline",
+      "text": "The AI workspace you already know how to use."
+    },
+    {
+      "id": "one-line",
+      "title": "One line",
+      "text": "Atelier is a self-hosted AI workspace with Chat and Code, on the model you choose."
+    },
+    {
+      "id": "short",
+      "title": "Short (about 30 words)",
+      "text": "Atelier is an AI workspace you run yourself. Chat and Code on any model, local or hosted, on your own machine or server, with your data staying with you and no telemetry."
+    },
+    {
+      "id": "medium",
+      "title": "Medium (about 75 words)",
+      "text": "Atelier is a self-hosted AI workspace with two rooms: Chat, for conversations, projects, attachments and web search that cites its sources, and Code, for agentic sessions in your repositories, where you review the diff and decide what is committed. It works with local models (Ollama, llama.cpp, LM Studio) and hosted ones, comes as a desktop app for macOS, Windows and Linux and as a Docker server for a team, and sends no telemetry. It is source-available and free for noncommercial use."
+    }
+  ],
+  "facts": [
+    ["Name", "Atelier (a capital A, one word)"],
+    ["What it is", "A self-hosted AI workspace: Chat and Code on any model, local or hosted"],
+    ["Runs on", "macOS, Windows and Linux (desktop app), and Docker (server)"],
+    ["License", "Source-available under PolyForm Noncommercial 1.0.0; free for noncommercial use"],
+    ["Status", "Beta"],
+    ["Made by", "TheOriUHD, an independent project"],
+    ["Website", "https://atelierhq.dev"],
+    ["Documentation", "https://docs.atelierhq.dev"],
+    ["Source", "https://github.com/TheOriUHD/atelier"]
+  ],
+  "contact": "contact@atelierhq.dev",
+  "usage": [
+    "You may use these files to write about, link to, review or show Atelier: articles, videos, talks, directories and social posts.",
+    "Don't use them in a way that suggests Atelier endorses, sponsors or is part of another product, and don't change the logo (its colours, proportions or type) or make something that looks like it.",
+    "Atelier is an independent project and is not affiliated with or endorsed by any model provider; please don't imply otherwise.",
+    "The screenshots show the real interface running against a scripted demo model.",
+    "The fonts are open source under the SIL Open Font License (OFL.txt in the fonts folder)."
+  ],
+  "do": [
+    "Use the files as they are, and the color logo on light or dark backgrounds that are plain.",
+    "Keep clear space around the logo of half the tile's height, on every side.",
+    "Use the black or white version on photographs, busy backgrounds and clay.",
+    "Keep the logo at least 24 px high (the tile alone, 16 px).",
+    "Write the name as Atelier, with a capital A, in one word."
+  ],
+  "dont": [
+    "Recolour, stretch, rotate, outline or add shadows or effects to the logo.",
+    "Redraw the palette or set the word in another typeface.",
+    "Put the color logo on clay or on busy images: use the white one.",
+    "Combine the logo with another mark, or build a new one from the palette.",
+    "Suggest that Atelier endorses or is part of your product."
+  ]
+}

@@ -1,0 +1,10 @@
+# Made by scripts/build.mjs
+public/kit/
+public/previews/
+public/downloads/
+public/_work/
+public/fonts/
+public/index.html
+public/sitemap.xml
+public/styles.css
+public/theme.js

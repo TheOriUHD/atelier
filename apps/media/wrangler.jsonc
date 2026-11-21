@@ -1,0 +1,15 @@
+{
+  // The media kit: static files only, on media.atelierhq.dev. The files are made by `node apps/media/scripts/build.mjs`.
+  // Deploy with `npx wrangler@4 deploy -c apps/media/wrangler.jsonc`; the custom domain creates its DNS record itself.
+  "name": "atelier-media",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  // Reachable only through the custom domain.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "media.atelierhq.dev", "custom_domain": true }],
+}
