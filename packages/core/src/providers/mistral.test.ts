@@ -460,6 +460,12 @@ describe('Mistral errors', () => {
     expect(finishOf(await collect(adapter.stream(chatRequest()))).error!.code).toBe('context_overflow');
   });
 
+  it('carries how long Mistral asked to wait on a rate limit', async () => {
+    const adapter = setup('mistral', () => new Response(JSON.stringify({ object: 'error', message: 'Rate limit exceeded', type: 'rate_limited', code: '1300' }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '3' } })).adapter;
+    const error = finishOf(await collect(adapter.stream(chatRequest()))).error!;
+    expect(error).toMatchObject({ code: 'provider_busy', retryable: true, retryAfterMs: 3000 });
+  });
+
   it('tells a wrong key, and a Vibe plan past its allowance', async () => {
     expect(finishOf(await collect(failing(401, { detail: 'Invalid API Key' }).stream(chatRequest()))).error!.code).toBe('provider_auth');
     const error = finishOf(await collect(failing(402, { object: 'error', message: 'Payment required', type: 'payment_required' }, 'mistral-vibe').stream(chatRequest()))).error!;

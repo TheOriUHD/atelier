@@ -77,6 +77,32 @@ const PERSIST_INTERVAL_MS = 750;
 /** Further attempts at a request whose reply the server couldn't parse (`model_output_invalid`). */
 const MALFORMED_RETRIES = 2;
 export const NETWORK_RETRY_DELAYS_MS = [5, 10, 15, 30, 60, 120, 240, 480, 960, 1920].map((seconds) => seconds * 1000);
+/**
+ * The waits after a provider that was busy (a rate limit, an overload) or cut a reply off: quick at first, as Mistral's
+ * own Vibe retries (half a second, one and a half times longer each time), then the long waits of an outage. A rate
+ * limit of a request a second is over by the second try; waiting five seconds first made it look like a failure.
+ */
+export const BUSY_RETRY_DELAYS_MS = [0.5, 0.75, 1.1, 1.7, 2.5, 3.8, 5.7, 8.5, 13, 19, 30, 60, 120, 240, 480, 960, 1920].map((seconds) => seconds * 1000);
+const BUSY_CODES = new Set(['provider_busy', 'stream_truncated', 'provider_timeout']);
+/** A provider that asks to wait longer than this (a limit for the day, say) is not waited for: the error says so. */
+const RETRY_AFTER_GIVE_UP_MS = 10 * 60_000;
+/** Further attempts at a reply that came back empty: no text and no tool call (Vibe tries twice as well). */
+const EMPTY_REPLY_RETRIES = 2;
+const EMPTY_REPLY_WAIT_MS = 750;
+export const EMPTY_REPLY_MESSAGE = 'The model finished without writing a reply, also when asked again. Send a message to continue, or try another model or a lower reasoning effort.';
+
+/**
+ * How long to wait before retry number `n` (counting from 1) of a request that failed with `error`, or null when it
+ * is not tried again: the schedule is spent, or the provider asked for more than ten minutes. The provider's own
+ * `Retry-After` wins over the schedule; a little random time on top keeps parallel requests from coming back together.
+ */
+export function retryWaitMs(error: MessageError, n: number, jitter = Math.random()): number | null {
+  const busy = BUSY_CODES.has(error.code);
+  const base = (busy ? BUSY_RETRY_DELAYS_MS : NETWORK_RETRY_DELAYS_MS)[n - 1];
+  if (base === undefined) return null;
+  if (error.retryAfterMs !== undefined) return error.retryAfterMs > RETRY_AFTER_GIVE_UP_MS ? null : Math.round(error.retryAfterMs + (busy ? jitter * 500 : 0));
+  return busy ? Math.round(base * (1 + jitter * 0.5)) : base;
+}
 /** Silence from the model server after which the status line says so (and how often that is checked). */
 const QUIET_AFTER_MS = 60_000;
 const QUIET_CHECK_MS = 5_000;
@@ -282,6 +308,7 @@ async function streamAssistantMessage(
   };
 
   let networkRetries = 0;
+  let emptyRetries = 0;
   for (let attempt = 0; ; attempt++) {
     let finished = false;
     // A model server that goes quiet in the middle of an answer (a hung runner, a stalled GPU) raises no error until the
@@ -376,8 +403,18 @@ async function streamAssistantMessage(
       stopReason = 'error';
       error = { code: 'provider_offline', message: 'The model connection ended before the reply was complete.', retryable: true };
     }
-    if (error?.retryable && error.code !== 'model_output_invalid' && !opts.signal.aborted && networkRetries < NETWORK_RETRY_DELAYS_MS.length) {
-      const waitMs = NETWORK_RETRY_DELAYS_MS[networkRetries++]!;
+    // A reply with no text and no tool call (the model stopped by itself, or all it wrote was thinking) is asked for
+    // again, twice, and then said out loud: an empty message in the transcript looks like Atelier froze.
+    if (!error && stopReason === 'end' && !opts.signal.aborted && !parts.some((p) => (p.type === 'text' && p.text.trim() !== '') || p.type === 'tool_call')) {
+      stopReason = 'error';
+      error = emptyRetries < EMPTY_REPLY_RETRIES ? { code: 'empty_reply', message: 'The model sent an empty reply.', retryable: true } : { code: 'empty_reply', message: EMPTY_REPLY_MESSAGE, retryable: false };
+    }
+    const emptyReply = error?.code === 'empty_reply';
+    const retryWait = error?.retryable && error.code !== 'model_output_invalid' && !opts.signal.aborted ? (emptyReply ? EMPTY_REPLY_WAIT_MS : retryWaitMs(error, networkRetries + 1)) : null;
+    if (retryWait !== null) {
+      const waitMs = retryWait;
+      if (emptyReply) emptyRetries++;
+      else networkRetries++;
       // No tool from this response has run yet. Replace only this incomplete response, never earlier tool rounds.
       parts.length = 0;
       toolJson.clear();
@@ -386,7 +423,7 @@ async function streamAssistantMessage(
       await persist(true);
       opts.emit({ type: 'message', message: { ...message, parts: [], usage: null, stopReason: null, error: null } });
       phaseShown = true;
-      opts.emit({ type: 'phase', phase: 'retrying', retryAttempt: networkRetries });
+      opts.emit({ type: 'phase', phase: 'retrying', retryAttempt: emptyReply ? emptyRetries : networkRetries });
       try {
         await new Promise<void>((resolve, reject) => {
           const abort = () => { clearTimeout(timer); reject(opts.signal.reason); };

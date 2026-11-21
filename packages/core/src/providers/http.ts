@@ -109,7 +109,8 @@ export function classifyError(
       retryable: true,
     };
   }
-  const busyStatus = status === 408 || status === 429 || (status !== null && status >= 500);
+  // 409 and 425 are what a busy server answers while it settles (Mistral's own Vibe retries both).
+  const busyStatus = status === 408 || status === 409 || status === 425 || status === 429 || (status !== null && status >= 500);
   const busyKind =
     status === null && /overloaded|rate.?limit|server_error|api_error|timeout|unavailable/i.test(haystack);
   if (busyStatus || busyKind) {
@@ -136,7 +137,25 @@ export async function httpError(res: Response, instance: ProviderIdentity): Prom
   } catch {
     // not JSON
   }
-  return classifyError(instance, res.status, kind, extractErrorMessage(body) || res.statusText);
+  return withRetryAfter(classifyError(instance, res.status, kind, extractErrorMessage(body) || res.statusText), res);
+}
+
+/**
+ * What a `Retry-After` header asks for, in milliseconds: seconds, or the date to wait until. Undefined for a header
+ * that is missing or unreadable.
+ */
+export function retryAfterMs(headers: Pick<Headers, 'get'>, now = Date.now()): number | undefined {
+  const value = headers.get('retry-after')?.trim();
+  if (!value) return undefined;
+  if (/^\d+(?:\.\d+)?$/.test(value)) return Math.round(Number(value) * 1000);
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - now) : undefined;
+}
+
+/** The error with how long the provider asked to wait, when it is one that is tried again. */
+export function withRetryAfter(error: MessageError, res: Pick<Response, 'headers'>): MessageError {
+  const wait = error.retryable ? retryAfterMs(res.headers) : undefined;
+  return wait === undefined ? error : { ...error, retryAfterMs: wait };
 }
 
 export function isAbortError(err: unknown): boolean {

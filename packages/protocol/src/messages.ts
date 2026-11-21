@@ -167,6 +167,8 @@ export const MessageError = z.object({
   /** Settings deep link that fixes the problem, e.g. `settings/providers`. */
   fix: z.string().optional(),
   retryable: z.boolean().optional(),
+  /** How long the provider asked to wait before another try (its `Retry-After`), in milliseconds. */
+  retryAfterMs: z.number().optional(),
 });
 export type MessageError = z.infer<typeof MessageError>;
 

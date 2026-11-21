@@ -5,7 +5,7 @@
  * Only on request, as it spends real tokens:
  *   LIVE_AGENT=1 LIVE_AGENT_TYPE=mistral-vibe LIVE_AGENT_MODEL=zai-glm-5-3-flash LIVE_AGENT_EFFORT=medium \
  *     npx vitest run packages/core/src/providers/live-agent.test.ts --disable-console-intercept
- * LIVE_AGENT_PROMPT replaces the prompt; LIVE_AGENT_FOLLOWUP sends more messages after it, separated by `||`.
+ * LIVE_AGENT_MODE=chat runs a chat instead of Code. LIVE_AGENT_PROMPT replaces the prompt; LIVE_AGENT_FOLLOWUP sends more messages after it, separated by `||`.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -45,11 +45,12 @@ function envFile(): Record<string, string> {
 const type = (process.env.LIVE_AGENT_TYPE ?? 'mistral-vibe') as 'mistral' | 'mistral-vibe';
 const model = process.env.LIVE_AGENT_MODEL ?? 'zai-glm-5-3-flash';
 const effort = (process.env.LIVE_AGENT_EFFORT ?? 'medium') as 'low' | 'medium' | 'high';
+const mode = (process.env.LIVE_AGENT_MODE ?? 'code') as 'code' | 'chat';
 const prompt = process.env.LIVE_AGENT_PROMPT ?? 'create a simple minecraft shader. i want shadows based on sun position and wavy, animated water.';
 const key = envFile()[type === 'mistral' ? 'MISTRAL_API_KEY' : 'MISTRAL_VIBE_API_KEY'];
 const runnerDir = join(import.meta.dirname, '../../../../runner/bin');
 
-it.skipIf(!key || !process.env.LIVE_AGENT)(`a Code turn through ${type} ${model} (${effort})`, { timeout: 15 * 60_000 }, async () => {
+it.skipIf(!key || !process.env.LIVE_AGENT)(`a ${mode} turn through ${type} ${model} (${effort})`, { timeout: 15 * 60_000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'atelier-live-agent-'));
   const logs: string[] = [];
   const asked: string[] = [];
@@ -77,7 +78,7 @@ it.skipIf(!key || !process.env.LIVE_AGENT)(`a Code turn through ${type} ${model}
     const c = createRpcClient(contract, clientSide);
     await c.call('auth.setup', { username: 'tester', name: 'Tester', password: 'correct horse battery', clientKind: 'desktop' });
     await c.call('providers.save', { id: 'mv', type, name: 'Mistral', baseUrl: 'https://api.mistral.ai', apiKey: key!, headers: {}, enabled: true } as never);
-    const session = await c.call('sessions.create', { mode: 'code', scratch: {}, model: `mv/${model}`, effort, permissionMode: 'bypassPermissions' } as never);
+    const session = await c.call('sessions.create', { mode, ...(mode === 'code' ? { scratch: {} } : {}), model: `mv/${model}`, effort, permissionMode: 'bypassPermissions' } as never);
     const events: RunEvent[] = [];
     let done!: () => void;
     const finished = new Promise<void>((r) => (done = r));

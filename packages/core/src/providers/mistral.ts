@@ -16,7 +16,7 @@
  */
 import type { MessageError, Part, StopReason, Usage } from '@atelier/protocol';
 import { clampEffort, DEFAULT_CONTEXT, listedModel, providerEffort, type CatalogEntry } from './catalog.ts';
-import { bearer, classifyError, extractErrorMessage, guardStream, jsonHeaders, probe, requestJson } from './http.ts';
+import { bearer, classifyError, extractErrorMessage, guardStream, jsonHeaders, probe, requestJson, withRetryAfter } from './http.ts';
 import { historyCallId } from './ollama.ts';
 import { ToolCallMerger } from './openai-compatible.ts';
 import { parseSSE } from './sse.ts';
@@ -119,7 +119,7 @@ async function mistralHttpError(res: Response, instance: ProviderInstance): Prom
   const error = classifyError(instance, res.status, kind, mistralErrorMessage(body) || res.statusText);
   // A Vibe key past its plan's allowance (with pay-as-you-go off) waits for the next month; Mistral's console says when.
   if (instance.type === 'mistral-vibe' && error.code === 'provider_quota') return { ...error, message: `${error.message}. The plan's Vibe allowance starts again at the next billing period, or turn on pay-as-you-go in Mistral's console.` };
-  return error;
+  return withRetryAfter(error, res);
 }
 
 type Chunk = Record<string, unknown>;

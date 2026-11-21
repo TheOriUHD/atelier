@@ -7,7 +7,7 @@ import { createArtifactTool } from '../tools/artifact.ts';
 import { describeTool } from '../tools/types.ts';
 import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/types.ts';
 import { withPromptedTools } from '../providers/prompted-tools.ts';
-import { callWrittenAsText, NETWORK_RETRY_DELAYS_MS, runTurn } from './loop.ts';
+import { BUSY_RETRY_DELAYS_MS, callWrittenAsText, EMPTY_REPLY_MESSAGE, NETWORK_RETRY_DELAYS_MS, retryWaitMs, runTurn } from './loop.ts';
 
 const model: ModelInfo = {
   ref: 'fake/m',
@@ -75,6 +75,75 @@ describe('runTurn', () => {
       expect(events.filter((event) => event.type === 'done')).toHaveLength(1);
       expect(NETWORK_RETRY_DELAYS_MS.slice(0, 4)).toEqual([5000, 10000, 15000, 30000]);
     } finally { vi.useRealTimers(); }
+  });
+
+  it('asks again for a reply that came back empty, and succeeds when the second try writes something', async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: ChatRequest[] = [];
+      const adapter = scripted([[{ type: 'thinking', delta: 'Hm' }, { type: 'finish', reason: 'end' }], [{ type: 'text', delta: 'Here it is.' }, { type: 'finish', reason: 'end' }]], seen);
+      const pending = runTurn({ sessionId, repo, adapter, model, system: [], tools: [], effort: null, signal: new AbortController().signal, emit: () => {}, prepare: history(500) });
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      expect(result.error).toBeNull();
+      expect(seen).toHaveLength(2);
+      const stored = (await repo.branch(sessionId)).messages.filter((m) => m.role === 'assistant');
+      expect(stored).toHaveLength(1);
+      expect(stored[0]!.parts).toEqual([{ type: 'text', text: 'Here it is.' }]);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('says so when a reply stays empty after two more tries', async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: ChatRequest[] = [];
+      const empty: StreamEvent[] = [{ type: 'finish', reason: 'end' }];
+      const pending = runTurn({ sessionId, repo, adapter: scripted([empty, empty, empty, empty], seen), model, system: [], tools: [], effort: null, signal: new AbortController().signal, emit: () => {}, prepare: history(500) });
+      await vi.runAllTimersAsync();
+      const result = await pending;
+      expect(seen).toHaveLength(3);
+      expect(result.stopReason).toBe('error');
+      expect(result.error).toEqual({ code: 'empty_reply', message: EMPTY_REPLY_MESSAGE, retryable: false });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not take a reply with only a tool call for an empty one', async () => {
+    const seen: ChatRequest[] = [];
+    const run = vi.fn(async () => ({ content: [{ type: 'text' as const, text: 'saved' }] }));
+    const adapter = scripted([[{ type: 'tool_call_start', id: 'a', name: 'save' }, { type: 'tool_call_end', id: 'a', input: {} }, { type: 'finish', reason: 'tool_use' }], [{ type: 'text', delta: 'Saved.' }, { type: 'finish', reason: 'end' }]], seen);
+    const result = await runTurn({ sessionId, repo, adapter, model, system: [], tools: [{ name: 'save', description: 'save', inputSchema: { type: 'object' }, readOnly: false, run }], effort: null, signal: new AbortController().signal, emit: () => {}, prepare: history(500) });
+    expect(result.error).toBeNull();
+    expect(seen).toHaveLength(2);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits the provider\'s Retry-After, and half a second first when it asked for nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      const seen: ChatRequest[] = [];
+      const limited: StreamEvent = { type: 'finish', reason: 'error', error: { code: 'provider_busy', message: 'Rate limit exceeded', retryable: true, retryAfterMs: 2000 } };
+      const plain: StreamEvent = { type: 'finish', reason: 'error', error: { code: 'provider_busy', message: 'Rate limit exceeded', retryable: true } };
+      const done: StreamEvent[] = [{ type: 'text', delta: 'ok' }, { type: 'finish', reason: 'end' }];
+      const pending = runTurn({ sessionId, repo, adapter: scripted([[limited], [plain], done], seen), model, system: [], tools: [], effort: null, signal: new AbortController().signal, emit: () => {}, prepare: history(500) });
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(seen).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(seen).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(seen).toHaveLength(3);
+      expect((await pending).error).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('plans the waits: quick for a busy provider, long for an outage, none for a limit that lasts the day', () => {
+    const busy = { code: 'provider_busy', message: 'x', retryable: true };
+    expect(retryWaitMs(busy, 1, 0)).toBe(500);
+    expect(retryWaitMs(busy, 1, 1)).toBe(750);
+    expect(BUSY_RETRY_DELAYS_MS.slice(0, 3)).toEqual([500, 750, 1100]);
+    expect(retryWaitMs(busy, BUSY_RETRY_DELAYS_MS.length + 1)).toBeNull();
+    expect(retryWaitMs({ code: 'provider_offline', message: 'x', retryable: true }, 1, 0.9)).toBe(5000);
+    expect(retryWaitMs({ ...busy, retryAfterMs: 7000 }, 5, 0)).toBe(7000);
+    expect(retryWaitMs({ ...busy, retryAfterMs: 3_600_000 }, 1)).toBeNull();
   });
 
   it('says so after a minute without output from the model, and drops the notice with the next output', async () => {
@@ -287,8 +356,8 @@ describe('runTurn', () => {
 
     expect(await run([{ type: 'phase', phase: 'loading' }, { type: 'text', delta: 'Hi' }, { type: 'text', delta: '!' }, { type: 'finish', reason: 'end' }]))
       .toEqual(['phase:loading', 'phase:null', 'part', 'delta', 'delta', 'done']);
-    expect(await run([{ type: 'phase', phase: 'reading' }, { type: 'thinking', delta: 'Hm' }, { type: 'finish', reason: 'end' }]))
-      .toEqual(['phase:reading', 'phase:null', 'part', 'delta', 'done']);
+    expect(await run([{ type: 'phase', phase: 'reading' }, { type: 'thinking', delta: 'Hm' }, { type: 'text', delta: 'Ok' }, { type: 'finish', reason: 'end' }]))
+      .toEqual(['phase:reading', 'phase:null', 'part', 'delta', 'part', 'delta', 'done']);
     // An error before any output, a stop and a failed request clear it too, before the reply ends.
     expect(await run([{ type: 'phase', phase: 'loading' }, { type: 'finish', reason: 'error', error: { code: 'provider_offline', message: 'gone', retryable: true } }], { abortOn: 'retry' }))
       .toEqual(['phase:loading', 'phase:null', 'phase:retrying', 'phase:null', 'done']);

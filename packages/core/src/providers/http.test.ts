@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chatRequest, collect, deps, finishOf, providerInstance } from './__fixtures__/harness.ts';
-import { classifyError, exceptionError, guardStream, postStream, requestJson } from './http.ts';
+import { classifyError, exceptionError, guardStream, httpError, postStream, requestJson, retryAfterMs } from './http.ts';
 import type { StreamEvent } from './types.ts';
 
 const instance = providerInstance('openai', 'https://api.openai.com');
@@ -61,6 +61,27 @@ describe('transient provider errors', () => {
     }));
     expect(finishOf(events)).toMatchObject({ reason: 'error', error: { code: 'provider_offline', retryable: true } });
     expect(finishOf(events).error).not.toHaveProperty('fix');
+  });
+});
+
+describe('Retry-After and busy statuses', () => {
+  it('reads seconds and dates, and nothing from a missing or odd header', () => {
+    const at = Date.parse('2026-11-21T10:00:00Z');
+    expect(retryAfterMs(new Headers({ 'retry-after': '3' }), at)).toBe(3000);
+    expect(retryAfterMs(new Headers({ 'retry-after': '1.5' }), at)).toBe(1500);
+    expect(retryAfterMs(new Headers({ 'retry-after': 'Sat, 21 Nov 2026 10:00:07 GMT' }), at)).toBe(7000);
+    expect(retryAfterMs(new Headers({ 'retry-after': 'Sat, 21 Nov 2026 09:59:00 GMT' }), at)).toBe(0);
+    expect(retryAfterMs(new Headers({ 'retry-after': 'soon' }), at)).toBeUndefined();
+    expect(retryAfterMs(new Headers(), at)).toBeUndefined();
+  });
+  it('puts the wait on a busy answer, and on nothing that is not tried again', async () => {
+    const limited = await httpError(new Response('{"message":"Rate limit exceeded"}', { status: 429, headers: { 'retry-after': '2' } }), instance);
+    expect(limited).toMatchObject({ code: 'provider_busy', retryable: true, retryAfterMs: 2000 });
+    const refused = await httpError(new Response('{"error":{"message":"bad key"}}', { status: 401, headers: { 'retry-after': '2' } }), instance);
+    expect(refused.retryAfterMs).toBeUndefined();
+  });
+  it.each([408, 409, 425, 429, 500, 503, 520, 529])('tries %s again', (status) => {
+    expect(classifyError(instance, status, '', 'busy')).toMatchObject({ code: 'provider_busy', retryable: true });
   });
 });
 
