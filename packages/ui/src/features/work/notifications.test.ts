@@ -84,16 +84,30 @@ describe('task notifications', () => {
     expect(run(['running', 'error']).shown).toEqual([['Cowork task failed', 'Summarize the Q3 reports']]);
   });
 
-  it('stays quiet while the window has focus, without permission, for other modes, or when turned off', () => {
+  it('stays quiet while the window has focus, without permission, or when turned off', () => {
     focused = true;
     expect(run(['running', 'idle']).shown).toEqual([]);
+    expect(run(['running', 'waiting'], { extra: { mode: 'code' } }).shown).toEqual([]);
     focused = false;
     FakeNotification.permission = 'denied';
     expect(run(['running', 'idle']).shown).toEqual([]);
     FakeNotification.permission = 'granted';
-    expect(run(['running', 'idle'], { extra: { mode: 'code' } }).shown).toEqual([]);
     expect(run(['running', 'waiting'], { prefs: prefs(true, false) }).shown).toEqual([]);
     expect(run(['running', 'idle'], { prefs: prefs(false, true) }).shown).toEqual([]);
+  });
+
+  it('tells a Code session’s turn ending, failing or waiting for a question or permission', () => {
+    const code = { mode: 'code' as const, title: 'Autoclicker' };
+    expect(run(['idle', 'running', 'waiting', 'running', 'idle'], { extra: code }).shown).toEqual([
+      ['Code session needs your input', 'Autoclicker'],
+      ['Code session finished', 'Autoclicker'],
+    ]);
+    FakeNotification.shown = [];
+    expect(run(['running', 'error'], { extra: code }).shown).toEqual([['Code session failed', 'Autoclicker']]);
+  });
+
+  it('tells a chat’s reply ending, a quick question’s too', () => {
+    expect(run(['running', 'idle'], { extra: { mode: 'chat', workspaceId: null, title: 'Train times' } }).shown).toEqual([['Reply finished', 'Train times']]);
   });
 
   it('notifies for a run that started before the window opened', () => {
@@ -129,13 +143,13 @@ describe('askToNotify', () => {
 });
 
 describe('with Chat and Cowork in one', () => {
-  it('tells a chat’s task ending, and never a quick question’s answer', () => {
+  it('tells a chat’s task ending as a task, and a quick question’s answer as a reply', () => {
     const notifier = createTaskNotifier(true);
     const open = vi.fn();
     // A chat that worked as a task: it has its sandbox (or a folder).
     for (const status of ['running', 'idle'] as SessionStatus[]) notifier.update(task(status, { id: 'c1', mode: 'chat', workspaceId: 'sandbox-1' }), prefs(), open);
     // A quick question: no sandbox was ever made.
     for (const status of ['running', 'idle'] as SessionStatus[]) notifier.update(task(status, { id: 'c2', mode: 'chat', workspaceId: null }), prefs(), open);
-    expect(FakeNotification.shown.map((n) => n.title)).toEqual(['Task finished']);
+    expect(FakeNotification.shown.map((n) => n.title)).toEqual(['Task finished', 'Reply finished']);
   });
 });

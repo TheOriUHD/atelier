@@ -33,8 +33,8 @@ see are hidden in the app.
 | **Dictation language** *(only where it works)* | The language you speak. Auto lets the service hear it; naming it helps with short phrases and names. |
 | **Hold to record** *(only where it works)* | Holding the microphone button or the dictate shortcut records until you let go. A click still starts and stops dictating. |
 | **Microphone** *(only where it works)* | Which microphone dictation uses on this computer. |
-| **Notify me when a task finishes** | A system notification when a chat’s task ends while you’re in another window or app. |
-| **Notify me when a task needs me** | A system notification when a chat’s task waits for your answer or permission. |
+| **Notify me when a reply finishes** | A system notification when a Code session, a task or a chat finishes its reply (or fails) while you’re in another window or app. |
+| **Notify me when Atelier needs me** | A system notification when a Code session, a task or a chat waits for your answer to a question or for a permission, while you’re in another window or app. |
 
 ## Settings › Computer use
 

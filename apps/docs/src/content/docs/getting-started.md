@@ -196,8 +196,8 @@ through it as a task.
 2. Describe the result you want and press Enter.
 3. Watch its steps. Its to-do list and the files it writes appear beside the conversation once there are some, and it
    ends with cards for the files it wrote, each with **Open**.
-4. Turn on **Notify me when a task finishes** and **Notify me when a task needs me** in **Settings › General** to get a
-   system notification while you are in another window.
+4. While you are in another window, a system notification says when it finishes or needs you (**Notify me when a reply
+   finishes** and **Notify me when Atelier needs me** in **Settings › General**, both on by default).
 
 The chip at the bottom left of a chat's message box sets what asks you first: **Auto mode**, **Ask permissions**,
 **Accept edits** or **Bypass permissions**. It starts at the default mode from **Settings › Admin › Code** (Auto, unless
@@ -239,7 +239,7 @@ name. The pages in the **Settings** group are for everyone:
 
 | Page | What it is for |
 |---|---|
-| **General** | Theme, chat font, transcript text size and width, motion; your own **Default model** for new chats; task notifications. |
+| **General** | Theme, chat font, transcript text size and width, motion; your own **Default model** for new chats; notifications when a reply finishes or Atelier needs you. |
 | **Computer use** (desktop app only) | **Enable computer use**, how the assistant uses the apps you allow, the apps allowed for good, and Atelier for Chrome. See [Computer use](/computer-use/). |
 | **Account** | Your photo, name, what Atelier calls you, personal **Instructions**, **Personality**, **Response style** and **Your ATELIER.md**. On this computer also **Screen lock** and **Setup**; on a server your password, passkeys, active sessions, devices, **Remote control** and **Log out**. |
 | **Privacy** | **Keep conversations** (automatic deletion after a number of days), **Temporary chats**, **Export your data**, **Delete all conversations**. |

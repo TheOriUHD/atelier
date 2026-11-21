@@ -34,9 +34,9 @@ function renderPage(prefs = defaultUserPrefs(), extra: Record<string, () => unkn
 describe('task notifications', () => {
   it('are on by default; turning one on is when the browser asks for permission', async () => {
     renderPage({ ...defaultUserPrefs(), notifications: { taskFinished: false, permissionNeeded: true } });
-    const needed = await screen.findByRole('switch', { name: 'Notify me when a task needs me' });
+    const needed = await screen.findByRole('switch', { name: 'Notify me when Atelier needs me' });
     await waitFor(() => expect(needed.getAttribute('aria-checked')).toBe('true'));
-    const finished = screen.getByRole('switch', { name: 'Notify me when a task finishes' });
+    const finished = screen.getByRole('switch', { name: 'Notify me when a reply finishes' });
     expect(finished.getAttribute('aria-checked')).toBe('false');
     expect(notification.requestPermission).not.toHaveBeenCalled();
 

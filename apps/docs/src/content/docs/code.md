@@ -325,7 +325,7 @@ A turn has no step cap, but it stops when the same action ran 15 times with the 
 
 - **Keep computer awake** (**More**, desktop app) stops the computer from sleeping while this session runs or waits for you; the screen may still turn off. It is per session and per device, and ends when the session finishes, you switch it off, delete the session or quit Atelier.
 - Closing a window doesn't stop a run. On macOS Atelier keeps running with no window; on Windows and Linux closing the last window quits it, which stops runs and [loops](/loops/).
-- **Notifications.** System notifications (**Settings › General › Notify me when a task finishes** and **needs me**) cover chats that work as tasks only. In Code, watch the session's dot in the sidebar.
+- **Notifications.** While Atelier isn't in front, a system notification says when a session's turn finishes (**Code session finished**), fails, or waits for your answer or a permission (**Code session needs your input**); clicking it opens the session. **Settings › General › Notify me when a reply finishes** and **Notify me when Atelier needs me** switch them (both on by default).
 
 ## Instructions, skills, hooks and connectors
 

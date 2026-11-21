@@ -348,18 +348,20 @@ separate Background tasks pane: the Background list in the panel is it.
 
 ### Notifications
 
-A system notification tells you when a chat's task finishes (**Task finished**), fails (**Task failed**) or needs you
-(**Task needs your input**: a question or a permission waiting), with the chat's title as the body. It comes for a chat
-that worked as a task (one that has its sandbox or a folder), and only when Atelier's window does not have focus.
-Clicking it opens the chat. Two switches in **Settings › General › Notifications** control it:
+A system notification tells you when a reply finishes, fails or needs you (a question or a permission waiting), with
+the conversation's title as the body: **Reply finished**, **Reply failed** and **Chat needs your input** for a chat,
+**Task finished**, **Task failed** and **Task needs your input** for a chat that worked as a task (one that has its
+sandbox or a folder), and **Code session finished**, **Code session failed** and **Code session needs your input** in
+Code. It comes only when Atelier's window does not have focus, and clicking it opens the conversation. Both are on by
+default; two switches in **Settings › General › Notifications** control them:
 
-- **Notify me when a task finishes** (covers finished and failed)
-- **Notify me when a task needs me**
+- **Notify me when a reply finishes** (covers finished and failed)
+- **Notify me when Atelier needs me**
 
-The desktop app allows notifications itself (your operating system's settings still apply). A browser asks for
-permission the first time you start a chat in a folder, and if you blocked it the setting shows "Notifications are
-blocked for Atelier. Allow them in your browser's site settings or your system settings." Code sessions show a status
-dot in the sidebar instead (see [Sessions](/sessions/#status-dots)).
+The desktop app allows notifications itself (your operating system's settings still apply: on Windows, Focus assist or
+Do not disturb holds them back). A browser asks for permission the first time you start a chat in a folder, and if you
+blocked it the setting shows "Notifications are blocked for Atelier. Allow them in your browser's site settings or your
+system settings." The sidebar's status dots show the same (see [Sessions](/sessions/#status-dots)).
 
 ### Writing a good task
 

@@ -167,16 +167,16 @@ export const SETTINGS_INDEX = [
   {
     id: 'notifications.taskFinished',
     page: 'general',
-    label: 'Notify me when a task finishes',
-    description: 'A system notification when a chat’s task ends while you’re in another window or app.',
-    keywords: ['notifications', 'alert', 'done', 'work', 'background'],
+    label: 'Notify me when a reply finishes',
+    description: 'A system notification when a Code session, a task or a chat finishes its reply (or fails) while you’re in another window or app.',
+    keywords: ['notifications', 'alert', 'done', 'finished', 'turn', 'code', 'work', 'background', 'push', 'toast'],
   },
   {
     id: 'notifications.permissionNeeded',
     page: 'general',
-    label: 'Notify me when a task needs me',
-    description: 'A system notification when a chat’s task waits for your answer or permission.',
-    keywords: ['notifications', 'alert', 'permission', 'question', 'input', 'work'],
+    label: 'Notify me when Atelier needs me',
+    description: 'A system notification when a Code session, a task or a chat waits for your answer to a question or for a permission, while you’re in another window or app.',
+    keywords: ['notifications', 'alert', 'permission', 'question', 'input', 'code', 'work', 'push', 'toast'],
   },
   {
     id: 'shortcuts.app',

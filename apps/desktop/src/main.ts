@@ -67,6 +67,8 @@ const chatgptChatBrowser = new ChatGptChatBrowser();
 const DEV_URL = process.env.ATELIER_DEV_URL;
 const UI_DIR = join(import.meta.dirname, 'ui');
 const isMac = process.platform === 'darwin';
+/** electron-builder.yml's `appId`, which the Windows installer gives its shortcuts as their app id. */
+const WINDOWS_APP_ID = 'dev.atelier.app';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } },
@@ -78,6 +80,10 @@ protocol.registerSchemesAsPrivileged([
 
 // The name first: the profile folder (userData) and the single-instance lock take their name from it, not from the package's.
 app.setName(APP.name);
+// Windows shows an app's notifications only under the app id its Start menu shortcut carries (the installer's, from
+// electron-builder's `appId`); without it every notification is dropped without a word. A build run from the checkout
+// has no shortcut: Electron's own path stands in.
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? WINDOWS_APP_ID : process.execPath);
 // A second copy hands over to the first (its `second-instance` shows the window) and goes at once: quitting the gentle
 // way would still run its start below, a second backend on the same data included.
 if (!app.requestSingleInstanceLock()) app.exit(0);
@@ -1206,7 +1212,8 @@ async function repairOwnShortcuts(): Promise<void> {
     },
     update: (path, link) => {
       try {
-        return shell.writeShortcutLink(path, 'update', link);
+        // The app id too: a shortcut without the one the app registers (setAppUserModelId) keeps its notifications from showing.
+        return shell.writeShortcutLink(path, 'update', { ...link, appUserModelId: WINDOWS_APP_ID });
       } catch {
         return false;
       }
