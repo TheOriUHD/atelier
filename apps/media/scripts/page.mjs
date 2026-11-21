@@ -76,7 +76,7 @@ export function renderPage({ manifest, colors, zips, words, rel }) {
           <div class="sw sw-${c.id}"></div>
           <div class="sw-meta">
             <h3>${esc(c.name)}</h3>
-            <p class="codes"><button class="copy" type="button" data-copy="${c.hex}" aria-label="Copy ${esc(c.name)} hex">${c.hex}</button><span>RGB ${rgb(c.hex)}</span></p>
+            <p class="codes"><button class="copy-btn" type="button" data-copy="${c.hex}" aria-label="Copy ${esc(c.name)} hex">${c.hex}</button><span>RGB ${rgb(c.hex)}</span></p>
             <p>${esc(c.use)}</p>
           </div>
         </div>`,
@@ -87,7 +87,7 @@ export function renderPage({ manifest, colors, zips, words, rel }) {
     .map(
       (b) => `
         <div class="copyblock">
-          <div class="copyhead"><h3>${esc(b.title)}</h3><button class="copy" type="button" data-copy-from="#t-${b.id}">Copy</button></div>
+          <div class="copyhead"><h3>${esc(b.title)}</h3><button class="copy-btn" type="button" data-copy-from="#t-${b.id}">Copy</button></div>
           <p id="t-${b.id}">${esc(b.text)}</p>
         </div>`,
     )

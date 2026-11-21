@@ -25,7 +25,7 @@
     });
   }
 
-  for (const button of document.querySelectorAll('.copy')) {
+  for (const button of document.querySelectorAll('.copy-btn')) {
     button.addEventListener('click', async () => {
       const text = button.dataset.copy ?? document.querySelector(button.dataset.copyFrom)?.textContent ?? '';
       try {

@@ -4,14 +4,17 @@
 .hero { padding-bottom: 0; }
 .hero + .section { padding-top: clamp(48px, 6vw, 72px); }
 .nav a { white-space: nowrap; }
+/* Eight links need more room than the website's four: the nav shows from 1100px, and below it the page is short enough to scroll. */
+.nav { display: none; }
+@media (min-width: 1100px) { .nav { display: flex; } }
 
 .group { margin: 56px 0 18px; font: 500 1.375rem/1.2 var(--serif); letter-spacing: -0.01em; }
 .section-head + .group { margin-top: 40px; }
 
 /* Assets: a preview on the background it is meant for, then its name, what it is and its files. */
-.assets { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.assets-banners { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
-.assets-narrow { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.assets { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
+.assets-banners { grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); }
+.assets-narrow { grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); }
 .asset { display: flex; flex-direction: column; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); overflow: hidden; transition: border-color 200ms var(--ease); }
 .asset:hover { border-color: var(--line-strong); }
 @media (min-width: 640px) { .asset-wide { grid-column: span 2; } }
@@ -38,7 +41,7 @@
 .panel[hidden] { display: none; }
 
 /* Colors and type */
-.swatches { display: grid; gap: 14px; margin-top: 40px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.swatches { display: grid; gap: 14px; margin-top: 40px; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); }
 .sw-card { border-radius: 12px; border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
 .sw { height: 96px; box-shadow: inset 0 -1px 0 var(--line-soft); }
 .sw-clay { background: #c6613f; }
@@ -51,11 +54,11 @@
 .sw-meta { padding: 14px 16px 16px; display: grid; gap: 6px; }
 .sw-meta p { color: var(--ink-2); font-size: 0.8438rem; text-wrap: pretty; }
 .sw-meta .codes { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-family: var(--mono); font-size: 0.8125rem; color: var(--ink-3); }
-.copy { appearance: none; border: 0; background: transparent; padding: 0; font: inherit; color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
-.copy:hover { text-decoration-color: currentColor; }
-.copyhead .copy { font: 500 0.8125rem/1 var(--sans); padding: 8px 12px; border-radius: 7px; border: 1px solid var(--line-strong); text-decoration: none; }
-.copyhead .copy:hover { background: var(--sunken); }
-.copy.is-done { color: var(--clay); }
+.copy-btn { appearance: none; border: 0; background: transparent; padding: 0; font: inherit; color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.copy-btn:hover { text-decoration-color: currentColor; }
+.copyhead .copy-btn { font: 500 0.8125rem/1 var(--sans); padding: 8px 12px; border-radius: 7px; border: 1px solid var(--line-strong); text-decoration: none; }
+.copyhead .copy-btn:hover { background: var(--sunken); }
+.copy-btn.is-done { color: var(--clay); }
 
 .type { display: grid; gap: 0; margin-top: 40px; border-top: 1px solid var(--line); }
 .specimen { padding: 26px 0; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
@@ -98,6 +101,8 @@
 .zip span { color: var(--ink-2); font-size: 0.875rem; grid-column: 1; }
 .zip .size { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-.assets-phone { margin-top: 14px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-.sw-meta .codes .copy { flex: none; white-space: nowrap; }
+.assets-phone { margin-top: 14px; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); }
+.sw-meta .codes .copy-btn { flex: none; white-space: nowrap; }
 .sw-meta .codes span { white-space: nowrap; }
+.facts dd { overflow-wrap: anywhere; }
+@media (max-width: 380px) { .site-header .btn { display: none; } }
