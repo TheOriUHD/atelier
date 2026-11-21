@@ -81,7 +81,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 21, 16333 characters of JSON
+# Tools: 21, 16320 characters of JSON
 
 [
   {
@@ -789,7 +789,7 @@ Recent commit subjects:
         },
         "summary": {
           "type": "string",
-          "description": "What the action does, in a few words; the person sees it in the page."
+          "description": "What the action does, for actions that change something."
         },
         "url": {
           "type": "string",

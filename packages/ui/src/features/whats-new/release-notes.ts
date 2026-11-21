@@ -44,7 +44,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       {
         icon: Eye,
         title: 'Watch it work in the page',
-        body: 'With Atelier for Chrome 0.2.0, the tab the assistant works in glows orange at its edges and lists its steps at the bottom left as it goes (“Opens the second result”). When the reply is done the glow fades, and if it waits for your answer the page says so. Clicks go through, and its own screenshots leave it out. Chrome updates the extension from the Web Store by itself.',
+        body: 'With Atelier for Chrome 0.2.1, the tab the assistant works in glows orange at its edges, and a label at the bottom left says what it is doing right now, like “Reading page…” or “Thinking…”. When the reply is done it says Done and fades, and if it waits for your answer the page says so. Clicks go through, and its own screenshots leave it out. Chrome updates the extension from the Web Store by itself.',
       },
       {
         icon: AppWindow,

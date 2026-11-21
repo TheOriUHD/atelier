@@ -130,10 +130,11 @@ browser itself instead of its pictures:
   look at what it found and it can go on in them in the next message. It closes the ones it no longer needs, keeps at
   most ten per chat (opening another closes the one used longest ago), and closes all of a chat's tabs when you archive
   or delete the chat. It can't see your own tabs, bookmarks or history.
-- **You can watch it.** The tab it is working in glows orange at its edges, and its steps ("Searching duckduckgo.com for
-  “usb c cable”", "Opens the second result") are listed at the bottom left of the page as it goes. When the reply is
-  done the glow fades; if it is waiting for your answer in the chat, the page says so. Nothing of this is in its way:
-  clicks go through, and its own screenshots of the page leave it out.
+- **You can watch it.** The tab it is working in glows orange at its edges, and a small label at the bottom left of the
+  page says what it is doing right now: "Reading page…", "Finding “price” on page…", "Clicking “Add to cart”…", and
+  "Thinking…" between steps. When the reply is done the label says **Done** and goes with the glow; if it is waiting for
+  your answer in the chat, it says so. Nothing of this is in its way: clicks go through, and its own screenshots of the
+  page leave it out.
 - **It reads pages.** It gets the page's text and a list of its links, buttons and fields, and acts on them by name, so
   it needs far fewer screenshots and doesn't miss a button by a few pixels. It can choose from lists, which the
   background mode for apps can't.
@@ -157,7 +158,7 @@ it starts.
 On a server, the extension on your computer works for your server's chats too: the desktop app lends it over the same
 link as computer use, while **Computer use** is on in the desktop app. The server needs version 0.10.4 or later.
 
-The chat tab groups, the glow and the steps need Atelier for Chrome 0.2.0 or later; with 0.1.0 the tabs go in one
+The chat tab groups, the glow and the label need Atelier for Chrome 0.2.0 or later; with 0.1.0 the tabs go in one
 orange **Atelier** group, also staying open, and nothing shows in the page. Chrome updates extensions from the store
 by itself within a few hours, or at once with **Update** on `chrome://extensions` (Developer mode).
 

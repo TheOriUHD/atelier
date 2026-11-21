@@ -22,7 +22,7 @@ you're signed in to.
 It works in tabs of its own, in the background, in an orange tab group named after the chat. Your own tabs stay yours:
 it never reads them and never takes the front of your screen. Its tabs stay open after a reply, for you to look at and for
 the next question, and close when you delete the chat. You keep working while it works, and you can watch: the tab it
-works in glows orange and lists its steps at the bottom left.
+works in glows orange, and a label at the bottom left says what it is doing right now ("Reading page…").
 
 How it works
 • The assistant opens a page in its own tab, reads its text and its links, buttons and fields, and clicks, types, chooses
@@ -52,8 +52,8 @@ them, for tasks the person gives Atelier.
 | `tabs` | Opens its own background tabs, reads their title, address and loading state, navigates them and closes them when the task ends. It never uses the person's own tabs. |
 | `tabGroups` | Keeps each chat's tabs together in a collapsed orange group named after the chat, apart from the person's tabs. |
 | `debugger` | Sends trusted clicks, typing and scrolling to pages in its own tabs and takes screenshots of those tabs while they are in the background (the DevTools Protocol's Input and Page domains). Only in its own tabs; Chrome shows its "started debugging" bar meanwhile. |
-| `scripting` | Reads a page's text and its links, buttons and fields in its own tabs, makes links there that would open a new tab open in the same tab, so nothing comes to the front, and shows the orange glow and the list of steps in the tab it works in. |
-| `webNavigation` | Notices a new page loading in one of its own tabs, to apply that same-tab rule and show the glow and the steps again. |
+| `scripting` | Reads a page's text and its links, buttons and fields in its own tabs, makes links there that would open a new tab open in the same tab, so nothing comes to the front, and shows the orange glow and the label with its current step in the tab it works in. |
+| `webNavigation` | Notices a new page loading in one of its own tabs, to apply that same-tab rule and show the glow and the label again. |
 | `storage` | Remembers which tabs are its own (session storage, which the browser clears when it closes), so it keeps track after its service worker restarts. |
 | `alarms` | Tries to reach the desktop app again once a minute while the app isn't running. |
 | Host permission `<all_urls>` | The person can ask Atelier to work on any site; the extension acts only in tabs it opened itself. |

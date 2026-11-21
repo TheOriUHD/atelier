@@ -1,23 +1,21 @@
-// The glow and the steps panel in a tab while Atelier works in it, run in the page with chrome.scripting.executeScript
-// (the extension's own isolated world). Like page.ts, each function is sent to the page as its source text: no imports,
-// no closures over this module, only its arguments.
+// The glow and the step pill in a tab while Atelier works in it, run in the page with chrome.scripting.executeScript (the
+// extension's own isolated world). Like page.ts, each function is sent to the page as its source text: no imports, no
+// closures over this module, only its arguments.
 //
-// Everything sits in a closed shadow root on one element under <html> (not in <body>, so the page's text as read leaves it
-// out), and nothing in it takes the pointer: clicks, Atelier's own included, go through to the page. The panel is never
-// built from HTML text, only with textContent, so a step can't put markup in the page.
+// The pill shows one line: what Atelier is doing this moment ("Reading page…", "Clicking “Sign in”…"), "Thinking…"
+// between steps, then "Done". Everything sits in a closed shadow root on one element under <html> (not in <body>, so the
+// page's text as read leaves it out), and nothing in it takes the pointer: clicks, Atelier's own included, go through to
+// the page. The text is only ever set with textContent, so a step can't put markup in the page.
 
-/** What the panel shows. */
+/** What the pill shows. */
 export interface OverlayView {
-  /** The chat's name. */
-  title: string;
-  /** The latest steps, oldest first: while `state` is working, the last is the one under way. */
-  steps: string[];
-  /** How many steps came before the ones shown. */
-  earlier: number;
-  state: 'working' | 'done' | 'waiting';
+  /** The step under way (while working); the other states have their own words. */
+  step: string;
+  /** working: a step is under way; thinking: between steps; waiting: on the person; done: the turn ended. */
+  state: 'working' | 'thinking' | 'waiting' | 'done';
 }
 
-/** Shows the glow and the panel, or brings them up to date. `done` fades both out and removes them after a moment. */
+/** Shows the glow and the pill, or brings them up to date. `done` fades both out and removes them after a moment. */
 export function showOverlay(view: OverlayView): void {
   const TAG = 'atelier-overlay';
   /** A working overlay with no news for this long goes by itself (a turn that ended without telling the extension). */
@@ -34,54 +32,51 @@ export function showOverlay(view: OverlayView): void {
     }
     .glow.off { opacity: 0; animation: none; }
     @keyframes breathe { from { opacity: 0.62; } to { opacity: 1; } }
-    .panel {
+    .pill {
       position: fixed; left: 14px; bottom: 14px; box-sizing: border-box; pointer-events: none;
-      width: max-content; min-width: 220px; max-width: min(360px, calc(100vw - 28px));
-      padding: 10px 12px 11px; border-radius: 12px;
-      background: rgba(252, 252, 251, 0.95); color: #1c1c1b; border: 1px solid rgba(198, 97, 63, 0.3);
-      box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.08);
+      display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 8px;
+      max-width: min(440px, calc(100vw - 28px)); border-radius: 999px;
+      background: rgba(252, 252, 251, 0.94); color: #1c1c1b; border: 1px solid rgba(198, 97, 63, 0.3);
+      box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.08);
       -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
-      font: 500 12.5px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      letter-spacing: normal; text-align: left; direction: ltr; -webkit-font-smoothing: antialiased;
-      animation: rise 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+      font: 500 13px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      letter-spacing: normal; text-align: left; direction: ltr; white-space: nowrap; -webkit-font-smoothing: antialiased;
+      animation: rise 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
       transition: opacity 0.4s ease, transform 0.4s ease;
     }
-    .panel.gone { opacity: 0; transform: translateY(6px); }
+    .pill.gone { opacity: 0; transform: translateY(6px); }
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-    .head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .mark { flex: none; width: 18px; height: 18px; border-radius: 5px; background: #c6613f; display: grid; place-items: center; }
-    .mark svg { width: 13px; height: 13px; fill: #fbf8f2; }
-    .title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
-    .state { flex: none; display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #b5532f; }
-    .state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.2s ease-in-out infinite; }
-    .panel[data-state="done"] .state, .panel[data-state="waiting"] .state { color: rgba(28, 28, 27, 0.6); }
-    .panel[data-state="done"] .state::before, .panel[data-state="waiting"] .state::before { animation: none; }
-    @keyframes pulse { 50% { opacity: 0.35; } }
-    .steps { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
-    .steps li { display: flex; gap: 7px; align-items: flex-start; min-width: 0; color: rgba(28, 28, 27, 0.56); font-weight: 450; }
-    .steps li.now { color: #1c1c1b; font-weight: 500; }
-    .steps li.enter { animation: rise 0.18s ease-out; }
-    .steps .text { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-    .steps .earlier { font-size: 11px; color: rgba(28, 28, 27, 0.45); padding-left: 19px; }
-    .icon { flex: none; width: 12px; height: 12px; margin-top: 2.5px; box-sizing: border-box; }
-    .check { fill: none; stroke: #c6613f; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; opacity: 0.8; }
-    .spin { border-radius: 50%; border: 1.7px solid rgba(198, 97, 63, 0.25); border-top-color: #c6613f; animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .mark { flex: none; width: 20px; height: 20px; border-radius: 6px; background: #c6613f; display: grid; place-items: center; }
+    .mark svg { width: 14px; height: 14px; fill: #fbf8f2; }
+    .pill[data-state="working"] .mark, .pill[data-state="thinking"] .mark { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { transform: scale(0.86); opacity: 0.8; } }
+    .line { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+    .text { display: block; overflow: hidden; text-overflow: ellipsis; padding: 1px 0; }
+    .text.enter { animation: swap 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+    @keyframes swap { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+    /* A light that runs over the words while something is under way. */
+    .pill[data-state="working"] .text, .pill[data-state="thinking"] .text {
+      color: transparent; -webkit-background-clip: text; background-clip: text;
+      background-image: linear-gradient(90deg, #1c1c1b 0%, #1c1c1b 38%, #d97757 50%, #1c1c1b 62%, #1c1c1b 100%);
+      background-size: 250% 100%; animation: shimmer 2.4s linear infinite;
+    }
+    .pill[data-state="working"] .text.enter, .pill[data-state="thinking"] .text.enter { animation: swap 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), shimmer 2.4s linear infinite; }
+    .pill[data-state="thinking"] .text { opacity: 0.75; }
+    @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+    .pill[data-state="waiting"] .text, .pill[data-state="done"] .text { color: rgba(28, 28, 27, 0.72); }
     @media (prefers-color-scheme: dark) {
-      .panel { background: rgba(30, 30, 29, 0.94); color: #f2efe9; border-color: rgba(222, 132, 99, 0.34); box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.3); }
-      .state { color: #e48f6e; }
-      .panel[data-state="done"] .state, .panel[data-state="waiting"] .state { color: rgba(242, 239, 233, 0.6); }
-      .steps li { color: rgba(242, 239, 233, 0.56); }
-      .steps li.now { color: #f2efe9; }
-      .steps .earlier { color: rgba(242, 239, 233, 0.42); }
-      .check { stroke: #de8463; }
+      .pill { background: rgba(30, 30, 29, 0.93); color: #f2efe9; border-color: rgba(222, 132, 99, 0.34); box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.3); }
+      .pill[data-state="working"] .text, .pill[data-state="thinking"] .text {
+        background-image: linear-gradient(90deg, #f2efe9 0%, #f2efe9 38%, #e48f6e 50%, #f2efe9 62%, #f2efe9 100%);
+      }
+      .pill[data-state="waiting"] .text, .pill[data-state="done"] .text { color: rgba(242, 239, 233, 0.72); }
     }
     @media (prefers-reduced-motion: reduce) {
-      .glow, .panel, .steps li.enter, .state::before, .spin { animation: none; }
-      .spin { border-color: #c6613f; }
+      .glow, .pill, .mark, .text, .text.enter { animation: none !important; }
+      .pill[data-state="working"] .text, .pill[data-state="thinking"] .text { color: inherit; background: none; }
     }
   `;
-  type Parts = { shadow: ShadowRoot; glow: HTMLElement; panel: HTMLElement; title: HTMLElement; state: HTMLElement; steps: HTMLElement; shown: number; timer?: number; stale?: number };
+  type Parts = { glow: HTMLElement; pill: HTMLElement; line: HTMLElement; shown: string; timer?: number; stale?: number };
   type Host = HTMLElement & { __atelierOverlay?: Parts };
 
   const root = document.documentElement;
@@ -96,11 +91,10 @@ export function showOverlay(view: OverlayView): void {
     style.textContent = CSS;
     const glow = document.createElement('div');
     glow.className = 'glow';
-    const panel = document.createElement('div');
-    panel.className = 'panel';
-    panel.setAttribute('role', 'status');
-    const head = document.createElement('div');
-    head.className = 'head';
+    const pill = document.createElement('div');
+    pill.className = 'pill';
+    pill.setAttribute('role', 'status');
+    pill.setAttribute('aria-live', 'polite');
     const mark = document.createElement('span');
     mark.className = 'mark';
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -109,75 +103,43 @@ export function showOverlay(view: OverlayView): void {
     path.setAttribute('d', GLYPH);
     svg.append(path);
     mark.append(svg);
-    const title = document.createElement('span');
-    title.className = 'title';
-    const state = document.createElement('span');
-    state.className = 'state';
-    head.append(mark, title, state);
-    const steps = document.createElement('ol');
-    steps.className = 'steps';
-    panel.append(head, steps);
-    shadow.append(style, glow, panel);
-    host.__atelierOverlay = { shadow, glow, panel, title, state, steps, shown: 0 };
+    const line = document.createElement('span');
+    line.className = 'line';
+    pill.append(mark, line);
+    shadow.append(style, glow, pill);
+    host.__atelierOverlay = { glow, pill, line, shown: '' };
     root.append(host);
   } else if (host.parentNode !== root) root.append(host);
 
   const parts = host.__atelierOverlay!;
   clearTimeout(parts.timer);
   clearTimeout(parts.stale);
-  parts.panel.classList.remove('gone');
-  parts.panel.dataset.state = view.state;
-  parts.glow.classList.toggle('off', view.state !== 'working');
-  parts.title.textContent = view.title.trim() || 'Atelier';
-  parts.state.textContent = view.state === 'working' ? 'Working' : view.state === 'waiting' ? 'Waiting for you' : 'Done';
+  parts.pill.classList.remove('gone');
+  parts.pill.dataset.state = view.state;
+  parts.glow.classList.toggle('off', view.state === 'waiting' || view.state === 'done');
 
-  const total = view.earlier + view.steps.length;
-  const list: HTMLElement[] = [];
-  if (view.earlier > 0) {
-    const more = document.createElement('li');
-    more.className = 'earlier';
-    more.textContent = view.earlier === 1 ? '1 earlier step' : `${view.earlier} earlier steps`;
-    list.push(more);
+  const words = view.state === 'thinking' ? 'Thinking…' : view.state === 'waiting' ? 'Waiting for you' : view.state === 'done' ? 'Done' : view.step.trim() || 'Working…';
+  // Only new words come in with a movement; the same step painted again (a new page in the tab) stays still.
+  if (words !== parts.shown) {
+    const text = document.createElement('span');
+    text.className = parts.shown ? 'text enter' : 'text';
+    text.textContent = words;
+    parts.line.replaceChildren(text);
+    parts.shown = words;
   }
-  view.steps.forEach((text, i) => {
-    const now = view.state === 'working' && i === view.steps.length - 1;
-    const item = document.createElement('li');
-    if (now) item.className = 'now';
-    // Only a step that wasn't there before comes in with a movement.
-    if (view.earlier + i >= parts.shown) item.classList.add('enter');
-    let icon: Element;
-    if (now) {
-      icon = document.createElement('span');
-      icon.setAttribute('class', 'icon spin');
-    } else {
-      icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      icon.setAttribute('class', 'icon check');
-      icon.setAttribute('viewBox', '0 0 12 12');
-      const tick = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      tick.setAttribute('d', 'M2.5 6.4 4.9 8.7 9.5 3.6');
-      icon.append(tick);
-    }
-    const label = document.createElement('span');
-    label.className = 'text';
-    label.textContent = text;
-    item.append(icon, label);
-    list.push(item);
-  });
-  parts.steps.replaceChildren(...list);
-  parts.shown = total;
 
   const fadeAndGo = (after: number) => {
     parts.timer = window.setTimeout(() => {
       parts.glow.classList.add('off');
-      parts.panel.classList.add('gone');
+      parts.pill.classList.add('gone');
       parts.timer = window.setTimeout(() => host!.remove(), 450);
     }, after);
   };
-  if (view.state === 'done') fadeAndGo(4_000);
+  if (view.state === 'done') fadeAndGo(2_500);
   else parts.stale = window.setTimeout(() => fadeAndGo(0), STALE_MS);
 }
 
-/** Takes the glow and the panel away at once (the chat moved on to another tab). */
+/** Takes the glow and the pill away at once (the chat moved on to another tab). */
 export function removeOverlay(): void {
   document.querySelector('atelier-overlay')?.remove();
 }

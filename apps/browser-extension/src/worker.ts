@@ -6,7 +6,8 @@
 // after 20 idle seconds. Reading goes through a script in the page.
 //
 // Each chat's tabs are in a tab group of their own, named after the chat; they stay open after a reply and close when the
-// chat is deleted (or when the model closes them). The tab a chat works in glows orange and lists its steps (overlay.ts).
+// chat is deleted (or when the model closes them). The tab a chat works in glows orange and shows, bottom left, what it is
+// doing this moment (overlay.ts).
 
 // The protocol's browser module alone, not the package index, so the worker doesn't carry the app's schemas.
 import { BROWSER_HOST_NAME, BROWSER_PROTOCOL_VERSION, type BrowserMethods, type BrowserRequest, type BrowserSession, type BrowserTab, type BrowserTarget } from '../../../packages/protocol/src/browser.ts';
@@ -16,8 +17,8 @@ import { chooseOption, keepInThisTab, locate, selectAll, snapshot, type Snapshot
 
 /** The group of tabs opened without a chat (by an app older than this extension). */
 const GROUP_TITLE = 'Atelier';
-/** How many of a chat's steps the panel shows; the ones before are counted. */
-const STEPS_SHOWN = 4;
+/** With nothing running in the tab for this long after a step, the pill says "Thinking…" until the next step. */
+const THINKING_AFTER = 700;
 /** A chat's glow with no step for this long is taken away (the page's own timer does the same). */
 const OVERLAY_STALE_MS = 10 * 60_000;
 /** How long a page may take to load before a call returns anyway. */
@@ -70,11 +71,24 @@ function browserName(): string {
 }
 
 async function answer(to: chrome.runtime.Port, request: BrowserRequest): Promise<void> {
+  // A call in a tab (not the overlay's own) counts as the step under way until it returns.
+  const tab = request.method.startsWith('overlay.') ? undefined : (request.params as { tab?: unknown } | undefined)?.tab;
+  const inTab = typeof tab === 'number' ? tab : undefined;
+  if (inTab !== undefined) running.set(inTab, (running.get(inTab) ?? 0) + 1);
   try {
     const result = await handle(request.method, request.params as never);
     to.postMessage({ id: request.id, result });
   } catch (error) {
     to.postMessage({ id: request.id, error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    if (inTab !== undefined) {
+      const left = (running.get(inTab) ?? 1) - 1;
+      if (left > 0) running.set(inTab, left);
+      else {
+        running.delete(inTab);
+        thinkLater(inTab);
+      }
+    }
   }
 }
 
@@ -102,6 +116,9 @@ async function own(tab: number): Promise<void> {
 chrome.tabs.onRemoved.addListener((tab) => {
   if (ours.delete(tab)) void save();
   attached.delete(tab);
+  running.delete(tab);
+  clearTimeout(thinkingTimers.get(tab));
+  thinkingTimers.delete(tab);
 });
 
 // Links that would open a tab open in the same one, from the first moment of every page in Atelier's tabs.
@@ -169,7 +186,7 @@ async function retitle(session: BrowserSession): Promise<void> {
   await save();
 }
 
-// ---------------------------------------------------------------- the glow and the steps
+// ---------------------------------------------------------------- the glow and the step
 
 interface Overlay {
   session: string;
@@ -181,6 +198,9 @@ interface Overlay {
 
 /** Each working chat's overlay, by chat. */
 const overlays = new Map<string, Overlay>();
+/** Calls under way in each tab. */
+const running = new Map<number, number>();
+const thinkingTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
 async function paint(overlay: Overlay): Promise<void> {
   await chrome.scripting.executeScript({ target: { tabId: overlay.tab }, func: showOverlay, args: [overlay.view] }).catch(() => undefined);
@@ -190,11 +210,31 @@ async function unpaint(tab: number): Promise<void> {
   await chrome.scripting.executeScript({ target: { tabId: tab }, func: removeOverlay }).catch(() => undefined);
 }
 
-/** A step text as the panel shows it: one line, not too long. */
+/** A step as the pill shows it: one line, not too long. */
 const stepText = (step: string) => {
-  const line = step.replace(/\s+/g, ' ').trim() || 'Working';
-  return line.length > 160 ? `${line.slice(0, 159).trimEnd()}…` : line;
+  const line = step.replace(/\s+/g, ' ').trim() || 'Working…';
+  return line.length > 120 ? `${line.slice(0, 119).trimEnd()}…` : line;
 };
+
+/**
+ * Once the tab has had nothing running for a moment, the step is over and the model is deciding what comes next: the
+ * pill says so until the next step, rather than showing a step that has ended.
+ */
+function thinkLater(tab: number, after = THINKING_AFTER): void {
+  clearTimeout(thinkingTimers.get(tab));
+  const overlay = [...overlays.values()].find((o) => o.tab === tab && o.view.state === 'working');
+  if (!overlay) return;
+  const step = overlay.view;
+  thinkingTimers.set(
+    tab,
+    setTimeout(() => {
+      thinkingTimers.delete(tab);
+      if (running.get(tab) || overlays.get(overlay.session) !== overlay || overlay.view !== step) return;
+      overlay.view = { ...step, state: 'thinking' };
+      void paint(overlay);
+    }, after),
+  );
+}
 
 async function endAllOverlays(): Promise<void> {
   const all = [...overlays.values()];
@@ -375,24 +415,20 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
   'tabs.rename': async ({ session }) => {
     await remembered;
     await retitle(session);
-    const overlay = overlays.get(session.id);
-    if (overlay && overlay.view.title !== session.title) {
-      overlay.view = { ...overlay.view, title: session.title };
-      await paint(overlay);
-    }
     return {};
   },
 
   'overlay.step': async ({ session, tab, step }) => {
     await own(tab);
     const previous = overlays.get(session.id);
-    const steps = [...(previous && previous.view.state !== 'done' ? previous.view.steps : []), stepText(step)];
-    const earlier = (previous && previous.view.state !== 'done' ? previous.view.earlier : 0) + Math.max(0, steps.length - STEPS_SHOWN);
-    const overlay: Overlay = { session: session.id, tab, at: Date.now(), view: { title: session.title, steps: steps.slice(-STEPS_SHOWN), earlier, state: 'working' } };
+    const overlay: Overlay = { session: session.id, tab, at: Date.now(), view: { step: stepText(step), state: 'working' } };
     overlays.set(session.id, overlay);
     // The chat moved on to another of its tabs: the one before stops glowing.
     if (previous && previous.tab !== tab) await unpaint(previous.tab);
     await paint(overlay);
+    // The step's own call normally comes right after and keeps it showing while it runs; if it came first (or there is
+    // none), the pill moves on to "Thinking…" a little later than usual.
+    if (!running.get(tab)) thinkLater(tab, THINKING_AFTER * 2);
     await retitle(session).catch(() => undefined);
     return {};
   },
@@ -479,7 +515,7 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
     const metrics = (await cdp(tab, 'Page.getLayoutMetrics')) as { cssVisualViewport: { pageX: number; pageY: number; clientWidth: number; clientHeight: number } };
     const view = metrics.cssVisualViewport;
     const scale = Math.min(1, maxWidth / view.clientWidth);
-    // The glow and the steps aren't part of the page: the model sees it without them.
+    // The glow and the pill aren't part of the page: the model sees it without them.
     await chrome.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [true] }).catch(() => undefined);
     let shot: { data: string };
     try {

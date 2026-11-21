@@ -93,7 +93,10 @@ describe('Browser tool with Atelier for Chrome 0.2.0', () => {
     await tool.run({ action: 'click', tab: 10, ref: 4 }, ctx);
     await tick();
     expect(calls.find((c) => c.method === 'tabs.open')!.params).toEqual({ url: 'https://duckduckgo.com/?q=lab+rax+project', session: { id: 's', title: 'Lab Rax research' } });
-    expect(calls.filter((c) => c.method === 'overlay.step').map((c) => (c.params as { step: string }).step)).toEqual(['Searching duckduckgo.com for “lab rax project”', 'Clicking “Checkout”']);
+    expect(calls.filter((c) => c.method === 'overlay.step').map((c) => (c.params as { step: string }).step)).toEqual(['Searching for “lab rax project”…', 'Clicking “Checkout”…']);
+    // A step goes out before the call that does it, so the page shows it while that call runs.
+    const methods = calls.map((c) => c.method);
+    expect(methods.lastIndexOf('overlay.step')).toBeLessThan(methods.indexOf('page.click'));
     // The status is asked once, not for every step.
     expect(calls.filter((c) => c.method === 'status')).toHaveLength(1);
 
@@ -192,15 +195,20 @@ describe('Browser tool with Atelier for Chrome 0.2.0', () => {
     await tool.run({ action: 'read', tab: 3 }, ctx);
     await tool.run({ action: 'click', tab: 3, ref: 4 }, { ...ctx, sessionId: 'someone-else' });
     await tick();
-    expect(calls.filter((c) => c.method === 'overlay.step').map((c) => (c.params as { step: string }).step)).toEqual(['Reading the page', 'Clicking']);
+    expect(calls.filter((c) => c.method === 'overlay.step').map((c) => (c.params as { step: string }).step)).toEqual(['Reading page…', 'Clicking…']);
   });
 
-  it('writes steps the person can follow', () => {
-    expect(stepLabel({ action: 'click', tab: 1, ref: 2, summary: '  Opens the second   result ' })).toBe('Opens the second result');
-    expect(stepLabel({ action: 'open', url: 'https://www.example.com/docs/' })).toBe('Opening example.com/docs');
-    expect(stepLabel({ action: 'navigate', tab: 1, url: 'https://www.google.com/search?q=lab%20rax' })).toBe('Searching google.com for “lab rax”');
-    expect(stepLabel({ action: 'scroll', tab: 1, dy: -300 })).toBe('Scrolling up');
-    expect(stepLabel({ action: 'read', tab: 1, from: 6000 })).toBe('Reading further');
-    expect(stepLabel({ action: 'type', tab: 1, text: 'usb c cable' })).toBe('Typing “usb c cable”');
+  it('writes each step as one short line of what is happening', () => {
+    expect(stepLabel({ action: 'read', tab: 1 })).toBe('Reading page…');
+    expect(stepLabel({ action: 'read', tab: 1, from: 6000 })).toBe('Reading further…');
+    expect(stepLabel({ action: 'find', tab: 1, query: 'price' })).toBe('Finding “price” on page…');
+    expect(stepLabel({ action: 'open', url: 'https://www.example.com/docs/' })).toBe('Opening example.com/docs…');
+    expect(stepLabel({ action: 'navigate', tab: 1, url: 'https://www.google.com/search?q=lab%20rax' })).toBe('Searching for “lab rax”…');
+    expect(stepLabel({ action: 'click', tab: 1, ref: 2 }, new Map([[2, ' Add to cart ']]))).toBe('Clicking “Add to cart”…');
+    // The model's summary is for the record, not the page: the line stays the action's own.
+    expect(stepLabel({ action: 'click', tab: 1, ref: 2, summary: 'Opens the second result' })).toBe('Clicking…');
+    expect(stepLabel({ action: 'scroll', tab: 1, dy: -300 })).toBe('Scrolling up…');
+    expect(stepLabel({ action: 'type', tab: 1, text: 'usb c cable' })).toBe('Typing “usb c cable”…');
+    expect(stepLabel({ action: 'screenshot', tab: 1 })).toBe('Looking at page…');
   });
 });
