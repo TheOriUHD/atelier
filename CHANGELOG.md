@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.6] — 2026-11-21
+
 - **A server can update itself.** With **Update automatically** on (Settings › Admin › Server; off until an admin turns it on, setting `server.autoUpdate`), the server asks the update feed for the newest version every minute (`ATELIER_AUTO_UPDATE_CHECK_SECONDS`, 60 by default, 30 at the least), has the updater service download a newer one at once, and installs it as soon as nothing is running: no turn being written in any session (a sub-agent's included), no summary being made, no sub-agent or command running in the background (a `/loop` doesn't count: it ends with a restart anyway). It checks every three seconds while it waits, so the install follows the last thing that finishes within seconds. Nobody is asked. A failed download or install is shown in the Server status and tried again after 5 minutes, then 15, then every hour; an install after which the server still runs the old version (a Compose file that pins an image tag) is remembered in `auto-update.json` in the data folder and not repeated for a day, so a server never restarts every minute.
 
 - **The updater downloads ahead.** `POST /pull` downloads the new images without touching the running ones, and `POST /update?pull=false` recreates the server and the sandbox from what was downloaded, which takes seconds because nothing is left to fetch; `GET /status` lists `features: ['pull']` and the job has `pulledAt`. An updater from before this version (it isn't one of the services it recreates) still downloads and installs in one go, at the moment nothing is running; `docker compose pull updater && docker compose up -d updater` once makes it download ahead.
