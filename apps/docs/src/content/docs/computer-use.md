@@ -126,20 +126,20 @@ With the **Atelier for Chrome** extension in Chrome, Brave, Edge or Arc, the ass
 browser itself instead of its pictures:
 
 - **In tabs of its own.** It opens pages in background tabs, never in your own tabs, in an orange tab group named after
-  the chat *(next release)*. Your tab stays in front and the browser doesn't come forward. The tabs stay open after the
-  reply *(next release)*, so you can look at what it found and it can go on in them in the next message. It closes the
-  ones it no longer needs, keeps at most ten per chat (opening another closes the one used longest ago), and closes all
-  of a chat's tabs when you archive or delete the chat. It can't see your own tabs, bookmarks or history.
-- **You can watch it** *(next release)*. The tab it is working in glows orange at its edges, and its steps ("Searching
-  duckduckgo.com for “usb c cable”", "Opens the second result") are listed at the bottom left of the page as it goes.
-  When the reply is done the glow fades; if it is waiting for your answer in the chat, the page says so. Nothing of this
-  is in its way: clicks go through, and its own screenshots of the page leave it out.
+  the chat. Your tab stays in front and the browser doesn't come forward. The tabs stay open after the reply, so you can
+  look at what it found and it can go on in them in the next message. It closes the ones it no longer needs, keeps at
+  most ten per chat (opening another closes the one used longest ago), and closes all of a chat's tabs when you archive
+  or delete the chat. It can't see your own tabs, bookmarks or history.
+- **You can watch it.** The tab it is working in glows orange at its edges, and its steps ("Searching duckduckgo.com for
+  “usb c cable”", "Opens the second result") are listed at the bottom left of the page as it goes. When the reply is
+  done the glow fades; if it is waiting for your answer in the chat, the page says so. Nothing of this is in its way:
+  clicks go through, and its own screenshots of the page leave it out.
 - **It reads pages.** It gets the page's text and a list of its links, buttons and fields, and acts on them by name, so
   it needs far fewer screenshots and doesn't miss a button by a few pixels. It can choose from lists, which the
   background mode for apps can't.
-- **It looks things up properly** *(next release)*. For a question, it opens and reads several results rather than the
-  first, follows links when they lead closer, reads long pages to the end in parts, and answers with what the pages say
-  and links to them.
+- **It looks things up properly.** For a question, it opens and reads several results rather than the first, follows
+  links when they lead closer, reads long pages to the end in parts, and answers with what the pages say and links to
+  them.
 - **Chrome says so.** While it acts in a page, the browser shows a bar saying Atelier "started debugging this browser";
   **Cancel** there stops it in that tab, and it asks you before going on. The bar goes when it has been idle a moment.
 - **No question for each step.** You installed it for this, and it works only in its own tabs, so it doesn't ask before
@@ -157,8 +157,8 @@ it starts.
 On a server, the extension on your computer works for your server's chats too: the desktop app lends it over the same
 link as computer use, while **Computer use** is on in the desktop app. The server needs version 0.10.4 or later.
 
-The chat tab groups, the glow and the steps need Atelier for Chrome 0.2.0 *(next release)*; with 0.1.0 the tabs go in
-one orange **Atelier** group, also staying open, and nothing shows in the page. Chrome updates extensions from the store
+The chat tab groups, the glow and the steps need Atelier for Chrome 0.2.0 or later; with 0.1.0 the tabs go in one
+orange **Atelier** group, also staying open, and nothing shows in the page. Chrome updates extensions from the store
 by itself within a few hours, or at once with **Update** on `chrome://extensions` (Developer mode).
 
 ### Denied apps
