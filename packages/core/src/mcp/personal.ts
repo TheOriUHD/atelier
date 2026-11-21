@@ -59,6 +59,7 @@ export interface PersonalConnectorsDeps {
   /** A person's connectors changed state: their windows hear of it. */
   changed(userId: string): void;
   callTimeoutMs?: number;
+  probeTimeoutMs?: number;
 }
 
 interface Person {
@@ -304,6 +305,7 @@ export class PersonalConnectors {
       fetch: guarded,
       reach: (server, resolved, log) => this.reach(userId, person, server.name, server.config, resolved, log),
       ...(this.deps.callTimeoutMs ? { callTimeoutMs: this.deps.callTimeoutMs } : {}),
+      ...(this.deps.probeTimeoutMs ? { probeTimeoutMs: this.deps.probeTimeoutMs } : {}),
     });
     manager.on('changed', (list) => {
       person.statuses = list;

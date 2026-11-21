@@ -3,7 +3,7 @@
  * to the secret store; the entry keeps only `${secret:<id>}` references, with ids derived from the connector name.
  * A connector that signs in with OAuth needs none: the backend keeps what the sign-in gives it.
  */
-import { McpServerName, type ConnectorPreset, type McpImportEntry, type McpServerConfig, type McpTransport, type SecretSummary } from '@atelier/protocol';
+import { McpServerName, presetRunsOn, type ConnectorPreset, type McpImportEntry, type McpServerConfig, type McpTransport, type SecretSummary } from '@atelier/protocol';
 
 /** A credential to store before the entry that refers to it is written. */
 export interface NewSecret {
@@ -127,13 +127,50 @@ export function entryFromForm(form: ConnectorForm, keep: Partial<McpServerConfig
   return { entry: { type: form.type, ...transport, enabled, disabledTools, preset }, secrets };
 }
 
-/** A preset's entry with the pasted token stored as `mcp-<name>`. */
-export function entryFromPreset(preset: ConnectorPreset, name: string, token: string, fields: Record<string, string>): { entry: Partial<McpServerConfig>; secrets: NewSecret[] } {
+/** A preset's entry with the pasted token stored as `mcp-<name>`; `platform` is the system its program runs on. */
+export function entryFromPreset(preset: ConnectorPreset, name: string, token: string, fields: Record<string, string>, platform: string): { entry: Partial<McpServerConfig>; secrets: NewSecret[] } {
   const id = secretId('mcp', name);
   return {
-    entry: { ...preset.server({ secretRef: reference(id), fields }), preset: preset.id },
-    secrets: [{ id, label: `${preset.token.label} for ${name}`, kind: secretKind(preset.token.label), value: token.trim() }],
+    entry: { ...preset.server({ secretRef: reference(id), fields, platform }), preset: preset.id },
+    secrets: preset.token ? [{ id, label: `${preset.token.label} for ${name}`, kind: secretKind(preset.token.label), value: token.trim() }] : [],
   };
+}
+
+/** What `connectors.save` takes for a person's own connector. */
+export interface PersonalInput {
+  name: string;
+  type: McpTransport;
+  command?: string;
+  args?: string[];
+  url?: string;
+  env: Record<string, string>;
+  headers: Record<string, string>;
+  auth?: 'oauth';
+}
+
+/**
+ * A preset as one of the person's own connectors: the pasted token goes in as it is, since all of its values are kept
+ * as their secret on the server. `oauth` signs in to the preset's hosted server instead.
+ */
+export function personalFromPreset(preset: ConnectorPreset, name: string, token: string, fields: Record<string, string>, platform: string, oauth: boolean): PersonalInput {
+  if (oauth && preset.oauth) return { name, type: 'http', url: preset.oauth.url, auth: 'oauth', env: {}, headers: {} };
+  const server = preset.server({ secretRef: token.trim(), fields, platform });
+  return server.type === 'stdio'
+    ? { name, type: 'stdio', command: server.command!, args: server.args ?? [], env: server.env ?? {}, headers: {} }
+    : { name, type: server.type, url: server.url!, env: {}, headers: server.headers ?? {} };
+}
+
+const SYSTEMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' };
+
+/**
+ * Why a preset can't be added from here, if it can't: its setup runs a program and nothing here runs one (`programs`),
+ * or its program doesn't exist for the system it would run on (`platform`, null when that isn't known).
+ */
+export function presetUnavailable(preset: ConnectorPreset, programs: boolean, platform: string | null): string | undefined {
+  if (!preset.desktopOnly || preset.oauth) return undefined;
+  if (!programs) return 'Only in the desktop app: it runs a program on your computer.';
+  if (platform && !presetRunsOn(preset, platform)) return `${preset.name} is only on ${(preset.platforms ?? []).map((p) => SYSTEMS[p] ?? p).join(' and ')}.`;
+  return undefined;
 }
 
 /** A preset's hosted server, to sign in to with OAuth. */

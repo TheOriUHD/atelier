@@ -2,19 +2,57 @@
  * MCP over a device link's lines (ARCHITECTURE §9-B, §21): a person's connector that runs a program runs it on their
  * desktop, and each JSON-RPC message is one line of a channel there and back. `LineTransport` is the server's end, an
  * SDK transport over that channel; `programChannel` is the desktop's, the program's stdio as a channel, started the way
- * the SDK starts a stdio server (cross-spawn, its safe default environment, stderr kept apart).
+ * the SDK starts a stdio server (cross-spawn, its safe default environment, stderr kept apart). `programLine` is what
+ * both a program here and one on a desktop start with.
  */
+import { stat } from 'node:fs/promises';
+import { isAbsolute } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { deserializeMessage, serializeMessage, SdkError, SdkErrorCode, type JSONRPCMessage, type Transport } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { interpolate } from '../util/interpolate.ts';
 import type { RunnerChannel } from '../workspaces/runner-client.ts';
+
+/**
+ * A connector's command line as it runs on this computer: `${VAR}` (and `${VAR:-default}`) in its command and arguments
+ * filled in from this computer's environment, as Claude Code does, so one entry fits every computer (Roblox Studio's
+ * `${LOCALAPPDATA}\Roblox\mcp.bat`). A command given by its path must exist: a program that isn't installed says so
+ * instead of failing to start. `where` names this computer in what the person reads.
+ */
+export async function programLine(command: string, args: readonly string[], env: (name: string) => string | undefined, where = 'this computer'): Promise<{ command: string; args: string[] }> {
+  const missing = new Set<string>();
+  const fill = async (value: string) => {
+    // `${secret:…}` stays as written: only a connector's values (its env and headers) refer to secrets.
+    const filled = await interpolate(value, { secret: async (id) => `\${secret:${id}}`, env });
+    for (const name of filled.missing) missing.add(name);
+    return filled.value;
+  };
+  const line = { command: await fill(command), args: await Promise.all(args.map(fill)) };
+  if (missing.size) throw new Error(`Missing the environment variable ${[...missing].join(', ')} on ${where}.`);
+  if (isAbsolute(line.command) && !(await stat(line.command).then((s) => s.isFile(), () => false))) {
+    throw new Error(`${line.command} isn't on ${where}: install the program it belongs to, or correct the command.`);
+  }
+  return line;
+}
+
+/** Whether a connect failed because the program ended on the modern probe (SDKs from before it end on any request before `initialize`). */
+export function endedOnProbe(error: unknown): boolean {
+  return error instanceof SdkError && error.code === SdkErrorCode.EraNegotiationFailed && /closed during the server\/discover probe/.test(error.message);
+}
 
 /** The client's end of a connector whose program runs elsewhere: its messages are the channel's lines. */
 export class LineTransport implements Transport {
   onclose?: Transport['onclose'];
   onerror?: Transport['onerror'];
   onmessage?: Transport['onmessage'];
+  /**
+   * A program's stdio, as the SDK tells one apart (it has these two): a 2025 program that doesn't answer the modern
+   * probe then gets `initialize` instead of failing with "Version negotiation probe timed out". Its stderr goes to the
+   * connector's log and its process is on another computer, so neither is here.
+   */
+  readonly stderr = null;
+  readonly pid = null;
   private ended = false;
 
   constructor(private readonly channel: RunnerChannel) {}

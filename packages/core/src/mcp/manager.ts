@@ -32,6 +32,7 @@ import { textOutput, type Tool, type ToolContext, type ToolOutput } from '../too
 import { escapeTags } from '../prompts/escape.ts';
 import { interpolate } from '../util/interpolate.ts';
 import { networkFailure } from '../util/network-error.ts';
+import { endedOnProbe, programLine } from './line-transport.ts';
 import { CLIENT_METADATA_PATH, loadCredentials, loopbackCallback, OAUTH_CALLBACK_PATH, oauthSecretId, PendingSignIn, saveCredentials, StoredSignIn, type OAuthSecrets } from './oauth.ts';
 import { toOutput } from './output.ts';
 
@@ -51,6 +52,8 @@ export interface McpManagerDeps {
   fetch?: FetchLike;
   /** How long a call may run, not counting the time the person takes to answer the server. */
   callTimeoutMs?: number;
+  /** How long a server may leave the modern probe unanswered before it is taken for a 2025 one (10 s). */
+  probeTimeoutMs?: number;
 
   // A person's own connectors (personal.ts) are reached another way, with their own secrets.
   /**
@@ -443,9 +446,21 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
     const { config } = server;
     const options = { timeout: CONNECT_TIMEOUT_MS, ...(server.prior ? { prior: server.prior } : {}) };
     const reached = await this.deps.reach?.({ name: server.name, config }, resolved, (line) => this.note(server, line));
-    if (reached && 'transport' in reached) return connected(this.client(server, true), reached.transport, options);
+    if (reached && 'transport' in reached) {
+      try {
+        return await connected(this.client(server, true), reached.transport, options);
+      } catch (error) {
+        // A program on another computer is probed in place, unlike one started here (the SDK probes a copy of that): one
+        // that ended on the probe is started again and spoken to the 2025 way.
+        if (server.prior || !endedOnProbe(error)) throw error;
+        this.note(server, 'It ended on the MCP 2026-07-28 probe: starting it again with the 2025 handshake.');
+        server.prior = { kind: 'legacy' };
+        return this.handshake(server, resolved);
+      }
+    }
     if (config.type === 'stdio') {
-      const transport = new StdioClientTransport({ command: config.command!, args: config.args, env: { ...getDefaultEnvironment(), ...env }, stderr: 'pipe' });
+      const line = await programLine(config.command!, config.args, (name) => this.deps.env[name]);
+      const transport = new StdioClientTransport({ command: line.command, args: line.args, env: { ...getDefaultEnvironment(), ...env }, stderr: 'pipe' });
       if (transport.stderr) createInterface({ input: transport.stderr as Readable }).on('line', (line) => this.note(server, line));
       return connected(this.client(server, true), transport, options);
     }
@@ -470,7 +485,7 @@ export class McpManager extends EventEmitter<{ changed: [McpServerStatus[]] }> {
       { name: APP.name, version: APP.version },
       {
         capabilities: { elicitation: { form: {}, url: {} } },
-        ...(negotiate ? { versionNegotiation: { mode: 'auto' as const, probe: { timeoutMs: PROBE_TIMEOUT_MS } } } : {}),
+        ...(negotiate ? { versionNegotiation: { mode: 'auto' as const, probe: { timeoutMs: this.deps.probeTimeoutMs ?? PROBE_TIMEOUT_MS } } } : {}),
         listChanged: {
           tools: {
             onChanged: (error, tools) => {

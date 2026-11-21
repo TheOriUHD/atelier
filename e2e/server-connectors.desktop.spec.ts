@@ -40,7 +40,11 @@ test("desktop signed in to a server: a person's own connector runs on it, and it
     await page.evaluate(() => (location.hash = '#/customize?tab=connectors'));
     const yours = page.locator('section', { has: page.getByRole('heading', { name: 'Your connectors' }) });
     await yours.getByRole('button', { name: 'Add your own' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Add your connector' });
+    // The ready-made ones first; one that runs a program is offered here, in the desktop app.
+    const catalog = page.getByRole('dialog', { name: 'Add your connector' });
+    await expect(catalog.getByRole('button', { name: /^Brave Search/ })).toBeEnabled();
+    await catalog.getByRole('button', { name: /^Custom/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add your own custom connector' });
     await dialog.getByLabel('Name').fill('mock');
     await dialog.getByRole('radio', { name: 'stdio' }).click();
     await dialog.getByLabel('Command').fill(process.execPath);

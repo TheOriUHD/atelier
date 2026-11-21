@@ -276,7 +276,7 @@ it shows.
 | `type` `stdio`, `http`, `sse` | Supported. An entry with `url` and no `type` imports as `http`; without `url` as `stdio`. stdio servers run only in the desktop app. |
 | `type` `ws`, `sdk`, or `streamable-http` | Not imported. |
 | `command`, `args`, `env`, `url`, `headers` | Supported. |
-| `${VAR}` and `${VAR:-default}` | Supported in `env`, `headers` and `url` only (not in `command` or `args`), resolved when connecting, plus Atelier's `${secret:id}`. A variable with no value and no default stops the connection with "Missing the environment variable VAR." instead of being left as text. |
+| `${VAR}` and `${VAR:-default}` | Supported in `command`, `args`, `env`, `headers` and `url`, resolved when connecting, plus Atelier's `${secret:id}` (not in `command` or `args`). In a stdio server's command, arguments and env they come from the environment of the computer the program runs on. A variable with no value and no default stops the connection with "Missing the environment variable VAR." instead of being left as text. |
 | `oauth` block (`clientId`, `callbackPort`, `scopes`), `headersHelper`, `timeout`, `alwaysLoad` | Not supported; dropped on import. A server can use `auth: "oauth"`, which an admin signs in once. |
 | Tool names | `mcp__<server>__<tool>`, other characters replaced by `_`, at most 64 characters. Permission rules `mcp__server`, `mcp__server__tool` and `mcp__server__*` work. |
 | Approval of project servers | None, because nothing is read from a project automatically. |

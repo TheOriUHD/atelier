@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CONNECTOR_PRESETS, McpServerConfig } from '@atelier/protocol';
-import { connectorFormErrors, emptyForm, entryFromForm, entryFromImport, entryFromPreset, formFromConfig, secretId, storesSecret } from './connector-form.ts';
+import { connectorFormErrors, emptyForm, entryFromForm, entryFromImport, entryFromPreset, formFromConfig, personalFromPreset, presetUnavailable, secretId, storesSecret } from './connector-form.ts';
 
 const form = (patch: Partial<ReturnType<typeof emptyForm>>) => ({ ...emptyForm(), ...patch });
+const preset = (id: string) => CONNECTOR_PRESETS.find((p) => p.id === id)!;
 
 describe('connector forms', () => {
   it('derives valid secret ids from names', () => {
@@ -68,11 +69,47 @@ describe('connector forms', () => {
   });
 
   it('builds a preset’s entry around the stored token', () => {
-    const ha = CONNECTOR_PRESETS.find((p) => p.id === 'home-assistant')!;
-    expect(entryFromPreset(ha, 'home', ' tok-123 ', { url: 'http://ha.lan:8123/' })).toEqual({
+    const ha = preset('home-assistant');
+    expect(entryFromPreset(ha, 'home', ' tok-123 ', { url: 'http://ha.lan:8123/' }, 'linux')).toEqual({
       entry: { type: 'http', url: 'http://ha.lan:8123/api/mcp', headers: { Authorization: 'Bearer ${secret:mcp-home}' }, preset: 'home-assistant' },
       secrets: [{ id: 'mcp-home', label: 'Long-lived access token for home', kind: 'token', value: 'tok-123' }],
     });
+    // One that needs nothing pasted stores nothing, and runs the program for the system it runs on.
+    expect(entryFromPreset(preset('roblox-studio'), 'roblox-studio', '', {}, 'win32')).toEqual({
+      entry: { type: 'stdio', command: '${LOCALAPPDATA}\\Roblox\\mcp.bat', preset: 'roblox-studio' },
+      secrets: [],
+    });
+  });
+
+  it('makes a preset one of the person’s own connectors, its token one of its values', () => {
+    expect(personalFromPreset(preset('notion'), 'notion', ' ntn_123 ', {}, 'darwin', false)).toEqual({
+      name: 'notion',
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', '@notionhq/notion-mcp-server'],
+      env: { NOTION_TOKEN: 'ntn_123' },
+      headers: {},
+    });
+    expect(personalFromPreset(preset('notion'), 'notion', '', {}, 'darwin', true)).toEqual({ name: 'notion', type: 'http', url: 'https://mcp.notion.com/mcp', auth: 'oauth', env: {}, headers: {} });
+    expect(personalFromPreset(preset('github'), 'gh', 'ghp_x', {}, 'linux', false)).toMatchObject({ type: 'http', headers: { Authorization: 'Bearer ghp_x' } });
+    expect(personalFromPreset(preset('roblox-studio'), 'roblox', '', {}, 'darwin', false)).toEqual({
+      name: 'roblox',
+      type: 'stdio',
+      command: '/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP',
+      args: [],
+      env: {},
+      headers: {},
+    });
+  });
+
+  it('says why a preset can’t be added from here', () => {
+    const roblox = preset('roblox-studio');
+    expect(presetUnavailable(roblox, false, null)).toBe('Only in the desktop app: it runs a program on your computer.');
+    expect(presetUnavailable(roblox, true, 'linux')).toBe('Roblox Studio is only on macOS and Windows.');
+    expect(presetUnavailable(roblox, true, 'win32')).toBeUndefined();
+    // One that can sign in instead, or reaches a service, can be added anywhere.
+    expect(presetUnavailable(preset('notion'), false, null)).toBeUndefined();
+    expect(presetUnavailable(preset('github'), false, null)).toBeUndefined();
   });
 
   it('moves the credentials an import flagged', () => {

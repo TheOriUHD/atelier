@@ -1,7 +1,8 @@
 /**
  * Connector presets (ARCHITECTURE §9-B): ready-made MCP server entries for common services. The person pastes
  * a token (kept in the secret store; the entry only references it) and, for self-hosted services, an address.
- * Services whose hosted server lets clients register themselves can be signed in to with OAuth instead.
+ * Services whose hosted server lets clients register themselves can be signed in to with OAuth instead. A program
+ * that comes with an app on the person's computer (Roblox Studio's) needs neither.
  */
 
 /** An `mcpServers` entry in Claude Code's shape. */
@@ -18,17 +19,29 @@ export interface ConnectorPreset {
   id: string;
   name: string;
   description: string;
-  /** What to paste, and where to create it. */
-  token: { label: string; url: string; help: string };
+  /** What to paste, and where to create it; absent when it needs nothing pasted. */
+  token?: { label: string; url: string; help: string };
   /** Other inputs, such as a self-hosted address. */
   fields: { id: string; label: string; placeholder: string }[];
   /** The token setup runs a stdio server on the person's computer, so only the desktop app offers it. */
   desktopOnly: boolean;
+  /** The systems its program exists for (`process.platform` names); absent for any. */
+  platforms?: readonly string[];
   /** The hosted server to sign in to with OAuth instead of pasting a token. */
   oauth?: { url: string };
   note?: string;
-  /** `secretRef` is `${secret:<id>}` for the pasted token. */
-  server(input: { secretRef: string; fields: Record<string, string> }): PresetServer;
+  /** What has to be true on the computer for it to work, shown on its form and on its page while it fails. */
+  setup?: string;
+  /**
+   * `secretRef` stands for the pasted token: `${secret:<id>}`, or the token itself for a person's own connector (whose
+   * values are its secret). `platform` is the system the program runs on (`darwin`, `win32`, `linux`).
+   */
+  server(input: { secretRef: string; fields: Record<string, string>; platform: string }): PresetServer;
+}
+
+/** Whether a preset's program exists for `platform`. */
+export function presetRunsOn(preset: Pick<ConnectorPreset, 'platforms'>, platform: string): boolean {
+  return !preset.platforms || preset.platforms.includes(platform);
 }
 
 const bearer = (secretRef: string) => ({ Authorization: `Bearer ${secretRef}` });
@@ -93,5 +106,19 @@ export const CONNECTOR_PRESETS: readonly ConnectorPreset[] = [
     fields: [{ id: 'url', label: 'Home Assistant address', placeholder: 'http://homeassistant.local:8123' }],
     desktopOnly: false,
     server: ({ secretRef, fields }) => ({ type: 'http', url: `${(fields.url ?? '').replace(/\/+$/, '')}/api/mcp`, headers: bearer(secretRef) }),
+  },
+  {
+    id: 'roblox-studio',
+    name: 'Roblox Studio',
+    description: 'Run Luau, read and edit scripts, insert assets, play-test and take screenshots in the place open in Studio.',
+    fields: [],
+    desktopOnly: true,
+    platforms: ['darwin', 'win32'],
+    note: 'Runs the MCP server that comes with Roblox Studio, on your computer.',
+    setup: 'Roblox Studio must be installed and open, with Assistant › ⋯ › Manage MCP Servers › Enable Studio as MCP server turned on.',
+    // As Roblox documents them (create.roblox.com/docs/studio/mcp). On Windows, Studio's version folder changes with every
+    // update; the launcher it keeps at %LOCALAPPDATA%\Roblox\mcp.bat finds the current one.
+    server: ({ platform }) =>
+      platform === 'win32' ? { type: 'stdio', command: '${LOCALAPPDATA}\\Roblox\\mcp.bat' } : { type: 'stdio', command: '/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP' },
   },
 ];

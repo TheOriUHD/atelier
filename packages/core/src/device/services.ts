@@ -26,7 +26,7 @@ import type { RunnerChannel } from '../workspaces/runner-client.ts';
 import { plainHttpFetch } from '../providers/plain-http.ts';
 import { detectLocalServers } from '../providers/local-servers.ts';
 import { detectImageServers } from '../images/detect.ts';
-import { programChannel } from '../mcp/line-transport.ts';
+import { programChannel, programLine } from '../mcp/line-transport.ts';
 import { importClaudeCode } from '../mcp/import.ts';
 import { homeFs, scanHome, watchHome } from '../extensions/home.ts';
 import { interpolate } from '../util/interpolate.ts';
@@ -348,8 +348,8 @@ export function deviceServices(o: DeviceServicesOptions) {
 
     /**
      * A personal connector's program, allowed here by exactly what runs (its fingerprint): never with an environment
-     * variable that changes which code runs, `${VAR}` filled in from this computer's environment, run in the home folder.
-     * Its stdout and stdin are the channel's lines, its stderr goes to `log`.
+     * variable that changes which code runs, `${VAR}` in its values, command and arguments filled in from this computer's
+     * environment, run in the home folder. Its stdout and stdin are the channel's lines, its stderr goes to `log`.
      */
     async mcp(service: Extract<DeviceStart, { kind: 'mcp' }>, log: (line: string) => void): Promise<RunnerChannel> {
       const keys = Object.keys(service.env);
@@ -367,10 +367,14 @@ export function deviceServices(o: DeviceServicesOptions) {
         env[key] = filled.value;
       }
       if (missing.length) throw new Refusal('failed', `${o.deviceName} has no ${missing.join(', ')} in its environment.`);
+      // Allowed as written: `${VAR}` in its command and arguments is filled in only now, from this computer's environment.
+      const line = await programLine(service.command, service.args, (name) => process.env[name], o.deviceName).catch((e: unknown) => {
+        throw new Refusal('failed', e instanceof Error ? e.message : String(e));
+      });
       try {
-        return await programChannel({ command: service.command, args: service.args, env, cwd: home }, log);
+        return await programChannel({ command: line.command, args: line.args, env, cwd: home }, log);
       } catch (e) {
-        throw new Refusal('failed', `${service.command} didn't start on ${o.deviceName}: ${e instanceof Error ? e.message : String(e)}`);
+        throw new Refusal('failed', `${line.command} didn't start on ${o.deviceName}: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
 
