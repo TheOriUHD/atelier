@@ -196,7 +196,13 @@ export const SettingsSchema = z.object({
   ultracode: z.object({ enabled: z.boolean().default(true) }).default({ enabled: true }),
   /** File pre-images kept for Rewind. */
   checkpoints: z.object({ retentionDays: z.number().int().min(1).max(3650).default(30) }).default({ retentionDays: 30 }),
-  server: z.object({ signup: SignupPolicy.default('invite') }).default({ signup: 'invite' }),
+  server: z
+    .object({
+      signup: SignupPolicy.default('invite'),
+      /** The server downloads a new version as soon as it is out and installs it when no turn is running (off unless an admin turns it on). */
+      autoUpdate: z.boolean().default(false),
+    })
+    .default({ signup: 'invite', autoUpdate: false }),
   /** How long the admin activity log of a shared server keeps its events (ARCHITECTURE §21). */
   audit: z.object({ retentionDays: z.number().int().min(7).max(365).default(90) }).default({ retentionDays: 90 }),
   /** System-wide permission rules in Claude Code syntax; projects and people add their own. */

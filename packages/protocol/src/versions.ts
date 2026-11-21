@@ -37,8 +37,32 @@ export const ServerUpdateJob = z.object({
   finishedAt: z.number().nullable(),
   /** While pulling: bytes down of the bytes to fetch, a whole percent that never goes back, and whether it is unpacking. An updater before 0.7.1 has none. */
   progress: z.object({ done: z.number(), total: z.number(), percent: z.number(), unpacking: z.boolean() }).nullable().default(null),
+  /** When the new images finished downloading and wait for the install (an updater from 0.10.6 on, which downloads ahead). */
+  pulledAt: z.number().nullable().default(null),
 });
 export type ServerUpdateJob = z.infer<typeof ServerUpdateJob>;
+
+/** The code of the error a turn gets while the server installs an update: the apps say so calmly instead of failing. */
+export const UPDATING_ERROR_CODE = 'updating';
+
+/**
+ * How an automatic update stands (Settings › Admin › Server › Update automatically). `idle`: nothing newer is known;
+ * `downloading`: the new version is coming down; `waiting`: it is down and installs when no turn, sub-agent or command
+ * is running; `installing`: the server is restarting into it; `failed`: the last try failed, the next is at `retryAt`.
+ */
+export const ServerAutoUpdate = z.object({
+  enabled: z.boolean(),
+  state: z.enum(['idle', 'downloading', 'waiting', 'installing', 'failed']),
+  /** The version being downloaded, waited for or installed. */
+  version: z.string().nullable(),
+  /** While waiting: what holds the install back. */
+  waitingFor: z.object({ turns: z.number(), background: z.number() }).nullable(),
+  error: z.string().nullable(),
+  retryAt: z.number().nullable(),
+  /** The updater can download ahead and install in a moment; an updater from before 0.10.6 does both at the install. */
+  downloadsAhead: z.boolean(),
+});
+export type ServerAutoUpdate = z.infer<typeof ServerAutoUpdate>;
 
 /** Settings › Admin › Server; `install`: the updater service can do it, by hand (`manual`), or rebuild (`source`). */
 export const ServerUpdateStatus = z.object({
@@ -52,5 +76,7 @@ export const ServerUpdateStatus = z.object({
   /** Why the configured updater can't be used (unreachable, refused the secret). */
   updaterError: z.string().nullable(),
   job: ServerUpdateJob.nullable(),
+  /** Absent on a server from before automatic updates. */
+  auto: ServerAutoUpdate.nullable().optional(),
 });
 export type ServerUpdateStatus = z.infer<typeof ServerUpdateStatus>;

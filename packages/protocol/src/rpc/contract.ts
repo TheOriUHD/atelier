@@ -897,6 +897,8 @@ export const contract = {
     'ssh.prompt': SshPrompt,
     /** A prompt is no longer waiting (answered elsewhere, or it timed out). */
     'ssh.promptClosed': Id,
+    /** The server is about to restart into a new version (`installing`), or the install didn't happen: apps say so calmly instead of "connection lost". */
+    'server.updating': z.object({ installing: z.boolean(), version: z.string().nullable() }),
     'mcp.changed': z.array(McpServerStatus),
     /** Skills, commands, agents or plugin installs changed in this machine's folders: lists should be read again. */
     'extensions.changed': Empty,
