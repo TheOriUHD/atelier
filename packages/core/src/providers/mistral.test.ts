@@ -466,6 +466,30 @@ describe('Mistral errors', () => {
     expect(error).toMatchObject({ code: 'provider_busy', retryable: true, retryAfterMs: 3000 });
   });
 
+  it('asks again without a picture Mistral could not open, and keeps it out of the requests after', async () => {
+    const refusal = () => new Response(JSON.stringify({ object: 'error', message: "Image, 'data:image/png;base64,iVBORw==', could not be loaded as a valid image. Allowed formats are JPEG, PNG, WEBP", type: 'invalid_request_error', code: null }), { status: 400, headers: { 'content-type': 'application/json' } });
+    let n = 0;
+    const { adapter, calls } = setup('mistral', () => (n++ === 0 ? refusal() : streamResponse(sseOf([last({ content: 'Seen.' }, 'stop', { prompt_tokens: 3, completion_tokens: 1 })], true))));
+    const request = chatRequest({ model: 'mistral-small-2603', messages: [message('user', [{ type: 'text', text: 'Look' }, { type: 'image', mime: 'image/png', blob: 'png' }])] });
+    expect(textOf(await collect(adapter.stream(request)))).toBe('Seen.');
+    const chats = () => calls.filter((c) => c.url.endsWith('/chat/completions')).map((c) => JSON.stringify(c.body));
+    expect(chats()).toHaveLength(2);
+    expect(chats()[0]).toContain('iVBORw==');
+    expect(chats()[1]).not.toContain('iVBORw==');
+    expect(chats()[1]).toContain('could not read');
+    // The picture is still in the conversation next time: it goes as a note at once, without a failed request first.
+    expect(textOf(await collect(adapter.stream(request)))).toBe('Seen.');
+    expect(chats()).toHaveLength(3);
+    expect(chats()[2]).not.toContain('iVBORw==');
+  });
+
+  it('keeps a refused picture\'s data out of the error it shows', async () => {
+    const adapter = failing(400, { object: 'error', message: `Image, 'data:image/png;base64,${'QUJD'.repeat(50000)}', could not be loaded as a valid image.`, type: 'invalid_request_error', code: null });
+    const error = finishOf(await collect(adapter.stream(chatRequest()))).error!;
+    expect(error.message.length).toBeLessThan(300);
+    expect(error.message).toContain('could not be loaded as a valid image');
+  });
+
   it('tells a wrong key, and a Vibe plan past its allowance', async () => {
     expect(finishOf(await collect(failing(401, { detail: 'Invalid API Key' }).stream(chatRequest()))).error!.code).toBe('provider_auth');
     const error = finishOf(await collect(failing(402, { object: 'error', message: 'Payment required', type: 'payment_required' }, 'mistral-vibe').stream(chatRequest()))).error!;

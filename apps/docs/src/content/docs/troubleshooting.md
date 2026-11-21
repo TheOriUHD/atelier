@@ -133,11 +133,16 @@ your PIN?** › Touch ID on a Mac with it, or quit Atelier and delete `screen-lo
 | Cannot reach *Provider* at *host* | The connection failed. Retried automatically. |
 | *Provider* at *host* took too long to respond / … sent nothing for too long (no response for 15 minutes) | A local server went silent. Raise `ATELIER_MODEL_IDLE_TIMEOUT_MS` for models that stay quiet while they write a long call. |
 | The model connection ended before the reply was complete. | The stream stopped mid-reply. Retried automatically. |
+| The model finished without writing a reply, also when asked again. | The model stopped after a tool result (or after thinking) without writing anything, three times in a row. Send a message to continue, or try another model or a lower reasoning effort. |
 | The model's reply didn't follow its own format, so *Provider* couldn't read it | The server could not parse a tool call. Atelier asks again twice. A model with a poor chat template does this often: set its tool calling to **Prompted** (below). |
 
-**Retries.** A busy provider, a dropped connection or a timeout is retried up to 10 times with growing waits (5, 10, 15 and
-30 seconds, then 1, 2, 4, 8, 16 and 32 minutes). The status line shows "Connection interrupted. Retry *n* of 10" and, in
-the transcript, "Waiting to reconnect". Stop ends it. Quota errors and bad credentials are not retried.
+**Retries.** A dropped connection or a timeout is retried up to 10 times with growing waits (5, 10, 15 and 30 seconds,
+then 1, 2, 4, 8, 16 and 32 minutes). A provider that answers busy, unavailable or "rate limit exceeded" (and a stream it
+closed early) is retried up to 10 times too, but sooner: after 0.5, 1, 2, 4, 8, 15 and 30 seconds, then 1, 2 and 4
+minutes, or after the wait the provider asks for (its `Retry-After`) when it sends one. A provider that asks for more than
+ten minutes is not waited for. A reply with no text and no tool call is asked for again twice; if it stays empty the
+message says "The model finished without writing a reply". The status line shows "Connection interrupted. Retry *n* of
+10" and, in the transcript, "Waiting to reconnect". Stop ends it. Quota errors and bad credentials are not retried.
 
 ### Tools don't work with a model
 

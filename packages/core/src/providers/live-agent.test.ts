@@ -83,9 +83,27 @@ it.skipIf(!key || !process.env.LIVE_AGENT)(`a ${mode} turn through ${type} ${mod
     let done!: () => void;
     const finished = new Promise<void>((r) => (done = r));
     let running = false;
+    // LIVE_AGENT_TRACE=1 prints a line for what happens as it happens: where a slow or stuck turn is.
+    const trace = !!process.env.LIVE_AGENT_TRACE;
+    const sizes = new Map<string, number>();
+    let lastTrace = Date.now();
     c.on('session.event', ({ sessionId, event }) => {
       if (sessionId !== session.id) return;
       events.push(event);
+      if (trace) {
+        const t = `[${Math.round((Date.now() - started) / 1000)}s]`;
+        if (event.type === 'delta') {
+          sizes.set(event.kind, (sizes.get(event.kind) ?? 0) + event.text.length);
+          if (Date.now() - lastTrace > 15_000) {
+            lastTrace = Date.now();
+            console.log(`${t} streaming ${JSON.stringify(Object.fromEntries(sizes))}`);
+          }
+        } else if (event.type === 'phase') console.log(`${t} phase ${String(event.phase)}${event.retryAttempt ? ` attempt ${event.retryAttempt}` : ''}`);
+        else if (event.type === 'status') console.log(`${t} status ${event.status}`);
+        else if (event.type === 'done') console.log(`${t} reply done stop=${String(event.stopReason)}${event.error ? ` ERROR ${event.error.code}: ${event.error.message}` : ''} usage=${JSON.stringify(event.usage ?? {})}`);
+        else if (event.type === 'tool_output') void 0;
+        else if (event.type === 'part' && event.part.type === 'tool_call') console.log(`${t} call ${event.part.name}`);
+      }
       if (event.type === 'status') {
         if (event.status === 'running') running = true;
         else if (running && event.status !== 'waiting') done();

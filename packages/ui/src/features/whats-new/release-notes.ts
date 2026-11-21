@@ -39,8 +39,18 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.10.5',
-    intro: 'The memory budget for local models now sizes more of them, and says plainly why a model has no number.',
+    intro: 'Mistral and other cloud models recover from busy servers, empty replies and a picture they can’t open, and the memory budget for local models sizes more of them.',
     highlights: [
+      {
+        icon: RefreshCw,
+        title: 'Busy servers and empty replies are tried again at once',
+        body: 'When a model server answers “busy” or “rate limit exceeded”, Atelier now tries again after half a second, then a little longer each time, and waits as long as the server asks if it says so; it used to wait five seconds first, which looked like a failure. A reply with no text and no tool call, which Mistral’s models sometimes send after a tool result, is asked for again twice, and if it stays empty the message now says so instead of showing nothing.',
+      },
+      {
+        icon: Images,
+        title: 'One picture Mistral can’t open no longer ends the conversation',
+        body: 'A picture a script wrote badly (a PNG with broken data, say) and then looked at made Mistral refuse every later message of that conversation, because the picture stayed in it. Atelier now sees which picture Mistral refused, sends it as a note instead and asks again, and the error never carries the picture’s data.',
+      },
       {
         icon: Gauge,
         title: 'Calculate all now calculates all',

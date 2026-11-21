@@ -79,10 +79,10 @@ const MALFORMED_RETRIES = 2;
 export const NETWORK_RETRY_DELAYS_MS = [5, 10, 15, 30, 60, 120, 240, 480, 960, 1920].map((seconds) => seconds * 1000);
 /**
  * The waits after a provider that was busy (a rate limit, an overload) or cut a reply off: quick at first, as Mistral's
- * own Vibe retries (half a second, one and a half times longer each time), then the long waits of an outage. A rate
- * limit of a request a second is over by the second try; waiting five seconds first made it look like a failure.
+ * own Vibe retries, then longer, ten tries in about eight minutes (the transcript counts "Retry 3 of 10"). A rate limit
+ * of a request a second is over by the second try; waiting five seconds first made it look like a failure.
  */
-export const BUSY_RETRY_DELAYS_MS = [0.5, 0.75, 1.1, 1.7, 2.5, 3.8, 5.7, 8.5, 13, 19, 30, 60, 120, 240, 480, 960, 1920].map((seconds) => seconds * 1000);
+export const BUSY_RETRY_DELAYS_MS = [0.5, 1, 2, 4, 8, 15, 30, 60, 120, 240].map((seconds) => seconds * 1000);
 const BUSY_CODES = new Set(['provider_busy', 'stream_truncated', 'provider_timeout']);
 /** A provider that asks to wait longer than this (a limit for the day, say) is not waited for: the error says so. */
 const RETRY_AFTER_GIVE_UP_MS = 10 * 60_000;
@@ -423,7 +423,8 @@ async function streamAssistantMessage(
       await persist(true);
       opts.emit({ type: 'message', message: { ...message, parts: [], usage: null, stopReason: null, error: null } });
       phaseShown = true;
-      opts.emit({ type: 'phase', phase: 'retrying', retryAttempt: emptyReply ? emptyRetries : networkRetries });
+      // The wire carries 1 to 10: a longer wait than ten tries (an outage) shows as the tenth.
+      opts.emit({ type: 'phase', phase: 'retrying', retryAttempt: Math.min(emptyReply ? emptyRetries : networkRetries, 10) });
       try {
         await new Promise<void>((resolve, reject) => {
           const abort = () => { clearTimeout(timer); reject(opts.signal.reason); };

@@ -70,7 +70,7 @@ const logs: string[] = [];
 function adapter(): ProviderAdapter {
   return createAdapter(
     { id: 'live', type, name: 'Mistral', baseUrl: 'https://api.mistral.ai', headers: {}, apiKey: key! } as never,
-    { fetch: (url, init) => fetch(url, init), readBlob: async () => IMAGE, log: (line: string) => logs.push(line) } as never,
+    { fetch: (url: string | URL | Request, init?: RequestInit) => fetch(url, init), readBlob: async (sha: string) => (sha === 'bad' ? new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]) : IMAGE), log: (line: string) => logs.push(line) } as never,
   );
 }
 
@@ -200,6 +200,8 @@ const histories: Array<[string, () => Message[], ToolDef[]]> = [
   ['B15 200k char system', () => [user('Say OK.')], []],
   ['B16 tool call with big args', () => [user('Write.'), assistant([call('c1', 'noop', { text: 'x'.repeat(60_000) })]), toolMsg([result('c1', 'ok')])], [NOOP]],
   ['B17 empty assistant then user', () => [user('Hi'), assistant([]), user('Say OK.')], []],
+  ['B19 unreadable user image', () => [msg('user', [{ type: 'text', text: 'What is in the picture? Short.' }, { type: 'image', mime: 'image/png', blob: 'bad' }])], []],
+  ['B20 unreadable tool image', () => [user('Look.'), assistant([call('c1', 'get_weather', { city: 'Paris' })]), toolMsg([{ type: 'tool_result', callId: 'c1', content: [{ type: 'text', text: 'screenshot' }, { type: 'image', mime: 'image/png', blob: 'bad' }] }])], [WEATHER]],
   ['B18 whitespace-only user text', () => [user('Hi'), assistant([{ type: 'text', text: 'Hello' }]), user('   ')], []],
 ];
 
@@ -234,7 +236,7 @@ async function agentLoop(model: string, effort: ChatRequest['effort'], task: num
       if (e.type === 'thinking') thinking += e.delta;
       if (e.type === 'thinking_replay') replay = e.data;
       if (e.type === 'text') text += e.delta;
-      if (e.type === 'tool_call_end') parts.push(call(e.id, events.find((x) => x.type === 'tool_call_start' && x.id === e.id)?.name ?? '', e.input));
+      if (e.type === 'tool_call_end') parts.push(call(e.id, '', e.input));
     }
     const names = new Map(events.flatMap((e) => (e.type === 'tool_call_start' ? [[e.id, e.name] as const] : [])));
     for (const p of parts) if (p.type === 'tool_call') p.name = names.get(p.id) ?? p.name;

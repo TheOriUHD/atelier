@@ -210,7 +210,7 @@ The context figure turns amber from 75% of the window and red above 90%. What th
 | **Thinking**, then **Still thinking, a high effort setting can take a few minutes** (after 2 minutes) and **Still thinking, this is taking much longer than usual** (after 10) | A model whose own service thinks before it answers (ChatGPT Chat at its higher settings). |
 
 **Retries.** When the connection to a model drops, or the provider answers busy or unavailable, Atelier retries the same
-request by itself, up to 10 times, and says **Connection interrupted. Retry n of 10**. The waits are 5, 10, 15 and 30 seconds, then 1, 2, 4, 8, 16 and 32 minutes, about 64 minutes in all. **Stop** ends it. Errors that retrying cannot fix (a rejected key, a missing model) are shown at once, and so is a
+request by itself, up to 10 times, and says **Connection interrupted. Retry n of 10**. After a dropped connection the waits are 5, 10, 15 and 30 seconds, then 1, 2, 4, 8, 16 and 32 minutes, about 64 minutes in all; after a busy or rate-limited answer they are 0.5, 1, 2, 4, 8, 15 and 30 seconds, then 1, 2 and 4 minutes, or the time the provider asks for. A reply that comes back empty is asked for again twice. **Stop** ends it. Errors that retrying cannot fix (a rejected key, a missing model) are shown at once, and so is a
 usage limit.
 
 **A restart in the middle.** If Atelier or its server restarts while a reply is being written, the

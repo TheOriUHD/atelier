@@ -238,6 +238,15 @@ only in the key and in how use is paid.
 - **Caching:** Mistral caches prompts on its own. Atelier sends the conversation's id as `prompt_cache_key`, so its requests
   are more likely to reuse the cache.
 - **Sampling:** a temperature you set is sent, at most 1.5 (Mistral's maximum).
+- **Rate limits:** Mistral limits requests per minute for each model, and the limit depends on your plan; on a Vibe plan,
+  for example, GLM 5.2 and Mistral Large 3 take 30 a minute while Large 4 takes 2,000. A request over the limit is
+  answered with 429 and no wait time. Atelier tries again after half a second, then 1, 2, 4, 8, 15, 30, 60, 120 and 240
+  seconds, so a turn that hits the limit pauses (the line under the conversation counts "Retry 3 of 10") and goes on when
+  the minute is over instead of failing. Run fewer conversations or sub-agents on a model with a low limit, or choose one
+  with a higher limit.
+- **A picture Mistral can't open:** a picture it can't decode (a PNG a script wrote with broken data, then looked at) is
+  refused with "could not be loaded as a valid image". Atelier sends that picture as a note from then on and asks again,
+  so the conversation goes on.
 - **Cost:** see [Cost](#cost).
 
 ## Mistral Vibe

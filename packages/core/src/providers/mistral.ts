@@ -90,8 +90,15 @@ export function mistralCatalog(id: string): MistralEntry | undefined {
   return key === undefined ? undefined : CATALOG[key];
 }
 
+/** An image Mistral refuses to open echoes the whole picture back in its message: the data stays out of ours. */
+const stripData = (text: string): string => text.replace(/data:[a-z]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]{16,}/gi, 'data:…');
+
 /** Tells a 422's validation list as a sentence: "body.stream_options: Extra inputs are not permitted". */
 export function mistralErrorMessage(body: string): string {
+  return stripData(mistralErrorText(body));
+}
+
+function mistralErrorText(body: string): string {
   try {
     const json = rec(JSON.parse(body));
     const message = isRecord(json.message) ? json.message : typeof json.message === 'string' && json.message.startsWith('{') ? rec(JSON.parse(json.message)) : null;
@@ -108,8 +115,8 @@ export function mistralErrorMessage(body: string): string {
   return extractErrorMessage(body);
 }
 
-async function mistralHttpError(res: Response, instance: ProviderInstance): Promise<MessageError> {
-  const body = await res.text().catch(() => '');
+async function mistralHttpError(res: Response, instance: ProviderInstance, text?: string): Promise<MessageError> {
+  const body = text ?? (await res.text().catch(() => ''));
   let kind = '';
   try {
     kind = str(rec(JSON.parse(body)).type) ?? '';
@@ -139,13 +146,20 @@ export interface MistralModelFacts {
    * Mistral's own Vibe sends it; a model without reasoning refuses it, as after a switch from one that reasons.
    */
   thinking?: boolean;
+  /** Images (by blob) Mistral could not open: they go as a note, so one bad picture doesn't end the conversation. */
+  unreadable?: ReadonlySet<string>;
 }
+
+const UNREADABLE_IMAGE_NOTE = '[An image that the model server could not read.]';
 
 async function userContent(parts: readonly Part[], deps: AdapterDeps, facts: MistralModelFacts): Promise<Content> {
   const texts = [textOf(parts)];
   const extra: Chunk[] = [];
   for (const part of parts) {
-    if (part.type === 'image') extra.push({ type: 'image_url', image_url: dataUrl(part.mime, await deps.readBlob(part.blob)) });
+    if (part.type === 'image') {
+      if (facts.unreadable?.has(part.blob)) texts.push(UNREADABLE_IMAGE_NOTE);
+      else extra.push({ type: 'image_url', image_url: dataUrl(part.mime, await deps.readBlob(part.blob)) });
+    }
     if (part.type === 'document') {
       const bytes = await deps.readBlob(part.blob);
       if (part.mime === 'application/pdf' && facts.pdf) extra.push({ type: 'document_url', document_url: dataUrl(part.mime, bytes), document_name: part.name });
@@ -190,7 +204,7 @@ export async function toMistralMessages(request: Pick<ChatRequest, 'system' | 'm
       continue;
     }
     for (const result of results) {
-      const content = await userContent(result.content, deps, { pdf: false });
+      const content = await userContent(result.content, deps, { pdf: false, ...(facts.unreadable ? { unreadable: facts.unreadable } : {}) });
       const text = typeof content === 'string' ? content : content.flatMap((c) => (c.type === 'text' ? [String(c.text)] : [])).join('\n');
       if (typeof content !== 'string') pending.push(...content.filter((c) => c.type === 'image_url'));
       const name = names.get(result.callId);
@@ -379,29 +393,63 @@ class ReplyOutline {
   }
 }
 
-async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, request: ChatRequest, known: Known): AsyncGenerator<StreamEvent> {
-  const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf, thinking: known.reasoning.kind !== 'none' });
-  const body = mistralBody(request, messages, known.reasoning);
-  const outline = new ReplyOutline(instance, request, body);
-  const res = await deps.fetch(apiUrl(instance.baseUrl, '/v1/chat/completions'), {
-    method: 'POST',
-    headers: jsonHeaders(instance, bearer(instance)),
-    body: JSON.stringify(body),
-    signal: request.signal,
-  });
-  if (!res.ok || !res.body) {
-    const error = res.ok ? classifyError(instance, null, '', 'empty response body') : await mistralHttpError(res, instance);
+/** What Mistral answers for an image it cannot decode: a picture a script wrote badly, a format it doesn't know. */
+const UNREADABLE_IMAGE = /could not be loaded as a valid image|not a valid image|unable to (?:load|decode|open) (?:the )?image/i;
+
+/**
+ * Which of the request's images Mistral's message names (it echoes the picture back whole), added to `unreadable`.
+ * Without a match in the text none is blamed: the request fails as it is.
+ */
+async function blameImages(request: ChatRequest, deps: AdapterDeps, text: string, unreadable: Set<string>): Promise<number> {
+  let found = 0;
+  const parts = request.messages.flatMap((m) => m.parts.flatMap((p) => (p.type === 'image' ? [p] : p.type === 'tool_result' ? p.content.flatMap((c) => (c.type === 'image' ? [c] : [])) : [])));
+  for (const part of new Map(parts.map((p) => [p.blob, p])).values()) {
+    if (unreadable.has(part.blob)) continue;
+    const base64 = Buffer.from(await deps.readBlob(part.blob)).toString('base64');
+    if (text.includes(base64.slice(0, Math.min(base64.length, 160)))) {
+      unreadable.add(part.blob);
+      found++;
+    }
+  }
+  return found;
+}
+
+async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, request: ChatRequest, known: Known, unreadable: Set<string>): AsyncGenerator<StreamEvent> {
+  let res: Response;
+  let outline: ReplyOutline;
+  let sent: Record<string, unknown>;
+  for (let attempt = 0; ; attempt++) {
+    const messages = await toMistralMessages(request, deps, instance.type, { pdf: known.pdf, thinking: known.reasoning.kind !== 'none', unreadable });
+    const body = mistralBody(request, messages, known.reasoning);
+    sent = body;
+    outline = new ReplyOutline(instance, request, body);
+    res = await deps.fetch(apiUrl(instance.baseUrl, '/v1/chat/completions'), {
+      method: 'POST',
+      headers: jsonHeaders(instance, bearer(instance)),
+      body: JSON.stringify(body),
+      signal: request.signal,
+    });
+    if (res.ok && res.body) break;
+    const text = res.ok ? '' : await res.text().catch(() => '');
+    // One picture Mistral can't open would fail this request and every later one of the conversation, for the picture
+    // stays in it: it is named in the answer, goes as a note from now on, and the request is made again.
+    if (attempt === 0 && res.status === 400 && UNREADABLE_IMAGE.test(text) && (await blameImages(request, deps, text, unreadable)) > 0) {
+      deps.log?.(outline.line('HTTP 400', 'an image could not be read: asking again without it'));
+      continue;
+    }
+    const error = res.ok ? classifyError(instance, null, '', 'empty response body') : await mistralHttpError(res, instance, text);
     deps.log?.(outline.line(`HTTP ${res.status}`, `error=${error.code}: ${error.message.slice(0, 500)}`));
     yield { type: 'finish', reason: 'error', error };
     return;
   }
+  const stream = res.body!;
 
   const calls = new ToolCallMerger();
   let usage: Usage | undefined;
   let finishReason: string | undefined;
   let signature: string | undefined;
 
-  for await (const event of parseSSE(res.body, request.signal)) {
+  for await (const event of parseSSE(stream, request.signal)) {
     let chunk: Record<string, unknown>;
     try {
       chunk = rec(JSON.parse(event.data));
@@ -471,7 +519,7 @@ async function* runMistral(instance: ProviderInstance, deps: AdapterDeps, reques
   // `tool_calls`, not `length`, and that call's input stops mid-JSON (seen on Mistral's API, 2026-11-07; Mistral's own
   // models say `length`). A lenient parse would run a Write with half its file. Such a reply was cut off: the loop runs
   // none of its calls and asks for them again, a large Write split up.
-  const usedAll = usage !== undefined && typeof body.max_tokens === 'number' && usage.output >= body.max_tokens;
+  const usedAll = usage !== undefined && typeof sent.max_tokens === 'number' && usage.output >= sent.max_tokens;
   const cutOff = finishReason !== 'length' && finishReason !== 'model_length' && (usedAll || calls.cutOff());
   if ((outline.text === 0 && !sawTool) || cutOff || finishReason === undefined || finishReason === 'length' || finishReason === 'model_length') {
     deps.log?.(outline.line(`finish_reason ${finishReason ?? 'none'}${cutOff ? ', but the output limit was reached: cut off' : ''}${outline.text === 0 && !sawTool ? ', nothing to show' : ''}`, usageNote));
@@ -487,6 +535,8 @@ export function createMistralAdapter(instance: ProviderInstance, deps: AdapterDe
   const modelsUrl = apiUrl(instance.baseUrl, '/v1/models');
   /** What the last listing said, by every name a model has: how a request for it reasons and whether it reads PDFs. */
   const listed = new Map<string, Known>();
+  /** Pictures Mistral could not open (by blob): they stay out of every later request of this adapter. */
+  const unreadable = new Set<string>();
 
   const knownOf = (model: string): Known => {
     const seen = listed.get(model);
@@ -522,7 +572,7 @@ export function createMistralAdapter(instance: ProviderInstance, deps: AdapterDe
     },
 
     stream(request) {
-      return guardStream(request, instance, () => runMistral(instance, deps, request, knownOf(request.model)));
+      return guardStream(request, instance, () => runMistral(instance, deps, request, knownOf(request.model), unreadable));
     },
 
     ...(instance.type === 'mistral-vibe' ? { planUsage: (signal?: AbortSignal) => vibeBudget(instance, deps, signal) } : {}),

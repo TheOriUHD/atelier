@@ -119,6 +119,7 @@ describe('runTurn', () => {
 
   it('waits the provider\'s Retry-After, and half a second first when it asked for nothing', async () => {
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     try {
       const seen: ChatRequest[] = [];
       const limited: StreamEvent = { type: 'finish', reason: 'error', error: { code: 'provider_busy', message: 'Rate limit exceeded', retryable: true, retryAfterMs: 2000 } };
@@ -132,14 +133,15 @@ describe('runTurn', () => {
       await vi.advanceTimersByTimeAsync(1000);
       expect(seen).toHaveLength(3);
       expect((await pending).error).toBeNull();
-    } finally { vi.useRealTimers(); }
+    } finally { vi.useRealTimers(); vi.restoreAllMocks(); }
   });
 
   it('plans the waits: quick for a busy provider, long for an outage, none for a limit that lasts the day', () => {
     const busy = { code: 'provider_busy', message: 'x', retryable: true };
     expect(retryWaitMs(busy, 1, 0)).toBe(500);
     expect(retryWaitMs(busy, 1, 1)).toBe(750);
-    expect(BUSY_RETRY_DELAYS_MS.slice(0, 3)).toEqual([500, 750, 1100]);
+    expect(BUSY_RETRY_DELAYS_MS.slice(0, 3)).toEqual([500, 1000, 2000]);
+    expect(BUSY_RETRY_DELAYS_MS).toHaveLength(NETWORK_RETRY_DELAYS_MS.length);
     expect(retryWaitMs(busy, BUSY_RETRY_DELAYS_MS.length + 1)).toBeNull();
     expect(retryWaitMs({ code: 'provider_offline', message: 'x', retryable: true }, 1, 0.9)).toBe(5000);
     expect(retryWaitMs({ ...busy, retryAfterMs: 7000 }, 5, 0)).toBe(7000);
