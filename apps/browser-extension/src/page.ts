@@ -9,6 +9,7 @@ export interface Snapshot {
   title: string;
   text?: string;
   truncated?: boolean;
+  textLength?: number;
   elements?: BrowserElement[];
 }
 
@@ -17,7 +18,7 @@ export interface Snapshot {
  * in the viewport come first, then the rest in reading order. With `query`, only elements whose role, name or value
  * contain it.
  */
-export function snapshot(options: { text: boolean; elements: boolean; maxChars: number; maxElements: number; query?: string }): Snapshot {
+export function snapshot(options: { text: boolean; elements: boolean; maxChars: number; maxElements: number; query?: string; from?: number }): Snapshot {
   const SELECTOR = [
     'a[href]', 'button', 'input:not([type=hidden])', 'select', 'textarea', 'summary', '[contenteditable=""]', '[contenteditable=true]',
     '[role=button]', '[role=link]', '[role=checkbox]', '[role=radio]', '[role=switch]', '[role=tab]', '[role=menuitem]',
@@ -91,9 +92,17 @@ export function snapshot(options: { text: boolean; elements: boolean; maxChars: 
 
   const out: Snapshot = { url: location.href, title: document.title };
   if (options.text) {
-    const text = squash(document.body?.innerText ?? '').replace(/ ?\n ?/g, '\n');
-    out.text = clip(text, options.maxChars);
-    if (text.length > options.maxChars) out.truncated = true;
+    // Lines kept (a heading stays apart from its paragraph), runs of spaces and of empty lines squashed.
+    const text = (document.body?.innerText ?? '')
+      .replace(/[^\S\n]+/g, ' ')
+      .replace(/ ?\n ?/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    // A long page is read in parts: `from` is where the last part ended (its length is in `textLength`).
+    const from = Math.max(0, Math.min(Math.floor(options.from ?? 0), text.length));
+    out.text = text.slice(from, from + options.maxChars);
+    out.textLength = text.length;
+    if (text.length > from + options.maxChars) out.truncated = true;
   }
   if (options.elements || options.query) {
     const seen = new Set<Element>();

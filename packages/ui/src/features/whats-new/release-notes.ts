@@ -38,6 +38,28 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.7',
+    intro: 'Browsing with Atelier for Chrome is easier to follow and more thorough: tabs stay open, each chat has its own tab group, and the page shows what the assistant is doing.',
+    highlights: [
+      {
+        icon: Eye,
+        title: 'Watch it work in the page',
+        body: 'With Atelier for Chrome 0.2.0, the tab the assistant works in glows orange at its edges and lists its steps at the bottom left as it goes (“Opens the second result”). When the reply is done the glow fades, and if it waits for your answer the page says so. Clicks go through, and its own screenshots leave it out. Chrome updates the extension from the Web Store by itself.',
+      },
+      {
+        icon: AppWindow,
+        title: 'Tabs stay open, grouped by chat',
+        body: 'The pages it opened no longer close when the reply ends. They stay in an orange tab group named after the chat, for you to look at and for your next message to go on in. A chat keeps at most ten, it closes the ones it no longer needs, and a chat’s tabs close when you archive or delete it.',
+      },
+      {
+        icon: Globe,
+        title: 'Answers from more than one page',
+        body: 'When it looks something up in the browser, it reads several results instead of stopping at the first, follows links that lead closer, reads long pages to the end, and answers with what it found, linked to the pages it came from.',
+      },
+    ],
+    also: ['The media kit at media.atelierhq.dev has the logos, app icons, banners, screenshots and colours, linked from the website’s footer.'],
+  },
+  {
     version: '0.10.6',
     intro: 'A server can now update itself: it downloads a new version as soon as it is out and installs it the moment nothing is running.',
     highlights: [

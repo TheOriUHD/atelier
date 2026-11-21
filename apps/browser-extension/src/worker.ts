@@ -4,13 +4,22 @@
 // Input goes through Chrome's debugger on that tab (trusted clicks and typing that work while the tab is in the
 // background); Chrome shows its "started debugging this browser" bar while it is attached, and it is detached again
 // after 20 idle seconds. Reading goes through a script in the page.
+//
+// Each chat's tabs are in a tab group of their own, named after the chat; they stay open after a reply and close when the
+// chat is deleted (or when the model closes them). The tab a chat works in glows orange and lists its steps (overlay.ts).
 
 // The protocol's browser module alone, not the package index, so the worker doesn't carry the app's schemas.
-import { BROWSER_HOST_NAME, BROWSER_PROTOCOL_VERSION, type BrowserMethods, type BrowserRequest, type BrowserTab, type BrowserTarget } from '../../../packages/protocol/src/browser.ts';
+import { BROWSER_HOST_NAME, BROWSER_PROTOCOL_VERSION, type BrowserMethods, type BrowserRequest, type BrowserSession, type BrowserTab, type BrowserTarget } from '../../../packages/protocol/src/browser.ts';
 import { parseChord, reachesTheBrowser } from './keys.ts';
+import { hideOverlay, removeOverlay, showOverlay, type OverlayView } from './overlay.ts';
 import { chooseOption, keepInThisTab, locate, selectAll, snapshot, type Snapshot } from './page.ts';
 
+/** The group of tabs opened without a chat (by an app older than this extension). */
 const GROUP_TITLE = 'Atelier';
+/** How many of a chat's steps the panel shows; the ones before are counted. */
+const STEPS_SHOWN = 4;
+/** A chat's glow with no step for this long is taken away (the page's own timer does the same). */
+const OVERLAY_STALE_MS = 10 * 60_000;
 /** How long a page may take to load before a call returns anyway. */
 const LOAD_TIMEOUT = 20_000;
 /** The debugger is detached after this long without input, so Chrome's bar goes away between tasks. */
@@ -32,9 +41,16 @@ function connect(): void {
     return scheduleRetry();
   }
   const current = port;
-  current.onMessage.addListener((message) => void answer(current, message as BrowserRequest));
+  let used = false;
+  current.onMessage.addListener((message) => {
+    used = true;
+    void answer(current, message as BrowserRequest);
+  });
   current.onDisconnect.addListener(() => {
     if (port === current) port = null;
+    // The desktop app that sent the calls quit or restarted: no chat is working in a tab any more. (A connection that
+    // never came up, with the app closed, has nothing to end.)
+    if (used) void endAllOverlays();
     scheduleRetry();
   });
   current.postMessage({ hello: { protocol: BROWSER_PROTOCOL_VERSION, extensionVersion: chrome.runtime.getManifest().version, browser: browserName() } });
@@ -64,11 +80,19 @@ async function answer(to: chrome.runtime.Port, request: BrowserRequest): Promise
 
 // ---------------------------------------------------------------- Atelier's own tabs
 
-const ours = new Set<number>();
-const remembered = chrome.storage.session.get('tabs').then((stored) => {
-  for (const id of (stored.tabs as number[] | undefined) ?? []) ours.add(id);
+/** Atelier's tabs, each with the chat it was opened for ('' when the app didn't say). */
+const ours = new Map<number, string>();
+/** Each chat's tab group, and the name it was given (a group the person renamed keeps their name). */
+const groups = new Map<string, { id: number; title: string }>();
+const remembered = chrome.storage.session.get(['tabs', 'groups']).then((stored) => {
+  // 0.1.0 kept the tab ids alone.
+  for (const entry of (stored.tabs as (number | [number, string])[] | undefined) ?? []) {
+    if (Array.isArray(entry)) ours.set(entry[0], entry[1]);
+    else ours.set(entry, '');
+  }
+  for (const [session, group] of Object.entries((stored.groups as Record<string, { id: number; title: string }> | undefined) ?? {})) groups.set(session, group);
 });
-const save = () => chrome.storage.session.set({ tabs: [...ours] });
+const save = () => chrome.storage.session.set({ tabs: [...ours], groups: Object.fromEntries(groups) });
 
 async function own(tab: number): Promise<void> {
   await remembered;
@@ -85,14 +109,111 @@ chrome.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
   if (frameId === 0 && ours.has(tabId)) void keepLinksHere(tabId);
 });
 
+// A new page in a tab a chat works in gets the glow and the steps again (the old page took them with it).
+chrome.webNavigation.onDOMContentLoaded.addListener(({ tabId, frameId }) => {
+  if (frameId !== 0) return;
+  for (const overlay of overlays.values()) if (overlay.tab === tabId && overlay.view.state !== 'done') void paint(overlay);
+});
+
 async function keepLinksHere(tab: number): Promise<void> {
   await chrome.scripting.executeScript({ target: { tabId: tab }, func: keepInThisTab, world: 'MAIN', injectImmediately: true }).catch(() => undefined);
 }
 
-async function intoGroup(tab: chrome.tabs.Tab): Promise<void> {
-  const [group] = await chrome.tabGroups.query({ title: GROUP_TITLE, windowId: tab.windowId });
-  const groupId = await chrome.tabs.group(group ? { tabIds: tab.id!, groupId: group.id } : { tabIds: tab.id!, createProperties: { windowId: tab.windowId } });
-  if (!group) await chrome.tabGroups.update(groupId, { title: GROUP_TITLE, color: 'orange', collapsed: true });
+/** A chat's name as its group's title: on one line, and short enough for the tab strip. */
+function groupTitle(title: string): string {
+  const line = title.replace(/\s+/g, ' ').trim() || GROUP_TITLE;
+  return line.length > 40 ? `${line.slice(0, 39).trimEnd()}…` : line;
+}
+
+/** The chat's tab group, while it still exists. */
+async function sessionGroup(session: string): Promise<chrome.tabGroups.TabGroup | null> {
+  const known = groups.get(session);
+  if (!known) return null;
+  try {
+    return await chrome.tabGroups.get(known.id);
+  } catch {
+    groups.delete(session);
+    return null;
+  }
+}
+
+/** Puts a new tab in its chat's group (made, orange and collapsed, in the tab's window when there is none there yet). */
+async function intoGroup(tab: chrome.tabs.Tab, session?: BrowserSession): Promise<void> {
+  if (!session) {
+    const [group] = await chrome.tabGroups.query({ title: GROUP_TITLE, windowId: tab.windowId });
+    const groupId = await chrome.tabs.group(group ? { tabIds: tab.id!, groupId: group.id } : { tabIds: tab.id!, createProperties: { windowId: tab.windowId } });
+    if (!group) await chrome.tabGroups.update(groupId, { title: GROUP_TITLE, color: 'orange', collapsed: true });
+    return;
+  }
+  const group = await sessionGroup(session.id);
+  if (group && group.windowId === tab.windowId) {
+    await chrome.tabs.group({ tabIds: tab.id!, groupId: group.id });
+    return void (await retitle(session));
+  }
+  const groupId = await chrome.tabs.group({ tabIds: tab.id!, createProperties: { windowId: tab.windowId } });
+  const title = groupTitle(session.title);
+  groups.set(session.id, { id: groupId, title });
+  await save();
+  await chrome.tabGroups.update(groupId, { title, color: 'orange', collapsed: true });
+}
+
+/** The chat got its name (titles come after the first reply) or a new one: its group follows, unless the person renamed it. */
+async function retitle(session: BrowserSession): Promise<void> {
+  const known = groups.get(session.id);
+  const title = groupTitle(session.title);
+  if (!known || known.title === title) return;
+  const group = await sessionGroup(session.id);
+  if (!group) return;
+  if (group.title === known.title) await chrome.tabGroups.update(group.id, { title });
+  groups.set(session.id, { id: group.id, title });
+  await save();
+}
+
+// ---------------------------------------------------------------- the glow and the steps
+
+interface Overlay {
+  session: string;
+  /** The tab the chat works in now: the only one that glows. */
+  tab: number;
+  view: OverlayView;
+  at: number;
+}
+
+/** Each working chat's overlay, by chat. */
+const overlays = new Map<string, Overlay>();
+
+async function paint(overlay: Overlay): Promise<void> {
+  await chrome.scripting.executeScript({ target: { tabId: overlay.tab }, func: showOverlay, args: [overlay.view] }).catch(() => undefined);
+}
+
+async function unpaint(tab: number): Promise<void> {
+  await chrome.scripting.executeScript({ target: { tabId: tab }, func: removeOverlay }).catch(() => undefined);
+}
+
+/** A step text as the panel shows it: one line, not too long. */
+const stepText = (step: string) => {
+  const line = step.replace(/\s+/g, ' ').trim() || 'Working';
+  return line.length > 160 ? `${line.slice(0, 159).trimEnd()}…` : line;
+};
+
+async function endAllOverlays(): Promise<void> {
+  const all = [...overlays.values()];
+  overlays.clear();
+  for (const overlay of all) {
+    overlay.view = { ...overlay.view, state: 'done' };
+    await paint(overlay);
+  }
+}
+
+/** Glows that nothing has updated for a while go (a turn that ended without telling the extension). */
+async function sweepOverlays(): Promise<void> {
+  const now = Date.now();
+  for (const [session, overlay] of overlays) {
+    if (now - overlay.at < OVERLAY_STALE_MS) continue;
+    overlays.delete(session);
+    overlay.view = { ...overlay.view, state: 'done' };
+    await paint(overlay);
+  }
 }
 
 function waitLoaded(tab: number, timeout = LOAD_TIMEOUT): Promise<void> {
@@ -196,20 +317,24 @@ async function handle<M extends keyof BrowserMethods>(method: M, params: Params<
 const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Result<M>> } = {
   status: async () => ({ connected: true, browser: browserName(), extensionVersion: chrome.runtime.getManifest().version }),
 
-  'tabs.open': async ({ url }) => {
-    const created = await chrome.tabs.create({ url, active: false });
-    ours.add(created.id!);
+  'tabs.open': async ({ url, session }) => {
+    await remembered;
+    // A chat's tabs stay together: a new one opens in the window its group is in.
+    const group = session ? await sessionGroup(session.id) : null;
+    const created = await chrome.tabs.create({ url, active: false, ...(group ? { windowId: group.windowId } : {}) });
+    ours.set(created.id!, session?.id ?? '');
     await save();
-    await intoGroup(created).catch(() => undefined);
+    await intoGroup(created, session).catch(() => undefined);
     await waitLoaded(created.id!);
     await keepLinksHere(created.id!);
     return describe(created.id!);
   },
 
-  'tabs.list': async () => {
+  'tabs.list': async ({ session } = {}) => {
     await remembered;
     const tabs: BrowserTab[] = [];
-    for (const id of [...ours]) {
+    for (const [id, owner] of [...ours]) {
+      if (session !== undefined && owner !== session) continue;
       try {
         tabs.push(await describe(id));
       } catch {
@@ -225,6 +350,60 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
     await chrome.tabs.remove(tab);
     ours.delete(tab);
     await save();
+    return {};
+  },
+
+  'tabs.closeSession': async ({ session }) => {
+    await remembered;
+    const tabs = [...ours].filter(([, owner]) => owner === session).map(([id]) => id);
+    overlays.delete(session);
+    groups.delete(session);
+    for (const id of tabs) ours.delete(id);
+    await save();
+    let closed = 0;
+    for (const id of tabs) {
+      try {
+        await chrome.tabs.remove(id);
+        closed++;
+      } catch {
+        // Closed already.
+      }
+    }
+    return { closed };
+  },
+
+  'tabs.rename': async ({ session }) => {
+    await remembered;
+    await retitle(session);
+    const overlay = overlays.get(session.id);
+    if (overlay && overlay.view.title !== session.title) {
+      overlay.view = { ...overlay.view, title: session.title };
+      await paint(overlay);
+    }
+    return {};
+  },
+
+  'overlay.step': async ({ session, tab, step }) => {
+    await own(tab);
+    const previous = overlays.get(session.id);
+    const steps = [...(previous && previous.view.state !== 'done' ? previous.view.steps : []), stepText(step)];
+    const earlier = (previous && previous.view.state !== 'done' ? previous.view.earlier : 0) + Math.max(0, steps.length - STEPS_SHOWN);
+    const overlay: Overlay = { session: session.id, tab, at: Date.now(), view: { title: session.title, steps: steps.slice(-STEPS_SHOWN), earlier, state: 'working' } };
+    overlays.set(session.id, overlay);
+    // The chat moved on to another of its tabs: the one before stops glowing.
+    if (previous && previous.tab !== tab) await unpaint(previous.tab);
+    await paint(overlay);
+    await retitle(session).catch(() => undefined);
+    return {};
+  },
+
+  'overlay.end': async ({ session, state }) => {
+    const overlay = overlays.get(session);
+    if (!overlay) return {};
+    overlay.view = { ...overlay.view, state };
+    overlay.at = Date.now();
+    if (state === 'done') overlays.delete(session);
+    await paint(overlay);
     return {};
   },
 
@@ -244,9 +423,9 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
     return describe(tab);
   },
 
-  'page.read': async ({ tab, text = true, elements = true, maxChars, maxElements }) => {
+  'page.read': async ({ tab, text = true, elements = true, maxChars, maxElements, from }) => {
     await own(tab);
-    const page: Snapshot = await inPage(tab, snapshot, [{ text, elements, maxChars: maxChars ?? READ_DEFAULTS.maxChars, maxElements: maxElements ?? READ_DEFAULTS.maxElements }]);
+    const page: Snapshot = await inPage(tab, snapshot, [{ text, elements, maxChars: maxChars ?? READ_DEFAULTS.maxChars, maxElements: maxElements ?? READ_DEFAULTS.maxElements, from }]);
     return { tab, ...page };
   },
 
@@ -300,11 +479,18 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
     const metrics = (await cdp(tab, 'Page.getLayoutMetrics')) as { cssVisualViewport: { pageX: number; pageY: number; clientWidth: number; clientHeight: number } };
     const view = metrics.cssVisualViewport;
     const scale = Math.min(1, maxWidth / view.clientWidth);
-    const shot = (await cdp(tab, 'Page.captureScreenshot', {
-      format: 'jpeg',
-      quality: 70,
-      clip: { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale },
-    })) as { data: string };
+    // The glow and the steps aren't part of the page: the model sees it without them.
+    await chrome.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [true] }).catch(() => undefined);
+    let shot: { data: string };
+    try {
+      shot = (await cdp(tab, 'Page.captureScreenshot', {
+        format: 'jpeg',
+        quality: 70,
+        clip: { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale },
+      })) as { data: string };
+    } finally {
+      await chrome.scripting.executeScript({ target: { tabId: tab }, func: hideOverlay, args: [false] }).catch(() => undefined);
+    }
     const page = await describe(tab);
     return { data: shot.data, width: Math.round(view.clientWidth * scale), height: Math.round(view.clientHeight * scale), ...page };
   },
@@ -316,5 +502,8 @@ const calls: { [M in keyof BrowserMethods]: (params: Params<M>) => Promise<Resul
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);
 chrome.alarms.create('connect', { periodInMinutes: 1 });
-chrome.alarms.onAlarm.addListener(connect);
+chrome.alarms.onAlarm.addListener(() => {
+  connect();
+  void sweepOverlays();
+});
 connect();

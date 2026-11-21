@@ -81,7 +81,7 @@ Recent commit subjects:
 - Fix rounding in totals
 </context-update>
 
-# Tools: 21, 16111 characters of JSON
+# Tools: 21, 16333 characters of JSON
 
 [
   {
@@ -765,7 +765,7 @@ Recent commit subjects:
   },
   {
     "name": "Browser",
-    "description": "Works in web pages in tabs of its own: open a URL, read the page (text and elements with refs), click, type, select, scroll.",
+    "description": "Works in web pages in tabs of its own: open a URL, read the page (text and elements with refs), click, type, select, scroll. Tabs stay open after your reply. For research, read several sources, not just the first hit.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -789,7 +789,7 @@ Recent commit subjects:
         },
         "summary": {
           "type": "string",
-          "description": "What the action does, for actions that change something."
+          "description": "What the action does, in a few words; the person sees it in the page."
         },
         "url": {
           "type": "string",
@@ -844,6 +844,10 @@ Recent commit subjects:
         "count": {
           "type": "integer",
           "description": "click: 2 for a double click."
+        },
+        "from": {
+          "type": "integer",
+          "description": "read: where in the page’s text to go on, from the end of the part before."
         }
       },
       "required": [

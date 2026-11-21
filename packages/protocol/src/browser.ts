@@ -16,6 +16,33 @@ export const BROWSER_EXTENSION_IDS = ['ehblmofeglpkfcaejllehbbhhddchefk', 'efpch
 /** Protocol version, sent in the extension's hello; a mismatch is reported in Settings, not guessed around. */
 export const BROWSER_PROTOCOL_VERSION = 1;
 
+/**
+ * The extension version that groups tabs by chat, shows the glow and the steps in the page, and reads long pages in parts
+ * (`tabs.open` and `tabs.list` with `session`, `tabs.closeSession`, `tabs.rename`, `overlay.*`, `page.read` with `from`). An
+ * older extension ignores the new parameters and doesn't know the new methods, so the core asks only one that is this
+ * version or newer for them (`browserFeatures`).
+ */
+export const BROWSER_SESSIONS_SINCE = '0.2.0';
+
+/** A chat, as the extension shows it: its tab group is named after it, and the steps panel in the page says its name. */
+export interface BrowserSession {
+  id: string;
+  title: string;
+}
+
+/**
+ * What the connected extension can do, from the version it reports. (A plain x.y.z comparison of its own: the extension
+ * imports this module alone, and versions.ts would bring zod with it.)
+ */
+export function browserFeatures(extensionVersion: string | undefined): { sessions: boolean } {
+  const parts = (v: string) => v.split('.').map((n) => Number.parseInt(n, 10) || 0);
+  const have = parts(extensionVersion ?? '0');
+  const since = parts(BROWSER_SESSIONS_SINCE);
+  let newer = 0;
+  for (let i = 0; i < 3 && newer === 0; i++) newer = (have[i] ?? 0) - (since[i] ?? 0);
+  return { sessions: !!extensionVersion && newer >= 0 };
+}
+
 /** One element of a page the model can act on, by `ref` (valid until the page changes; read again after a navigation). */
 export interface BrowserElement {
   ref: number;
@@ -40,9 +67,11 @@ export interface BrowserTab {
 }
 
 export interface BrowserPage extends BrowserTab {
-  /** The page's text, as read (`read` with `text`), cut to `maxChars`; `truncated` when there was more. */
+  /** The page's text, as read (`read` with `text`), from `from` on, cut to `maxChars`; `truncated` when there was more. */
   text?: string;
   truncated?: boolean;
+  /** How long the whole text is, in characters (0.2.0 on): with `from`, a long page is read in parts. */
+  textLength?: number;
   /** The elements that can be used (links, buttons, fields, …) in reading order, up to `maxElements`. */
   elements?: BrowserElement[];
 }
@@ -58,15 +87,30 @@ export interface BrowserTarget {
 export interface BrowserMethods {
   /** Whether an extension is connected, and which browser it is in. */
   status: { params: Record<string, never>; result: BrowserStatus };
-  /** Opens a tab of Atelier's own (in the background, in the "Atelier" tab group) and waits for the page to load. */
-  'tabs.open': { params: { url: string }; result: BrowserTab };
-  /** Atelier's own tabs. */
-  'tabs.list': { params: Record<string, never>; result: { tabs: BrowserTab[] } };
+  /**
+   * Opens a tab of Atelier's own in the background and waits for the page to load. With `session` (0.2.0 on) it goes in
+   * that chat's tab group, named after the chat; without, in one group called "Atelier".
+   */
+  'tabs.open': { params: { url: string; session?: BrowserSession }; result: BrowserTab };
+  /** Atelier's own tabs; with `session` (0.2.0 on), only that chat's. */
+  'tabs.list': { params: { session?: string }; result: { tabs: BrowserTab[] } };
   'tabs.close': { params: { tab: number }; result: Record<string, never> };
+  /** Closes every tab of a chat (0.2.0 on): when the chat is deleted or archived. */
+  'tabs.closeSession': { params: { session: string }; result: { closed: number } };
+  /** The chat has a new name (0.2.0 on): its tab group takes it, unless the person renamed the group. */
+  'tabs.rename': { params: { session: BrowserSession }; result: Record<string, never> };
+  /**
+   * A step of a chat's work in one of its tabs (0.2.0 on): that tab glows orange at its edges and shows the chat's steps
+   * at its bottom left, the newest as the one under way; the chat's other tabs stop glowing. The glow goes by itself
+   * after a few idle minutes, or when the desktop app disconnects.
+   */
+  'overlay.step': { params: { session: BrowserSession; tab: number; step: string }; result: Record<string, never> };
+  /** The chat's turn ended (0.2.0 on): the glow fades; the steps say "Done", or that it waits for the person's answer. */
+  'overlay.end': { params: { session: string; state: 'done' | 'waiting' }; result: Record<string, never> };
   'page.navigate': { params: { tab: number; url: string }; result: BrowserTab };
   'page.back': { params: { tab: number }; result: BrowserTab };
-  /** The page's text and/or its usable elements. */
-  'page.read': { params: { tab: number; text?: boolean; elements?: boolean; maxChars?: number; maxElements?: number }; result: BrowserPage };
+  /** The page's text and/or its usable elements; `from` (0.2.0 on) starts the text further in, for a long page. */
+  'page.read': { params: { tab: number; text?: boolean; elements?: boolean; maxChars?: number; maxElements?: number; from?: number }; result: BrowserPage };
   /** Elements whose name, value or role contains `query` (case-insensitive). */
   'page.find': { params: { tab: number; query: string; maxElements?: number }; result: BrowserPage };
   'page.click': { params: BrowserTarget & { count?: number }; result: BrowserTab };

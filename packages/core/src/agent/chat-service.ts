@@ -102,7 +102,7 @@ import { Loops, type LoopTick } from './loops.ts';
 import { approvedMode, createExitPlanModeTool } from '../tools/exit-plan-mode.ts';
 import { createAddConnectorTool, type AddedConnector, type NewConnector } from '../tools/add-connector.ts';
 import { createComputerTools, type ComputerCall } from '../tools/computer.ts';
-import { browserConnected, createBrowserTool, type BrowserSessionCall } from '../tools/browser.ts';
+import { browserConnected, createBrowserTool, type BrowserSessionCall, type BrowserTool } from '../tools/browser.ts';
 import { keepRecentGenerated, keepRecentScreenshots } from './screenshots.ts';
 import { credentialPath } from '../permissions/sensitive.ts';
 import { flavorOfSep } from '../paths.ts';
@@ -569,7 +569,7 @@ export class ChatService {
   private readonly changeDirectory: Tool;
   private readonly addConnector: Tool;
   private readonly computerTools: Tool[];
-  private readonly browserTool: (Tool & { closeTabs(sessionId: string): Promise<void> }) | null;
+  private readonly browserTool: BrowserTool | null;
   private readonly askUser: Tool;
   private readonly exitPlanMode: Tool;
   private readonly skill: Tool;
@@ -680,7 +680,9 @@ export class ChatService {
       wanted: (sessionId) => this.computerWanted(sessionId),
       where: async (sessionId) => (this.deps.computer?.where ? this.deps.computer.where(await this.requireSession(sessionId)) : null),
     });
-    this.browserTool = this.deps.browser ? (createBrowserTool({ call: this.deps.browser.call, blobs: this.deps.blobs }) as Tool & { closeTabs(sessionId: string): Promise<void> }) : null;
+    this.browserTool = this.deps.browser
+      ? createBrowserTool({ call: this.deps.browser.call, blobs: this.deps.blobs, title: async (id) => (await this.deps.repo.getRow(id))?.title ?? '' })
+      : null;
     this.addConnector = createAddConnectorTool({
       approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
       add: async (sessionId, connector) => this.deps.addConnector!(await this.requireSession(sessionId), connector),
@@ -1171,6 +1173,13 @@ export class ChatService {
     this.wakes.delete(sessionId);
   }
 
+  /** The person archived or renamed a chat: an archived one's browser tabs close, a renamed one's tab group follows. */
+  async browserChanged(sessionId: string, change: 'archived' | 'renamed'): Promise<void> {
+    if (!this.browserTool) return;
+    if (change === 'archived') await this.browserTool.closeTabs(sessionId).catch(() => undefined);
+    else await this.browserTool.renamed(sessionId).catch(() => undefined);
+  }
+
   /** Stops a conversation that is being deleted and forgets what was kept for it in memory. */
   async discard(sessionId: string): Promise<void> {
     this.discarding.add(sessionId);
@@ -1178,6 +1187,8 @@ export class ChatService {
       for (const child of await this.deps.repo.children(sessionId)) if (isSideChat(child)) await this.discard(child.id);
       this.loops.forget(sessionId);
       await this.stop(sessionId);
+      // Its browser tabs close with it (while its row is still there: on a server, the row says whose browser it is).
+      await this.browserTool?.closeTabs(sessionId).catch(() => undefined);
       this.sessionRules.delete(sessionId);
       this.folderRules.delete(sessionId);
       this.sinceTodo.delete(sessionId);
@@ -3508,8 +3519,8 @@ export class ChatService {
 
   /** Ends a session's control of the computer, if it has it, as its turn ends or waits on the person; best-effort. */
   private async releaseComputer(sessionId: string, waiting?: PendingInteraction['kind']): Promise<void> {
-    // The browser tabs the reply opened close with it (not while it waits on the person: it goes on in them).
-    if (!waiting) await this.browserTool?.closeTabs(sessionId).catch(() => undefined);
+    // The browser tabs the reply opened stay open, for the person and the next turn; the glow in the page fades.
+    await this.browserTool?.endTurn(sessionId, !!waiting).catch(() => undefined);
     if (!this.deps.computer) return;
     const session = await this.deps.repo.getRow(sessionId);
     if (!session || (session.mode !== 'code' && !this.asTask(session)) || session.parentSessionId) return;
@@ -3553,6 +3564,7 @@ export class ChatService {
       if (!title) return;
       const summary = await this.deps.repo.update(sessionId, { title });
       this.emit(sessionId, { type: 'title', title });
+      void this.browserTool?.renamed(sessionId).catch(() => undefined);
       this.deps.sessionChanged(summary);
     } catch {
       // Titles are best-effort; the session keeps its fallback label.

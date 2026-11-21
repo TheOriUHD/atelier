@@ -2926,6 +2926,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       if (Object.keys(quiet).length) await sessions.patchQuietly(id, quiet);
       const updated = Object.keys(loud).length ? await sessions.update(id, loud) : (await sessions.get(id))!;
       emitToUser(me(ctx).id, 'sessions.changed', updated);
+      // A chat put away takes its browser tabs with it; a new title names its tab group.
+      if (archived) void chat.browserChanged(id, 'archived');
+      else if (title !== undefined) void chat.browserChanged(id, 'renamed');
       if (remoteControl !== undefined) await syncRemoteAccess(me(ctx).id, id);
       // A project counts its chats that aren't archived.
       if (updated.projectId !== before.projectId || (archived !== undefined && updated.projectId)) emitToUser(me(ctx).id, 'projects.changed', {});

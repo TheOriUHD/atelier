@@ -19,16 +19,18 @@ Atelier for Chrome connects your browser to Atelier, the AI workspace for your d
 the web for you: look something up across a few sites, compare products, fill in a form you asked it to, or read a page
 you're signed in to.
 
-It works in tabs of its own, in an orange "Atelier" group, in the background. Your own tabs stay yours: it never reads
-them, never takes the front of your screen, and closes its tabs when the task is done. You keep working while it works.
+It works in tabs of its own, in the background, in an orange tab group named after the chat. Your own tabs stay yours:
+it never reads them and never takes the front of your screen. Its tabs stay open after a reply, for you to look at and for
+the next question, and close when you delete the chat. You keep working while it works, and you can watch: the tab it
+works in glows orange and lists its steps at the bottom left.
 
 How it works
 • The assistant opens a page in its own tab, reads its text and its links, buttons and fields, and clicks, types, chooses
   from lists and scrolls by name.
 • Everything it reads goes only to the Atelier desktop app on the same computer, through Chrome's native messaging. The
   extension makes no network requests of its own, has no analytics and loads no code from anywhere.
-• Your permission mode in Atelier applies to every step that changes something. It never types passwords or completes a
-  purchase, and it asks before it accepts terms or sends anything.
+• It never types passwords or completes a purchase, and it asks in the chat before it accepts terms or sends anything.
+  Permission rules you set in Atelier for the browser apply.
 • While it acts in a page, Chrome shows a bar saying Atelier started debugging the browser; Cancel there stops it.
 
 Requires the Atelier desktop app (macOS, Windows or Linux) from https://atelierhq.dev. Works in Chrome, Brave, Edge and
@@ -48,10 +50,10 @@ them, for tasks the person gives Atelier.
 |---|---|
 | `nativeMessaging` | The extension's only connection: it talks to the Atelier desktop app on the same computer, which registers the native host `dev.atelier.browser`. |
 | `tabs` | Opens its own background tabs, reads their title, address and loading state, navigates them and closes them when the task ends. It never uses the person's own tabs. |
-| `tabGroups` | Keeps its tabs together in one collapsed orange "Atelier" group, apart from the person's tabs. |
+| `tabGroups` | Keeps each chat's tabs together in a collapsed orange group named after the chat, apart from the person's tabs. |
 | `debugger` | Sends trusted clicks, typing and scrolling to pages in its own tabs and takes screenshots of those tabs while they are in the background (the DevTools Protocol's Input and Page domains). Only in its own tabs; Chrome shows its "started debugging" bar meanwhile. |
-| `scripting` | Reads a page's text and its links, buttons and fields in its own tabs, and makes links there that would open a new tab open in the same tab, so nothing comes to the front. |
-| `webNavigation` | Notices a new page loading in one of its own tabs, to apply that same-tab rule again. |
+| `scripting` | Reads a page's text and its links, buttons and fields in its own tabs, makes links there that would open a new tab open in the same tab, so nothing comes to the front, and shows the orange glow and the list of steps in the tab it works in. |
+| `webNavigation` | Notices a new page loading in one of its own tabs, to apply that same-tab rule and show the glow and the steps again. |
 | `storage` | Remembers which tabs are its own (session storage, which the browser clears when it closes), so it keeps track after its service worker restarts. |
 | `alarms` | Tries to reach the desktop app again once a minute while the app isn't running. |
 | Host permission `<all_urls>` | The person can ask Atelier to work on any site; the extension acts only in tabs it opened itself. |

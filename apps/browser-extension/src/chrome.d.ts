@@ -50,6 +50,7 @@ declare namespace chrome {
       title?: string;
       windowId: number;
     }
+    function get(groupId: number): Promise<TabGroup>;
     function update(groupId: number, properties: { title?: string; color?: string; collapsed?: boolean }): Promise<TabGroup>;
     function query(query: { title?: string; windowId?: number }): Promise<TabGroup[]>;
   }
@@ -82,6 +83,7 @@ declare namespace chrome {
 
   export namespace webNavigation {
     const onCommitted: Event<(details: { tabId: number; frameId: number; url: string }) => void>;
+    const onDOMContentLoaded: Event<(details: { tabId: number; frameId: number; url: string }) => void>;
   }
 
   export namespace alarms {
@@ -91,7 +93,7 @@ declare namespace chrome {
 
   export namespace storage {
     const session: {
-      get(key: string): Promise<Record<string, unknown>>;
+      get(keys: string | string[]): Promise<Record<string, unknown>>;
       set(items: Record<string, unknown>): Promise<void>;
     };
   }
