@@ -3698,7 +3698,7 @@ export interface ExtensionCatalog {
 /** How much of a running tool's live output a reconnecting client gets. */
 const OUTPUT_TAIL_CHARS = 30_000;
 /** What a person is told when they start a turn while the server installs an update: it takes a few seconds. */
-export const UPDATING_MESSAGE = 'Atelier is installing an update right now. It takes a few seconds: send your message again in a moment.';
+export const UPDATING_MESSAGE = 'Atelier is installing an update right now. Try again in a few seconds.';
 
 /**
  * Every tool call needs a result right after it, or providers reject the whole history (Anthropic 400s on

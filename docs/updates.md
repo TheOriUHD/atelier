@@ -80,7 +80,9 @@ With the setting `server.autoUpdate` on (Settings › Admin › Server › Updat
    registry and takes seconds. The server sends the event `server.updating` just before it restarts, so open apps can say
    so. An updater without `features: ['pull']` is sent `POST /update` as before, and downloads and installs in one go.
 5. A failed pull or install is shown in the Server status (`auto.state: 'failed'`, the reason, `retryAt`); the server keeps
-   running the old version and tries again later.
+   running the old version and tries again after 5 minutes, then 15, then every hour. An install after which the server
+   still runs the old version (the Compose file pins an image tag, or the images weren't pushed before the feed) is
+   remembered in `auto-update.json` in the data folder and not repeated for a day, so a server never restarts every minute.
 
 The updater does not update itself (it is not one of the services it recreates), so a server needs its updater pulled
 once for step 2: `docker compose pull updater && docker compose up -d updater`; the release notes of the release that

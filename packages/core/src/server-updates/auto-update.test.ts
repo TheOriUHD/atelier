@@ -205,6 +205,29 @@ describe('automatic server updates', () => {
     expect(state.announced).toEqual([{ installing: true, version: '0.10.6' }]);
   });
 
+  it('holds and watches an update the admin started by hand, also with the setting off, and lets turns start again when it fails', async () => {
+    const { auto, state, look } = setup({ enabled: false });
+    auto.adopt('0.10.6');
+    expect(state.holds).toEqual([true]);
+    expect(state.announced).toEqual([{ installing: true, version: '0.10.6' }]);
+    expect(auto.snapshot()).toMatchObject({ enabled: false, state: 'installing' });
+    state.job = idleJob({ state: 'failed', message: 'manifest unknown' });
+    await look();
+    expect(state.holds).toEqual([true, false]);
+    expect(state.announced.at(-1)).toEqual({ installing: false, version: '0.10.6' });
+    await look();
+    expect(auto.snapshot().state).toBe('idle');
+  });
+
+  it('lets turns start again when the update the admin asked for did not start', () => {
+    const { auto, state } = setup({ enabled: false });
+    auto.adopt(null);
+    auto.abandon();
+    expect(state.holds).toEqual([true, false]);
+    expect(state.announced).toEqual([{ installing: true, version: null }, { installing: false, version: null }]);
+    expect(auto.snapshot().state).toBe('idle');
+  });
+
   it('leaves a server without an updater, or built from source, alone', async () => {
     const none = setup();
     none.state.updaterError = null;

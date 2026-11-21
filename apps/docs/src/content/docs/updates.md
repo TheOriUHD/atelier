@@ -174,7 +174,7 @@ file has the `updater` service) lets the server take care of its own updates, wi
    say "Atelier is installing an update (*x*). This page reconnects in a moment." and reconnect by themselves.
 
 If a try fails (the registry is down, the updater refuses), the page says why and when the next try is; the server keeps
-running the old version meanwhile. **Update now** stays on the page for an admin who wants it right away, and **Check now**
+running the old version meanwhile. If the server comes back from an install still on the old version (a Compose file that pins an image version, say), it doesn't install the same version again for a day and the page says why. **Update now** stays on the page for an admin who wants it right away, and **Check now**
 still looks up the newest version. A server's updater from before 0.10.6 downloads and installs in one go, at the moment
 nothing is running; see [Run a server](/self-hosting/#updating-automatically) for the one command that updates it.
 

@@ -3208,14 +3208,13 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'server.update': () =>
       serverUpdateErrors(async () => {
         if (!serverUpdates) throw appError('not_supported', 'This app updates itself: see Settings › System.');
-        // The server restarts in a moment: from here until then no turn starts, and the apps say why.
-        chat.setUpdating(true);
-        announceUpdating({ installing: true, version: null });
+        // The server restarts in a moment: from here until then no turn starts, and the apps say why. If it doesn't
+        // restart (the updater fails) the hold ends again.
+        autoUpdate?.adopt((await serverUpdates.status()).latest?.version ?? null);
         try {
           return await serverUpdates.update();
         } catch (e) {
-          chat.setUpdating(false);
-          announceUpdating({ installing: false, version: null });
+          autoUpdate?.abandon();
           throw e;
         }
       }),

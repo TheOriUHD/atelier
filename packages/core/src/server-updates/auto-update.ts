@@ -94,6 +94,23 @@ export class AutoUpdate {
     this.schedule(0);
   }
 
+  /**
+   * An update the admin started by hand (Update now): held and watched like an automatic one, so that new turns get the
+   * `updating` notice meanwhile, and a failure (or a server that never restarts) lets them start again.
+   */
+  adopt(version: string | null): void {
+    this.target ??= version;
+    this.beginInstall(version);
+    this.schedule();
+  }
+
+  /** The update the admin asked for did not start. */
+  abandon(): void {
+    this.release();
+    if (this.state === 'installing') this.options.announce({ installing: false, version: this.target });
+    this.state = 'idle';
+  }
+
   snapshot(): ServerAutoUpdate {
     return {
       enabled: this.options.enabled(),
@@ -130,8 +147,9 @@ export class AutoUpdate {
 
   private async step(): Promise<void> {
     const { source } = this.options;
-    if (!this.options.enabled()) return this.reset();
+    // An install under way is watched whatever the setting says: one the admin started by hand ends the same way.
     if (this.state === 'installing') return this.watchInstall();
+    if (!this.options.enabled()) return this.reset();
     const now = this.now();
     if (this.retryAt !== null) {
       if (now < this.retryAt) return;
@@ -239,14 +257,14 @@ export class AutoUpdate {
     }
   }
 
-  private beginInstall(version: string): void {
+  private beginInstall(version: string | null): void {
     if (!this.holding) {
       this.options.hold(true);
       this.holding = true;
     }
     this.state = 'installing';
     this.installingSince = this.now();
-    this.options.log?.(`Installing Atelier ${version}: the server restarts in a moment.`);
+    this.options.log?.(`Installing ${version ? `Atelier ${version}` : 'an update'}: the server restarts in a moment.`);
     this.options.announce({ installing: true, version });
   }
 
