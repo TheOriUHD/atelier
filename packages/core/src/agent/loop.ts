@@ -40,9 +40,9 @@ export interface TurnOptions {
   live?(messageId: string, parts: readonly Part[] | null): void;
   /**
    * Approves or refuses a validated call, possibly after asking the person; an approval may replace the input
-   * (a PreToolUse hook's `updatedInput`). Without it every call runs.
+   * (a PreToolUse hook's `updatedInput`). Without it every call runs. `messageId`: the reply the call is part of.
    */
-  authorize?(call: ToolCallPart, tool: DescribedTool): Promise<{ allow: true; input?: unknown } | { allow: false; message: string }>;
+  authorize?(call: ToolCallPart, tool: DescribedTool, messageId: string): Promise<{ allow: true; input?: unknown } | { allow: false; message: string }>;
   /** Sees each result before the model does (PostToolUse hooks, context notes) and may add to it. */
   afterTool?(call: ToolCallPart, output: ToolOutput): Promise<ToolOutput>;
   /** A reply hit the output limit: add the note that asks the model to carry on (once per turn). */
@@ -577,7 +577,7 @@ async function invoke(sent: Extract<Part, { type: 'tool_call' }>, tool: Describe
     // The call as stored stays as the model sent it; permissions, hooks and the tool see the parsed arguments.
     call = { ...call, input: parsed };
   }
-  const verdict = opts.authorize ? await opts.authorize(call, tool) : { allow: true as const };
+  const verdict = opts.authorize ? await opts.authorize(call, tool, messageId) : { allow: true as const };
   // Quotes what the person typed on the card or what a hook printed: like tool output, it can't open or close Atelier's tags.
   if (!verdict.allow) return { content: [{ type: 'text', text: escapeTags(verdict.message) }], isError: true };
   const input = 'input' in verdict && verdict.input !== undefined ? verdict.input : call.input;

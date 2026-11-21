@@ -421,6 +421,26 @@ describe('decide', () => {
     expect(decide(click, ctx({ allow: ['ComputerAction'] })).behavior).toBe('allow');
   });
 
+  it('has Auto mode review computer use that takes the whole screen, the mouse or the keyboard, and nothing else changes', () => {
+    const shot = { name: 'Screenshot', input: {} };
+    const look = { name: 'ComputerAction', input: { actions: [{ action: 'screenshot' }] } };
+    const take = { name: 'FullControl', input: { action: 'request', reason: 'Check the window' } };
+    const whole = (mode: PermissionMode, rules: Partial<RuleSet> = {}) => ({ ...ctx(rules, mode), isReadOnly: (t: string) => t === 'Screenshot', screen: 'whole' as const });
+    for (const call of [shot, look, take]) {
+      expect(decide(call, whole('auto')), call.name).toMatchObject({ behavior: 'review', reason: expect.stringMatching(/whole screen|mouse and keyboard/) });
+      // Plan · Auto too, where ComputerAction doesn't run at all.
+      expect(decide(call, whole('planAuto')).behavior, call.name).toBe(call === look ? 'deny' : 'review');
+      // Other modes look as before, and leave Full control to its own card; a rule still wins.
+      for (const mode of ['default', 'acceptEdits', 'bypassPermissions'] as const) expect(decide(call, whole(mode)).behavior, `${call.name} ${mode}`).toBe('allow');
+      expect(decide(call, whole('auto', { allow: [call.name] })).behavior, call.name).toBe('allow');
+    }
+    // One app's window in the background, a look the turn already took, or handing control back: no review.
+    expect(decide(shot, { ...whole('auto'), screen: 'window' }).behavior).toBe('allow');
+    expect(decide(look, { ...whole('auto'), screen: undefined }).behavior).toBe('allow');
+    expect(decide({ name: 'FullControl', input: { action: 'release' } }, whole('auto')).behavior).toBe('allow');
+    expect(decide(take, { ...whole('auto'), screen: 'window' }).behavior).toBe('review');
+  });
+
   it('lets Atelier for Chrome work in its own tabs without asking, in every mode that acts, and keeps rules in charge', () => {
     const open = { name: 'Browser', input: { action: 'open', url: 'https://example.com' } };
     const click = { name: 'Browser', input: { action: 'click', tab: 3, ref: 4, summary: 'Opens the order' } };

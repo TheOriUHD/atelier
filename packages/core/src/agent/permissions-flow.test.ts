@@ -1194,13 +1194,15 @@ describe('hooks', () => {
 describe('auto mode', () => {
   let runs: number;
   let reviews: string[];
+  let commands: string[];
   const bashTool: Tool<{ command: string }> = {
     name: 'Bash',
     description: 'Run a command',
     inputSchema: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
     readOnly: false,
-    run: async () => {
+    run: async ({ command }) => {
       runs++;
+      commands.push(command);
       return textOutput('ok');
     },
   };
@@ -1234,6 +1236,7 @@ describe('auto mode', () => {
   beforeEach(() => {
     runs = 0;
     reviews = [];
+    commands = [];
   });
 
   it('runs what the reviewer allows without asking, and it reads what the person asked for', async () => {
@@ -1329,6 +1332,144 @@ describe('auto mode', () => {
     chat.respond(s.id, lastPending()!.id, { behavior: 'allow' });
     await chat.settle(s.id);
     expect(runs).toBe(1);
+  });
+
+  describe('a redirect to a less intrusive way', () => {
+    type Reply = { text?: string; calls?: { name: string; input: Record<string, unknown> }[] };
+    /** The agent's replies in order (one with no calls ends the turn; past the list it says "done"); the reviewer answers with `verdicts` in turn, then ALLOW. */
+    function scripted(replies: Reply[], verdicts: string[]): ProviderAdapter {
+      let step = 0;
+      return {
+        ...writer,
+        async *stream(req): AsyncIterable<StreamEvent> {
+          if (req.system.some((b) => b.text.includes('short title'))) {
+            yield { type: 'text', delta: 'Title' };
+          } else if (req.system.some((b) => b.text.startsWith('You review one action'))) {
+            reviews.push(messageText(req.messages[0]!.parts));
+            yield { type: 'text', delta: verdicts.shift() ?? 'ALLOW' };
+          } else {
+            const reply = replies[step++] ?? { text: 'done' };
+            if (reply.text) yield { type: 'text', delta: reply.text };
+            for (const [i, call] of (reply.calls ?? []).entries()) {
+              yield { type: 'tool_call_start', id: `s${step}-${i}`, name: call.name };
+              yield { type: 'tool_call_end', id: `s${step}-${i}`, input: call.input };
+            }
+            if (reply.calls?.length) {
+              yield { type: 'finish', reason: 'tool_use' };
+              return;
+            }
+          }
+          yield { type: 'finish', reason: 'end' };
+        },
+      };
+    }
+    const bash = (command: string) => ({ name: 'Bash', input: { command } });
+    let shots: number;
+    const screenshotTool: Tool<{ app?: string }> = {
+      name: 'Screenshot',
+      description: 'Shows the screen',
+      inputSchema: { type: 'object', properties: { app: { type: 'string' } } },
+      readOnly: true,
+      run: async () => {
+        shots++;
+        return textOutput('Screenshot of Main, 1280×800 pixels.');
+      },
+    };
+    /** The person's computer, in Full control or in the background: only its state is asked for. */
+    const computer = (mode: 'full' | 'background'): Partial<ChatServiceDeps> => ({
+      computer: {
+        available: async () => true,
+        call: (async (_session: unknown, method: string) =>
+          method === 'access.state' ? { apps: [], platform: 'win32', mode, background: true, denied: [], control: false, displays: [] } : {}) as NonNullable<ChatServiceDeps['computer']>['call'],
+      },
+    });
+    const answered = new Set<string>();
+    /** Waits for a card not answered yet, answers it and returns its request. */
+    const answer = async (chat: ChatService, sessionId: string, behavior: 'allow' | 'deny') => {
+      await until(() => !!lastPending() && !answered.has(lastPending()!.id));
+      const pending = lastPending()!;
+      answered.add(pending.id);
+      chat.respond(sessionId, pending.id, behavior === 'allow' ? { behavior } : { behavior, message: '' });
+      return pending.payload as PermissionRequest;
+    };
+    beforeEach(() => {
+      shots = 0;
+      answered.clear();
+    });
+
+    it('tells the agent to reach the same result the suggested way, without counting it as a block, and the turn goes on', async () => {
+      const replies = [bash('npm run a'), bash('npm run b'), bash('open -a Clicker'), bash('npm run c'), bash('npm run d')].map((call) => ({ calls: [call] }));
+      const way = 'run its UI test with `npm run test:ui` instead of opening it on the screen';
+      const chat = service(scripted(replies, ['BLOCK [Test]: one', 'BLOCK [Test]: two', `REDIRECT: ${way}`, 'BLOCK [Test]: three']), [bashTool as Tool]);
+      const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await chat.send(s.id, [{ type: 'text', text: 'build the clicker and check it works' }]);
+      // Two blocks, the redirect, a third block: only then is Auto mode paused, so the redirect wasn't one.
+      const paused = await answer(chat, s.id, 'allow');
+      expect(paused).toMatchObject({ input: { command: 'npm run d' }, reason: expect.stringMatching(/^Auto mode paused after 3 blocked actions in a row/) });
+      await chat.settle(s.id);
+      expect(reviews).toHaveLength(4);
+      expect(commands).toEqual(['npm run d']);
+      const redirected = (await results(s.id))[2]!;
+      expect(redirected).toMatch(/^Auto mode suggests a less intrusive way: run its UI test with `npm run test:ui` instead of opening it on the screen\. Reach the same result that way\./);
+      expect(redirected).toContain('nothing is blocked');
+      expect(redirected).not.toContain("Don't reach the same result");
+    });
+
+    it('asks the person, with the suggestion, when a later reply makes the same call again; the turn may then look at the screen, and the next turn starts fresh', async () => {
+      const shot = { name: 'Screenshot', input: {} };
+      const way = 'capture just the Clicker window from PowerShell instead of the whole screen';
+      const replies = [{ calls: [shot] }, { text: 'The tray menu only shows on the screen, so I need the whole screen.', calls: [shot] }, { calls: [shot] }, { text: 'done' }, { calls: [shot] }, { text: 'done' }];
+      const chat = service(scripted(replies, [`REDIRECT: ${way}`]), [screenshotTool as Tool], undefined, {}, computer('full'));
+      const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await chat.send(s.id, [{ type: 'text', text: 'build an autoclicker for Windows and check its UI' }]);
+      const card = await answer(chat, s.id, 'allow');
+      // Not reviewed again: the person decides, told what Auto mode suggested.
+      expect(reviews).toHaveLength(1);
+      expect(reviews[0]).toContain('Screenshot captures the whole screen');
+      expect(card).toMatchObject({ toolName: 'Screenshot', reason: expect.stringMatching(/^Auto mode suggested another way: capture just the Clicker window from PowerShell instead of the whole screen\. The assistant asks to do it this way instead\. Screenshot captures the whole screen/) });
+      await chat.settle(s.id);
+      // Once allowed, the turn's next look needs neither the review nor the person.
+      expect(shots).toBe(2);
+      expect(reviews).toHaveLength(1);
+      expect((await results(s.id))[0]).toMatch(/^Auto mode suggests a less intrusive way: capture just the Clicker window/);
+      await chat.send(s.id, [{ type: 'text', text: 'check it once more' }]);
+      await chat.settle(s.id);
+      expect(reviews).toHaveLength(2);
+      expect(shots).toBe(3);
+      expect(lastPending()).toBeNull();
+    });
+
+    it('reviews the rest of the redirected reply as usual; declined, the way stays the person’s for the turn, allowed, it goes back to the review', async () => {
+      const open = bash('open -a Clicker');
+      const replies = [{ calls: [open, open] }, { calls: [open] }, { calls: [open] }, { calls: [open] }];
+      const chat = service(scripted(replies, ['REDIRECT: run `npm run test:ui`', 'REDIRECT']), [bashTool as Tool]);
+      const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await chat.send(s.id, [{ type: 'text', text: 'check the clicker works' }]);
+      const declined = await answer(chat, s.id, 'deny');
+      // Both calls of the first reply were reviewed; the second named no way.
+      expect(reviews).toHaveLength(2);
+      expect((await results(s.id))[1]).toMatch(/^Auto mode suggests a less intrusive way to do this, such as a command, a file or the app’s own tests\. Reach/);
+      expect(declined.reason).toMatch(/^Auto mode suggested another way\. The assistant asks/);
+      await answer(chat, s.id, 'allow');
+      await chat.settle(s.id);
+      expect(reviews).toHaveLength(3);
+      expect(runs).toBe(2);
+    });
+
+    it('never reviews a look at one app’s window, and leaves the screen alone in the other modes', async () => {
+      const replies = [{ calls: [{ name: 'Screenshot', input: { app: 'Clicker' } }] }, { text: 'done' }, { calls: [{ name: 'Screenshot', input: {} }] }, { text: 'done' }];
+      const background = service(scripted(replies.slice(0, 2), []), [screenshotTool as Tool], undefined, {}, computer('background'));
+      const auto = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await background.send(auto.id, [{ type: 'text', text: 'check the clicker' }]);
+      await background.settle(auto.id);
+      const full = service(scripted(replies.slice(2), []), [screenshotTool as Tool], undefined, {}, computer('full'));
+      const asking = await repo.create({ mode: 'code', userId: null, permissionMode: 'default' });
+      await full.send(asking.id, [{ type: 'text', text: 'check the clicker' }]);
+      await full.settle(asking.id);
+      expect(reviews).toEqual([]);
+      expect(shots).toBe(2);
+      expect(lastPending()).toBeNull();
+    });
   });
 });
 

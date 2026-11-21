@@ -108,7 +108,7 @@ The mode picker under the message box decides how much the agent may do. Click i
 
 | Mode | What happens |
 |---|---|
-| **Auto mode** (default) | Another model reviews each action that would ask, and runs it, asks you, or blocks it with a reason the agent reads. |
+| **Auto mode** (default) | Another model reviews each action that would ask, and runs it, asks you, points the agent to a less intrusive way, or blocks it with a reason the agent reads. |
 | **Ask permissions** | Asks before editing files or running commands. |
 | **Accept edits** | Edits without asking; still asks before commands. |
 | **Plan mode** | Reads and plans only; you approve the plan before anything changes. |

@@ -266,11 +266,16 @@ something else. The view goes away when the task ends; the popped-out window say
 
 Computer use follows the [permission mode](/permissions/) like everything else the assistant does:
 
-- **Looking** (screenshots, scrolling, waiting, the app list) never asks.
+- **Looking** (screenshots, scrolling, waiting, the app list) never asks. In **Auto**, a look at your whole screen (Full
+  control, or while it has the mouse and keyboard) goes to the reviewer first, once per turn: a look at one app's window
+  in the background doesn't.
 - **Clicking, typing, pressing keys and opening apps** go through the mode. **Bypass** runs them; **Auto** has its
   reviewer watch them, letting ordinary use through and stopping only for what matters (a purchase or payment, sending a
   message, deleting something, accepting terms, changing account or security settings, typing a password); **Ask** and
   **Accept edits** ask each time, listing the steps and what would be typed; **Plan** only looks.
 - The card for an app asks in every mode except **Bypass**, unless you named the app yourself (see
   [Allowing apps](#allowing-apps-background)). The card for taking over the mouse and keyboard (Background) asks in every
-  mode, Bypass included.
+  mode, Bypass included; in **Auto** the reviewer sees the request first.
+- In **Auto**, the reviewer also points the assistant to a less intrusive way when it uses your screen for something a
+  developer would do another way, such as capturing the whole screen to look at an app it is building instead of
+  capturing just that app's window or running its UI tests. See [Redirects](/permissions/#redirects).

@@ -68,18 +68,44 @@ export function reviewLeniency(providerType: string): string {
     : '';
 }
 
-export type Verdict = { decision: 'allow' } | { decision: 'ask'; reason: string } | { decision: 'block'; reason: string };
+/**
+ * `redirect`: fine for the task, but done a needlessly intrusive way (a whole-screen capture to look at the app the agent
+ * builds); `reason` is the less intrusive way to the same result, empty when the reviewer named none.
+ */
+export type Verdict =
+  | { decision: 'allow' }
+  | { decision: 'ask'; reason: string }
+  | { decision: 'redirect'; reason: string }
+  | { decision: 'block'; reason: string };
 
-/** ALLOW, ASK or BLOCK with its reason; null when the reply is none of them. */
+/** ALLOW, ASK, REDIRECT or BLOCK with its reason; null when the reply is none of them. */
 export function parseVerdict(reply: string): Verdict | null {
   const lines = reply.replace(/<think>[\s\S]*?<\/think>/g, '').split('\n').map((l) => l.trim().replace(/^[*`>"\s]+/, ''));
-  const rest = (text: string) => text.replace(/[*`]+$/, '').trim();
+  // What follows the word, past the colon and the bold or code marks around it (`**REDIRECT**: …`).
+  const rest = (text: string) => text.replace(/^[\s:*`]+/, '').replace(/[*`]+$/, '').trim();
   for (const line of lines) {
     if (/^ALLOW\b/i.test(line)) return { decision: 'allow' };
-    const ask = /^ASK\b[\s:]*(.*)$/i.exec(line);
+    const ask = /^ASK\b(.*)$/i.exec(line);
     if (ask) return { decision: 'ask', reason: rest(ask[1]!) };
-    const block = /^BLOCK\b[\s:]*(.*)$/i.exec(line);
+    const redirect = /^REDIRECT\b(.*)$/i.exec(line);
+    if (redirect) return { decision: 'redirect', reason: rest(redirect[1]!) };
+    const block = /^BLOCK\b(.*)$/i.exec(line);
     if (block) return { decision: 'block', reason: rest(block[1]!) || 'No reason given.' };
   }
   return null;
+}
+
+/** Computer use's tools that work on the person's screen: one way of working, whichever of them a call uses. */
+const SCREEN_TOOLS = new Set(['Screenshot', 'ComputerAction', 'OpenApp', 'FullControl']);
+
+/**
+ * What counts as the same call again after a redirect (the agent insisting on its way): any use of the person's screen
+ * (Screenshot, ComputerAction, OpenApp and FullControl are one way of working), the same command for Bash and
+ * PowerShell, the same file, folder or address for a tool that names one, else the same tool.
+ */
+export function redirectKey(call: { name: string; input: unknown }): string {
+  if (SCREEN_TOOLS.has(call.name)) return 'screen';
+  const input = (call.input && typeof call.input === 'object' ? call.input : {}) as Record<string, unknown>;
+  const target = typeof input.command === 'string' ? input.command.trim().replace(/\s+/g, ' ') : (input.file_path ?? input.notebook_path ?? input.path ?? input.url);
+  return `${call.name}\n${typeof target === 'string' ? target : ''}`;
 }

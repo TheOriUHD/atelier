@@ -3,7 +3,8 @@
  *   deny rules → ask rules → allow rules → mode default,
  * with compound Bash commands checked part by part and dangerous commands always prompting outside Bypass.
  * In Auto mode what would prompt goes to a reviewing model instead (`review`, permissions/auto-mode.ts), except ask
- * rules and deletions outside the workspace, which still ask the person.
+ * rules and deletions outside the workspace, which still ask the person. Computer use that takes the screen goes to it
+ * too (`takesScreen`), where other modes take it as a read or leave it to its own card.
  */
 import { tmpdir } from 'node:os';
 import { pathOps, type PathFlavor } from '../paths.ts';
@@ -34,6 +35,12 @@ export interface PermissionContext extends MatchContext {
    * editors or the agent itself ask the host even in Accept edits: such an edit can make the host's computer run commands.
    */
   guest?: boolean;
+  /**
+   * Computer use in Auto mode: what a look at the screen takes in on the session's computer now, the person's whole screen
+   * (Full control, or while the session has their mouse and keyboard) or one app's window (Background). Unset where nobody
+   * asked: other modes and tools, or a turn the review or the person already let take the screen.
+   */
+  screen?: 'whole' | 'window';
 }
 
 export interface Decision {
@@ -138,6 +145,11 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   // Auto mode: removing build output, caches and temp files is cleanup, not a mass deletion to worry about.
   if (auto && isBash && !opaque && !warning && routineCleanup(parts, ctx)) return { behavior: 'allow', reason: 'Auto mode: clearing generated or temporary files.' };
 
+  // Auto mode: computer use that takes the screen, the mouse or the keyboard goes to the review, which can point to a less
+  // intrusive way (looking at an app the agent builds through its window or its tests). Elsewhere FullControl asks the
+  // person itself and a look is a read.
+  const intrusive = auto ? takesScreen(call, ctx) : null;
+  if (intrusive) return { behavior: 'review', reason: intrusive };
   if (ASKS_ITSELF.has(call.name)) return { behavior: 'allow', reason: 'It asks the person itself.' };
   // Making an image touches nothing but the provider, and a per-turn limit caps it: Auto has nothing to review.
   if (auto && call.name === 'GenerateImage') return { behavior: 'allow', reason: 'It only makes an image.' };
@@ -177,6 +189,18 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
     return target ? { behavior: 'review', reason: `${call.name} changes ${target}, which configures tools or the agent itself.` } : { behavior: 'allow', reason: 'Auto mode: an edit in the workspace.' };
   }
   return warned({ behavior: unsure, reason: `${call.name} needs your approval.` });
+}
+
+/**
+ * Why a computer use call takes over the person's screen, for the review's note and the card; null for one that works in
+ * one app's window, only hands control back or only asks.
+ */
+export function takesScreen(call: ToolCall, ctx: Pick<PermissionContext, 'screen'>): string | null {
+  if (call.name === 'FullControl') return call.input.action === 'request' ? 'FullControl takes over the mouse and keyboard.' : null;
+  if (ctx.screen !== 'whole') return null;
+  if (call.name === 'Screenshot') return 'Screenshot captures the whole screen, not one app’s window.';
+  if (call.name === 'ComputerAction' && onlyLooks(call.input)) return 'ComputerAction looks at the whole screen, not one app’s window.';
+  return null;
 }
 
 /** Whether every command is `rm` (or `cd`) and only removes disposable folders in the workspace or things below a temp folder. */

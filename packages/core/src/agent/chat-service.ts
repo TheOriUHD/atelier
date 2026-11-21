@@ -59,8 +59,8 @@ import { appError, imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLen
 import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
-import { BLOCKS_IN_A_ROW, BLOCKS_TOTAL, parseVerdict, reviewInput, reviewLeniency } from '../permissions/auto-mode.ts';
-import { decide, outsideRoots, SANDBOX_CODE_TOOLS, SANDBOX_TOOLS, sandboxDecide, suggestRule, type Decision, type PermissionContext } from '../permissions/engine.ts';
+import { BLOCKS_IN_A_ROW, BLOCKS_TOTAL, parseVerdict, redirectKey, reviewInput, reviewLeniency } from '../permissions/auto-mode.ts';
+import { decide, outsideRoots, SANDBOX_CODE_TOOLS, SANDBOX_TOOLS, sandboxDecide, suggestRule, takesScreen, type Decision, type PermissionContext } from '../permissions/engine.ts';
 import { InteractionBroker } from './interactions.ts';
 import type { FileRepo } from '../files/file-repo.ts';
 import { canExtractText, extractText } from '../files/text-extract.ts';
@@ -592,6 +592,13 @@ export class ChatService {
   private pendingMoves = new Map<string, string>();
   /** Auto mode's blocks per top-level session: in a row and in all (permissions/auto-mode.ts). */
   private autoBlocks = new Map<string, { row: number; total: number }>();
+  /**
+   * Auto mode's redirects in the acting session's current turn, by `redirectKey`: the less intrusive way it named and the
+   * reply that made the call. The same call in a later reply of the turn goes to the person, who decides.
+   */
+  private redirects = new Map<string, Map<string, { way: string; messageId: string }>>();
+  /** Sessions whose current turn the review or the person let take the screen: its later looks aren't reviewed again. */
+  private screenTaken = new Set<string>();
   /** Tool calls since each session's last TodoWrite (or nudge about it). */
   private sinceTodo = new Map<string, number>();
   /** Instruction files below the root, by session and folder, as the file tools found them. */
@@ -1386,6 +1393,8 @@ export class ChatService {
       this.wakeTurns.delete(sessionId);
       this.live.delete(sessionId);
       this.toolOutputs.delete(sessionId);
+      this.redirects.delete(sessionId);
+      this.screenTaken.delete(sessionId);
       this.afterRun(sessionId, controller.signal.aborted);
     });
     this.runs.set(sessionId, { controller, done, startedAt });
@@ -1495,6 +1504,9 @@ export class ChatService {
 
   private async run(sessionId: string, signal: AbortSignal, submitted: boolean, wake = false): Promise<void> {
     await this.setStatus(sessionId, 'running');
+    // What Auto mode redirected, and its yes to the screen, hold for one turn.
+    this.redirects.delete(sessionId);
+    this.screenTaken.delete(sessionId);
     let finalStatus: 'idle' | 'error' = 'idle';
     // Stop let this run go while it waited (STOP_GRACE_MS): whatever it waited on finished late, and it adds nothing now.
     const gone = () => !this.isCurrent(sessionId, signal);
@@ -1585,7 +1597,7 @@ export class ChatService {
         recoverOverflow: () => {
           run.threshold = Math.floor(Math.min(run.threshold, run.last?.used ?? run.threshold) * 0.8);
         },
-        authorize: (call, tool) => this.authorize(session, call, tool, offered, signal),
+        authorize: (call, tool, messageId) => this.authorize(session, call, tool, offered, signal, messageId),
         // Before each request, so a long turn (and its sub-agents) stops soon after a limit is reached.
         ...(this.deps.limits ? { admit: () => this.deps.limits!.admit(actor.payer) } : {}),
         afterTool: (call, output) => this.afterTool(session, hooks ?? null, call, output, signal),
@@ -1900,9 +1912,9 @@ export class ChatService {
    * The permission pipeline (ARCHITECTURE §8): deny rules always win; then PreToolUse hooks may deny, ask,
    * allow or rewrite the input; otherwise rules and mode decide, or the person does.
    */
-  private async authorize(session: SessionRow, call: ToolCallPart, tool: Tool, offered: ReadonlySet<string>, signal: AbortSignal): Promise<{ allow: true; input?: unknown } | { allow: false; message: string }> {
+  private async authorize(session: SessionRow, call: ToolCallPart, tool: Tool, offered: ReadonlySet<string>, signal: AbortSignal, messageId: string): Promise<{ allow: true; input?: unknown } | { allow: false; message: string }> {
     const seen: { ctx?: PermissionContext } = {};
-    const result = await this.decideAccess(session, call, tool, offered, signal, seen);
+    const result = await this.decideAccess(session, call, tool, offered, signal, seen, messageId);
     // An allowed call on a file elsewhere on the machine: the runner has to be told it may go there. That includes the
     // folders the admin allowed besides the workspace (the rest of `roots`): the permission engine treats them as inside,
     // but the runner knows only the workspace's own folder until it is told.
@@ -1920,6 +1932,7 @@ export class ChatService {
     offered: ReadonlySet<string>,
     signal: AbortSignal,
     seen: { ctx?: PermissionContext },
+    messageId: string,
   ): Promise<{ allow: true; input?: unknown } | { allow: false; message: string }> {
     // Co-op: a guest's own connector, lent to their turns, asks them about every call, whatever the mode or rules here
     // (their computer runs only the calls they allowed: coop/gateway.ts). Nobody else's turn uses it.
@@ -1956,6 +1969,8 @@ export class ChatService {
     const standing = guest ? [] : ctx.rules.allow;
     const rules = { ...ctx.rules, allow: [...standing, ...(this.sessionRules.get(key(asker)) ?? []), ...(main ? (this.sessionRules.get(key(main.id)) ?? []) : []), ...folders] };
     const judge: PermissionContext = { ...ctx, ...(guest ? { mode: guestMode(ctx.mode), guest: true } : {}), rules, isReadOnly: (name) => (name === tool.name && tool.readOnly) || ctx.isReadOnly(name), offers: (name) => offered.has(name) };
+    const screen = await this.screenFor(current, judge.mode, call.name);
+    if (screen) judge.screen = screen;
     // A chat's sandbox runs under its fixed rules: Bash and Read in a plain chat, every code tool in a merged one that has no
     // folder of its own (yet). A merged chat given a folder goes through the permission mode, as Cowork does.
     const sandboxed = current.mode === 'chat' && (this.unified(current) ? SANDBOX_CODE_TOOLS.has(call.name) && (await this.inSandbox(current)) : SANDBOX_TOOLS.has(call.name));
@@ -1977,10 +1992,27 @@ export class ChatService {
     if (!verdict.warning && ((pre?.permission === 'allow' && !askRule) || (pre?.permission !== 'ask' && verdict.behavior === 'allow'))) return { allow: true, ...(input ? { input } : {}) };
     // Auto mode: the reviewing model answers in the person's place; when it can't, the person is asked after all.
     let reason = verdict.reason;
-    if (verdict.behavior === 'review' && pre?.permission !== 'ask') {
+    // A call that takes the screen (a whole-screen look, Full control): once let through, the turn's later looks aren't reviewed.
+    const takes = judge.screen === 'whole' || takesScreen(final, judge) !== null;
+    // The call comes back to a way Auto mode redirected, in a later reply (where the agent can say why): not reviewed
+    // again, the person decides. In the reply that was redirected, the next call is reviewed like any other.
+    const way = verdict.behavior === 'review' && pre?.permission !== 'ask' ? redirectKey(final) : null;
+    const prior = way !== null ? this.redirects.get(session.id)?.get(way) : undefined;
+    const insisted = prior && prior.messageId !== messageId ? prior : undefined;
+    if (insisted) {
+      reason = `Auto mode suggested another way${insisted.way ? `: ${insisted.way}` : '.'} The assistant asks to do it this way instead. ${verdict.reason}`;
+    } else if (verdict.behavior === 'review' && pre?.permission !== 'ask') {
       const review = await this.autoReview(current, asker, final, verdict, ctx.cwd, signal);
-      if (review.behavior === 'allow') return { allow: true, ...(input ? { input } : {}) };
+      if (review.behavior === 'allow') {
+        if (takes) this.screenTaken.add(session.id);
+        return { allow: true, ...(input ? { input } : {}) };
+      }
       if (review.behavior === 'deny') return { allow: false, message: review.message };
+      if (review.behavior === 'redirect') {
+        const ways = this.redirects.get(session.id) ?? new Map<string, { way: string; messageId: string }>();
+        this.redirects.set(session.id, ways.set(way!, { way: review.way, messageId }));
+        return { allow: false, message: redirectMessage(review.way) };
+      }
       reason = review.reason;
     }
 
@@ -2003,6 +2035,9 @@ export class ChatService {
     }
     // Approving resumes Auto mode after it paused.
     this.autoBlocks.delete(asker);
+    if (takes) this.screenTaken.add(session.id);
+    // The person allowed the way Auto mode redirected: its next call goes to the review again. (Declined, it stays theirs.)
+    if (insisted) this.redirects.get(session.id)?.delete(way!);
     // Dangerous commands are approved one call at a time.
     if (verdict.warning) return { allow: true, ...(input ? { input } : {}) };
     // Looking at a folder elsewhere on the machine is approved once for the folder, not once per file: moving or reading a
@@ -2066,6 +2101,19 @@ export class ChatService {
   }
 
   /**
+   * Auto mode: what a Screenshot or ComputerAction would take in on the session's computer now (`PermissionContext.screen`),
+   * asked of the computer until the turn was let take the screen. Null otherwise, and when the computer doesn't answer:
+   * the call then fails by itself.
+   */
+  private async screenFor(session: SessionRow, mode: PermissionMode, tool: string): Promise<'whole' | 'window' | null> {
+    if ((mode !== 'auto' && mode !== 'planAuto') || (tool !== 'Screenshot' && tool !== 'ComputerAction') || !this.deps.computer || this.screenTaken.has(session.id)) return null;
+    const state = await this.deps.computer.call(session, 'access.state', {}).catch(() => null);
+    if (!state) return null;
+    // As the computer decides (apps/desktop/src/computer/controller.ts): one app's window only in the background, without the mouse and keyboard.
+    return state.mode === 'full' || state.control || !state.background ? 'whole' : 'window';
+  }
+
+  /**
    * Auto mode's review of one call, by the acting session's own model (no swap on a one-model server), ahead of the
    * queue. After too many blocks, or when the model can't answer, the person decides.
    */
@@ -2076,7 +2124,7 @@ export class ChatService {
     decision: Decision,
     cwd: string | null,
     signal: AbortSignal,
-  ): Promise<{ behavior: 'allow' } | { behavior: 'deny'; message: string } | { behavior: 'ask'; reason: string }> {
+  ): Promise<{ behavior: 'allow' } | { behavior: 'deny'; message: string } | { behavior: 'ask'; reason: string } | { behavior: 'redirect'; way: string }> {
     const blocks = this.autoBlocks.get(asker) ?? { row: 0, total: 0 };
     if (blocks.row >= BLOCKS_IN_A_ROW || blocks.total >= BLOCKS_TOTAL) {
       return { behavior: 'ask', reason: `Auto mode paused after ${blocks.row >= BLOCKS_IN_A_ROW ? `${blocks.row} blocked actions in a row` : `${blocks.total} blocked actions`}. ${decision.reason}` };
@@ -2116,6 +2164,8 @@ export class ChatService {
     }
     // Probably wanted but not settled by the person's messages: they decide, and it isn't held against the agent.
     if (verdict.decision === 'ask') return { behavior: 'ask', reason: `Auto mode wants your OK${verdict.reason ? `: ${verdict.reason}` : '.'} ${decision.reason}` };
+    // Fine for the task but needlessly intrusive: the agent is pointed to the other way, and it isn't held against it either.
+    if (verdict.decision === 'redirect') return { behavior: 'redirect', way: sentence(verdict.reason) };
     this.autoBlocks.set(asker, { row: blocks.row + 1, total: blocks.total + 1 });
     return {
       behavior: 'deny',
@@ -3640,6 +3690,18 @@ const CANCELLED = 'Cancelled before the tool ran.';
 function refusal(decision: Decision): string {
   if (!decision.rule) return decision.reason;
   return `${decision.reason} The person's settings rule this out: don't get the same result another way, with another command or tool. Tell them what was blocked.`;
+}
+
+/** The reviewer's words as a sentence of their own. */
+const sentence = (text: string) => (text && !/[.!?…]$/.test(text) ? `${text}.` : text);
+
+/**
+ * What the agent hears when Auto mode points to a less intrusive way: the opposite of a block, it reaches the same result
+ * that way; and when it has to be this way after all, it says why and calls again, and the person decides.
+ */
+function redirectMessage(way: string): string {
+  const suggested = way ? `: ${way}` : ' to do this, such as a command, a file or the app’s own tests.';
+  return `Auto mode suggests a less intrusive way${suggested} Reach the same result that way. This call didn't run, but nothing is blocked: go on with the task. If it really has to be done this way, say why in your reply and make the same call again; the person then decides.`;
 }
 /** Tool calls without a TodoWrite before the task list gets a reminder. */
 const TODO_NUDGE_CALLS = 10;
