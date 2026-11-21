@@ -93,7 +93,7 @@ From here: invite people ([Accounts](/accounts/#adding-people)), open **Settings
 |---|---|---|
 | `atelier` | `ghcr.io/theoriuhd/atelier` | The server. Listens on 7340 inside the Compose network and is not published to the host. Data in the `atelier-data` volume at `/data`. |
 | `sandbox` | `ghcr.io/theoriuhd/atelier-sandbox` | A small Debian container with Git, Python, Node and build tools, where Chat runs commands, each account as a Unix user of its own. Limited to 2 CPUs, 2 GB of memory and 512 processes. |
-| `updater` | `ghcr.io/theoriuhd/atelier-updater` | Optional. Lets an admin press **Update server**. It holds the Docker socket; see [the updater](#the-updater-service). |
+| `updater` | `ghcr.io/theoriuhd/atelier-updater` | Optional. Lets an admin press **Update now**, and lets the server update itself. It holds the Docker socket; see [the updater](#the-updater-service). |
 | `caddy` | `caddy:2` | Gets and renews the certificate, terminates HTTPS on ports 80 and 443, and forwards to `atelier:7340`. Certificates live in the `caddy-data` volume. |
 
 The server image has a health check; `docker compose ps` shows `healthy` once it is up.
@@ -338,7 +338,7 @@ The variables you will most often set on a server. The complete list, including 
 | `ATELIER_SETUP_TOKEN` | random at each start | The one-time token for creating the first admin. |
 | `ATELIER_SANDBOX_HOST`, `ATELIER_SANDBOX_KEYS`, `ATELIER_SANDBOX_PORT`, `ATELIER_SANDBOX_SLOTS`, `ATELIER_SANDBOX_USER` | none, none, `2222`, `256`, none | The chat sandbox and how many accounts it holds. Leave out the host and chats have no sandbox. |
 | `ATELIER_UPDATES_REPO` and `ATELIER_UPDATES_TOKEN` | none | Serve desktop updates from a GitHub repository's releases. Both are needed. |
-| `ATELIER_UPDATER_URL` | none | The updater service, for **Update server**. |
+| `ATELIER_UPDATER_URL` | none | The updater service, for **Update now** and **Update automatically**. |
 | `ATELIER_UPDATE_FEED` | `https://updates.atelierhq.dev` | Where the server looks up the newest version; `off` stops the lookup, unless `ATELIER_UPDATES_REPO` is set. |
 | `ATELIER_IMAGE` | set in released images | What image this is; empty means built from source. |
 
@@ -379,7 +379,7 @@ finds the pool full gets a message that says so. A deleted account keeps its use
 account that ever used the sandbox.
 
 **Updating from a version where all accounts shared one user.** Pull and recreate both images together
-(`docker compose pull && docker compose up -d`, or **Update server**). The compose file you already have keeps working; the new
+(`docker compose pull && docker compose up -d`, or **Update now**). The compose file you already have keeps working; the new
 one only adds hardening you can copy (`security_opt`, `cap_drop` and `cap_add` of the `sandbox` service). Chats made before keep
 their folders and their paths: when the new sandbox starts, everything the old shared user left in `sandbox-home` is locked to
 root, so nobody can read it, and the first time an account's chat uses the sandbox again its `chats/<account>/` folder is handed
@@ -426,12 +426,37 @@ What the page offers depends on how the server was installed:
 
 | Install | What **Settings › Admin › Server** does |
 |---|---|
-| The Compose file with the `updater` service | **Update server** pulls the new `atelier` and `sandbox` images and recreates those two containers. A bar shows how much of the new version is down ("40% · 120 MB of 300 MB"), then the restart. Everyone is disconnected for a minute or so and reconnects by themselves; replies being written stop. Your volumes are kept. |
+| The Compose file with the `updater` service | **Update now** pulls the new `atelier` and `sandbox` images and recreates those two containers, with no question first (**Update automatically** below does it when nothing is running). A bar shows how much of the new version is down ("40% · 120 MB of 300 MB"), then the restart. Everyone is disconnected for a minute or so and reconnects by themselves; replies being written stop. Your volumes are kept. |
 | Compose without the updater | Shows the command to run on the host, in the folder with `compose.yaml`: `docker compose pull && docker compose up -d`. |
 | An image built from source (no registry name) | "This server was built from source; update it by rebuilding its image." |
 
 Desktop apps and open browser tabs say so when their version and the server's differ; the messages are in
 [Updates](/updates/#the-server).
+
+### Updating automatically
+
+With the `updater` service, **Settings › Admin › Server › Update automatically** (off until an admin turns it on) makes
+the server do the whole update itself, so nobody has to open a page or answer a question:
+
+- The server looks up the newest version every minute, from the same place as the Server page, and downloads the new
+  images through the updater as soon as one is out. The lookup is the small `stable/latest.yml` file; with
+  `ATELIER_UPDATES_REPO` set it asks GitHub's releases instead, which at one request a minute needs the token
+  (`ATELIER_UPDATES_TOKEN`) to stay within GitHub's limit.
+- It installs when **no reply is being written and no sub-agent or background command runs** in any conversation, within
+  seconds of the last one ending. Nothing is cut off: while someone is using the server it waits, and the Server page says
+  what it waits for. Installing is a restart of the `atelier` and `sandbox` containers, a few seconds, because the images
+  are down already.
+- A message sent in those seconds is refused with "Atelier is installing an update right now. Try again in a few
+  seconds." (an application error, code `updating`, so the apps show a notice, not an error, and keep what was typed).
+- A try that fails (no registry, the updater refused) is shown on the page and tried again later; the server keeps
+  running meanwhile. A pinned tag (`:v<version>`) is pulled again and nothing changes, as with **Update now**.
+
+An updater from before 0.10.6 can only pull and restart in one go, so with it the server waits until nothing is running
+and then downloads and installs together (the restart takes a little longer). Update the updater once, on the host:
+
+```bash
+docker compose pull updater && docker compose up -d updater
+```
 
 Back up before updating. Database migrations run when the new version starts and only move forward; Atelier has no
 rollback, and does not stop an older version from opening a database a newer one has migrated.
@@ -441,7 +466,9 @@ rollback, and does not stop an older version from opening a database a newer one
 A container cannot replace itself, so the Compose file has a small optional service, `updater`. It gets the Docker socket,
 which is **root on the host**, so it is deliberately limited:
 
-- It answers only `GET /status` and `POST /update`, on the Compose network (port 7341, not published).
+- It answers only `GET /status`, `POST /pull` (from 0.10.6: download the new images, change nothing) and `POST /update`
+  (pull, unless `?pull=false`, then recreate), on the Compose network (port 7341, not published). `/status` lists what it can
+  do (`features`), so a server with an older updater falls back to `/update` alone.
 - Both need a secret the server makes on first use in the `updater-secret` volume (mode 0600; the updater mounts it
   read-only). It is never in an environment variable or a committed file.
 - An update runs `docker compose pull` and `docker compose up -d --no-deps` for the `atelier` and `sandbox` services of the
@@ -456,8 +483,10 @@ else works, and the Server page shows the manual command. Things to know:
 
 - It updates the images the Compose file names. With `:latest` that means the newest; with a pinned tag (`:v<version>`) it
   pulls the same tag again and nothing changes. To move a pinned server, edit the tag and run `docker compose up -d`.
-- It does not update itself. `docker compose pull && docker compose up -d` on the host updates it with the rest. An
-  updater from before 0.7.1 shows no progress bar, only the last line Docker printed, until it is updated this way.
+- It does not update itself. `docker compose pull && docker compose up -d` on the host updates it with the rest (or only it:
+  `docker compose pull updater && docker compose up -d updater`). An updater from before 0.7.1 shows no progress bar, only
+  the last line Docker printed, and one from before 0.10.6 cannot download ahead for **Update automatically**, until it is
+  updated this way.
 - With private images, the updater needs a registry login: mount the host's `~/.docker/config.json` at
   `/root/.docker/config.json:ro`.
 - A server on host networking cannot reach `http://updater:7341`. Publish the updater on loopback only
@@ -504,7 +533,7 @@ docker run -d --name atelier --restart unless-stopped \
   ghcr.io/theoriuhd/atelier:latest
 ```
 
-Without the other services there is no chat sandbox and no **Update server** button; update with `docker pull` and
+Without the other services there is no chat sandbox and no **Update now** button; update with `docker pull` and
 recreate the container. To see your proxy's address as the container sees it, open **Settings › Account › Active sessions**: the **IP address**
 column shows it.
 
@@ -594,7 +623,7 @@ Atelier does not publish measured requirements. What is known:
 | Chats say "The sandbox can't be reached: … Permission denied" | The `sandbox` container is older than the server (update both), or it refused the account's user because the server gave it to a different account than before (`docker compose logs sandbox` says which; see [the chat sandbox](#the-chat-sandbox)). |
 | Chats say "The sandbox has no free account left" | Every user of the sandbox is taken; raise `ATELIER_SANDBOX_SLOTS` on both services. |
 | "This app has no runner builds to put into a codespace." | `ATELIER_RUNNER_DIR` is not set (only from source; the image sets it). |
-| **Update server** is missing, or the page says "This server has no updater service." | The button appears only when a newer version exists and the updater answers. Otherwise `ATELIER_UPDATER_URL` is not set, or the updater is down. |
+| **Update now** is missing, or the page says "This server has no updater service." | The button appears only when a newer version exists and the updater answers. Otherwise `ATELIER_UPDATER_URL` is not set, or the updater is down. |
 | A desktop app says "The server doesn’t offer updates for this computer yet. Its admin sets them up with ATELIER_UPDATES_REPO." | The server's feed is off (it answers 404) and the app has no public feed to fall back to (`ATELIER_UPDATE_FEED=off` on the desktop). See [Serving desktop updates](#serving-desktop-updates-from-your-server). |
 | A desktop app cannot connect | See [Troubleshooting](/troubleshooting/#cant-reach-the-server). |
 

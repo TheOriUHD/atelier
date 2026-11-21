@@ -312,9 +312,16 @@ quit, a container recreate. The transcript keeps what arrived. Press **Continue*
 A browser tab that shows "The server was updated to Atelier *x*." needs **Reload**. After a server update, desktop apps
 reconnect by themselves.
 
-On a server, **Update server** problems: "The updater refused this server’s secret: both must mount the same `updater-secret`
-volume.", "The updater can’t be reached at …", "This server was built from source; update it by rebuilding its image."
-See [Run a server](/self-hosting/#the-updater-service).
+On a server, update problems on the Server page: "The updater refused this server’s secret: both must mount the same
+`updater-secret` volume.", "The updater can’t be reached at …", "This server was built from source; update it by
+rebuilding its image." See [Run a server](/self-hosting/#the-updater-service).
+
+| You see | What it means |
+|---|---|
+| **Atelier is installing an update right now. Try again in a few seconds.** (a notice, and your message is back in the box) | **Update automatically** is on and the server is restarting into the new version. Nothing was sent; send it again in a few seconds. |
+| **Atelier is installing an update (*x*). This page reconnects in a moment.** | The same, seen from an open page or the desktop app. It reconnects by itself within a minute. |
+| The Server page says "Atelier *x* is downloaded and installs as soon as nothing is running (…)" for a long time | A reply, a sub-agent or a background command is still running in some conversation; the server waits for the last one. Stop it, or press **Update now** to restart at once. |
+| "The automatic update to Atelier *x* didn’t work: … Trying again at …" | The updater could not download or install; its message says why. The server runs the old version and tries again at that time. |
 
 ## Data and disk
 

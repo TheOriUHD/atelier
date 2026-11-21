@@ -38,6 +38,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.6',
+    intro: 'A server can now update itself: it downloads a new version as soon as it is out and installs it the moment nothing is running.',
+    highlights: [
+      {
+        icon: Server,
+        title: 'Update automatically',
+        body: 'In Settings › Admin › Server an admin can turn on Update automatically (it is off until you do). The server looks for a new version every minute, downloads it in the background, and installs it as soon as no reply is being written and no sub-agent or background command is running, so nobody is cut off. The page says what it is doing and what it waits for. A server whose updater is older than this version needs it pulled once: docker compose pull updater && docker compose up -d updater.',
+      },
+      {
+        icon: RefreshCw,
+        title: 'A calm message while it installs',
+        body: 'The few seconds of the restart no longer look like an error. A message sent then is not taken, the app says “Atelier is installing an update right now. Try again in a few seconds.” and your text goes back into the box, and open pages say the update is installing and reconnect by themselves.',
+      },
+    ],
+    also: ['Update server is now Update now, and it no longer asks “Update the server to Atelier x?” first.'],
+  },
+  {
     version: '0.10.5',
     intro: 'Mistral and other cloud models recover from busy servers, empty replies and a picture they can’t open, and the memory budget for local models sizes more of them.',
     highlights: [

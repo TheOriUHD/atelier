@@ -25,8 +25,10 @@ newer bundle is unpacked beside the staged one, which stays ready if the newer d
 electron-updater drops the waiting installer when a download fails, so the app says so and the next check tries again.
 
 The server image is published with the apps (`atelier`, `atelier-sandbox` and `atelier-updater`), so the version in
-`stable/latest.yml` is the one an admin's **Update server** installs. The release command pushes the images before the
-feed for that reason: a server updated in between would pull the previous image and stay on its version.
+`stable/latest.yml` is the one an admin's **Update now** installs, and the one a server with **Update automatically** on
+installs by itself. The release command pushes the images before the feed for that reason: a server updated in between
+would pull the previous image and stay on its version (with automatic updates that moment comes within a minute of the
+feed changing, so the order matters more than it did).
 Apps compare their version with their server's and warn in the sidebar when they differ.
 
 An Atelier **server** can still serve its own feed (`ATELIER_UPDATES_REPO`, see [self-hosting](self-hosting.md)).
@@ -57,7 +59,32 @@ who have the app, since the app has to be able to fetch them.)
 | **Linux, AppImage** | the same: the AppImage file is replaced | |
 | **Linux, `.deb`** | downloaded in the background; installing asks for your password (`pkexec dpkg -i`) | Needs `latest-linux.yml` to list the `.deb`: build the AppImage and the `.deb` in one run. |
 | **macOS** | in the background too: the zip is downloaded, checked and unpacked beside the app, and swapped in when Atelier quits or on Restart | Works with or without a Developer ID (released builds are signed and notarized): Atelier replaces its own bundle from a small helper script (`apps/desktop/src/bundle-swap.ts`); what the app downloads itself carries no quarantine flag, so Gatekeeper never judges it. It needs Atelier to be installed where it can write (Applications, from the disk image). Run from a disk image or a quarantined Downloads copy it cannot replace itself, and the sidebar offers the disk image instead. |
-| **The server** (Docker) | from Settings › Admin › Server, with the compose file's `updater` service | **Update server** pulls the new images and recreates the server and the sandbox (see [self-hosting](self-hosting.md#updating-the-server)). Without the updater: `docker compose pull && docker compose up -d`. A server built from source is updated by rebuilding it. The newest version shown is the public feed's `stable/latest.yml`. |
+| **The server** (Docker) | from Settings › Admin › Server, with the compose file's `updater` service | **Update now** pulls the new images and recreates the server and the sandbox (see [self-hosting](self-hosting.md#updating-the-server)); with **Update automatically** on, the server does it by itself (see below). Without the updater: `docker compose pull && docker compose up -d`. A server built from source is updated by rebuilding it. The newest version shown is the public feed's `stable/latest.yml`. |
+
+### How a server updates itself
+
+With the setting `server.autoUpdate` on (Settings › Admin › Server › Update automatically; off by default), the server
+(`packages/core/src/server-updates`) runs this loop. Nothing in it asks an admin.
+
+1. **Every 60 seconds** it asks the feed for `stable/latest.yml` (or GitHub's `releases/latest` with
+   `ATELIER_UPDATES_REPO`) and compares the version with its own. Every server with the setting on makes that request
+   once a minute, so **the feed must stay cheap**: the Worker serves a small static file from R2 and nothing in it may
+   do work per request (no database, no signing). Five hundred servers are 720,000 requests a day.
+2. A newer version means `POST /pull` to the updater: it downloads the new `atelier` and `sandbox` images and changes
+   nothing else. The updater's `/status` lists `features: ['pull']` when it can; an updater from before 0.10.6 lists none,
+   and the server then skips this step.
+3. With the images down, it installs as soon as the server is **quiet**: no turn running in any session and no sub-agent
+   or background command. While it installs, the server refuses to start a turn with the application error `updating`
+   ("Atelier is installing an update right now. Try again in a few seconds."), which the apps show as a notice.
+4. The install is `POST /update?pull=false`: the same recreate as an update with the pull left out, so it needs no
+   registry and takes seconds. The server sends the event `server.updating` just before it restarts, so open apps can say
+   so. An updater without `features: ['pull']` is sent `POST /update` as before, and downloads and installs in one go.
+5. A failed pull or install is shown in the Server status (`auto.state: 'failed'`, the reason, `retryAt`); the server keeps
+   running the old version and tries again later.
+
+The updater does not update itself (it is not one of the services it recreates), so a server needs its updater pulled
+once for step 2: `docker compose pull updater && docker compose up -d updater`; the release notes of the release that
+first needs it say so.
 
 ## Set it up once
 

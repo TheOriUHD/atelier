@@ -4,6 +4,14 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+- **The apps for automatic server updates.** Settings › Admin › Server has **Update automatically** (off until an admin turns it on; shown where the Compose file has the updater service and the server offers it) and says in words where an automatic update stands: "Downloading Atelier *x* in the background…" over the usual bar, "Atelier *x* is downloaded and installs as soon as nothing is running (2 replies, 1 background task).", "Installing Atelier *x*. This page reconnects in a moment." or why a try failed and when the next one is. The page reads the state every two seconds while an update is on its way.
+
+- **No question before an admin updates the server.** **Update server** is now **Update now** and updates at once: the "Update the server to Atelier *x*?" dialog is gone. The row says that it restarts the server and that replies being written stop; with automatic updates on it says the server updates itself as soon as nothing is running.
+
+- **A message sent while the server installs an update is a notice, not an error.** The server refuses it with the application error `updating` ("Atelier is installing an update right now. Try again in a few seconds."); the web and desktop apps show that as a plain notice (not a red error and not "Internal error") and put what was typed, with its files, back into the message box, also when it was the first message of a new conversation. The terminal app prints the message in the warning colour with "Press ↑ to bring your message back." (`atelier -p` prints it as one line and exits with 1), and the iPhone and iPad app keeps the draft and no longer marks the message "may have reached the server", because nothing did.
+
+- **A page that was open during an update says so while the server is away.** On the event `server.updating` the app shows "Atelier is installing an update (*x*). This page reconnects in a moment." for up to a minute, and a page loaded while the server restarts says that instead of "Can’t reach *server* yet" (the notice is remembered for 90 seconds in the tab's session storage); it goes when the connection is back.
+
 ## [0.10.5] — 2026-11-21
 
 - **A busy or rate-limited model server is tried again within seconds, and for as long as it asks.** A request that fails with 408, 409, 425, 429, 5xx, a stream the server closed early or a timeout waited five seconds before its first retry, which looked like a failure on Mistral's free and Vibe plans (rate limit, then Retry). The waits are now half a second, 1, 2, 4, 8, 15, 30, 60, 120 and 240 seconds (plus up to half as much, so parallel requests don't come back together), or the server's own `Retry-After` when it sends one (nothing is waited for a limit that lasts more than ten minutes: the error says so). An outage (no connection) keeps the old, longer waits. `MessageError` has an optional `retryAfterMs` for it.

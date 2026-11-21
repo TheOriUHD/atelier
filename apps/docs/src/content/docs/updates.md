@@ -4,7 +4,8 @@ description: How the desktop app and the server find, verify and install new ver
 ---
 
 The desktop app and the server update separately. The desktop app downloads new versions by itself and installs them when
-you restart it. The server updates when an admin presses **Update server**, or when you run `docker compose pull`.
+you restart it. The server updates when an admin presses **Update now**, by itself when an admin turns on **Update
+automatically**, or when you run `docker compose pull`.
 
 ## The desktop app
 
@@ -139,8 +140,9 @@ checks off first.
 
 The server tells admins in **Settings › Admin › Server**: its version, the newest one, and what to do.
 
-- With the Compose file's `updater` service, **Update server** pulls the new images and recreates the server and the sandbox.
-  Everyone is disconnected for a minute or so and reconnects by themselves.
+- With the Compose file's `updater` service, **Update now** pulls the new images and recreates the server and the sandbox.
+  Everyone is disconnected for a minute or so and reconnects by themselves; replies being written stop. There is no
+  question first. To have it done for you without disturbing anyone, turn on **Update automatically** (below).
 - Without it: `docker compose pull && docker compose up -d` on the host, in the folder with `compose.yaml`. Your data
   volume is kept.
 - A server built from source is updated by rebuilding it.
@@ -153,8 +155,28 @@ Details, the updater's security trade-off and pinning a version are in
   older version (0.1.7). Update it in Settings › Admin › Server."
 - **A web page** left open shows "The server was updated to Atelier 0.1.10." with **Reload**.
 
-The server only looks up the newest version when an admin opens the Server page or presses **Check now**; it never updates
-itself.
+Unless an admin turns on **Update automatically**, the server only looks up the newest version when an admin opens the
+Server page or presses **Check now**, and it never updates itself.
+
+### Updating the server automatically
+
+**Settings › Admin › Server › Update automatically** (off until an admin turns it on; it is offered where the Compose
+file has the `updater` service) lets the server take care of its own updates, without anyone pressing anything:
+
+1. The server asks the update feed for the newest version **every minute**. As soon as a newer one is out, it downloads it
+   in the background; the Server page shows "Downloading Atelier *x* in the background…" with the same bar as before.
+2. It installs the new version **as soon as nothing is running**: no reply being written, no sub-agent and no background
+   command in any conversation. Installing is only a restart, a few seconds, because everything is downloaded already.
+   While someone is using the server, the page says "Atelier *x* is downloaded and installs as soon as nothing is running
+   (2 replies, 1 background task)." and the server waits; nobody's work is cut off.
+3. In the seconds of the restart, a message sent from an app is not taken. The app says "Atelier is installing an update
+   right now. Try again in a few seconds." as a plain notice, and what was typed goes back into the message box. Open pages
+   say "Atelier is installing an update (*x*). This page reconnects in a moment." and reconnect by themselves.
+
+If a try fails (the registry is down, the updater refuses), the page says why and when the next try is; the server keeps
+running the old version meanwhile. **Update now** stays on the page for an admin who wants it right away, and **Check now**
+still looks up the newest version. A server's updater from before 0.10.6 downloads and installs in one go, at the moment
+nothing is running; see [Run a server](/self-hosting/#updating-automatically) for the one command that updates it.
 
 ## Publishing updates
 
