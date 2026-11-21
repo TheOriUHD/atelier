@@ -12,6 +12,7 @@ import Observation
     private(set) var checking = false
     private(set) var starting = false
     private(set) var savingSignup = false
+    private(set) var savingAutoUpdate = false
     /// The server stopped answering while it updates: it is restarting.
     private(set) var reconnecting = false
     private var watching: Task<Void, Never>?
@@ -116,6 +117,19 @@ import Observation
         await reload()
         if let update, update.job?.state == .failed { return }
         if let now = snapshot?.version, let before = versionBefore, now != before { store.notify("Updated to Atelier \(now)") }
+    }
+
+    /// Turns the automatic update on or off: the server downloads a new version as soon as it is out and installs it when nothing runs.
+    func setAutoUpdate(_ on: Bool) async {
+        guard !savingAutoUpdate, snapshot?.update?.auto?.enabled != on else { return }
+        savingAutoUpdate = true; defer { savingAutoUpdate = false }
+        do {
+            _ = try await rpc.adminCall("settings.set", ["layer": "global", "path": .array([.string("server"), .string("autoUpdate")]), "value": .bool(on)])
+            // The server looks at once: read what it says now.
+            let status = try await rpc.adminCall("server.updates")
+            mutate { $0.update = AdminServerUpdate(status) }
+            store.notify("Saved")
+        } catch is CancellationError { return } catch { failure = AdminFailure.message(for: error) }
     }
 
     // MARK: Sign-up

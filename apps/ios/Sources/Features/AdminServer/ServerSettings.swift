@@ -5,7 +5,6 @@ import SwiftUI
 struct ServerSettings: View {
     let store: AppStore
     @State private var model: AdminServerModel
-    @State private var confirmUpdate = AdminDebug.is("update-confirm")
     @State private var confirmOpen = AdminDebug.is("open-confirm")
     @State private var editing: AdminProviderTarget?
     @State private var copied = false
@@ -72,16 +71,21 @@ struct ServerSettings: View {
         } header: {
             Text("Version")
         }
+        if let update = snapshot.update, update.install == .updater, let auto = update.auto {
+            Section {
+                Toggle("Update automatically", isOn: Binding(get: { auto.enabled }, set: { on in Task { await model.setAutoUpdate(on) } }))
+                    .disabled(model.savingAutoUpdate)
+            } footer: {
+                Text("The server checks for a new version every minute, downloads it at once and installs it as soon as no reply is being written and nothing runs in the background. Nobody is asked.")
+            }
+        }
         if let update = snapshot.update, update.install == .updater, update.newerVersion != nil, !update.isRunning {
             Section {
-                Button { confirmUpdate = true } label: { Text("Update server") }
+                Button { Task { await model.startUpdate() } } label: { Text("Update now") }
                     .buttonStyle(ClayButtonStyle(busy: model.starting)).disabled(model.starting)
-                    .confirmationDialog("Update the server to Atelier \(update.newerVersion ?? "")?", isPresented: $confirmUpdate, titleVisibility: .visible) {
-                        Button("Update server") { Task { await model.startUpdate() } }
-                    } message: { Text("The server downloads the new version and restarts. Everyone is disconnected for a minute or so, and replies being written stop. The apps reconnect by themselves.") }
                     .listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             } footer: {
-                Text("Back up the server's data folder first. Updates move the database forward and cannot be undone.")
+                Text("Downloads the new version and restarts the server at once: replies being written stop, and the apps reconnect by themselves. Back up the server's data folder first: updates move the database forward and cannot be undone.")
             }
         }
     }

@@ -61,6 +61,18 @@ struct AdminServerUpdate: Equatable, Sendable {
         let progress: Progress?
     }
 
+    /// How an automatic update stands (`server.updates` › `auto`); nil on a server from before automatic updates.
+    struct Auto: Equatable, Sendable {
+        enum State: String, Sendable { case idle, downloading, waiting, installing, failed }
+        let enabled: Bool
+        let state: State
+        let version: String?
+        let turns: Int
+        let background: Int
+        let error: String?
+        let retryAt: Date?
+    }
+
     let version: String
     let latestVersion: String?
     let checkedAt: Date?
@@ -69,6 +81,7 @@ struct AdminServerUpdate: Equatable, Sendable {
     let image: String?
     let updaterError: String?
     let job: Job?
+    let auto: Auto?
 
     /// Nil when the server says there is nothing to update here (a desktop app's own backend answers null).
     init?(_ json: JSON) {
@@ -84,6 +97,10 @@ struct AdminServerUpdate: Equatable, Sendable {
         }
         image = json["image"].stringOrNil
         updaterError = json["updaterError"].stringOrNil
+        if json["auto"] == .null { auto = nil } else {
+            let auto = json["auto"]
+            self.auto = Auto(enabled: auto["enabled"].bool, state: Auto.State(rawValue: auto["state"].string) ?? .idle, version: auto["version"].stringOrNil, turns: auto["waitingFor"]["turns"].int, background: auto["waitingFor"]["background"].int, error: auto["error"].stringOrNil, retryAt: auto["retryAt"].date)
+        }
         if json["job"] == .null { job = nil } else {
             let job = json["job"]
             let progress: Progress? = job["progress"] == .null ? nil : Progress(done: job["progress"]["done"].doubleValue, total: job["progress"]["total"].doubleValue, percent: job["progress"]["percent"].int, unpacking: job["progress"]["unpacking"].bool)
@@ -116,8 +133,25 @@ struct AdminServerUpdate: Equatable, Sendable {
             let why = updaterError.map { "\($0) " } ?? "This server has no updater service. "
             return "\(why)To update, run the command below on its host, in the folder with compose.yaml."
         case .updater:
+            if let auto, auto.enabled, let line = autoDetail(auto) { return line }
             if job?.state == .done, let finished = job?.finishedAt { return "Updated \(finished.relative)." }
             return newerVersion != nil ? "Downloads the new version and restarts the server." : nil
+        }
+    }
+
+    /// What an automatic update is doing, in words; nil when it has nothing to say (up to date).
+    private func autoDetail(_ auto: Auto) -> String? {
+        let version = auto.version ?? newerVersion ?? "the new version"
+        switch auto.state {
+        case .idle: return newerVersion != nil ? "Atelier \(version) is available. It downloads in a moment and installs by itself." : nil
+        case .downloading: return "Downloading Atelier \(version) in the background."
+        case .waiting:
+            var busy: [String] = []
+            if auto.turns > 0 { busy.append(auto.turns == 1 ? "1 reply" : "\(auto.turns) replies") }
+            if auto.background > 0 { busy.append(auto.background == 1 ? "1 background task" : "\(auto.background) background tasks") }
+            return busy.isEmpty ? "Atelier \(version) is downloaded and installs in a moment." : "Atelier \(version) is downloaded and installs as soon as nothing is running (\(busy.joined(separator: ", ")))."
+        case .installing: return "Installing Atelier \(version). The app reconnects in a moment."
+        case .failed: return "\(auto.error ?? "The automatic update failed.")\(auto.retryAt.map { " Trying again \($0.relative)." } ?? "")"
         }
     }
 

@@ -240,6 +240,26 @@ import XCTest
         XCTAssertLessThan(AdminVersion.compare("1.0.0-alpha", "1.0.0-alpha.1"), 0)
     }
 
+    func testAutomaticUpdateStatesRead() {
+        func status(_ auto: String) -> AdminServerUpdate {
+            AdminServerUpdate(json(#"{"version":"0.10.1","latest":{"version":"0.11.0","checkedAt":1794908959913},"latestError":null,"install":"updater","image":null,"updaterError":null,"job":null,"auto":\#(auto)}"#))!
+        }
+        XCTAssertNil(AdminServerUpdate(json(#"{"version":"0.10.1","latest":null,"latestError":null,"install":"updater","image":null,"updaterError":null,"job":null}"#))!.auto, "a server from before automatic updates has none")
+        let off = status(#"{"enabled":false,"state":"idle","version":null,"waitingFor":null,"error":null,"retryAt":null,"downloadsAhead":true}"#)
+        XCTAssertEqual(off.auto?.enabled, false)
+        XCTAssertEqual(off.updateDetail, "Downloads the new version and restarts the server.", "off: the manual wording stays")
+        let on = status(#"{"enabled":true,"state":"idle","version":null,"waitingFor":null,"error":null,"retryAt":null,"downloadsAhead":true}"#)
+        XCTAssertEqual(on.updateDetail, "Atelier 0.11.0 is available. It downloads in a moment and installs by itself.")
+        let downloading = status(#"{"enabled":true,"state":"downloading","version":"0.11.0","waitingFor":null,"error":null,"retryAt":null,"downloadsAhead":true}"#)
+        XCTAssertEqual(downloading.updateDetail, "Downloading Atelier 0.11.0 in the background.")
+        let waiting = status(#"{"enabled":true,"state":"waiting","version":"0.11.0","waitingFor":{"turns":2,"background":1},"error":null,"retryAt":null,"downloadsAhead":true}"#)
+        XCTAssertEqual(waiting.updateDetail, "Atelier 0.11.0 is downloaded and installs as soon as nothing is running (2 replies, 1 background task).")
+        XCTAssertEqual(status(#"{"enabled":true,"state":"waiting","version":"0.11.0","waitingFor":null,"error":null,"retryAt":null,"downloadsAhead":true}"#).updateDetail, "Atelier 0.11.0 is downloaded and installs in a moment.")
+        XCTAssertEqual(status(#"{"enabled":true,"state":"installing","version":"0.11.0","waitingFor":null,"error":null,"retryAt":null,"downloadsAhead":true}"#).updateDetail, "Installing Atelier 0.11.0. The app reconnects in a moment.")
+        let failed = status(#"{"enabled":true,"state":"failed","version":"0.11.0","waitingFor":null,"error":"The updater answered 500.","retryAt":4102444800000,"downloadsAhead":true}"#)
+        XCTAssertTrue(failed.updateDetail?.hasPrefix("The updater answered 500. Trying again ") == true)
+    }
+
     func testUpdateStatesRead() {
         func status(_ extra: String) -> AdminServerUpdate? {
             AdminServerUpdate(json(#"{"version":"0.10.1","latest":{"version":"0.11.0","checkedAt":1794908959913},"latestError":null,"install":"updater","image":"ghcr.io/x/atelier:latest","updaterError":null,"job":null\#(extra)}"#))
@@ -625,6 +645,21 @@ import XCTest
         canned.failures["settings.set"] = "limits.tokensPerDay: Too small: expected number to be >0"
         do { try await model.setSystem(.tokensPerDay, to: 0.5); XCTFail("should have thrown") }
         catch { XCTAssertTrue(error.localizedDescription.contains("Too small")) }
+    }
+
+    func testServerModelTurnsAutomaticUpdatesOnWithoutAskingAnyone() async throws {
+        let canned = Canned()
+        let off = #"{"version":"0.10.1","latest":{"version":"0.11.0","checkedAt":1},"latestError":null,"install":"updater","image":null,"updaterError":null,"job":null,"auto":{"enabled":false,"state":"idle","version":null,"waitingFor":null,"error":null,"retryAt":null,"downloadsAhead":true}}"#
+        canned.answers = ["app.info": json(#"{"version":"0.10.1","platform":"linux","dataDir":"/data"}"#), "server.updates": json(off), "settings.get": json(#"{"effective":{"server":{"signup":"invite"}}}"#), "oidc.list": .null, "settings.set": ["ok": true]]
+        let model = AdminServerModel(store: makeStore(canned))
+        await model.reload()
+        XCTAssertEqual(model.snapshot?.update?.auto?.enabled, false)
+        canned.answers["server.updates"] = json(off.replacingOccurrences(of: #""enabled":false,"state":"idle""#, with: #""enabled":true,"state":"downloading""#))
+        await model.setAutoUpdate(true)
+        XCTAssertEqual(canned.params("settings.set")?["path"], ["server", "autoUpdate"])
+        XCTAssertEqual(canned.params("settings.set")?["value"], true)
+        XCTAssertEqual(model.snapshot?.update?.auto?.enabled, true)
+        XCTAssertEqual(model.snapshot?.update?.auto?.state, .downloading)
     }
 
     func testServerModelUpdatesAndSignup() async throws {

@@ -25,6 +25,7 @@ final class AdminDemoState: @unchecked Sendable {
     private var providers: [[String: JSON]] = []
     private var limits: [String: Double] = ["tokensPerDay": 200_000, "costUsdPerDay": 5, "requestsPerHour": 30]
     private var signup = "invite"
+    private var autoUpdate = false
     private var retention = 90
     private var updateStarted: Date?
     private var version = "0.10.1"
@@ -196,6 +197,7 @@ final class AdminDemoState: @unchecked Sendable {
         let value = params["value"] ?? .null
         switch path {
         case ["server", "signup"]: signup = value.string
+        case ["server", "autoUpdate"]: autoUpdate = value.bool
         case ["audit", "retentionDays"]:
             guard value.int >= 7 else { throw MobileError.message("audit.retentionDays: Too small: expected number to be >=7") }
             retention = value.int
@@ -274,7 +276,9 @@ final class AdminDemoState: @unchecked Sendable {
                 job = ["state": "done", "message": .null, "startedAt": Self.ms(elapsed), "finishedAt": Self.ms(elapsed - 13), "progress": .null]
             }
         }
-        return .object(["version": .string(version), "latest": latest, "latestError": latestError, "install": .string(install), "image": install == "updater" ? "ghcr.io/theoriuhd/atelier:latest" : .null, "updaterError": updaterError, "job": job])
+        // Automatic updates, as a server that has them says it: waiting for a reply that is being written.
+        let auto: JSON = ["enabled": .bool(autoUpdate), "state": autoUpdate && install == "updater" ? "waiting" : "idle", "version": autoUpdate ? "0.11.0" : .null, "waitingFor": autoUpdate ? ["turns": 1, "background": 0] : .null, "error": .null, "retryAt": .null, "downloadsAhead": true]
+        return .object(["auto": auto, "version": .string(version), "latest": latest, "latestError": latestError, "install": .string(install), "image": install == "updater" ? "ghcr.io/theoriuhd/atelier:latest" : .null, "updaterError": updaterError, "job": job])
     }
 
     private func startUpdate() throws -> JSON {
