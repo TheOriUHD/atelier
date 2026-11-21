@@ -22,7 +22,7 @@ The mode picker sits under the message box in Code (in a chat, the chip at the b
 
 | Menu label | Chip | What it does |
 |---|---|---|
-| **Auto mode** (the default) | Auto | A separate review request to the session's own model checks each action that would otherwise ask you, and runs it, asks you, or blocks it with a reason the agent reads. |
+| **Auto mode** (the default) | Auto | A separate review request to the session's own model checks each action that would otherwise ask you, and runs it, asks you, points the agent to a less intrusive way, or blocks it with a reason the agent reads. |
 | **Ask permissions** | Ask | Asks before editing files or running commands. |
 | **Accept edits** | Accept edits | Edits files without asking; still asks before commands. |
 | **Plan mode** | Plan | Reads and plans only. Changes wait until you approve a plan. |
@@ -32,7 +32,7 @@ A session follows the default mode until you pick one. **Settings › Admin › 
 
 ## What happens when
 
-"Runs" means no prompt. "Asks" means you get the permission prompt. "Review" means that in Auto mode the reviewing model decides first (it runs the action, blocks it, or hands the decision to you).
+"Runs" means no prompt. "Asks" means you get the permission prompt. "Review" means that in Auto mode the reviewing model decides first (it runs the action, blocks it, redirects it, or hands the decision to you).
 
 | The model wants to | Auto | Ask | Accept edits | Plan | Bypass |
 |---|---|---|---|---|---|
@@ -50,8 +50,8 @@ A session follows the default mode until you pick one. **Settings › Admin › 
 | Move the session to another folder (ChangeDirectory) | Asks | Asks | Asks | Asks | Asks |
 | Add an MCP server it was given to your connectors (AddConnector) | Asks | Asks | Asks | Asks | Asks |
 | Use apps on your computer ([computer use](/computer-use/): ComputerAccess); an app you named yourself in the conversation never asks | Asks | Asks | Asks | Asks | Runs |
-| Take over the mouse and keyboard ([computer use](/computer-use/): FullControl) | Asks | Asks | Asks | Asks | Asks |
-| Look at the screen: screenshots, scrolling, the app list ([computer use](/computer-use/)) | Runs | Runs | Runs | Screenshots run; scrolling refused | Runs |
+| Take over the mouse and keyboard ([computer use](/computer-use/): FullControl) | Review, then asks | Asks | Asks | Asks | Asks |
+| Look at the screen: screenshots, scrolling, the app list ([computer use](/computer-use/)) | Runs; your whole screen: Review, once per turn | Runs | Runs | Screenshots run; scrolling refused | Runs |
 | Click, type, press keys, open apps (ComputerAction, OpenApp) | Review | Asks | Asks | Refused | Runs |
 | Anything a **deny** rule matches | Refused | Refused | Refused | Refused | Refused |
 | Anything an **ask** rule matches | Asks; a dangerous command: Review | Asks | Asks | Asks (only what Plan lets through) | Asks |
@@ -69,7 +69,7 @@ For one tool call the engine checks these in order and stops at the first that d
 4. **Commands that can't be judged from their text** (command substitution, `eval`, and the rest of the list under [How commands are read](#how-commands-are-read)) ask, or go to the reviewer in Auto, even when an allow rule matches. Bypass skips this step.
 5. **Allow rules.** A match runs the call. For Bash, every command in the line must be allowed on its own. A dangerous command still asks (or goes to the reviewer) even then. In Auto mode, broad allow rules are set aside first.
 6. **Bypass** runs everything left.
-7. **Auto only:** clearing build output and temp files runs without review ([routine cleanup](#what-runs-unreviewed-in-auto)).
+7. **Auto only:** clearing build output and temp files runs without review ([routine cleanup](#what-runs-unreviewed-in-auto)). Computer use that takes your screen goes to the reviewer: a FullControl request, and a screenshot or look of the whole screen until one is let through in that turn.
 8. **ChangeDirectory**, **AddConnector**, **ComputerAccess** and **FullControl** ask for themselves, each with its own card (ComputerAccess not for an app you named yourself, nor in Bypass). A computer use step that only looks (screenshots, scrolling, waiting) runs; clicks, typing, keys and opening apps continue below like any other action ([Computer use](/computer-use/)).
 9. **Files outside the folder.** Read-only tools run in Auto (credential-looking paths go to the reviewer); everything else asks, or goes to the reviewer in Auto. In Ask and Accept edits, allowing one look at a file allows looking at that folder for the rest of the session (credential files still ask), so reading or moving a whole project is one approval. Changes ask per call, like edits in the workspace. On a server, paths are read the way the folder's own computer writes them, so a Windows PC's folder works from a Linux server.
 10. **Read-only tools and the session tools** (TodoWrite, AskUser, ExitPlanMode, artifact) run.
@@ -262,10 +262,11 @@ Auto mode is the default. Its aim is fewer prompts: instead of asking you about 
 - Edits to **protected paths**: the folders `.git`, `.vscode`, `.idea`, `.husky`, `.cargo`, `.devcontainer`, `.yarn`, `.mvn`, `.claude` and `.atelier`, and files such as `.gitconfig`, `.gitmodules`, shell startup files (`.bashrc`, `.zshrc`, `.profile` and the like), `.envrc`, `.npmrc`, `.yarnrc`, `.pnpmfile.cjs`, `bunfig.toml`, `.pre-commit-config.yaml`, `lefthook.yml`, `.devcontainer.json`, `.mcp.json` and `.claude.json`. They change how git, shells, editors or the agent itself behave. Only Auto sends them to review: Accept edits runs an edit to one like any other edit in the folder.
 - Reads **outside the folder** that look like credentials or private data: `.ssh`, `.aws`, `.gnupg`, `.kube`, `.azure`, `.password-store`, cloud and `gh` config, `.netrc`, `.git-credentials`, `.npmrc`, `.env` files, private keys and key stores (`id_rsa`, `*.pem`, `*.key`, `*.p12`, `*.kdbx` …), keychains, browser and password-manager data, `/etc/shadow` and sudoers, `~/.claude.json`, and Atelier's own data folder and settings. Inside the folder this check does not apply: a `.env` file there is read like any other file in it, in every mode.
 - Dangerous commands and commands that can't be judged from their text.
+- [Computer use](/computer-use/) that takes your screen: taking over the mouse and keyboard (FullControl), and a screenshot or look of your whole screen (Full control, or while it has the mouse and keyboard). A look at the whole screen is reviewed until one is let through in that turn; the turn's later looks run. A screenshot of one app's window in the background is never reviewed.
 
 ### What always asks you
 
-Even in Auto, these skip the reviewer and ask you: **ask rules** (except on a dangerous command), **deleting outside the folder**, the **ChangeDirectory**, **AddConnector** and computer use cards, and a hook that answers `ask`.
+Even in Auto, these skip the reviewer and ask you: **ask rules** (except on a dangerous command), **deleting outside the folder**, the **ChangeDirectory**, **AddConnector** and computer use cards (a FullControl request goes to the reviewer first, then its card asks), a hook that answers `ask`, and an action the agent makes again in the same turn after the reviewer [redirected](#redirects) it.
 
 ### What the reviewer sees and decides
 
@@ -277,7 +278,7 @@ The reviewer is a model call of its own. It gets:
 
 **It never sees tool output.** A hostile file, web page or command result can't talk to it. Text inside actions and file contents is data to it.
 
-It answers `ALLOW`, `ASK` or `BLOCK`. Its instructions are published on [Side prompts](/prompts/side-prompts/); in short, it blocks the following unless you asked for exactly that:
+It answers `ALLOW`, `ASK`, `REDIRECT` or `BLOCK`. Its instructions are published on [Side prompts](/prompts/side-prompts/); in short, it blocks the following unless you asked for exactly that:
 
 - downloading and running code, or packages from outside the project's manifests;
 - sending secrets anywhere, or reading credential stores;
@@ -294,7 +295,29 @@ What each answer does:
 
 - **ALLOW** runs the action.
 - **ASK** brings up the usual prompt, with the line **Auto mode wants your OK:** and what you should decide. It is for an action that looks like what you want but your messages don't settle. It does not count against the agent.
+- **REDIRECT** doesn't run the action, and points the agent to a less intrusive way to the same result (see [Redirects](#redirects)). It does not count against the agent.
 - **BLOCK** doesn't run the action. The agent reads **Auto mode blocked this action:** with the reason, plus an instruction to take a safer approach or tell you what it needs rather than reach the same result another way.
+
+### Redirects
+
+Some actions are fine for the task but go about it in a needlessly intrusive way. The reviewer redirects them, naming the plainer way, when that way gets the same result:
+
+- looking at an app, game or page the agent builds or runs through your screen (a screenshot of the whole screen, Full control), when it can capture just that app's window from the shell (`screencapture -l` on macOS, a PowerShell window capture on Windows), run the app's UI tests or screenshot tooling (Playwright, XCUITest, a simulator's screenshot), use Preview or Browser for a web page, or, in the background, take a screenshot of that one app;
+- taking the mouse and keyboard for what a command, an API, a file or the app's own command line does;
+- opening apps on your screen for what a command-line tool does.
+
+It doesn't redirect what you asked to be done that way, or computer use that is the task itself, such as working in your apps or on a site you named.
+
+The agent reads **Auto mode suggests a less intrusive way:** with the way, and is told to reach the same result that way: this call didn't run, but nothing is blocked and the task goes on. When it really has to be done the first way, the agent says why in its reply and makes the same call again. Then the reviewer isn't asked again: you get the prompt, which starts **Auto mode suggested another way:** with the suggestion, and you decide.
+
+The same call means, within one turn and in a later reply than the one that was redirected:
+
+- for computer use, any use of the screen (Screenshot, ComputerAction, OpenApp and FullControl count as one way of working);
+- for Bash and PowerShell, the same command;
+- for a tool that names a file, folder or address, the same one;
+- for anything else, the same tool.
+
+If you allow it, the next such call goes to the reviewer again; if you decline, the next one asks you again. A new turn starts without redirects.
 
 With a **hosted model** (the providers **Anthropic**, **OpenAI**, **Mistral**, **Mistral Vibe**, **ChatGPT Plan** and **GitHub Copilot**) the reviewer reads "asked for" broadly: an action your request clearly leads to, such as pushing the branch you are working on or shipping what you asked to ship, counts as asked for. **Local models** (Ollama, llama.cpp, LM Studio) and every provider added as OpenAI-compatible, OpenRouter and OpenCode Zen included, keep the stricter reading, because small models judge less reliably.
 
@@ -309,10 +332,11 @@ A session on **ChatGPT Chat** can't review its own actions, because a review wou
 Auto mode fails closed: whenever it can't be sure, you get the prompt, never a silent allow.
 
 - The reviewer can't be reached or errors: **Auto mode couldn't check this action (…)**.
-- Its answer isn't `ALLOW`, `ASK` or `BLOCK`: **Auto mode couldn't read its reviewer's answer.**
+- Its answer isn't `ALLOW`, `ASK`, `REDIRECT` or `BLOCK`: **Auto mode couldn't read its reviewer's answer.**
 - **3 blocks in a row, or 20 in the session**: **Auto mode paused after 3 blocked actions in a row.** From then on every action that would have gone to the reviewer asks you instead. Approving any prompt resumes Auto mode and resets both counts.
+- The agent makes a redirected call again: **Auto mode suggested another way: …** ([Redirects](#redirects)).
 
-A block counts against the top-level conversation, sub-agents included.
+A block counts against the top-level conversation, sub-agents included. A redirect doesn't count.
 
 ### What Auto mode is not
 

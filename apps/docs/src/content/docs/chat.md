@@ -457,7 +457,7 @@ Every chat except a temporary one has a permission chip at the bottom left of it
 
 | Mode | What it does |
 |---|---|
-| **Auto mode** | A separate review request to the chat's own model checks each action that would otherwise ask you, and runs it, asks you, or blocks it. |
+| **Auto mode** | A separate review request to the chat's own model checks each action that would otherwise ask you, and runs it, asks you, points the agent to a less intrusive way, or blocks it. |
 | **Ask permissions** | Asks before editing files or running commands. |
 | **Accept edits** | Edits files without asking; still asks before commands. |
 | **Bypass permissions** | Never asks, not even for risky commands. Deny rules and ask rules still apply. |
