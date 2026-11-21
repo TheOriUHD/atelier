@@ -12,6 +12,7 @@ import { Button, Spinner, toast } from '../../components/ui/index.ts';
 import { desktop, getTransport, openExternal, type ConnectionProblem } from '../../lib/platform.ts';
 import { keys } from '../../lib/queries.ts';
 import { describeError, onSignInLost, rpc } from '../../lib/rpc.ts';
+import { clearServerUpdating, serverUpdating, UPDATING_TOAST_ID, updatingWords } from '../../lib/server-updating.ts';
 import {
   ChangePasswordScreen,
   ConnectionSetup,
@@ -168,12 +169,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
   // restarted left its folders marked Offline): everything shown is read again.
   useEffect(() => {
     if (screen.name !== 'app') return;
-    return getTransport().onReconnect(() => void qc.invalidateQueries());
+    return getTransport().onReconnect(() => {
+      // Back after an update: the notice that said the server would be away is over.
+      clearServerUpdating();
+      toast.dismiss(UPDATING_TOAST_ID);
+      void qc.invalidateQueries();
+    });
   }, [screen.name, qc]);
 
   const signedIn = (user: UserSummary) => show(userScreen(user));
   const toLogin = () => setScreen({ name: 'login' });
   const server = connection?.mode === 'server' ? connection.serverUrl : null;
+  // The server said it was restarting into a new version: while it is away, that is what the screen says.
+  const installing = serverUpdating();
 
   // Before anything else: while locked the app isn't rendered at all.
   if (lock?.locked) return <LockScreen status={lock} name={screen.name === 'app' ? screen.user.name : undefined} />;
@@ -208,7 +216,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg px-6 text-center text-body text-fg-muted">
           <Spinner size="md" label={server ? `Connecting to ${server}` : 'Loading'} />
           {server && !problem && <p>Connecting to {server}…</p>}
-          {server && problem && (
+          {server && problem && installing && (
+            <div role="status" className="flex max-w-md flex-col items-center gap-2">
+              <p className="text-fg">{updatingWords(installing.version)}</p>
+              <p className="text-footnote">Atelier keeps trying, and continues by itself once the server is back.</p>
+            </div>
+          )}
+          {server && problem && !installing && (
             <div role="status" className="flex max-w-md flex-col items-center gap-2">
               <p className="text-fg">Can’t reach {server} yet</p>
               <p>{problem.message}</p>

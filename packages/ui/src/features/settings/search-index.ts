@@ -1413,11 +1413,19 @@ export const SETTINGS_INDEX = [
     keywords: ['version', 'update', 'upgrade', 'release', 'latest', 'docker', 'image'],
   },
   {
+    id: 'server.autoUpdate',
+    page: 'server',
+    label: 'Update automatically',
+    description:
+      'The server checks for a new version every minute and downloads it at once. It installs it as soon as no reply is being written and no sub-agent or background command is running, and waits while someone is using it. The server restarts for a few seconds and everyone reconnects by themselves; a message sent in that moment asks to be sent again in a few seconds.',
+    keywords: ['automatic', 'auto update', 'updates itself', 'upgrade', 'new version', 'download', 'install', 'restart', 'updater'],
+  },
+  {
     id: 'server.update',
     page: 'server',
     label: 'Update server',
     description:
-      'Installs the newest version of Atelier on this server. It restarts, and everyone reconnects by themselves.',
+      'Installs the newest version of Atelier on this server now. It restarts, replies being written stop, and everyone reconnects by themselves.',
     keywords: ['update', 'upgrade', 'docker compose pull', 'restart', 'updater', 'new version'],
   },
   {

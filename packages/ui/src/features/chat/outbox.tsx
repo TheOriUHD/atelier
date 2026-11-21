@@ -13,7 +13,7 @@ import { messageText, type OutboxMessage, type Part } from '@atelier/protocol';
 import { Button, Icon, IconButton } from '../../components/ui/index.ts';
 import { rpc } from '../../lib/rpc.ts';
 import { Avatar } from '../coop/avatar.tsx';
-import { reportError, useCoopView, wroteIt, type CoopView } from '../coop/coop.ts';
+import { reportError, updatingError, useCoopView, wroteIt, type CoopView } from '../coop/coop.ts';
 import { answerWithName } from '../coop/coop-models.tsx';
 import { useModels } from '../../lib/queries.ts';
 import type { ComposerHandle } from './composer.tsx';
@@ -155,8 +155,8 @@ export function useSessionSend({
       void rpc()
         .call(busy || shared ? 'chat.queue' : 'chat.send', { sessionId, parts, ...(options.answerWith ? { answerWith: options.answerWith } : {}) })
         .catch((e: unknown) => {
-          // Nothing is lost: what couldn't be sent goes back into the box.
-          if (shared) putBack(parts, composer, attachments);
+          // Nothing is lost: what couldn't be sent goes back into the box (in co-op, and while the server installs an update).
+          if (shared || updatingError(e)) putBack(parts, composer, attachments);
           fail(e);
         });
     },

@@ -2,12 +2,17 @@ import { createRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OutboxMessage } from '@atelier/protocol';
+import { appError, UPDATING_ERROR_CODE, type OutboxMessage } from '@atelier/protocol';
+import { toast } from '../../components/ui/index.ts';
 import { callsTo, model, resetBackend } from '../settings/test-backend.ts';
 import { Composer, type ComposerHandle } from './composer.tsx';
 import { Outbox, useSessionSend } from './outbox.tsx';
 import type { Attachments } from './use-attachments.ts';
 
+vi.mock('../../components/ui/index.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../components/ui/index.ts')>();
+  return { ...original, toast: Object.assign(vi.fn(), { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }) };
+});
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
@@ -118,6 +123,37 @@ describe('useSessionSend', () => {
     const idle = hook(false);
     idle.result.current.send('hello');
     await waitFor(() => expect(callsTo('chat.send')).toHaveLength(1));
+  });
+
+  it('says an update calmly, and puts what was typed back into the box with its files', async () => {
+    resetBackend({
+      'chat.send': () => {
+        throw appError(UPDATING_ERROR_CODE, 'Atelier is installing an update right now. Try again in a few seconds.');
+      },
+    });
+    vi.mocked(toast.info).mockClear();
+    vi.mocked(toast.error).mockClear();
+    const { result, composer, files } = hook(false);
+    result.current.send('hello');
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('Atelier is installing an update right now. Try again in a few seconds.'));
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(composer.current.append).toHaveBeenCalledWith('hello');
+    expect(files.restore).toHaveBeenCalledWith([{ type: 'image', mime: 'image/png', blob: 'b1' }, { type: 'text', text: 'hello' }]);
+  });
+
+  it('still shows another failure as an error, and leaves the box alone', async () => {
+    resetBackend({
+      'chat.send': () => {
+        throw appError('no_model', 'Add a model provider to start chatting.');
+      },
+    });
+    vi.mocked(toast.info).mockClear();
+    vi.mocked(toast.error).mockClear();
+    const { result, composer } = hook(false);
+    result.current.send('hello');
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Add a model provider to start chatting.'));
+    expect(toast.info).not.toHaveBeenCalled();
+    expect(composer.current.append).not.toHaveBeenCalled();
   });
 
   it('puts a message taken back into the box, and gives back what waited when Stop is pressed', async () => {

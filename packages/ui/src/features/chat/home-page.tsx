@@ -94,10 +94,14 @@ export function HomePage() {
       ...(research?.on ? { research: true } : {}),
       ...(imageModel?.ref ? { imageModel: imageModel.ref } : {}),
     };
-    if (!folder) return start({ mode: 'chat', ...choices, ...(projectId && offersProject ? { projectId } : {}), ...(temporary ? { temporary: true } : {}) }, text);
+    // While the server installs an update nothing was sent: what was typed goes back into the box.
+    const keep = (result: 'updating' | undefined) => {
+      if (result === 'updating') composer.current?.append(text);
+    };
+    if (!folder) return start({ mode: 'chat', ...choices, ...(projectId && offersProject ? { projectId } : {}), ...(temporary ? { temporary: true } : {}) }, text).then(keep);
     // Sending is the gesture browsers want before they ask; Cowork tells the person when a task is done.
     if (prefs) askToNotify(prefs);
-    return start({ mode: kind, workspaceId: folder.id, ...(projectId && offersProject && unified ? { projectId } : {}), ...choices }, text);
+    return start({ mode: kind, workspaceId: folder.id, ...(projectId && offersProject && unified ? { projectId } : {}), ...choices }, text).then(keep);
   };
 
   return (

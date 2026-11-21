@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appError, type AuthStatus, type ScreenLockStatus } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
 import { callsTo, emit, resetBackend, user } from '../settings/test-backend.ts';
+import { clearServerUpdating, markServerUpdating, serverUpdating } from '../../lib/server-updating.ts';
 import { AuthGate } from './auth-gate.tsx';
 import { leaveSetup } from './sign-in.ts';
 
@@ -21,7 +22,7 @@ const bridge = vi.hoisted(() => ({
   openExternal: vi.fn(),
 }));
 
-const toasts = vi.hoisted(() => ({ message: vi.fn() }));
+const toasts = vi.hoisted(() => ({ message: vi.fn(), dismiss: vi.fn() }));
 
 vi.mock('../../components/ui/toaster.tsx', async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -197,6 +198,17 @@ describe('AuthGate in the desktop app', () => {
     invalidate.mockRestore();
   });
 
+  it('lets go of the update notice when the server is back', async () => {
+    resetBackend({ 'auth.status': () => status({ user: user() }), 'devices.register': () => ({}) });
+    markServerUpdating('0.10.6');
+    renderGate();
+    await screen.findByText('The app');
+    toasts.dismiss.mockClear();
+    act(() => reconnects.forEach((h) => h()));
+    expect(toasts.dismiss).toHaveBeenCalledWith('server-updating');
+    expect(serverUpdating()).toBeUndefined();
+  });
+
   it('signs in anyway, and says so, when this computer has no secure storage to keep the sign-in in', async () => {
     bridge.connection.get.mockResolvedValue({ mode: 'server', serverUrl: 'https://atelier.lan' });
     bridge.session.save.mockResolvedValue({ remembered: false });
@@ -333,6 +345,22 @@ describe('AuthGate in the desktop app', () => {
 
     act(() => announce(null));
     expect(await screen.findByText('Connecting to https://atelier.lan…')).toBeTruthy();
+  });
+
+  it('says the server is installing an update, not that it can’t be reached, for a minute after it announced one', async () => {
+    bridge.connection.get.mockResolvedValue({ mode: 'server', serverUrl: 'https://atelier.lan' });
+    bridge.connection.problem.mockResolvedValue({ code: 'ECONNREFUSED', message: 'atelier.lan refused the connection.' });
+    resetBackend({ 'auth.status': () => new Promise(() => {}) });
+    markServerUpdating('0.10.6');
+    try {
+      renderGate();
+      expect(await screen.findByText('Atelier is installing an update (0.10.6). This page reconnects in a moment.')).toBeTruthy();
+      expect(screen.queryByText(/Can’t reach/)).toBeNull();
+      expect(screen.queryByText('atelier.lan refused the connection.')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Change server' })).toBeTruthy();
+    } finally {
+      clearServerUpdating();
+    }
   });
 
   it('shows a problem the app already knew about when the screen opens', async () => {

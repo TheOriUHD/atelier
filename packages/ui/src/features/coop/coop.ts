@@ -9,7 +9,7 @@
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { isCoopMirror, unescapeTags, type CoopSettings, type CoopState, type Message, type OutboxMessage, type Participant, type ParticipantRole, type PendingInteraction, type SessionSummary } from '@atelier/protocol';
+import { isCoopMirror, unescapeTags, UPDATING_ERROR_CODE,type CoopSettings, type CoopState, type Message, type OutboxMessage, type Participant, type ParticipantRole, type PendingInteraction, type SessionSummary } from '@atelier/protocol';
 import { toast } from '../../components/ui/index.ts';
 import { TYPING_LAPSE_MS, isSharedSession, markHostAway, showCoopNotice, type LiveSessionState } from '../../lib/live-session.ts';
 import { describeError, errorCode, rpc } from '../../lib/rpc.ts';
@@ -174,10 +174,20 @@ export function useCoop(live: Pick<LiveSessionState, 'session' | 'participants' 
 }
 
 /**
- * A failed call's message as a toast, except the host's computer being away (`host_away`): that is no error, the
- * message box's banner says it calmly.
+ * Whether a failed call failed because the server is installing an update: nothing was sent, and sending again in a few
+ * seconds works. It is no error, so it is said calmly and what was typed goes back into the box.
+ */
+export const updatingError = (error: unknown): boolean => errorCode(error) === UPDATING_ERROR_CODE;
+
+/**
+ * A failed call's message as a toast, except the host's computer being away (`host_away`) and the server installing an
+ * update (`updating`): those are no errors, the message box's banner or a plain notice says them calmly.
  */
 export function reportError(sessionId: string | null | undefined, error: unknown): void {
+  if (updatingError(error)) {
+    toast.info(describeError(error).message);
+    return;
+  }
   if (errorCode(error) === 'host_away') {
     if (sessionId) markHostAway(sessionId);
     return;

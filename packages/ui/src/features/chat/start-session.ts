@@ -9,6 +9,7 @@ import { useSteadyPrefs } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { useSplitCell } from '../../lib/split-cell.tsx';
 import { lendSsh } from '../../lib/lending.ts';
+import { updatingError } from '../coop/coop.ts';
 import { lendScratch } from '../workspaces/lend-scratch.tsx';
 import { trustWorkspace } from '../workspaces/trust.tsx';
 import type { useAttachments } from './use-attachments.ts';
@@ -19,6 +20,7 @@ type NewSession = z.input<AppContract['procedures']['sessions.create']['input']>
  * Creates the session, sends the first message with the attachments and opens it. When sending fails the new,
  * empty session is deleted again, so trying once more doesn't leave one behind. A session in a folder the backend doesn't
  * trust yet (a codespace added before "Trust this workspace?" was asked) asks first, and doesn't start without a yes.
+ * While the server installs an update it says so calmly and resolves to `'updating'`: the caller puts the text back.
  */
 export function useStartSession(attachments: ReturnType<typeof useAttachments>) {
   const navigate = useNavigate();
@@ -27,18 +29,18 @@ export function useStartSession(attachments: ReturnType<typeof useAttachments>) 
   const [sending, setSending] = useState(false);
   // Thinking as the screen shows it (`useSteadyPrefs`), not as another device of the person's changed it meanwhile.
   const prefs = useSteadyPrefs();
-  const start = async (session: NewSession, text: string): Promise<void> => {
-    if (sending) return;
+  const start = async (session: NewSession, text: string): Promise<'updating' | undefined> => {
+    if (sending) return undefined;
     setSending(true);
     let sessionId: string | null = null;
     try {
       if (session.workspaceId) {
         const folder = (await rpc().call('workspaces.list', {})).find((w) => w.id === session.workspaceId);
-        if (folder && !(await trustWorkspace(folder))) return;
+        if (folder && !(await trustWorkspace(folder))) return undefined;
       }
       // A server makes a session's empty folder on this computer, or on an SSH host reached from it: the person allows that here.
       if (session.scratch?.sshHost) await lendSsh(session.scratch.sshHost);
-      else if (session.scratch && !(await lendScratch())) return;
+      else if (session.scratch && !(await lendScratch())) return undefined;
       sessionId = (await rpc().call('sessions.create', { ...(prefs ? { thinking: prefs.thinking } : {}), ...session })).id;
       const parts: Part[] = [...attachments.parts(), ...(text ? [{ type: 'text' as const, text }] : [])];
       await rpc().call('chat.send', { sessionId, parts });
@@ -47,10 +49,15 @@ export function useStartSession(attachments: ReturnType<typeof useAttachments>) 
       else void navigate({ to: SESSION_ROUTE[session.mode], params: { sessionId } });
     } catch (error) {
       if (sessionId) void rpc().call('sessions.delete', { id: sessionId }).catch(() => {});
+      if (updatingError(error)) {
+        toast.info(describeError(error).message);
+        return 'updating';
+      }
       toast.error(describeError(error).message);
     } finally {
       setSending(false);
     }
+    return undefined;
   };
   return { sending, start };
 }

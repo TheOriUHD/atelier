@@ -288,6 +288,9 @@ import UniformTypeIdentifiers
             pendingSend = nil; draft = ""; attachments = []; saveDraft()
         } catch {
             if Self.isGone(error) { conversationEnded(); saveDraft(); return }
+            // The server was installing an update and refused the message before taking it: nothing reached it, so
+            // there is nothing to reconcile; the draft stays and the message says to try again in a few seconds.
+            if (error as? MobileError)?.appCode == "updating" { pendingSend = nil; saveDraft(); throw error }
             uncertainDelivery = true; saveDraft(); throw error
         }
     }

@@ -2,8 +2,10 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { defaultUserPrefs, type AppInfo, type DictationStatus, type DiffCompare, type ImageModelInfo, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { toast } from '../components/ui/index.ts';
 import { setPath } from './json-path.ts';
 import { rpc } from './rpc.ts';
+import { clearServerUpdating, markServerUpdating, UPDATING_TOAST_ID, updatingWords } from './server-updating.ts';
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, refetchOnWindowFocus: false, retry: 1 } },
@@ -91,6 +93,16 @@ export function useLiveQueries(): void {
         void qc.invalidateQueries({ queryKey: keys.ssh });
       }),
       rpc().on('account.changed', (user) => qc.setQueryData(keys.account, user)),
+      // The server restarts into a new version in a moment: say so calmly (the screens do too while it is away), and let go if it doesn't.
+      rpc().on('server.updating', ({ installing, version }) => {
+        if (installing) {
+          markServerUpdating(version);
+          toast.info(updatingWords(version), { id: UPDATING_TOAST_ID, duration: 60_000 });
+        } else {
+          clearServerUpdating();
+          toast.dismiss(UPDATING_TOAST_ID);
+        }
+      }),
       rpc().on('models.changed', (models) => {
         qc.setQueryData(keys.models, models);
         void qc.invalidateQueries({ queryKey: keys.personalProviders });

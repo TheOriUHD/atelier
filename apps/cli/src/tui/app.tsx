@@ -12,13 +12,13 @@ import { writeFileSync, readFileSync, unlinkSync } from 'node:fs';
 import { Box, Static, Text, useAnimation, useApp, useInput, useWindowSize } from 'ink';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { initialLiveState, liveContext, liveStatus, type LiveSessionState } from '@atelier/client';
-import { effortChoices, shownEffort, type Effort, type ModelInfo, type Part, type PermissionMode, type WorkspaceSummary } from '@atelier/protocol';
+import { effortChoices, shownEffort, UPDATING_ERROR_CODE, type Effort, type ModelInfo, type Part, type PermissionMode, type WorkspaceSummary } from '@atelier/protocol';
 import { drawPip, PIP_HELLO } from '../art/mascot.ts';
 import { PipBox } from './pip.tsx';
 import { TIPS } from '../art/words.ts';
 import { updateConfig, type CliConfig } from '../config.ts';
 import type { Connected } from '../connection/connect.ts';
-import { describe } from '../connection/connect.ts';
+import { describe, errorCode } from '../connection/connect.ts';
 import type { CliPaths } from '../paths.ts';
 import { VERSION } from '../runtime.ts';
 import type { Paint } from '../style.ts';
@@ -333,7 +333,9 @@ export function App(props: AppProps) {
         await command.run(commandCtx, m![2] ?? '');
       } else await sendText(text, how);
     } catch (e) {
-      print(paint.fg('bad', describe(e)));
+      // The server installing an update refused the message: no error, the message is in the history to send again.
+      if (errorCode(e) === UPDATING_ERROR_CODE) print(paint.fg('warn', `${describe(e)} Press ↑ to bring your message back.`));
+      else print(paint.fg('bad', describe(e)));
     }
   };
 

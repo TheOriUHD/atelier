@@ -2,13 +2,18 @@ import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { appError, defaultUserPrefs, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { appError, defaultUserPrefs, UPDATING_ERROR_CODE, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { toast } from '../../components/ui/index.ts';
 import { keys, usePrefs, useSetPref } from '../../lib/queries.ts';
 import { backend, callsTo, resetBackend } from '../settings/test-backend.ts';
 import { TrustWorkspaceHost } from '../workspaces/trust.tsx';
 import { useStartSession } from './start-session.ts';
 
 const navigate = vi.fn();
+vi.mock('../../components/ui/index.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../components/ui/index.ts')>();
+  return { ...original, toast: Object.assign(vi.fn(), { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }) };
+});
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }));
 vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   const { fakeRpc } = await import('../settings/test-backend.ts');
@@ -58,7 +63,7 @@ describe('useStartSession', () => {
     backend.handlers['workspaces.list'] = () => [folder('w1', { trusted: false })];
     render(<TrustWorkspaceHost />);
     const { result } = renderHook(() => useStartSession(attachments), { wrapper });
-    let started!: Promise<void>;
+    let started!: Promise<unknown>;
     act(() => {
       started = result.current.start({ mode: 'code', workspaceId: 'w1' }, 'Run the tests');
     });
@@ -100,6 +105,25 @@ describe('useStartSession', () => {
     };
     const { result } = renderHook(() => useStartSession(attachments), { wrapper });
     await act(() => result.current.start({ mode: 'chat' }, 'hello'));
+    expect(callsTo('sessions.delete')).toEqual([{ id: 's1' }]);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(result.current.sending).toBe(false);
+  });
+
+  it('says an update calmly, deletes the empty session and tells the caller to put the text back', async () => {
+    backend.handlers['chat.send'] = () => {
+      throw appError(UPDATING_ERROR_CODE, 'Atelier is installing an update right now. Try again in a few seconds.');
+    };
+    vi.mocked(toast.info).mockClear();
+    vi.mocked(toast.error).mockClear();
+    const { result } = renderHook(() => useStartSession(attachments), { wrapper });
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.start({ mode: 'chat' }, 'hello');
+    });
+    expect(outcome).toBe('updating');
+    expect(toast.info).toHaveBeenCalledWith('Atelier is installing an update right now. Try again in a few seconds.');
+    expect(toast.error).not.toHaveBeenCalled();
     expect(callsTo('sessions.delete')).toEqual([{ id: 's1' }]);
     expect(navigate).not.toHaveBeenCalled();
     expect(result.current.sending).toBe(false);

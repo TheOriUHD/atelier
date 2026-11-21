@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appError, type ServerUpdateJob, type ServerUpdateStatus } from '@atelier/protocol';
 import { TooltipProvider } from '../../components/ui/index.ts';
@@ -11,7 +11,7 @@ vi.mock('../../lib/rpc.ts', async (importOriginal) => {
   return { ...(await importOriginal<object>()), rpc: () => fakeRpc };
 });
 
-const IDLE: ServerUpdateJob = { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null };
+const IDLE: ServerUpdateJob = { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null, pulledAt: null };
 const status = (extra: Partial<ServerUpdateStatus> = {}): ServerUpdateStatus => ({
   version: '0.1.8',
   latest: { version: '0.1.9', checkedAt: Date.now() },
@@ -28,6 +28,7 @@ beforeEach(() => {
   current = status();
   resetBackend({
     'settings.get': () => snapshot(),
+    'settings.set': () => ({ ok: true }),
     'server.updates': () => current,
     'server.update': () => (current = status({ job: { ...IDLE, state: 'pulling', startedAt: Date.now(), message: 'Pulling atelier' } })),
   });
@@ -53,20 +54,17 @@ const row = async (id: string) =>
   );
 
 describe('Server page', () => {
-  it('shows the version and the newer one, and updates after a confirmation', async () => {
+  it('shows the version and the newer one, and updates at once, without a question first', async () => {
     renderPage();
     const version = await row('server.version');
     expect(await version.findByText('0.1.8')).toBeTruthy();
     expect(version.getByText('Atelier 0.1.9 is available.')).toBeTruthy();
 
     const update = await row('server.update');
-    fireEvent.click(update.getByRole('button', { name: 'Update server' }));
-    const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByText('Update the server to Atelier 0.1.9?')).toBeTruthy();
-    expect(callsTo('server.update')).toEqual([]);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Update server' }));
-
+    expect(update.getByText(/^Downloads the new version and restarts the server\./)).toBeTruthy();
+    fireEvent.click(update.getByRole('button', { name: 'Update now' }));
     await waitFor(() => expect(callsTo('server.update')).toHaveLength(1));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(await update.findByText('Downloading the new version… Pulling atelier')).toBeTruthy();
     expect((update.getByRole('button', { name: /Updating/ }) as HTMLButtonElement).disabled).toBe(true);
   });
@@ -85,13 +83,13 @@ describe('Server page', () => {
   });
 
   it('says when the server came back on the new version', async () => {
-    current = status({ version: '0.1.9', job: { state: 'done', message: null, startedAt: Date.now() - 60_000, finishedAt: Date.now() - 1000, progress: null } });
+    current = status({ version: '0.1.9', job: { state: 'done', message: null, startedAt: Date.now() - 60_000, finishedAt: Date.now() - 1000, progress: null, pulledAt: null } });
     renderPage();
     const version = await row('server.version');
     expect(await version.findByText(/^Up to date\./)).toBeTruthy();
     const update = await row('server.update');
     expect(update.getByText(/^Updated /)).toBeTruthy();
-    expect(update.queryByRole('button', { name: 'Update server' })).toBeNull();
+    expect(update.queryByRole('button', { name: 'Update now' })).toBeNull();
     expect(update.getByRole('button', { name: 'Check now' })).toBeTruthy();
   });
 
@@ -108,7 +106,7 @@ describe('Server page', () => {
     const update = await row('server.update');
     expect(await update.findByText(/This server has no updater service\./)).toBeTruthy();
     expect(update.getByText('docker compose pull && docker compose up -d')).toBeTruthy();
-    expect(update.queryByRole('button', { name: 'Update server' })).toBeNull();
+    expect(update.queryByRole('button', { name: 'Update now' })).toBeNull();
   });
 
   it('names an updater that can’t be reached', async () => {
@@ -122,7 +120,7 @@ describe('Server page', () => {
     renderPage();
     const update = await row('server.update');
     expect(await update.findByText('This server was built from source; update it by rebuilding its image.')).toBeTruthy();
-    expect(update.queryByRole('button', { name: 'Update server' })).toBeNull();
+    expect(update.queryByRole('button', { name: 'Update now' })).toBeNull();
   });
 
   it('shows why the last update failed, and why an update was refused', async () => {
@@ -137,8 +135,7 @@ describe('Server page', () => {
     renderPage();
     const update = await row('server.update');
     expect((await update.findByRole('alert')).textContent).toBe('The last update failed: manifest unknown');
-    fireEvent.click(update.getByRole('button', { name: 'Update server' }));
-    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Update server' }));
+    fireEvent.click(update.getByRole('button', { name: 'Update now' }));
     await waitFor(() => expect(update.getByRole('alert').textContent).toBe('The updater answered 500.'));
   });
 
@@ -148,5 +145,78 @@ describe('Server page', () => {
     await row('server.signup');
     await waitFor(() => expect(callsTo('server.updates')).toHaveLength(1));
     expect(document.querySelector('[data-setting-row="server.version"]')).toBeNull();
+  });
+});
+
+const AUTO = { enabled: true, state: 'idle', version: null, waitingFor: null, error: null, retryAt: null, downloadsAhead: true } as const;
+
+describe('Automatic updates', () => {
+  it('offers the switch only on a server that does them, and writes the setting', async () => {
+    renderPage();
+    await row('server.version');
+    expect(document.querySelector('[data-setting-row="server.autoUpdate"]')).toBeNull();
+
+    current = status({ auto: { ...AUTO, enabled: false } });
+    cleanup();
+    renderPage();
+    const auto = await row('server.autoUpdate');
+    const toggle = auto.getByRole('switch') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
+    await waitFor(() => expect(callsTo('settings.set')).toContainEqual({ layer: 'global', path: ['server', 'autoUpdate'], value: true }));
+  });
+
+  it('has no switch for a server without an updater service', async () => {
+    current = status({ install: 'manual', auto: { ...AUTO, enabled: false } });
+    renderPage();
+    await row('server.update');
+    expect(document.querySelector('[data-setting-row="server.autoUpdate"]')).toBeNull();
+  });
+
+  it('says it is updated automatically, and keeps the manual button', async () => {
+    current = status({ auto: AUTO });
+    renderPage();
+    const update = await row('server.update');
+    expect(await update.findByText(/^This server updates itself as soon as nothing is running\./)).toBeTruthy();
+    expect(update.getByRole('button', { name: 'Update now' })).toBeTruthy();
+  });
+
+  it('says in words that the new version comes down in the background, over the bar', async () => {
+    current = status({
+      auto: { ...AUTO, state: 'downloading', version: '0.1.9' },
+      job: { ...IDLE, state: 'pulling', startedAt: Date.now(), progress: { done: 120_000_000, total: 300_000_000, percent: 40, unpacking: false } },
+    });
+    renderPage();
+    const update = await row('server.update');
+    expect(await update.findByText('Downloading Atelier 0.1.9 in the background… 40% · 120 MB of 300 MB')).toBeTruthy();
+    expect(update.getByRole('progressbar', { name: 'Server update' }).getAttribute('aria-valuenow')).toBe('40');
+  });
+
+  it('says what it waits for, counted', async () => {
+    current = status({ auto: { ...AUTO, state: 'waiting', version: '0.1.9', waitingFor: { turns: 2, background: 1 } } });
+    renderPage();
+    const update = await row('server.update');
+    expect(await update.findByText('Atelier 0.1.9 is downloaded and installs as soon as nothing is running (2 replies, 1 background task).')).toBeTruthy();
+    current = status({ auto: { ...AUTO, state: 'waiting', version: '0.1.9', waitingFor: { turns: 1, background: 0 } } });
+    cleanup();
+    renderPage();
+    expect(await (await row('server.update')).findByText('Atelier 0.1.9 is downloaded and installs as soon as nothing is running (1 reply).')).toBeTruthy();
+  });
+
+  it('says when it installs, with the button busy', async () => {
+    current = status({ auto: { ...AUTO, state: 'installing', version: '0.1.9' } });
+    renderPage();
+    const update = await row('server.update');
+    expect(await update.findByText('Installing Atelier 0.1.9. This page reconnects in a moment.')).toBeTruthy();
+    expect((update.getByRole('button', { name: /Updating/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('says why a try failed and when the next one is', async () => {
+    const retryAt = new Date(2026, 10, 21, 15, 42).getTime();
+    current = status({ auto: { ...AUTO, state: 'failed', version: '0.1.9', error: 'manifest unknown', retryAt } });
+    renderPage();
+    const update = await row('server.update');
+    const text = (await update.findByText(/^The automatic update to Atelier 0\.1\.9 didn’t work: manifest unknown\. Trying again at /)).textContent;
+    expect(text).toContain(new Date(retryAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
   });
 });
