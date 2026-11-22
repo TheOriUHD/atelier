@@ -12,6 +12,11 @@ import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/typ
 import type { Message } from '@atelier/protocol';
 
 export type PeerLookup = (keyId: string) => RpcClient<typeof PeerContract> | null;
+/** The guest's name, for what a failure of their model says in the session. */
+export type PeerNameLookup = (keyId: string) => string | null;
+
+/** "Ben’s own model (GPT-6.1)": which side's model a failure came from, so nobody looks for it among the host's. */
+export const peerModelLabel = (name: string | null, displayName: string | null): string => `${name ? `${name}’s` : 'A guest’s'} own model${displayName ? ` (${displayName})` : ''}`;
 
 /** Thinking a guest's model wrote is kept under this provider name: no other model ever gets its replay data. */
 export const peerProviderType = (keyId: string): string => `peer-${keyId}`;
@@ -53,8 +58,11 @@ export function toPeerRequest(request: ChatRequest, ref: string, selfType: strin
   };
 }
 
-/** Streams one request on the guest's computer: `model.event`s for this stream until `model.stream` returns. */
-export function peerAdapter(peer: RpcClient<typeof PeerContract>, keyId: string, innerRef: string): ProviderAdapter {
+/**
+ * Streams one request on the guest's computer: `model.event`s for this stream until `model.stream` returns. `label` says
+ * whose model it is ("Ben’s own model (GPT-6.1)") in front of an error from it.
+ */
+export function peerAdapter(peer: RpcClient<typeof PeerContract>, keyId: string, innerRef: string, label: () => string = () => peerModelLabel(null, null)): ProviderAdapter {
   const type = peerProviderType(keyId);
   return {
     // Not one of the provider types: thinking stored under it is replayed to this guest's model only (loop.ts).
@@ -73,7 +81,9 @@ export function peerAdapter(peer: RpcClient<typeof PeerContract>, keyId: string,
       };
       const off = peer.on('model.event', ({ streamId: id, event }) => {
         if (id !== streamId) return;
-        queue.push(event as StreamEvent);
+        const e = event as StreamEvent;
+        // Their provider's error, said as theirs: the session shows it to everyone, the host included.
+        queue.push(e.type === 'finish' && e.reason === 'error' && e.error ? { ...e, error: { ...e.error, message: `${label()} failed: ${e.error.message}` } } : e);
         push();
       });
       const abort = () => void peer.call('model.cancel', { streamId }).catch(() => undefined);
@@ -106,7 +116,7 @@ export function peerAdapter(peer: RpcClient<typeof PeerContract>, keyId: string,
         }
         // The guest's computer went away mid-reply, or refused: the turn fails with that, never on the host's models.
         const message = failure instanceof Error ? failure.message : 'The guest’s computer stopped answering.';
-        yield { type: 'finish', reason: 'error', error: { code: 'peer_offline', message: `Their model didn’t answer: ${message}` } } as StreamEvent;
+        yield { type: 'finish', reason: 'error', error: { code: 'peer_offline', message: `${label()} didn’t answer: ${message}` } } as StreamEvent;
       } finally {
         off();
         request.signal.removeEventListener('abort', abort);
@@ -119,7 +129,7 @@ export function peerAdapter(peer: RpcClient<typeof PeerContract>, keyId: string,
  * The host's model resolver with guests' models added: `peer-…` refs go to that guest's computer while they are
  * connected; every other ref is the base resolver's.
  */
-export function withPeerModels(base: ModelResolver, peerOf: PeerLookup): ModelResolver {
+export function withPeerModels(base: ModelResolver, peerOf: PeerLookup, nameOf: PeerNameLookup = () => null): ModelResolver {
   const described = new Map<string, { info: ModelInfo; at: number }>();
   // The base is a class (ProviderRegistry): its methods are delegated one by one, a spread would lose them.
   const resolver: ModelResolver = {
@@ -128,17 +138,19 @@ export function withPeerModels(base: ModelResolver, peerOf: PeerLookup): ModelRe
       const parsed = parsePeerModelRef(ref);
       if (!parsed) return base.resolve(ref, userId);
       const peer = peerOf(parsed.keyId);
-      if (!peer) throw new ModelUnavailableError('Their computer isn’t connected right now, so their model can’t answer.');
+      const name = nameOf(parsed.keyId);
+      if (!peer) throw new ModelUnavailableError(`${name ? `${name}’s` : 'Their'} computer isn’t connected right now, so their own model can’t answer.`);
       let cached = described.get(ref);
       if (!cached || Date.now() - cached.at > 5 * 60_000) {
         const info = await peer.call('model.describe', { ref: parsed.ref }).catch((e: unknown) => {
-          throw new ModelUnavailableError(`Their model isn’t available: ${e instanceof Error ? e.message : String(e)}`);
+          throw new ModelUnavailableError(`${peerModelLabel(name, null)} isn’t available: ${e instanceof Error ? e.message : String(e)}`);
         });
         // It is their model on their computer: never one of the host's own, never hidden from its user.
         cached = { info: { ...info, ref, providerId: `peer-${parsed.keyId}`, modelId: parsed.ref, hidden: false, personal: undefined } as ModelInfo, at: Date.now() };
         described.set(ref, cached);
       }
-      return { adapter: peerAdapter(peer, parsed.keyId, parsed.ref), info: cached.info };
+      const displayName = cached.info.displayName || null;
+      return { adapter: peerAdapter(peer, parsed.keyId, parsed.ref, () => peerModelLabel(nameOf(parsed.keyId) ?? name, displayName)), info: cached.info };
     },
   };
   if (base.listModels) resolver.listModels = (userId) => base.listModels!(userId);

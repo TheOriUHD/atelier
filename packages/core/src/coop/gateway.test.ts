@@ -19,6 +19,7 @@ import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/typ
 import { CoopGateway, mirrorId, type CoopGatewayDeps } from './gateway.ts';
 import { lanes } from './lanes.ts';
 import { peerAdapter, PEER_SELF, peerProviderType, withPeerModels } from './peer-model.ts';
+import { peerModelRef } from '@atelier/protocol';
 import { channelPair, settle, type ChannelPair } from './test-channels.ts';
 
 const ROOM = 'R'.repeat(22);
@@ -73,6 +74,7 @@ beforeEach(async () => {
     'coop.unsubscribe': record('coop.unsubscribe'),
     'chat.respond': record('chat.respond'),
     'chat.send': async (input: unknown) => (calls.push({ method: 'chat.send', input }), { userMessageId: 'm1' }),
+    'chat.secondOpinion': record('chat.secondOpinion'),
     'coop.leave': record('coop.leave'),
     'coop.models': async () => ({}) as never,
   } as unknown as Handlers<typeof CoopContract, object>;
@@ -142,6 +144,62 @@ describe('co-op gateway on the guest’s computer', () => {
     await settle();
     expect(events).toEqual([{ type: 'text', delta: 'hello' }, { type: 'usage', usage: { input: 10, output: 2 } }, { type: 'finish', reason: 'end' }]);
     expect((streamed[0]!.messages[0]!.parts[0] as { provider: string }).provider).toBe('anthropic');
+  });
+
+  it('runs their own model with its provider’s own model id, through the host’s peer adapter, whatever the provider', async () => {
+    // Refs as the guest's registry names them (`<provider id>/<model id>`), and the id each provider must be sent: the
+    // ChatGPT Plan said "The 'chatgpt/gpt-6.1-sol' model is not supported" when it got the whole ref.
+    const cases: [string, string][] = [
+      ['chatgpt/gpt-6.1-sol', 'gpt-6.1-sol'],
+      ['openai/gpt-5.2', 'gpt-5.2'],
+      ['anthropic/claude-sonnet-5', 'claude-sonnet-5'],
+      ['ollama/qwen3:30b', 'qwen3:30b'],
+      ['copilot/gpt-5-mini', 'gpt-5-mini'],
+      ['lmstudio/openai/gpt-oss-20b', 'openai/gpt-oss-20b'],
+    ];
+    const received: string[] = [];
+    const recording: ProviderAdapter = {
+      ...adapter,
+      async *stream(request: ChatRequest): AsyncIterable<StreamEvent> {
+        received.push(request.model);
+        yield { type: 'text', delta: 'ok' };
+        yield { type: 'finish', reason: 'end' };
+      },
+    };
+    const modelId = (ref: string) => ref.slice(ref.indexOf('/') + 1);
+    gateway = new CoopGateway({ ...deps, models: { resolve: async (ref) => ({ adapter: recording, info: { ...modelInfo(ref), modelId: modelId(ref) } }), firstAvailable: async () => undefined } });
+    const [[chosen], ...named] = cases as [[string, string], ...[string, string][]];
+    const { sessionId } = await gateway.join('u2', INVITE, 'own', chosen);
+    // The others they name for one answer each: an @mention, and a second opinion.
+    for (const [i, [ref]] of named.entries()) {
+      if (i % 2) await gateway.call('u2', 'chat.secondOpinion', { sessionId, messageId: 'a1', model: `own:${ref}` });
+      else await gateway.call('u2', 'chat.send', { sessionId, parts: [{ type: 'text', text: 'hi' }], answerWith: `own:${ref}` });
+    }
+    // The host's side, as backend.ts wraps its registry: none of these are the host's own.
+    const host = withPeerModels({ resolve: async () => Promise.reject(new Error('not one of the host’s')), firstAvailable: async () => undefined }, () => peer, () => 'Ben');
+    const key = PARTICIPANT.slice('peer:'.length);
+    for (const [ref] of cases) {
+      const { adapter: theirs, info } = await host.resolve(peerModelRef(key, ref));
+      // The host's loop sends the model id it knows, as for any model (chat-service.ts).
+      for await (const event of theirs.stream({ model: info.modelId, system: [], messages: [], maxOutputTokens: 10, signal: new AbortController().signal })) expect(event.type).not.toBe('error');
+    }
+    expect(received).toEqual(cases.map(([, id]) => id));
+  });
+
+  it('a failure of their own model says it was theirs, in the host’s session', async () => {
+    const failing: ProviderAdapter = {
+      ...adapter,
+      async *stream(): AsyncIterable<StreamEvent> {
+        yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: 'ChatGPT Plan request failed (400): no such model.' } };
+      },
+    };
+    gateway = new CoopGateway({ ...deps, models: { resolve: async (ref) => ({ adapter: failing, info: modelInfo(ref) }), firstAvailable: async () => undefined } });
+    await gateway.join('u2', INVITE, 'own', 'chatgpt/gpt-6.1-sol');
+    const host = withPeerModels({ resolve: async () => Promise.reject(new Error('no')), firstAvailable: async () => undefined }, () => peer, () => 'Ben');
+    const { adapter: theirs } = await host.resolve(peerModelRef(PARTICIPANT.slice(5), 'chatgpt/gpt-6.1-sol'));
+    const out: StreamEvent[] = [];
+    for await (const event of theirs.stream({ model: 'x', system: [], messages: [], maxOutputTokens: 10, signal: new AbortController().signal })) out.push(event);
+    expect(out.at(-1)).toMatchObject({ type: 'finish', reason: 'error', error: { message: 'Ben’s own model (Mine) failed: ChatGPT Plan request failed (400): no such model.' } });
   });
 
   it('their connectors are lent only when they say so, and each call only after they allowed it', async () => {

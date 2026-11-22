@@ -728,7 +728,8 @@ export class CoopGateway {
         ) as Message[];
         const server = (event: StreamEvent) => streamed({ streamId, event });
         try {
-          for await (const event of adapter.stream({ ...request, effort: (request.effort ?? undefined) as never, messages, signal: controller.signal })) {
+          // The host names the model by its ref here (`chatgpt/gpt-6.1`); the provider wants its own id (`gpt-6.1`).
+          for await (const event of adapter.stream({ ...request, model: info.modelId, effort: (request.effort ?? undefined) as never, messages, signal: controller.signal })) {
             if (event.type === 'usage') this.deps.recordUsage({ userId, sessionId: link.membership.id, model: info, usage: event.usage, mode: link.membership.mode });
             server(event);
             if (event.type === 'finish') break;
