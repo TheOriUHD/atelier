@@ -568,6 +568,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         hooks: {},
         prompts: { organizationInstructions: '' },
         capabilities: { ...effective.capabilities, webSearch: { enabled: effective.capabilities.webSearch.enabled, provider: effective.capabilities.webSearch.provider } },
+        // Which decision services there are, where and with which key, is the admin's business too.
+        decisions: { ...effective.decisions, services: [] },
         safeguards: { enabled: !!own, categories: categories as SafeguardCategories, profile: own?.younger ? 'younger' : 'adult', crisisResources: '' },
       },
       origins: {},
@@ -730,6 +732,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     queue: (id) => registry.queueOf(id),
     scheduler: registry.scheduler,
     stateFile: join(platform.dataDir, 'decisions.json'),
+    // Windows hear of it only when what is offered changed, not on every look.
+    onChange: () => sendDecisions(),
     log: (message) => platform.logger.info(message),
   });
   void decisions.load().then(() => decisions.changed());
@@ -776,11 +780,9 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   };
   imageRegistry.on('status', (s) => emitWhere(isAdmin, 'imageProviders.changed', s));
   registry.on('status', (s) => emitWhere(isAdmin, 'providers.changed', s));
-  // A provider found or lost its models (an Ollama pulled a decision model): decisions look again.
-  registry.on('status', () => {
-    decisions.changed();
-    sendDecisions();
-  });
+  // A provider found or lost its models (an Ollama pulled a decision model): decisions look again, and tell the
+  // windows if that changed anything.
+  registry.on('status', () => decisions.changed());
   // Everyone gets the shared models with their own after them; a change to a person's own models goes to them only.
   // One broadcast at a time, so a later list never arrives before an earlier one.
   let broadcasting = Promise.resolve();

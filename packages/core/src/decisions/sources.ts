@@ -149,10 +149,10 @@ function ids(json: unknown): string[] {
 
 /**
  * An Ollama server's decision models: `/api/tags` says each model's capabilities (0.40), else `/api/show` does. Null
- * when the server isn't an Ollama (no model list there).
+ * when the server isn't an Ollama (no model list there); throws when it didn't answer.
  */
 async function ollamaDecisionModels(deps: ListDeps, owner: DecisionOwner, root: string, signal: AbortSignal): Promise<string[] | null> {
-  const tags = await getJson(deps, owner, `${root}/api/tags`, signal).catch(() => null);
+  const tags = await getJson(deps, owner, `${root}/api/tags`, signal);
   if (!isRecord(tags) || !Array.isArray(tags.models)) return null;
   const models = tags.models.filter(isRecord);
   const said = models.filter((m) => Array.isArray(m.capabilities));
@@ -182,12 +182,18 @@ interface Found {
  * every address with a 200 and an error (an LM Studio from before decision models) falls through to the names.
  */
 async function localDecisionModels(deps: ListDeps, owner: DecisionOwner, root: string, signal: AbortSignal): Promise<Found[]> {
-  const lm = lmStudioModels(await getJson(deps, owner, `${root}/api/v1/models`, signal).catch(() => null));
+  // Each address may be missing on this kind of server; the server didn't answer only when none of them did.
+  let answered = false;
+  const ask = <T>(run: Promise<T>): Promise<T | null> => run.then((value) => ((answered = true), value), () => null);
+  const lm = lmStudioModels(await ask(getJson(deps, owner, `${root}/api/v1/models`, signal)));
   if (lm) return lm.filter((m) => m.type === 'decision').map((m) => ({ model: m.key, dialect: 'openai-decisions' as const, ...(m.loaded.length ? {} : { load: `${root}/api/v1/models/load` }) }));
-  const ollama = await ollamaDecisionModels(deps, owner, root, signal);
+  const ollama = await ask(ollamaDecisionModels(deps, owner, root, signal));
   if (ollama) return ollama.map((model) => ({ model, dialect: 'systemone' as const, ollama: true }));
-  const named = ids(await getJson(deps, owner, `${root}/v1/models`, signal).catch(() => null)).filter((m) => DECISION_NAME.test(m));
-  return named.map((model) => ({ model, dialect: 'auto' as const }));
+  const list = await ask(getJson(deps, owner, `${root}/v1/models`, signal));
+  if (!answered) throw new Error(`${root} didn’t answer`);
+  return ids(list)
+    .filter((m) => DECISION_NAME.test(m))
+    .map((model) => ({ model, dialect: 'auto' as const }));
 }
 
 /** A text provider's decision models, best first. */

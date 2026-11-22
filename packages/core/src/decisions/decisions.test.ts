@@ -250,6 +250,40 @@ describe('asking', () => {
   });
 });
 
+describe('a list that stays put', () => {
+  it('keeps a provider’s models when it doesn’t answer one time, and answers from the list in hand meanwhile', async () => {
+    let up = true;
+    let told = 0;
+    const service = make({}, { 'http://192.168.20.25:11434/api/tags': () => (up ? TAGS : new Response('busy', { status: 503 })) }, [], { onChange: () => told++ });
+    expect((await service.status(false)).source?.label).toBe('nimble');
+    expect(told).toBe(1);
+    // A provider's status changes and it is busy when asked again: nothing disappears.
+    up = false;
+    service.changed();
+    expect((await service.status(false)).source?.label).toBe('nimble');
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await service.status(false)).source?.label).toBe('nimble');
+    expect(service.ready?.source.label).toBe('nimble');
+    // The same found again tells nobody; the windows only hear of a change.
+    up = true;
+    service.changed();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(told).toBe(1);
+  });
+
+  it('tells the windows when a model appears', async () => {
+    let tags: unknown = { models: [{ name: 'qwen3-8b', capabilities: ['completion'] }] };
+    let told = 0;
+    const service = make({}, { 'http://192.168.20.25:11434/api/tags': () => tags }, [], { onChange: () => told++ });
+    expect((await service.status(false)).source).toBeNull();
+    tags = TAGS;
+    service.changed();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(told).toBe(2);
+    expect((await service.status(false)).source?.label).toBe('nimble');
+  });
+});
+
 describe('LM Studio and other servers of providers set up already', () => {
   /** LM Studio's own list, as its docs show it: the decision model not loaded yet. */
   const LIST = {

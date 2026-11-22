@@ -38,6 +38,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.10',
+    intro: 'Decide stays where it is.',
+    highlights: [
+      {
+        icon: Signpost,
+        title: 'Decide is always there when you have a decision model',
+        body: 'More › Decide in the sidebar and Decide in the command palette sometimes vanished and came back when you opened the decision model settings. A provider that was busy for a moment, such as an Ollama loading a model, made Atelier briefly think there was no decision model. Now the models it found stay until it knows better, and the entry is simply called Decide.',
+      },
+    ],
+    also: [],
+  },
+  {
     version: '0.10.9',
     intro: 'Decision models from LM Studio, and from any provider you have.',
     highlights: [
@@ -71,7 +83,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       {
         icon: SquareTerminal,
         title: 'Ask it yourself',
-        body: 'More › Decide… opens a window where you paste a text, ask your questions and see each answer’s probability. In the terminal, atelier decide does the same for scripts, a line at a time if you like.',
+        body: 'More › Decide opens a window where you paste a text, ask your questions and see each answer’s probability. In the terminal, atelier decide does the same for scripts, a line at a time if you like.',
       },
     ],
     also: [

@@ -30,6 +30,8 @@ export interface DecisionDeps {
   scheduler?: RequestScheduler;
   /** Where Auto mode's comparison is kept between restarts. */
   stateFile?: string;
+  /** What the backend offers changed (a model found or gone): windows are told. Not called when a new look found the same. */
+  onChange?(): void;
   log?(message: string): void;
   now?(): number;
 }
@@ -69,12 +71,19 @@ interface Comparison extends Omit<DecisionComparison, 'medianMs'> {
   times: number[];
 }
 
+/** What a list offers, to tell a new look that found the same from one that changed something. */
+const signature = (l: Listed) => JSON.stringify([l.targets.map((t) => t.source.id), l.problems]);
+
 const presetModels = (s: DecisionServiceConfig) => DECISION_SERVICE_PRESETS.find((p) => p.key === s.preset)?.models ?? [];
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export class DecisionService {
   private listed: Listed | null = null;
+  /** The settings or a provider changed: the list in hand is looked at again, and answers meanwhile. */
+  private stale = false;
+  /** Each provider's and service's models when it last answered. */
+  private readonly lastGood = new Map<string, DecisionTarget[]>();
   private listing: { key: string; promise: Promise<Listed> } | null = null;
   /** What `current()` found last, for the places that can't wait (which tools a turn has). */
   private last: DecisionTarget | null = null;
@@ -104,8 +113,9 @@ export class DecisionService {
 
   /** The settings changed: the next look lists afresh, and the choice is made again. */
   changed(): void {
-    this.listed = null;
-    void this.current().catch(() => undefined);
+    // The list in hand keeps answering until the new one is complete, so nothing flickers away while it is made.
+    this.stale = true;
+    void this.sources().catch(() => undefined);
   }
 
   private key(): string {
@@ -116,36 +126,55 @@ export class DecisionService {
     });
   }
 
-  /** Every decision model, best first: the services added for them, then the providers' in their order. */
+  /**
+   * Every decision model, best first: the services added for them, then the providers' in their order. A list that is
+   * only due again answers at once while the new one is made behind it; a new set of providers is waited for.
+   */
   async sources(refresh = false): Promise<Listed> {
     const key = this.key();
-    if (!refresh && this.listed?.key === key && this.now() - this.listed.at < LIST_TTL_MS) return this.listed;
-    if (this.listing?.key === key) return this.listing.promise;
-    const promise = this.list(key).finally(() => {
-      if (this.listing?.promise === promise) this.listing = null;
-    });
-    this.listing = { key, promise };
-    return promise;
+    const have = this.listed?.key === key ? this.listed : null;
+    if (have && !refresh && !this.stale && this.now() - have.at < LIST_TTL_MS) return have;
+    let pending = this.listing?.key === key ? this.listing.promise : null;
+    if (!pending) {
+      this.stale = false;
+      const promise = this.list(key).finally(() => {
+        if (this.listing?.promise === promise) this.listing = null;
+      });
+      this.listing = { key, promise };
+      pending = promise;
+    }
+    return have && !refresh ? have : pending;
   }
 
   private async list(key: string): Promise<Listed> {
     const s = this.deps.settings();
     const problems: Listed['problems'] = [];
     const listDeps = { fetch: this.deps.fetch, credentials: (owner: DecisionOwner) => this.deps.credentials(owner) };
-    const attempt = async (name: string, run: (signal: AbortSignal) => Promise<DecisionTarget[]>) => {
+    // A provider that didn't answer this time (busy loading a model, a computer asleep) keeps what it offered last time:
+    // its models don't vanish from the list, and from the windows, until it answers without them.
+    const attempt = async (name: string, memory: string, run: (signal: AbortSignal) => Promise<DecisionTarget[]>) => {
       try {
-        return await run(AbortSignal.timeout(LIST_TIMEOUT_MS));
+        const found = await run(AbortSignal.timeout(LIST_TIMEOUT_MS));
+        this.lastGood.set(memory, found);
+        return found;
       } catch (error) {
         problems.push({ provider: name, error: message(error) });
-        return [];
+        return this.lastGood.get(memory) ?? [];
       }
     };
-    const services = await Promise.all(s.services.filter((x) => x.enabled !== false).map((x) => attempt(x.name, (signal) => listService(listDeps, x, signal, presetModels(x)))));
-    const text = await Promise.all(s.text.filter((p) => p.enabled !== false && textOffer(p)).map((p) => attempt(p.name, (signal) => listTextProvider(listDeps, p, signal))));
+    const services = await Promise.all(s.services.filter((x) => x.enabled !== false).map((x) => attempt(x.name, `service|${x.id}|${x.baseUrl}`, (signal) => listService(listDeps, x, signal, presetModels(x)))));
+    const text = await Promise.all(s.text.filter((p) => p.enabled !== false && textOffer(p)).map((p) => attempt(p.name, `text|${p.id}|${p.baseUrl}`, (signal) => listTextProvider(listDeps, p, signal))));
     // A provider that has no decision models (an Ollama before 0.35, a chat-only server) isn't a problem; one that
     // couldn't be reached at all was already reported by the provider's own status, so only services' failures show.
     const listed: Listed = { key, at: this.now(), targets: [...services.flat(), ...text.flat()], problems: problems.filter((p) => s.services.some((x) => x.name === p.provider)) };
-    if (this.key() === key) this.listed = listed;
+    if (this.key() === key) {
+      const before = this.listed ? signature(this.listed) : null;
+      this.listed = listed;
+      if (signature(listed) !== before) {
+        await this.current().catch(() => null);
+        this.deps.onChange?.();
+      }
+    }
     return listed;
   }
 

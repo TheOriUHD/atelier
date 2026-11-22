@@ -318,7 +318,7 @@ function MoreRows() {
           {row(Keyboard, 'Keyboard shortcuts', () => setShortcuts(true))}
           {notes.length > 0 && row(Sparkles, 'What’s new', () => setNews(true))}
           {row(Users, 'Join a co-op session…', () => setJoining(true))}
-          {decide && row(Signpost, 'Decide…', () => setDeciding(true))}
+          {decide && row(Signpost, 'Decide', () => setDeciding(true))}
           {row(Bug, 'Report an issue', () => void openReporter('issue'))}
           {row(Lightbulb, 'Request a feature', () => void openReporter('feature'))}
         </div>

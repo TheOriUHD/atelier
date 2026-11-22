@@ -404,7 +404,7 @@ describe('the Decide window under More', () => {
   const nimble = { id: 'text:ollama:nimble', label: 'nimble', provider: 'Ollama', local: true };
   const more = async () => {
     fireEvent.click(within(await nav()).getByRole('button', { name: 'More' }));
-    // Its other rows are there at once; Decide… comes with the decision models' status.
+    // Its other rows are there at once; Decide comes with the decision models' status.
     await screen.findByRole('button', { name: 'Keyboard shortcuts' });
   };
 
@@ -412,7 +412,7 @@ describe('the Decide window under More', () => {
     Object.assign(backend.handlers, { 'settings.get': () => snapshot(), 'decisions.status': () => ({ enabled: true, source: nimble, sources: [], chosen: null }) });
     renderSidebar('/');
     await more();
-    fireEvent.click(await screen.findByRole('button', { name: 'Decide…' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Decide' }));
     expect(await screen.findByRole('dialog', { name: 'Decide' })).toBeTruthy();
   });
 
@@ -421,7 +421,7 @@ describe('the Decide window under More', () => {
     renderSidebar('/');
     await more();
     await waitFor(() => expect(callsTo('decisions.status')).toHaveLength(1));
-    expect(screen.queryByRole('button', { name: 'Decide…' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Decide' })).toBeNull();
   });
 
   it('doesn’t ask a server from before decision models', async () => {
@@ -431,6 +431,6 @@ describe('the Decide window under More', () => {
     await more();
     await waitFor(() => expect(callsTo('settings.get').length).toBeGreaterThan(0));
     expect(callsTo('decisions.status')).toEqual([]);
-    expect(screen.queryByRole('button', { name: 'Decide…' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Decide' })).toBeNull();
   });
 });

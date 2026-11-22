@@ -51,7 +51,7 @@ export function CommandPalette() {
     { id: 'new-chat', label: { chat: 'New chat', work: 'New Cowork task', code: 'New session' }[mode], icon: Plus, run: newChat },
     { id: 'new-temporary-chat', label: 'New temporary chat', icon: Ghost, run: newTemporaryChat },
     { id: 'join-coop', label: 'Join a co-op session…', icon: Users, run: () => setJoining(true) },
-    ...(decide ? [{ id: 'decide', label: 'Decide…', icon: Signpost, run: () => setDeciding(true) }] : []),
+    ...(decide ? [{ id: 'decide', label: 'Decide', icon: Signpost, run: () => setDeciding(true) }] : []),
     { id: 'settings', label: 'Settings', icon: SettingsIcon, run: () => openSettings() },
     { id: 'report-issue', label: 'Report an issue…', icon: Bug, run: () => void openReporter('issue') },
     { id: 'request-feature', label: 'Request a feature…', icon: Lightbulb, run: () => void openReporter('feature') },

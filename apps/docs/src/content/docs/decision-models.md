@@ -55,7 +55,9 @@ sorting than for Auto mode.
 
 ## The Decide window
 
-Paste or type a text, add one or more questions, and press **Decide** (⌘Enter or Ctrl+Enter). Each question is:
+Open it from **More › Decide** in the sidebar or from the command palette; it is there whenever the server has a
+decision model. Paste or type a text, add one or more questions, and press **Decide** (⌘Enter or Ctrl+Enter). Each
+question is:
 
 - **Yes or no**: the answer is the probability of yes ("Yes, 92%").
 - **Pick one**: two or more options; each gets its probability, and the likeliest is marked.

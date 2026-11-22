@@ -74,13 +74,13 @@ describe('the search palette', () => {
 
   it('opens the Decide window where there is a decision model', async () => {
     renderPalette(true, { enabled: true, source: { id: 'text:ollama:nimble', label: 'nimble', provider: 'Ollama', local: true }, sources: [], chosen: null });
-    fireEvent.click(await screen.findByRole('option', { name: 'Decide…' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Decide' }));
     expect(await screen.findByRole('dialog', { name: 'Decide' })).toBeTruthy();
   });
 
   it('offers no Decide window without one', async () => {
     renderPalette(true, { enabled: true, source: null, sources: [], chosen: null });
     await screen.findByText('Quarterly report');
-    expect(screen.queryByRole('option', { name: 'Decide…' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Decide' })).toBeNull();
   });
 });
