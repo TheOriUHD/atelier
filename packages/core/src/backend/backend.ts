@@ -14,6 +14,8 @@ import {
   ADMIN_PROCEDURES,
   SharePort,
   type NetworkShare,
+  type DecisionServiceConfig,
+  type DecisionServiceDraft,
   APP,
   DEVICE_LINK_PROTOCOL,
   McpImportList,
@@ -172,6 +174,7 @@ import { newId } from '../util/ids.ts';
 import { getAt, leafPaths } from '../util/json-path.ts';
 import { interpolate, secretRefs } from '../util/interpolate.ts';
 import { BuiltinSpeech, DictationError, DictationService } from '../dictation/index.ts';
+import { DecisionError, DecisionService } from '../decisions/service.ts';
 
 export interface Logger {
   info(message: string, data?: Record<string, unknown>): void;
@@ -709,8 +712,74 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       throw appError('unavailable', e instanceof Error ? e.message : 'Dictation failed.');
     }
   };
+  // Decision models (ARCHITECTURE §28): a text provider's (an Ollama with nimble, an OpenAI key) or a service's added for
+  // them; Auto mode's quick check, the Decide tool, small choices and the Decide window ask the one chosen here.
+  const decisions = new DecisionService({
+    settings: () => {
+      const e = settings.effective;
+      return { enabled: e.decisions.enabled, source: e.decisions.source, services: e.decisions.services, text: e.providers };
+    },
+    credentials: async (owner) => {
+      if (owner.kind === 'text') return (await registry.credentials(owner.id)) ?? { headers: {} };
+      const key = settings.effective.decisions.services.find((s) => s.id === owner.id)?.apiKey;
+      const apiKey = key ? (await interpolate(key, { secret: (id) => secrets.forSettings(id), env: (name) => platform.env[name] })).value : undefined;
+      return { ...(apiKey ? { apiKey } : {}), headers: {} };
+    },
+    fetch: inspector.wrap(platform.fetch ?? plainHttpFetch(httpFetch, { idleMs: 60_000 })),
+    queue: (id) => registry.queueOf(id),
+    scheduler: registry.scheduler,
+    stateFile: join(platform.dataDir, 'decisions.json'),
+    log: (message) => platform.logger.info(message),
+  });
+  void decisions.load().then(() => decisions.changed());
+  /** Tells every window what decisions use now (each as its person may see it). */
+  const sendDecisions = () => {
+    for (const c of connections) if (c.auth) void decisions.status(isAdmin(c)).then((status) => c.rpc.emit('decisions.changed', status), () => undefined);
+  };
+  let decisionsWere = JSON.stringify([settings.effective.decisions, settings.effective.providers.map((p) => [p.id, p.type, p.baseUrl, p.enabled])]);
+  settings.on('change', () => {
+    const now = JSON.stringify([settings.effective.decisions, settings.effective.providers.map((p) => [p.id, p.type, p.baseUrl, p.enabled])]);
+    if (now === decisionsWere) return;
+    decisionsWere = now;
+    decisions.changed();
+    sendDecisions();
+  });
+  const decisionErrors = async <T>(run: () => Promise<T> | T): Promise<T> => {
+    try {
+      return await run();
+    } catch (e) {
+      if (e instanceof DecisionError) throw appError(e.code === 'forbidden' ? 'forbidden' : e.code === 'unavailable' ? 'unavailable' : 'decision_failed', e.message, e.code === 'unavailable' ? { fix: 'settings/decisions' } : undefined);
+      throw appError('decision_failed', e instanceof Error ? e.message : 'The decision model failed.');
+    }
+  };
+  /** A decision service as settings keep it, from the form's draft: a new key goes to the secret store. */
+  const decisionServiceFrom = async (draft: DecisionServiceDraft): Promise<{ config: DecisionServiceConfig; key: string | undefined }> => {
+    const all = settings.effective.decisions.services;
+    const existing = draft.id ? all.find((s) => s.id === draft.id) : undefined;
+    if (draft.id && !existing) throw appError('not_found', 'That decision service is gone.');
+    const base = (draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'service').slice(0, 40);
+    let id = existing?.id ?? base;
+    for (let n = 2; !existing && all.some((s) => s.id === id); n++) id = `${base}-${n}`;
+    const saved = existing?.apiKey ? (await interpolate(existing.apiKey, { secret: (sid) => secrets.forSettings(sid), env: (name) => platform.env[name] })).value : undefined;
+    const config: DecisionServiceConfig = {
+      id,
+      name: draft.name,
+      type: draft.type,
+      baseUrl: draft.baseUrl.replace(/\/+$/, '').replace(/\/v1$/, ''),
+      ...(existing?.apiKey ? { apiKey: existing.apiKey } : {}),
+      ...(draft.models?.length ? { models: draft.models } : {}),
+      ...(draft.preset ? { preset: draft.preset } : {}),
+      enabled: existing?.enabled ?? true,
+    };
+    return { config, key: draft.apiKey || saved || undefined };
+  };
   imageRegistry.on('status', (s) => emitWhere(isAdmin, 'imageProviders.changed', s));
   registry.on('status', (s) => emitWhere(isAdmin, 'providers.changed', s));
+  // A provider found or lost its models (an Ollama pulled a decision model): decisions look again.
+  registry.on('status', () => {
+    decisions.changed();
+    sendDecisions();
+  });
   // Everyone gets the shared models with their own after them; a change to a person's own models goes to them only.
   // One broadcast at a time, so a later list never arrives before an earlier one.
   let broadcasting = Promise.resolve();
@@ -3764,6 +3833,38 @@ export async function createBackend(platform: Platform): Promise<Backend> {
     'dictation.cancel': ({ id }, ctx) => {
       dictation.cancel(ctx.connection(), id);
       return { ok: true as const };
+    },
+
+    'decisions.status': (_input, ctx) => decisions.status(me(ctx).role === 'admin'),
+    'decisions.decide': (input, ctx) => decisionErrors(() => decisions.decide(input, { admin: me(ctx).role === 'admin', priority: 'foreground', signal: ctx.signal })),
+    'decisions.testService': async (draft) => {
+      const { config, key } = await decisionServiceFrom(draft);
+      return decisions.testService(config, key);
+    },
+    'decisions.saveService': async (draft) => {
+      const { config } = await decisionServiceFrom(draft);
+      let apiKey = config.apiKey;
+      if (draft.apiKey) apiKey = `\${secret:${await secrets.set({ id: `decision-${config.id}`, label: `${config.name} key`, kind: 'api_key', value: draft.apiKey })}}`;
+      const saved = { ...config, ...(apiKey ? { apiKey } : {}) };
+      const all = settings.effective.decisions.services;
+      const next = all.some((s) => s.id === saved.id) ? all.map((s) => (s.id === saved.id ? saved : s)) : [...all, saved];
+      await writeSettings(() => settings.set('global', ['decisions', 'services'], next));
+      decisions.changed();
+      return decisions.status(true);
+    },
+    'decisions.removeService': async ({ id }) => {
+      const all = settings.effective.decisions.services;
+      const gone = all.find((s) => s.id === id);
+      if (!gone) throw appError('not_found', 'That decision service is gone.');
+      await writeSettings(() => settings.set('global', ['decisions', 'services'], all.filter((s) => s.id !== id)));
+      // Its own key goes with it; a key it shared with something else stays.
+      if (gone.apiKey === `\${secret:decision-${id}}` && !(secretUsage().get(`decision-${id}`) ?? []).length) await secrets.delete(`decision-${id}`).catch(() => undefined);
+      decisions.changed();
+      return decisions.status(true);
+    },
+    'decisions.resetComparison': () => {
+      decisions.resetComparison();
+      return decisions.status(true);
     },
   };
 
