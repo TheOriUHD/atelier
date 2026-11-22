@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 // Overridable so several checkouts can run their E2E suites at once (see e2e/fixtures.ts).
-const [ollamaPort, webPort, oidcPort, imagesPort, videoPort, audioPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360), Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362), Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610), Number(process.env.ATELIER_E2E_VIDEO_PORT ?? 11620), Number(process.env.ATELIER_E2E_AUDIO_PORT ?? 11630)];
+const [ollamaPort, webPort, oidcPort, imagesPort, videoPort, audioPort, relayPort] = [Number(process.env.ATELIER_E2E_OLLAMA_PORT ?? 11510), Number(process.env.ATELIER_E2E_WEB_PORT ?? 7360), Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362), Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610), Number(process.env.ATELIER_E2E_VIDEO_PORT ?? 11620), Number(process.env.ATELIER_E2E_AUDIO_PORT ?? 11630), Number(process.env.ATELIER_E2E_RELAY_PORT ?? 7364)];
 const dataDir = await mkdtemp(join(tmpdir(), 'atelier-e2e-web-'));
 await writeFile(
   join(dataDir, 'settings.json'),
@@ -50,6 +50,8 @@ const children = [
   spawn(process.execPath, ['e2e/fake-images.mjs', String(imagesPort)], { stdio: 'inherit' }),
   spawn(process.execPath, ['e2e/fake-video.mjs', String(videoPort)], { stdio: 'inherit' }),
   spawn(process.execPath, ['e2e/fake-audio.mjs', String(audioPort)], { stdio: 'inherit' }),
+  // Co-op with other computers goes through a relay of its own, never the public one (e2e/coop-relay.web.spec.ts).
+  spawn(process.execPath, ['e2e/coop-relay.mjs', String(relayPort)], { stdio: 'inherit' }),
   // The setup project (e2e/auth.setup.ts) creates the admin with this token (SETUP_TOKEN in fixtures.ts).
   spawn(process.execPath, ['apps/server/dist/server.mjs'], {
     stdio: 'inherit',
@@ -60,6 +62,7 @@ const children = [
       ATELIER_SETUP_TOKEN: 'atelier-e2e-setup-token',
       // Web search reads result pages from the fake server instead of the internet (e2e/web-search.web.spec.ts).
       ATELIER_SEARCH_BASE: `http://127.0.0.1:${ollamaPort}/engines`,
+      ATELIER_COOP_RELAY: `http://127.0.0.1:${relayPort}`,
     },
   }),
 ];
