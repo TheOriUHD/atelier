@@ -4,6 +4,10 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+Decision models: models that pick instead of write, in about a tenth of a second, on your own GPU (Ollama 0.35 or later with `nimble` or `tev1`, llama.cpp) or from TypeSafe Jev, OpenAI and OpenRouter. Auto mode can check actions with one before its reviewer, the assistant can sort hundreds of texts with the Decide tool, and you can ask one yourself in the Decide window or with `atelier decide`.
+
+**Updating a server.** Nothing to change: **Update now**, **Update automatically** or `docker compose pull && docker compose up -d`. For a decision model on the server's own GPU, update Ollama there to 0.35 or later and `ollama pull nimble`; Atelier finds it by itself.
+
 - **Decision models.** Models that don't write: they read a text and answer yes or no, one of a few options, or a level on a scale, with a probability for each, in about a tenth of a second. Atelier speaks both formats there are, TypeSafe's System One (`POST /v1/systemone`: TypeSafe Jev, Ollama 0.35 and later, llama.cpp's server, OpenRouter, Requesty, Decision Models, NVIDIA Dynamo) and OpenAI's Decisions API (`gpt-6-luna`), and finds them among the providers set up already: an Ollama's models with the `decision` capability (`nimble`, `tev1`, `clef`), a llama.cpp server's by name, an OpenAI key's, OpenRouter's and Requesty's. A service added only for them (TypeSafe Jev, Decision Models, any System One server) goes in **Settings › Admin › Decision models** (`decisions.services`, its key a secret). With none chosen (`decisions.source`), a service's model is used, else one on a server someone runs; a provider's paid model only when an admin chooses it. A local model waits for its turn on its server's queue like a chat request, and Ollama keeps it loaded for 30 minutes. See the new Decision models page in the docs.
 
 - **Auto mode's quick check.** With a decision model, Auto mode can have it look at each action before the reviewer, at the reviewer's own input (`decisions.autoMode`). **Compare** (the default) only measures it against the reviewer: both allowed, left to the reviewer, and the actions it would have let through that the reviewer stopped, listed in Settings (kept in `decisions.json`). **Approve** lets an action run without the reviewer when it is sure it is plainly asked for and harmless (run ≥ 0.9, harm < 0.3, 4 s at most), and leaves anything else to the reviewer. The engine's rules come first as before, and a co-op guest's actions always go to the reviewer. On Ollama 0.40.17 on an AMD R9700, nimble judged 12 of 14 known actions as expected and approved no risky one, in 180 ms (`decisions.live.test.ts`).
@@ -13,6 +17,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 - **Small choices by the decision model** (`decisions.helpers`): whether a reply ends by asking the person something (a task with open items then waits instead of going on), which engines a web search goes to, and whether a conversation has anything to remember (the memory update skips it when the decision model is sure it hasn't). Each keeps its old way without a decision model.
 
 - **The Decide window and `atelier decide`.** Anyone can ask the decision model directly: a text, one or more questions, and bars with each answer's probability. The terminal app's `atelier decide` does the same for scripts (`--choice`, `--yes-no`, `--score`, `--questions`, `--lines`, `--json`). RPC: `decisions.status`, `decisions.decide`, and for admins `decisions.testService`, `saveService`, `removeService`, `resetComparison`; event `decisions.changed`.
+
+- **The terminal app's exit codes.** A command that failed ended with exit code 0 (the exit timer let Node end first), so scripts and CI couldn't tell; `-p` and every other command now end with the documented codes (1 failed, 3 sign-in needed).
 
 ## [0.10.7] — 2026-11-22
 

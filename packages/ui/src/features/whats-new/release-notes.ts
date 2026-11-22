@@ -2,7 +2,7 @@ import { compareVersions } from '@atelier/protocol';
 // Clips are recorded from the real apps on throwaway data: apps/cli/scripts/record-clip.ts (see media/README.md).
 import cliClip from './media/atelier-cli.mp4';
 import cliPoster from './media/atelier-cli.jpg';
-import { AppWindow, Bell, Blocks, Bug, CircleStop, Lightbulb, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, Mic, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
+import { AppWindow, Bell, Blocks, Bug, CircleStop, Lightbulb, ListChecks, Eye, Globe, Bot, Cloud, FileDiff, Film, FolderInput, GitBranch, History, Monitor, Link, Clock, Cpu, FileText, Gauge, Images, Keyboard, KeyRound, ListX, Mic, MessageSquareText, MessagesSquare, MousePointerClick, Network, Plug, RefreshCw, Repeat2, Server, ShieldCheck, Signpost, SlidersHorizontal, SquareTerminal, Timer, Users, Volume2, Wifi, type LucideIcon } from 'lucide-react';
 
 /**
  * A clip or picture that shows a larger feature off: it takes the dialog's full width above the feature's title. Clips are
@@ -37,6 +37,36 @@ export interface ReleaseNotes {
 }
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
+  {
+    version: '0.10.8',
+    intro: 'Decision models: models that pick instead of write, in about a tenth of a second, on your own GPU or from TypeSafe Jev, OpenAI and OpenRouter. Auto mode, the assistant and you can all use one.',
+    highlights: [
+      {
+        icon: Signpost,
+        title: 'Decision models',
+        body: 'A decision model reads a text and answers yes or no, one of a few options, or a level on a scale, with how likely each answer is, in about a tenth of a second. Pull nimble or tev1 into Ollama 0.35 or later and Atelier finds it by itself; TypeSafe Jev, OpenAI’s Decisions API and OpenRouter work too. Settings › Admin › Decision models picks the one to use and what it is used for.',
+      },
+      {
+        icon: ShieldCheck,
+        title: 'Auto mode checks in a tenth of a second',
+        body: 'With a decision model, Auto mode can look at an action before its reviewer. At first it only compares the two, and Settings shows how often they agreed and anything it would have let through that the reviewer stopped. Switch it to Approve what it is sure of, and actions that are plainly what you asked for run at once instead of waiting seconds for the reviewer; everything else is reviewed as before.',
+      },
+      {
+        icon: ListChecks,
+        title: 'Sort hundreds of things at once',
+        body: 'The assistant has a Decide tool: it hands the decision model up to 200 texts, such as issues, emails or search results, and gets back the likeliest answers to its questions for each, so it reads only the ones that matter.',
+      },
+      {
+        icon: SquareTerminal,
+        title: 'Ask it yourself',
+        body: 'More › Decide… opens a window where you paste a text, ask your questions and see each answer’s probability. In the terminal, atelier decide does the same for scripts, a line at a time if you like.',
+      },
+    ],
+    also: [
+      'Atelier decides a few small things with the decision model instead of by keywords: whether a reply asks you something, which web search fits, and whether a conversation has anything worth remembering.',
+      'The terminal app ends with an error code when a command fails, as its documentation always said.',
+    ],
+  },
   {
     version: '0.10.7',
     intro: 'Co-op on Atelier servers with far fewer approvals, Atelier for Firefox, notifications for every conversation (on Windows too), a Stop that always stops, Roblox Studio and any other program as a connector, and an Auto mode that points to the gentler way.',
