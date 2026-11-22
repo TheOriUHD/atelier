@@ -151,6 +151,20 @@ export class DecisionService {
     return (this.last = pickAutomatic((await this.sources()).targets));
   }
 
+  /**
+   * The decision model now, without waiting on a listing that is due again (a provider that is off takes seconds to
+   * fail): the one found last, while it is looked for again behind. Atelier's own uses and the tool ask through this.
+   */
+  private async now_(): Promise<DecisionTarget | null> {
+    const s = this.deps.settings();
+    if (!s.enabled) return null;
+    if (s.source) return this.current();
+    const fresh = this.listed?.key === this.key() && this.now() - this.listed.at < LIST_TTL_MS;
+    if (fresh || !this.last) return this.current();
+    void this.current().catch(() => undefined);
+    return this.last;
+  }
+
   /** What `current()` found last, without asking anything: for tool lists, which are made without waiting. */
   get ready(): DecisionTarget | null {
     const s = this.deps.settings();
@@ -182,7 +196,7 @@ export class DecisionService {
       if (!options.admin) throw new DecisionError('forbidden', 'Only an admin can ask another decision model.');
       target = targetFor(input.source, s.text, s.services);
       if (!target) throw new DecisionError('unavailable', 'That decision model isn’t set up here any more.');
-    } else target = await this.current();
+    } else target = await this.now_();
     if (!target) throw new DecisionError('unavailable', 'No decision model is set up. Pull nimble or tev1 into Ollama 0.35 or later, or add a service in Settings › Admin › Decision models.');
     const timeout = AbortSignal.timeout(options.timeoutMs ?? DECIDE_TIMEOUT_MS);
     return this.run(target, input.state, input.questions, options.signal ? AbortSignal.any([options.signal, timeout]) : timeout, options.priority ?? 'foreground');
@@ -193,7 +207,7 @@ export class DecisionService {
    * model, it's off, or it didn't answer in time. Never throws: each use has its way without one.
    */
   async ask(state: DecisionState, questions: readonly DecisionQuestion[], options: { purpose: string; priority?: QueuePriority; timeoutMs: number; signal?: AbortSignal }): Promise<DecideResult | null> {
-    const target = await this.current().catch(() => null);
+    const target = await this.now_().catch(() => null);
     if (!target) return null;
     const timeout = AbortSignal.timeout(options.timeoutMs);
     try {
