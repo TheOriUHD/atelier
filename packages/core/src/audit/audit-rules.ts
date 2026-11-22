@@ -267,6 +267,26 @@ export const AUDIT_RULES = {
   'imageProviders.tryImage': skip('a trial image; stores nothing in settings'),
   'imageProviders.trySound': skip('a trial sound; stores nothing in settings'),
   'imageProviders.refresh': skip('asks the providers again; stores nothing'),
+  // Decision models' services: name, kind and address, never the key (it goes through the secret store).
+  'decisions.testService': skip('a trial request; stores nothing'),
+  'decisions.saveService': rule<'decisions.saveService'>({
+    before: (input, env) => (input.id ? (env.settings().decisions.services.find((s) => s.id === input.id) ?? null) : null),
+    describe: ({ input, before: kept }) => {
+      const before = kept as { id: string; name: string } | null;
+      const detail = { family: 'decision', type: input.preset ?? input.type, host: hostOf(input.baseUrl) };
+      if (!before) return { kind: 'provider.added', target: input.id ?? input.name, summary: `Added decision service ${input.name}`, detail };
+      const fields = changedFields(input as unknown as Record<string, unknown>, before as unknown as Record<string, unknown>);
+      return { kind: 'provider.changed', target: before.id, summary: `Changed decision service ${input.name}`, detail: { ...detail, fields: fields.join(', ') || null } };
+    },
+  }),
+  'decisions.removeService': rule<'decisions.removeService'>({
+    before: (input, env) => env.settings().decisions.services.find((s) => s.id === input.id) ?? null,
+    describe: ({ input, before }) => {
+      const saved = before as { name?: string; type?: string; preset?: string } | null;
+      return { kind: 'provider.removed', target: input.id, summary: `Removed decision service ${saved?.name ?? input.id}`, detail: { family: 'decision', type: saved?.preset ?? saved?.type ?? null } };
+    },
+  }),
+  'decisions.resetComparison': skip('starts Auto mode’s comparison with the decision model afresh; stores no setting'),
   'imageProviders.parseWorkflow': skip('reads a file; stores nothing'),
   'imageProviders.savedWorkflows': skip('reads only'),
 

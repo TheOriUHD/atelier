@@ -39,6 +39,7 @@ type Outcome = { state: 'idle' } | { state: 'deciding' } | { state: 'failed'; me
 /** The form is kept while the window is closed, so it opens again on what was asked. */
 export function DecideDialog({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
   const [form, setForm] = useState<DecideForm>(newDecideForm);
+  const [addedQuestion, setAddedQuestion] = useState<number | null>(null);
   const [attempted, setAttempted] = useState(false);
   const [chosen, setChosen] = useState(USUAL);
   const [outcome, setOutcome] = useState<Outcome>({ state: 'idle' });
@@ -110,12 +111,17 @@ export function DecideDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               question={q}
               removable={form.questions.length > 1}
               errors={shown.questions[q.key]}
+              focus={q.key === addedQuestion}
               onChange={(change) => setQuestion(q.key, change)}
               onRemove={() => setForm((f) => ({ ...f, questions: f.questions.filter((other) => other.key !== q.key) }))}
             />
           ))}
           <div className="flex items-center gap-3">
-            <Button size="sm" leadingIcon={Plus} disabled={form.questions.length >= MAX_QUESTIONS_HERE} onClick={() => setForm((f) => ({ ...f, questions: [...f.questions, newQuestion()] }))}>
+            <Button size="sm" leadingIcon={Plus} disabled={form.questions.length >= MAX_QUESTIONS_HERE} onClick={() => {
+                const question = newQuestion();
+                setAddedQuestion(question.key);
+                setForm((f) => ({ ...f, questions: [...f.questions, question] }));
+              }}>
               Add question
             </Button>
             {form.questions.length >= MAX_QUESTIONS_HERE && <span className="text-footnote text-fg-muted">Up to {MAX_QUESTIONS_HERE} questions here.</span>}
@@ -161,12 +167,15 @@ function QuestionCard({
   question,
   removable,
   errors,
+  focus,
   onChange,
   onRemove,
 }: {
   index: number;
   question: QuestionDraft;
   removable: boolean;
+  /** Just added: its question takes the cursor. */
+  focus: boolean;
   errors: { instructions?: string; options?: string } | undefined;
   onChange(change: (q: QuestionDraft) => QuestionDraft): void;
   onRemove(): void;
@@ -183,7 +192,7 @@ function QuestionCard({
         {removable && <IconButton icon={X} size="sm" label={`Remove ${name.toLowerCase()}`} onClick={onRemove} />}
       </div>
       <div className="flex flex-col gap-1.5">
-        <TextField aria-label={name} placeholder={PLACEHOLDERS[question.type]} value={question.instructions} invalid={!!errors?.instructions} onChange={(e) => onChange((q) => ({ ...q, instructions: e.target.value }))} />
+        <TextField aria-label={name} autoFocus={focus} placeholder={PLACEHOLDERS[question.type]} value={question.instructions} invalid={!!errors?.instructions} onChange={(e) => onChange((q) => ({ ...q, instructions: e.target.value }))} />
         {errors?.instructions && <p className="text-footnote text-danger-text">{errors.instructions}</p>}
       </div>
       {question.type !== 'yesno' && <OptionsEditor question={question} index={index} error={errors?.options} onChange={onChange} />}
@@ -198,6 +207,8 @@ function OptionsEditor({ question, index, error, onChange }: { question: Questio
   const noun = score ? 'level' : 'option';
   const max = score ? DECISION_MAX_LEVELS : DECISION_MAX_OPTIONS;
   const count = question.options.length;
+  // An option just added takes the cursor, so typing goes on in it.
+  const [added, setAdded] = useState<number | null>(null);
   const setOption = (key: number, patch: Partial<QuestionDraft['options'][number]>) => onChange((q) => ({ ...q, options: q.options.map((o) => (o.key === key ? { ...o, ...patch } : o)) }));
   const placeholder = (i: number) => (score ? (i === 0 ? 'Lowest level' : i === count - 1 ? 'Highest level' : `Level ${i + 1}`) : `Option ${i + 1}`);
   return (
@@ -211,7 +222,7 @@ function OptionsEditor({ question, index, error, onChange }: { question: Questio
           return (
             <li key={o.key} className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
-                <TextField aria-label={label} placeholder={placeholder(i)} value={o.value} className="flex-1" onChange={(e) => setOption(o.key, { value: e.target.value })} />
+                <TextField aria-label={label} placeholder={placeholder(i)} value={o.value} className="flex-1" autoFocus={o.key === added} onChange={(e) => setOption(o.key, { value: e.target.value })} />
                 <Button size="sm" variant="ghost" aria-expanded={o.described} aria-label={`Describe ${noun} ${i + 1}`} onClick={() => setOption(o.key, { described: !o.described })}>
                   <Icon icon={ChevronRight} size="sm" className={cn('transition-transform duration-(--at-duration-fast) ease-standard', o.described && 'rotate-90')} />
                   Describe
@@ -235,7 +246,11 @@ function OptionsEditor({ question, index, error, onChange }: { question: Questio
         })}
       </ul>
       <div>
-        <Button size="xs" variant="ghost" leadingIcon={Plus} disabled={count >= max} onClick={() => onChange((q) => ({ ...q, options: [...q.options, newOption()] }))}>
+        <Button size="xs" variant="ghost" leadingIcon={Plus} disabled={count >= max} onClick={() => {
+            const option = newOption();
+            setAdded(option.key);
+            onChange((q) => ({ ...q, options: [...q.options, option] }));
+          }}>
           Add {noun}
         </Button>
       </div>
