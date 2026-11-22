@@ -251,6 +251,21 @@ Admins only.
 | **haiku** | Which of your models answers when an agent file asks for `haiku`. |
 | **fable** | Which of your models answers when an agent file asks for `fable`. |
 
+## Settings › Admin › Decision models
+
+Admins only.
+
+| Setting | What it does |
+|---|---|
+| **Use decision models** | Off: nothing in Atelier asks a decision model, whatever is set up here. |
+| **Decision model** | Automatic picks a service added here or a model on a server you run, never a paid model by itself. |
+| **Decision services** | Services just for decision models. Models of the providers set up already, such as Ollama, OpenAI or OpenRouter, need nothing here. |
+| **Add decision service** | TypeSafe Jev, Decision Models, or any server that answers System One requests. |
+| **Auto mode check** | A decision model can look at the actions Auto mode reviews: to compare it with the reviewer, or to let the ones it is sure of run at once. |
+| **Compared with the reviewer** | What the decision model would have done with the actions Auto mode’s reviewer looked at. |
+| **Let the assistant sort many things at once** | Gives conversations a Decide tool that puts the same questions to many texts in one go, such as a full inbox. |
+| **Use it for Atelier’s small choices** | Whether a reply asks you something, which web search fits, and whether a conversation has something to remember. |
+
 ## Settings › Admin › Capabilities
 
 Admins only.

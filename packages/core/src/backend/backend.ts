@@ -3863,6 +3863,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       const gone = all.find((s) => s.id === id);
       if (!gone) throw appError('not_found', 'That decision service is gone.');
       await writeSettings(() => settings.set('global', ['decisions', 'services'], all.filter((s) => s.id !== id)));
+      // A choice of one of its models goes back to the automatic one.
+      if (settings.effective.decisions.source?.startsWith(`service:${id}:`)) await writeSettings(() => settings.reset('global', ['decisions', 'source']));
       // Its own key goes with it; a key it shared with something else stays.
       if (gone.apiKey === `\${secret:decision-${id}}` && !(secretUsage().get(`decision-${id}`) ?? []).length) await secrets.delete(`decision-${id}`).catch(() => undefined);
       decisions.changed();
