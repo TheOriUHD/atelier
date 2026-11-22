@@ -459,8 +459,9 @@ describe('EffortControl', () => {
       const gl = fakeWebGl();
       render(<Harness initial="ultracode" />);
       const slider = await openSlider('Effort: Ultracode, high usage');
-      // Well up, so its fade outlasts the popover's closing.
-      await waitFor(() => expect(gl.envelope()).toBeGreaterThan(0.5));
+      // Well up, so its fade outlasts the popover's closing. (A busy machine draws few frames: the build VM, running two
+      // suites at once, took over a second to get there.)
+      await waitFor(() => expect(gl.envelope()).toBeGreaterThan(0.5), { timeout: 5000 });
       // Off the stop and closed straight away, within the fade: its frame still has the field in it. (Checked here, not
       // after the popover has closed, which on a slow machine can outlast the fade; closing while lit is the next test.)
       fireEvent.keyDown(slider, { key: 'Home' });
