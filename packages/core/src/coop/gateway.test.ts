@@ -275,6 +275,20 @@ describe('co-op gateway on the guest’s computer', () => {
     expect(JSON.stringify(copied)).toContain(sentSha);
   });
 
+  it('a join that fails on the way says why in plain words, not as an internal error', async () => {
+    const { CoopError } = await import('./channel.ts');
+    for (const [code, expected] of [
+      ['refused', 'forbidden'],
+      ['room_closed', 'not_found'],
+      ['full', 'invalid_request'],
+      ['network', 'host_away'],
+    ] as const) {
+      gateway = new CoopGateway({ ...deps, transport: { join: async () => Promise.reject(new CoopError(code, 'x')) } });
+      await refused(gateway.join('u2', INVITE, 'host'), expected);
+    }
+    expect(await gateway.list('u2')).toEqual([]);
+  });
+
   it('their connectors are lent only when they say so, and each call only after they allowed it', async () => {
     const { sessionId } = await gateway.join('u2', INVITE, 'host');
     await gateway.call('u2', 'sessions.subscribe', { id: sessionId });

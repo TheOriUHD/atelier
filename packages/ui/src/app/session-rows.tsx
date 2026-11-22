@@ -68,7 +68,7 @@ export function coopLabel(session: Pick<SessionSummary, 'id' | 'coop'>): { label
     return { label: hint.charAt(0).toUpperCase() + hint.slice(1), hint, host: null };
   }
   const host = c?.hostName ?? 'the host';
-  const where = c?.mirror || isCoopMirror(session.id) ? `on ${host}’s computer` : `with ${host}`;
+  const where = c?.mirror || isCoopMirror(session.id) ? (c?.hostedOn === 'server' ? `on ${host}’s server` : `on ${host}’s computer`) : `with ${host}`;
   const hint = c?.ended ? `${where}, co-op ended` : where;
   return { label: c?.ended ? `Co-op ended, ${where}` : `Co-op ${where}`, hint, host };
 }

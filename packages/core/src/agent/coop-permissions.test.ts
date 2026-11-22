@@ -308,4 +308,23 @@ describe('co-op permissions on the host’s computer', () => {
     await chat.settle(s.id);
     expect(ran).toEqual(['Bash {"command":"make deploy"}']);
   });
+
+  it('a guest the host trusts answers the questions their own turn raises; one not trusted can’t', async () => {
+    coopSettings = { ...DEFAULT_COOP_SETTINGS, guestActions: 'ask' };
+    const trusted: TurnParticipant = { ...ben, trusted: true };
+    const chat = service();
+    const s = await repo.create({ mode: 'code', userId: 'ada', permissionMode: 'default' });
+    release();
+    script = [{ name: 'Bash', input: { command: 'npm test' } }];
+    await chat.send(s.id, [{ type: 'text', text: 'run the tests' }], undefined, trusted);
+    await until(() => lastPending() !== null);
+    const pending = lastPending()!;
+    expect(pending.approver).toBe(ada.id);
+    expect(await chat.mayRespond(s.id, pending.id, ben)).toBe(false);
+    expect(await chat.mayRespond(s.id, pending.id, trusted)).toBe(true);
+    expect(chat.respond(s.id, pending.id, { behavior: 'allow' }, trusted)).toBe(true);
+    await chat.settle(s.id);
+    expect(ran).toEqual(['Bash {"command":"npm test"}']);
+  });
 });
+

@@ -42,8 +42,37 @@ import type { ModelResolver } from '../agent/chat-service.ts';
 import type { StreamEvent } from '../providers/types.ts';
 import type { Db } from '../store/db.ts';
 import { coopMemberships } from '../store/schema.ts';
+import { CoopError } from './channel.ts';
 import { lanes, type JsonChannel } from './lanes.ts';
 import { PEER_SELF } from './peer-model.ts';
+
+/**
+ * Why joining failed, said to the person as it is: the channel's own errors would otherwise reach their window as an
+ * internal error, with nothing to go on.
+ */
+export function joinFailure(error: unknown): unknown {
+  if (!(error instanceof CoopError)) return error;
+  switch (error.code) {
+    case 'not_found':
+    case 'room_closed':
+      return appError('not_found', 'That co-op session isn’t open any more: the host ended it, or the link expired. Ask for a new link.');
+    case 'refused':
+    case 'forbidden':
+      return appError('forbidden', 'The host’s session didn’t take this link: a newer one may have replaced it. Ask for a new link.');
+    case 'full':
+      return appError('invalid_request', 'That session is full: four people at most.');
+    case 'host_key_changed':
+      return appError('forbidden', 'The host isn’t on the computer you joined from before. Ask them for a new link to be sure it’s them.');
+    case 'rate_limited':
+      return appError('rate_limited', 'Too many tries just now. Wait a minute and try again.');
+    case 'timeout':
+      return appError('host_away', 'The host’s Atelier didn’t answer in time. Try again while it’s open.');
+    case 'aborted':
+      return appError('aborted', 'Joining was cancelled.');
+    default:
+      return appError('host_away', `Couldn’t reach the co-op relay: ${error.message} Check the connection and try again.`);
+  }
+}
 
 /** A guest's channel to the host (channel.ts `GuestChannel`). */
 export interface GuestChannelPort extends JsonChannel {
@@ -253,7 +282,10 @@ export class CoopGateway {
     const link = this.blank(placeholder, models, model);
     // The invite's secret until the host gives them their own (`keep`), which then replaces it.
     await this.deps.secrets.set(pskSecret, parsed.secret);
-    const welcome = await this.connect(link, parsed.secret);
+    const welcome = await this.connect(link, parsed.secret).catch((e: unknown) => {
+      link.channel?.close();
+      throw joinFailure(e);
+    });
     const id = mirrorId(parsed.roomId, welcome.sessionId, account);
     const joined = { ...placeholder, id, hostKey: link.channel!.remoteKey, hostName: welcome.hostName, hostSessionId: welcome.sessionId, title: welcome.title, mode: welcome.mode };
     // Joining again keeps how they filed it in their sidebar (their name for it, pinned, group).
@@ -437,7 +469,15 @@ export class CoopGateway {
       effort: null,
       connectorsOff: [],
       research: false,
-      coop: { role: link.state?.role === 'viewer' ? 'viewer' : 'editor', hostName: m.hostName, participants: link.state?.participants.length ?? 2, mirror: true, waitingOnYou: !ended && link.waitingOnYou, ...(ended ? { ended: true } : {}) },
+      coop: {
+        role: link.state?.role === 'viewer' ? 'viewer' : 'editor',
+        hostName: m.hostName,
+        participants: link.state?.participants.length ?? 2,
+        mirror: true,
+        waitingOnYou: !ended && link.waitingOnYou,
+        ...(link.state?.hostedOn ? { hostedOn: link.state.hostedOn } : {}),
+        ...(ended ? { ended: true } : {}),
+      },
       status: !ended && link.waitingOnYou ? 'waiting' : 'idle',
       pinnedAt: m.pinnedAt,
       groupId: m.groupId,

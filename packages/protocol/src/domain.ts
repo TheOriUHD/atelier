@@ -56,6 +56,8 @@ export const SessionSummary = z.object({
       knocking: z.array(z.object({ id: z.string(), name: z.string() })).max(8).optional(),
       /** The question the session waits on is this viewer's to answer (absent from older backends). */
       waitingOnYou: z.boolean().optional(),
+      /** A session joined elsewhere: whether it runs on the host's computer or an Atelier server, once known. */
+      hostedOn: z.enum(['computer', 'server']).optional(),
     })
     .optional(),
   status: SessionStatus,
