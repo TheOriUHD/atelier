@@ -42,7 +42,7 @@ process.on('unhandledRejection', (e) => {
 });
 
 async function main(argv: string[]): Promise<number> {
-  const { values, positionals } = parse(argv);
+  const { values, positionals, tokens } = parse(argv);
   const p = cliPaths();
   let config = await readConfig(p.config);
   const plain = !!values.plain || !!values['screen-reader'] || config.theme === 'plain';
@@ -56,6 +56,11 @@ async function main(argv: string[]): Promise<number> {
   if (values.version) {
     if (process.stdout.isTTY && !plain) process.stdout.write(`${bigBanner(paint, process.stdout.columns ?? 80).join('\n')}\n${paint.fg('muted', `Atelier CLI ${VERSION}`)}\n`);
     else process.stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+  if (values.help && command === 'decide') {
+    const { decideHelp } = await import('./commands/decide.ts');
+    process.stdout.write(`${decideHelp(paint)}\n`);
     return 0;
   }
   if (values.help || command === 'help') {
@@ -129,6 +134,30 @@ async function main(argv: string[]): Promise<number> {
     case 'models':
     case 'sessions':
       return listCommand(command, p, config, paint);
+    case 'decide': {
+      const { decideCommand } = await import('./commands/decide.ts');
+      const { readFile } = await import('node:fs/promises');
+      const server = typeof values.server === 'string' ? values.server : process.env.ATELIER_SERVER;
+      const target: CliConfig = server ? { ...config, connection: { mode: 'server', serverUrl: server.replace(/\/$/, '') } } : config;
+      // A pipe on macOS is written later: everything is out before the exit (`--lines` can print a lot).
+      const flushed = () => new Promise<void>((resolve) => process.stdout.write('', () => resolve()));
+      const code = await decideCommand(
+        { values, rest, tokens, paint, bars: !values['screen-reader'] },
+        {
+          connect: () =>
+            connect(p, target, { service: false }).catch((e: unknown) => {
+              process.stderr.write(`${describe(e)}\n`);
+              return e instanceof NeedsSetup ? 3 : 1;
+            }),
+          readFile: (path) => readFile(path, 'utf8'),
+          stdin: process.stdin,
+          out: (t) => void process.stdout.write(t),
+          err: (t) => void process.stderr.write(t),
+        },
+      );
+      await flushed();
+      return code;
+    }
     default:
       break;
   }
@@ -418,6 +447,8 @@ async function updateCommand(config: CliConfig, p: ReturnType<typeof cliPaths>, 
 
 main(process.argv.slice(2)).then(
   (code) => {
+    // The code holds when the process ends by itself before the timer (the timer doesn't keep it running).
+    process.exitCode = code;
     if (code !== 0 || process.env.ATELIER_DAEMON !== '1') setTimeout(() => process.exit(code), 50).unref();
   },
   (e: unknown) => {

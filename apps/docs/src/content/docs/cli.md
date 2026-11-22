@@ -149,6 +149,33 @@ On a CI machine, `ATELIER_SERVER` and `ATELIER_TOKEN` connect without setup. The
 `atelier token` prints the one this terminal uses. Anyone with it works as you, so keep it in the CI's secrets; it lasts
 as long as it is used at least every 30 days, and signing that terminal out (Settings › Account › Sessions) ends it.
 
+## Decisions *(next release)*
+
+`atelier decide` asks a decision model about a text. A decision model doesn't write a reply: it answers typed questions
+with how sure it is, in about a tenth of a second. The text is the argument, `--file <path>`, or what is piped in.
+
+```sh
+atelier decide "Win a free phone!" --yes-no "Is this spam?"
+atelier decide --file ticket.txt --choice "billing=Invoices and refunds,tech,other" --question "Which team should take it?"
+atelier decide --file ticket.txt --score "low,medium,high" --question "How urgent is it?"
+cat subjects.txt | atelier decide --lines --questions questions.json
+```
+
+| Option | |
+|---|---|
+| `--yes-no <question>` | Yes or no. Give it again for more questions. |
+| `--choice <a,b,c>` with `--question <question>` | Which option fits. `name=what it means` describes an option (no commas inside). |
+| `--score <low,mid,high>` with `--question <question>` | A level on a scale of 2 to 10 levels, lowest first. |
+| `--questions <file.json>` | The questions from a file: `[{"name": "spam", "type": "yesno", "instructions": "Is this spam?"}]`, with `options` (`[{"value": "billing", "description": "…"}]`) for `choice` and `score`. |
+| `--lines` | Each line is decided on its own, 4 at a time: one line out per line in, the answers then the text, split by tabs. |
+| `--json` | The whole result: every answer's chances, the model, the time and the tokens (with `--lines`, a list). |
+| `--model <id>` | Admins: ask this decision model instead of the one Atelier picks. |
+| `--list` | The decision model in use, and for admins every one with its id. |
+
+Each `--choice` and `--score` takes the `--question` in the same order. Without a decision model, it says how to get
+one: pull `nimble` or `tev1` into an Ollama (0.35 or newer) that Atelier uses, or add a service in Settings › Admin ›
+Decision models. Exit codes: 0 done, 1 failed, 3 sign-in needed.
+
 ## The background service
 
 One `atelier daemon` runs per person in the background, started by the first terminal that needs it:

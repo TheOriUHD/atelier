@@ -23,6 +23,8 @@ How to install and set it up: [Atelier CLI](/cli/).
 | `atelier doctor` | Check that everything works |
 | `atelier models` | The models you can use |
 | `atelier sessions` | Your Code sessions |
+| `atelier decide [text]` | Ask a decision model about a text (or --file, or stdin) with --yes-no, --choice or --score |
+| `atelier decide --list` | The decision model in use (admins: every one, with its id) |
 | `atelier token` | Print this terminal’s sign-in, for ATELIER_TOKEN in CI |
 | `atelier update [--beta]` | Update to the newest version |
 | `atelier daemon status\|stop\|keep\|unkeep` | The background service (keep: start it at login) |
@@ -39,11 +41,19 @@ How to install and set it up: [Atelier CLI](/cli/).
 | `-c`, `--continue` | Carry on with the latest session in this folder |
 | `-r`, `--resume` | Pick a session to carry on with (or give its id: -r <id>) |
 | `--session <id>` | Open this session |
-| `-m`, `--model <model>` | The model for new sessions (a name or provider/model) |
+| `-m`, `--model <model>` | The model for new sessions (a name or provider/model); with decide, a decision model’s id from --list (admins) |
 | `--effort <level>` | low, medium, high, xhigh (Extra) or max |
 | `--mode <mode>` | auto, ask, accept, plan or bypass |
 | `--permission-mode <mode>` | The same as --mode (Claude Code’s name) |
 | `--allow <rule>` | With -p: allow calls like this, e.g. --allow "Bash(npm test *)" --allow Edit |
+| `--yes-no <question>` | With decide: a yes-or-no question (give it again for more) |
+| `--choice <a,b,c>` | With decide: which of these options fits, with --question; an option may be name=what it means |
+| `--score <low,mid,high>` | With decide: a level on this scale (2 to 10 levels, lowest first), with --question |
+| `--question <question>` | With decide: the question of a --choice or --score (one each, in the same order) |
+| `--questions <file.json>` | With decide: the questions from a JSON file (an array of questions) |
+| `--file <path>` | With decide: the text from this file |
+| `--lines` | With decide: each line of the text on its own, one line out for each |
+| `--json` | With decide: the whole result as JSON (with --lines, a list of them) |
 | `--plain` | No colour and no animation |
 | `--screen-reader` | Plain text that reads well with a screen reader |
 | `--server <url>` | Use this server for this run (with ATELIER_TOKEN, for scripts) |
