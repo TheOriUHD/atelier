@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.7] — 2026-11-22
+
 Everything from the six 0.10.7 betas, now for everyone: co-op on Atelier servers with Auto mode checking guests' actions, notifications for every conversation (on Windows too), a Stop that always stops, programs on your computer such as Roblox Studio as connectors also from a server, an Auto mode that points to the less intrusive way, browser tabs that stay open per chat with the page showing what the assistant does, the desktop side of Atelier for Firefox, and servers that can follow the beta channel and bring their updater along.
 
 **Updating a server.** **Update now**, **Update automatically** and `docker compose pull && docker compose up -d` install 0.10.7 as before. The first two leave an updater from before 0.10.7 as it is: run `docker compose pull updater && docker compose up -d updater` once on the host, in the folder with `compose.yaml`, and from then on the updater comes along with every update and can install betas. Nothing else changes in the Compose file.
