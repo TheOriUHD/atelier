@@ -26,13 +26,17 @@ export interface ServerUpdatesOptions {
 /** Updates the updater to the compose file's own tag (`:latest`), which is a release's. */
 export const UPDATE_UPDATER = 'docker compose pull updater && docker compose up -d updater';
 
+/** The first release whose updater installs exact versions: from it on, `:latest` is new enough for every later beta. */
+const FIRST_EXACT_RELEASE = '0.10.7';
+
 /**
- * The one command that puts in an updater able to install betas (0.10.7 and later), where an older one runs. A beta's
- * images have only their version's tag, so before a release has it, `:latest` is too old as well: the command fetches the
- * beta's own updater and gives it the name the compose file runs. From then on every update brings the updater along.
+ * The one command that puts in an updater able to install betas (0.10.7 and later), where an older one runs. Pulling
+ * `:latest` does it, except for a beta of 0.10.7 itself: its images have only their version's tag and the release before
+ * it has no such updater, so the command fetches the beta's own updater and gives it the name the compose file runs.
+ * From then on every update brings the updater along.
  */
 export function updaterUpdateCommand(image: string | null | undefined, target: string | null): string {
-  if (!target?.includes('-')) return UPDATE_UPDATER;
+  if (!target?.includes('-') || compareVersions(target, FIRST_EXACT_RELEASE) > 0) return UPDATE_UPDATER;
   const updater = `${image || 'ghcr.io/theoriuhd/atelier'}-updater`;
   return `docker pull ${updater}:v${target} && docker tag ${updater}:v${target} ${updater}:latest && docker compose up -d updater`;
 }

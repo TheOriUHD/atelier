@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ServerUpdates, type ServerUpdatesOptions } from './server-updates.ts';
+import { ServerUpdates, UPDATE_UPDATER, updaterUpdateCommand, type ServerUpdatesOptions } from './server-updates.ts';
 
 const FEED = 'https://updates.example.test';
 const UPDATER = 'http://updater:7341';
@@ -242,6 +242,13 @@ describe('downloading ahead and installing', () => {
     expect((await updates.status()).updaterUpdate).toBe(command);
     await expect(updates.update()).rejects.toMatchObject({ code: 'updater_old', message: expect.stringContaining(command) });
     expect(network.requests.some((r) => r.method === 'POST')).toBe(false);
+  });
+
+  it('names the plain pull for an updater too old for a beta after 0.10.7, whose release updater is new enough', () => {
+    expect(updaterUpdateCommand('ghcr.io/theoriuhd/atelier', '0.10.8-beta.1')).toBe(UPDATE_UPDATER);
+    expect(updaterUpdateCommand('ghcr.io/theoriuhd/atelier', '0.11.0-beta.2')).toBe(UPDATE_UPDATER);
+    expect(updaterUpdateCommand('ghcr.io/theoriuhd/atelier', '0.10.7')).toBe(UPDATE_UPDATER);
+    expect(updaterUpdateCommand('ghcr.io/theoriuhd/atelier', '0.10.7-beta.6')).toContain('docker tag');
   });
 
   it('on stable, keeps the compose file’s tags even with an updater that could choose', async () => {

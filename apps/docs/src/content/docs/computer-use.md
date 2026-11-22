@@ -168,7 +168,8 @@ by itself within a few hours, or at once with **Update** on `chrome://extensions
 chat, the glow and the label, reading pages by name, and the same limits (never passwords or purchases, it asks before
 terms or sending). Install it from [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/atelier-for-firefox/);
 **Settings › Computer use › Browser extension** says **Connected in Firefox …** within a few seconds. Firefox asks you to
-allow the data it sends to the Atelier app (the pages it works in) when you add it.
+allow the data it sends to the Atelier app (the pages it works in) when you add it. The add-on is new and goes through
+Mozilla's review first, so the link shows it once that is done.
 
 What is different in Firefox:
 

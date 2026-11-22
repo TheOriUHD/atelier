@@ -69,17 +69,17 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       {
         icon: Globe,
         title: 'Atelier for Firefox',
-        body: 'The browser extension now works in Firefox too: add Atelier for Firefox from Firefox Add-ons, and the assistant works in web pages there, in tabs of its own grouped by chat, with the same glow and label. With Chrome and Firefox both connected, it works in the one you used last. In Firefox, clicks and typing happen inside the page, which a few sites that need real input ignore; the assistant tells you when that happens.',
+        body: 'The browser extension comes to Firefox too, and this version of the app is ready for it: once Mozilla has reviewed the new add-on, add Atelier for Firefox from Firefox Add-ons (Settings › Computer use links to it), and the assistant works in web pages there, in tabs of its own grouped by chat, with the same glow and label. With Chrome and Firefox both connected, it works in the one you used last. In Firefox, clicks and typing happen inside the page, which a few sites that need real input ignore; the assistant tells you when that happens.',
       },
       {
         icon: Eye,
         title: 'Watch it work in the page',
-        body: 'With Atelier for Chrome 0.2.1, the tab the assistant works in glows orange at its edges, and a label at the bottom left says what it is doing right now, like “Reading page…” or “Thinking…”. When the reply is done it says Done and fades, and if it waits for your answer the page says so. Clicks go through, and its own screenshots leave it out. Chrome updates the extension from the Web Store by itself.',
+        body: 'With Atelier for Chrome 0.2.1, the tab the assistant works in glows orange at its edges, and a label at the bottom left says what it is doing right now, like “Reading page…” or “Thinking…”. When the reply is done it says Done and fades, and if it waits for your answer the page says so. Clicks go through, and its own screenshots leave it out. Chrome installs 0.2.1 from the Web Store by itself once the store has approved it.',
       },
       {
         icon: AppWindow,
         title: 'Tabs stay open, grouped by chat',
-        body: 'The pages it opened no longer close when the reply ends. They stay in an orange tab group named after the chat, for you to look at and for your next message to go on in. A chat keeps at most ten, it closes the ones it no longer needs, and a chat’s tabs close when you archive or delete it.',
+        body: 'The pages it opened no longer close when the reply ends. They stay in an orange tab group named after the chat (with Atelier for Chrome 0.2.1; before, in one Atelier group), for you to look at and for your next message to go on in. A chat keeps at most ten, it closes the ones it no longer needs, and a chat’s tabs close when you archive or delete it.',
       },
       {
         icon: ListChecks,
@@ -91,7 +91,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       'When it looks something up in the browser, it reads several results, follows links that lead closer and answers with what it found, linked to its sources.',
       'Switching the update channel back to Stable drops a beta that was already downloaded, so it is no longer installed when Atelier quits.',
       'The media kit at media.atelierhq.dev has the logos, app icons, banners, screenshots and colours, linked from the website’s footer.',
-      'A server can follow the beta channel: Settings › Admin › Server › Update channel. Check now says what it found, and the server’s updater now updates itself with the rest.',
+      'A server can follow the beta channel: Settings › Admin › Server › Update channel. Check now says what it found, and the server’s updater now updates itself with the rest; to get that updater, run docker compose pull updater && docker compose up -d updater once on the server’s host.',
       'Add price finds a model as you type its name, and the focus ring around a field is sharp instead of a soft glow.',
       'In co-op, a guest who answers with their own model from the ChatGPT Plan (or any other provider) is answered again instead of failing, and leaving a session keeps the copy the Leave dialog promises.',
     ],

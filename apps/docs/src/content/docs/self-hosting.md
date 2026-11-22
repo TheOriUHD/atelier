@@ -418,8 +418,9 @@ to restore are in [Data and files](/data-and-files/#a-server).
 ## Updating
 
 **Settings › Admin › Server** shows the server's version, and the newest one it knows of ("Atelier 0.1.10 is
-available." or "Up to date. Checked 2 minutes ago."). The newest version comes from `stable/latest.yml` on the public
-update feed, or, with `ATELIER_UPDATES_REPO` set, the newest non-draft, non-prerelease GitHub release of that repository.
+available." or "Up to date: 0.10.7 is the newest release."). The newest version comes from `stable/latest.yml` on the
+public update feed (on the [beta channel](#update-channel), `beta/latest.yml` too), or, with `ATELIER_UPDATES_REPO` set,
+the newest non-draft, non-prerelease GitHub release of that repository.
 The answer is cached for 10 minutes; **Check now** skips the cache. The server asks only when an admin opens the page or
 presses **Check now**; with no internet it keeps showing the last version it saw.
 
@@ -451,12 +452,13 @@ Going back to **Stable** never downgrades: the server stays on its beta until a 
 back up first.
 
 Installing betas needs an updater from 0.10.7 on. With an older one the page says so and names the one command to run on
-the host, in the folder with `compose.yaml`; until 0.10.7 is released that command fetches the beta's own updater, for
-example:
+the host, in the folder with `compose.yaml`:
 
 ```bash
-docker pull ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6 && docker tag ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6 ghcr.io/theoriuhd/atelier-updater:latest && docker compose up -d updater
+docker compose pull updater && docker compose up -d updater
 ```
+
+From then on the updater updates itself along with the server, so this is needed only once.
 
 ### Updating automatically
 
