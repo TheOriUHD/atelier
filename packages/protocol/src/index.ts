@@ -31,3 +31,4 @@ export * from './browser.ts';
 export * from './preview.ts';
 export * from './reports.ts';
 export * from './dictation.ts';
+export * from './decisions.ts';

@@ -6,6 +6,7 @@
  * Keys are added to this schema in the milestone that uses them.
  */
 import { z } from 'zod';
+import { DecisionAutoMode, DecisionServiceConfig } from './decisions.ts';
 import { ImageModelOverride, ImagePrice, ImageProviderConfig } from './images.ts';
 import { LimitsSettings } from './limits.ts';
 import { McpServerConfig, McpServerName } from './mcp.ts';
@@ -187,6 +188,24 @@ export const SettingsSchema = z.object({
    * best speech-to-text service among the providers set up here.
    */
   dictation: z.object({ enabled: z.boolean().default(true), source: z.string().max(400).optional() }).default({ enabled: true }),
+  /**
+   * Decision models (ARCHITECTURE §28): which one the backend asks, the services added only for them, and what Atelier
+   * uses one for. `source` is a `DecisionSource` id; absent, the backend picks a service added here or a model of a
+   * server someone runs, never a provider's paid model on its own.
+   */
+  decisions: z
+    .object({
+      enabled: z.boolean().default(true),
+      source: z.string().max(400).optional(),
+      services: z.array(DecisionServiceConfig).default([]),
+      /** Auto mode's quick check: none, compared with the reviewer, or approving what it is sure of. */
+      autoMode: DecisionAutoMode.default('compare'),
+      /** The Decide tool, for the assistant to sort many things at once. */
+      tool: z.boolean().default(true),
+      /** Atelier's own small choices: whether a reply asks something, which search fits, whether there's anything to remember. */
+      helpers: z.boolean().default(true),
+    })
+    .default({ enabled: true, services: [], autoMode: 'compare', tool: true, helpers: true }),
   /** Per-person limits on text models for a shared server (ARCHITECTURE §8); none until an admin sets one. */
   limits: LimitsSettings.default({}),
   context: z

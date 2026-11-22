@@ -45,6 +45,7 @@ import { REPORT_LIMITS, ReportApp, ReportChat, ReportDiagnostics, ReportImageTyp
 import { SshAnswer, SshConnectionInput, SshConnectionView, SshPrompt, SshTestResult } from '../ssh.ts';
 import { Effort, ModelInfo, PlanUsage, ProviderStatus, ProviderType } from '../models.ts';
 import { CoopSettings, CoopState, CoopTrack, ModelsChoice } from '../coop.ts';
+import { DecideInput, DecideResult, DecisionServiceDraft, DecisionServiceTest, DecisionStatus } from '../decisions.ts';
 import { DictationAudio, DictationId, DictationStart, DictationStatus, DictationUpdate } from '../dictation.ts';
 import { AudioKind, DetectedImageServer, GeneratedImage, ImageModelInfo, ImageProviderConfig, ImageProviderDraft, ImageWorkflow, ImageWorkflowSource, PersonalImageProvider, PersonalImageProviderDraft, SavedImageWorkflow } from '../images.ts';
 import { LocalServer, PersonalProvider, PersonalProviderDraft } from '../personal-providers.ts';
@@ -866,6 +867,17 @@ export const contract = {
     'dictation.stop': { input: z.object({ id: DictationId }), output: z.object({ text: z.string() }) },
     /** Stops listening and keeps nothing. */
     'dictation.cancel': { input: z.object({ id: DictationId }), output: Ok },
+    /** Decision models (ARCHITECTURE §28): which one this backend asks, and for admins every one to choose from. */
+    'decisions.status': { input: Empty, output: DecisionStatus },
+    /** Asks the decision model: the Decide window and `atelier decide`. A `source` other than the backend's is for admins. */
+    'decisions.decide': { input: DecideInput, output: DecideResult },
+    /** Admins: checks a decision service before it is saved (its address, its key, its models). */
+    'decisions.testService': { input: DecisionServiceDraft, output: DecisionServiceTest },
+    /** Admins: adds or changes a decision service; a key in the draft is stored as a secret. */
+    'decisions.saveService': { input: DecisionServiceDraft, output: DecisionStatus },
+    'decisions.removeService': { input: Id, output: DecisionStatus },
+    /** Admins: starts Auto mode's comparison with the reviewer afresh. */
+    'decisions.resetComparison': { input: Empty, output: DecisionStatus },
   },
   events: {
     /** The person's memory changed (a chat saved something, a background update, another window). */
@@ -911,6 +923,8 @@ export const contract = {
     'dictation.update': DictationUpdate,
     /** Dictation's status changed here (the speech model's download, a provider added): `dictation.status` again. */
     'dictation.changed': DictationStatus,
+    /** Decision models changed here (a provider or service added, the choice, the comparison): as `decisions.status` answers. */
+    'decisions.changed': DecisionStatus,
   },
 } as const satisfies Contract;
 
@@ -983,6 +997,10 @@ export const ADMIN_PROCEDURES: ReadonlySet<ProcedureName> = new Set<ProcedureNam
   'imageProviders.refresh',
   'imageProviders.parseWorkflow',
   'imageProviders.savedWorkflows',
+  'decisions.testService',
+  'decisions.saveService',
+  'decisions.removeService',
+  'decisions.resetComparison',
   'users.list',
   'users.create',
   'users.update',
