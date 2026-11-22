@@ -24,13 +24,14 @@ import {
   Wrench,
   Settings as SettingsIcon,
   Shield,
+  Signpost,
   SquareCode,
   Users,
   MousePointerClick,
   type LucideIcon,
 } from 'lucide-react';
 import { desktop } from '../../lib/platform.ts';
-import { auditLogOffered, imageGenerationOffered, sharedComputer, usageLimitsOffered } from '../../lib/queries.ts';
+import { auditLogOffered, decisionsOffered, imageGenerationOffered, sharedComputer, usageLimitsOffered } from '../../lib/queries.ts';
 import { isLocal } from '../auth/screen-lock.ts';
 
 export type SettingsPageId =
@@ -52,6 +53,7 @@ export type SettingsPageId =
   | 'providers'
   | 'image-providers'
   | 'models'
+  | 'decisions'
   | 'capabilities'
   | 'admin-code'
   | 'connectors'
@@ -111,6 +113,8 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
   // Separate from text providers (ARCHITECTURE §23). An older server has neither the page's calls nor its settings.
   { id: 'image-providers', label: 'Media', icon: Images, group: 'Admin', available: () => imageGenerationOffered() },
   { id: 'models', label: 'Models', icon: Box, group: 'Admin' },
+  // Models that answer questions instead of writing (ARCHITECTURE §28). An older server has neither the calls nor the settings.
+  { id: 'decisions', label: 'Decision models', icon: Signpost, group: 'Admin', available: () => decisionsOffered() },
   { id: 'capabilities', label: 'Capabilities', icon: BriefcaseBusiness, group: 'Admin' },
   // Everyone's Code sessions: permission rules and the system AGENTS.md.
   { id: 'admin-code', label: 'Code', icon: SquareCode, group: 'Admin' },

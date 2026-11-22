@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the RPC contract; backend events keep caches fresh without polling. */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { defaultUserPrefs, type AppInfo, type DictationStatus, type DiffCompare, type ImageModelInfo, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
+import { defaultUserPrefs, type AppInfo, type DictationStatus, type DiffCompare, type ImageModelInfo, type Mode, type ProviderType, type SessionSummary, type Settings, type SettingsLayer, type SettingsSnapshot, type SettingsPath, type SidebarView, type UserPrefs, type WorkspaceSummary } from '@atelier/protocol';
 import { toast } from '../components/ui/index.ts';
 import { setPath } from './json-path.ts';
 import { rpc } from './rpc.ts';
@@ -74,6 +74,8 @@ export const keys = {
   workspace: (id: string) => ['workspace', id] as const,
   /** Whether dictation works and with which service: read again when settings or providers change. */
   dictation: ['dictation'] as const,
+  /** Decision models: which one this backend asks (and for admins every one, the comparison); `decisions.changed` replaces it. */
+  decisions: ['decisions'] as const,
 };
 
 /** Wires backend events into the query cache once, at app start. */
@@ -86,8 +88,10 @@ export function useLiveQueries(): void {
       rpc().on('settings.changed', (snapshot) => {
         qc.setQueryData(keys.settings, snapshot);
         void qc.invalidateQueries({ queryKey: keys.dictation });
+        void qc.invalidateQueries({ queryKey: keys.decisions });
       }),
       rpc().on('dictation.changed', (status) => qc.setQueryData(keys.dictation, status)),
+      rpc().on('decisions.changed', (status) => qc.setQueryData(keys.decisions, status)),
       rpc().on('prefs.changed', (prefs) => {
         qc.setQueryData(keys.prefs, prefs);
         void qc.invalidateQueries({ queryKey: keys.ssh });
@@ -110,6 +114,7 @@ export function useLiveQueries(): void {
       rpc().on('providers.changed', (status) => {
         qc.setQueryData(keys.providers, status);
         void qc.invalidateQueries({ queryKey: keys.dictation });
+        void qc.invalidateQueries({ queryKey: keys.decisions });
       }),
       rpc().on('imageModels.changed', (models) => {
         qc.setQueryData(keys.imageModels, models);
@@ -231,6 +236,20 @@ export function useDictationStatus({ enabled = true }: { enabled?: boolean } = {
   return useQuery({ queryKey: keys.dictation, queryFn: () => rpc().call('dictation.status', {}), retry: false, staleTime: 60_000, enabled });
 }
 
+/**
+ * Decision models (ARCHITECTURE §28): the one this backend asks, and for admins every one to choose from and how Auto
+ * mode's check compares with the reviewer. Kept current by `decisions.changed`; an error means a server from before them.
+ */
+export function useDecisionStatus({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: keys.decisions, queryFn: () => rpc().call('decisions.status', {}), retry: false, staleTime: 60_000, enabled });
+}
+
+/** This backend knows decision models: its settings have their block (a server from before them has none). */
+export function useDecisionsOffered(): boolean {
+  const { settings } = useSettings();
+  return !!(settings as Partial<Settings> | undefined)?.decisions;
+}
+
 export function usePrefs() {
   const q = useQuery({ queryKey: keys.prefs, queryFn: () => rpc().call('prefs.get', {}) });
   return { ...q, prefs: q.data };
@@ -329,6 +348,8 @@ export function useAppInfo() {
 
 /** For code outside React (Settings search): null before dictation's status was read (or on a server without it), else whether it is on. */
 export const dictationOffered = (): boolean | null => queryClient.getQueryData<DictationStatus>(keys.dictation)?.enabled ?? null;
+/** For code outside React (the Settings page list and search): the settings read so far have decision models' block. */
+export const decisionsOffered = (): boolean => !!(queryClient.getQueryData<SettingsSnapshot>(keys.settings)?.effective as Partial<Settings> | undefined)?.decisions;
 /** For code outside React (the Settings page list). A newer app on an older server hides image generation; something must have asked `useAppInfo`. */
 export const imageGenerationOffered = (): boolean => !!queryClient.getQueryData<AppInfo>(keys.appInfo)?.imageGeneration;
 /** Plan mode answered by the Auto reviewer: a server from before it knows only Plan. */

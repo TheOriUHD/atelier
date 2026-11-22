@@ -14,6 +14,7 @@ import { CapabilitiesPage } from './capabilities-page.tsx';
 import { CloudPage } from './cloud-page.tsx';
 import { CodePage } from './code-page.tsx';
 import { ConnectorsPage } from './connectors-page.tsx';
+import { DecisionsPage } from './decisions-page.tsx';
 import { FoldersPage } from './folders-page.tsx';
 import { GeneralPage } from './general-page.tsx';
 import { ImageProvidersPage } from './image-providers-page.tsx';
@@ -59,6 +60,7 @@ const PAGE_COMPONENTS: Record<SettingsPageId, ComponentType> = {
   providers: ProvidersPage,
   'image-providers': ImageProvidersPage,
   models: ModelsPage,
+  decisions: DecisionsPage,
   capabilities: CapabilitiesPage,
   'admin-code': AdminCodePage,
   connectors: ConnectorsPage,

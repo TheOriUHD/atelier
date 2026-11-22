@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { defaultSettings } from '@atelier/protocol';
 import { keys, queryClient } from '../../lib/queries.ts';
 import { setLocal } from '../auth/screen-lock.ts';
 import { SETTINGS_PAGES, settingsPage, visiblePages } from './pages.ts';
@@ -28,6 +29,27 @@ describe('Image providers', () => {
     expect(shown(true)).not.toContain('image-providers');
     // A link to it lands on a page that exists.
     expect(settingsPage('image-providers', true).id).toBe('general');
+  });
+});
+
+describe('Decision models', () => {
+  afterEach(() => queryClient.clear());
+  const shown = (admin: boolean) => visiblePages(admin).map((p) => p.id);
+  const settings = (effective: object) => queryClient.setQueryData(keys.settings, { effective, origins: {}, projectRoot: null, errors: [] });
+
+  it('is an admin page after Models, once the settings have decision models', () => {
+    settings(defaultSettings());
+    const pages = shown(true);
+    expect(pages[pages.indexOf('models') + 1]).toBe('decisions');
+    expect(shown(false)).not.toContain('decisions');
+  });
+
+  it('is hidden on a server from before them, and until the settings are read', () => {
+    expect(shown(true)).not.toContain('decisions');
+    const { decisions: _, ...older } = defaultSettings();
+    settings(older);
+    expect(shown(true)).not.toContain('decisions');
+    expect(settingsPage('decisions', true).id).toBe('general');
   });
 });
 

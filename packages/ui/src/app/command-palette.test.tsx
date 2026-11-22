@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultSettings, defaultUserPrefs, type Mode, type SessionSummary } from '@atelier/protocol';
 import { resetBackend, snapshot } from '../features/settings/test-backend.ts';
@@ -33,9 +33,10 @@ const SESSIONS: Partial<Record<Mode, SessionSummary[]>> = {
   work: [session('Quarterly report', 'work', 2_000)],
 };
 
-/** `unified`: the backend says Chat and Cowork are one; without it, a server from before that. */
-function renderPalette(unified: boolean) {
+/** `unified`: the backend says Chat and Cowork are one; without it, a server from before that. `decisions`: what `decisions.status` answers. */
+function renderPalette(unified: boolean, decisions?: unknown) {
   resetBackend({
+    ...(decisions ? { 'decisions.status': () => decisions } : {}),
     'app.info': () => ({ name: 'Atelier', version: '0.7.6', surface: 'web', platform: 'linux', dataDir: '', ...(unified ? { unifiedChat: true } : {}) }),
     'settings.get': () => snapshot(defaultSettings()),
     'prefs.get': () => defaultUserPrefs(),
@@ -69,5 +70,17 @@ describe('the search palette', () => {
     const rows = await recent();
     expect(rows[0]).toContain('Quarterly report');
     expect(rows[1]).toContain('Older chat');
+  });
+
+  it('opens the Decide window where there is a decision model', async () => {
+    renderPalette(true, { enabled: true, source: { id: 'text:ollama:nimble', label: 'nimble', provider: 'Ollama', local: true }, sources: [], chosen: null });
+    fireEvent.click(await screen.findByRole('option', { name: 'Decide…' }));
+    expect(await screen.findByRole('dialog', { name: 'Decide' })).toBeTruthy();
+  });
+
+  it('offers no Decide window without one', async () => {
+    renderPalette(true, { enabled: true, source: null, sources: [], chosen: null });
+    await screen.findByText('Quarterly report');
+    expect(screen.queryByRole('option', { name: 'Decide…' })).toBeNull();
   });
 });

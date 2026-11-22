@@ -37,6 +37,7 @@ import {
   Settings as SettingsIcon,
   Shapes,
   ShieldCheck,
+  Signpost,
   Sparkles,
   SquareTerminal,
   SunMoon,
@@ -79,6 +80,7 @@ import { useCodeSplit } from './split-nav.ts';
 import { FolderGroups, GroupHeader, RowLead, SessionRow, rowClass } from './session-rows.tsx';
 import { ShortcutsDialog } from './shortcuts-dialog.tsx';
 import { JoinLinkDialog } from '../features/coop/join-link-dialog.tsx';
+import { DecideDialog, useDecideOffered } from '../features/decisions/decide-dialog.tsx';
 import { useWhatsNewNotes, WhatsNewDialog } from '../features/whats-new/whats-new.tsx';
 
 type Tab = 'chat' | 'code';
@@ -271,14 +273,16 @@ function SearchButton() {
 }
 
 /**
- * "More" opens in place onto the less used places: Settings, Usage, the keyboard shortcuts, what's new, and joining a
- * co-op session from a pasted invite link.
+ * "More" opens in place onto the less used places: Settings, Usage, the keyboard shortcuts, what's new, joining a
+ * co-op session from a pasted invite link, and the Decide window where there is a decision model.
  */
 function MoreRows() {
   const [open, setOpen] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const [news, setNews] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  const decide = useDecideOffered();
   const notes = useWhatsNewNotes();
   const openSettings = useOpenSettings();
   const list = useId();
@@ -314,12 +318,14 @@ function MoreRows() {
           {row(Keyboard, 'Keyboard shortcuts', () => setShortcuts(true))}
           {notes.length > 0 && row(Sparkles, 'What’s new', () => setNews(true))}
           {row(Users, 'Join a co-op session…', () => setJoining(true))}
+          {decide && row(Signpost, 'Decide…', () => setDeciding(true))}
           {row(Bug, 'Report an issue', () => void openReporter('issue'))}
           {row(Lightbulb, 'Request a feature', () => void openReporter('feature'))}
         </div>
       )}
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
       <JoinLinkDialog open={joining} onOpenChange={setJoining} />
+      {(decide || deciding) && <DecideDialog open={deciding} onOpenChange={setDeciding} />}
       {notes.length > 0 && <WhatsNewDialog notes={notes} open={news} onOpenChange={setNews} />}
     </>
   );
