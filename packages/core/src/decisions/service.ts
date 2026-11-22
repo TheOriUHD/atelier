@@ -17,8 +17,8 @@ import {
 } from '@atelier/protocol';
 import type { RequestScheduler, ServerLimits } from '../providers/scheduler.ts';
 import type { ProviderFetch, QueuePriority } from '../providers/types.ts';
-import { listService, listTextProvider, pickAutomatic, targetFor, textOffer, type DecisionOwner, type DecisionTarget } from './sources.ts';
-import { errorText, openAiBody, parseDecision, systemOneBody } from './wire.ts';
+import { endpointOf, listService, listTextProvider, namableProviders, pickAutomatic, targetFor, textOffer, type DecisionOwner, type DecisionTarget } from './sources.ts';
+import { errorText, openAiBody, parseDecision, systemOneBody, type DecisionDialect } from './wire.ts';
 
 export interface DecisionDeps {
   settings(): { enabled: boolean; source?: string | undefined; services: readonly DecisionServiceConfig[]; text: readonly ProviderConfig[] };
@@ -51,6 +51,10 @@ const LIST_TIMEOUT_MS = 6_000;
 const DECIDE_TIMEOUT_MS = 60_000;
 /** Ollama keeps a decision model loaded this long after its last use, so the next one is quick. */
 const KEEP_ALIVE = '30m';
+/** A server's words for an address it doesn't have (LM Studio: "Unexpected endpoint or method"). */
+const UNKNOWN_ENDPOINT = /unexpected endpoint|unknown (?:endpoint|route|path)|no route|not found|cannot post|unsupported (?:endpoint|path)/i;
+/** LM Studio's words for a decision model that isn't loaded. */
+const NOT_LOADED = /not loaded|no (?:decision )?model (?:is )?loaded|load (?:a|the) (?:decision )?model|requires a loaded/i;
 /** Misses kept for the admin to look at. */
 const MISSES_KEPT = 10;
 
@@ -76,6 +80,10 @@ export class DecisionService {
   private last: DecisionTarget | null = null;
   private stats: Comparison;
   private saving: ReturnType<typeof setTimeout> | undefined;
+  /** The format each server answered in, for servers asked in either (`auto`). */
+  private readonly formats = new Map<string, DecisionDialect>();
+  /** LM Studio models this backend loaded (`root|model`). */
+  private readonly loaded = new Set<string>();
   private readonly now: () => number;
 
   constructor(private readonly deps: DecisionDeps) {
@@ -146,7 +154,7 @@ export class DecisionService {
     const s = this.deps.settings();
     if (!s.enabled) return (this.last = null);
     // A choice is used as it is, without listing: a model that went away fails when asked, and says why.
-    const chosen = s.source ? targetFor(s.source, s.text, s.services) : null;
+    const chosen = s.source ? targetFor(s.source, s.text, s.services, this.listed?.targets) : null;
     if (chosen) return (this.last = chosen);
     return (this.last = pickAutomatic((await this.sources()).targets));
   }
@@ -183,7 +191,7 @@ export class DecisionService {
       source: current?.source ?? null,
       sources,
       chosen: admin ? (s.source ?? null) : null,
-      ...(admin ? { comparison: this.comparison(), problems: listed?.problems ?? [] } : {}),
+      ...(admin ? { comparison: this.comparison(), problems: listed?.problems ?? [], providers: namableProviders(s.text).map((p) => ({ id: p.id, name: p.name })) } : {}),
     };
   }
 
@@ -194,7 +202,7 @@ export class DecisionService {
     let target: DecisionTarget | null;
     if (input.source) {
       if (!options.admin) throw new DecisionError('forbidden', 'Only an admin can ask another decision model.');
-      target = targetFor(input.source, s.text, s.services);
+      target = targetFor(input.source, s.text, s.services, this.listed?.targets);
       if (!target) throw new DecisionError('unavailable', 'That decision model isn’t set up here any more.');
     } else target = await this.now_();
     if (!target) throw new DecisionError('unavailable', 'No decision model is set up. Pull nimble or tev1 into Ollama 0.35 or later, or add a service in Settings › Admin › Decision models.');
@@ -224,31 +232,79 @@ export class DecisionService {
     const release = queue && this.deps.scheduler ? await this.deps.scheduler.hold(queue.server, queue.limits, target.model, signal, { priority }) : null;
     try {
       const { apiKey, headers } = await credentials(target.owner);
-      const body = target.dialect === 'openai-decisions' ? openAiBody(target.model, state, questions) : systemOneBody(target.model, state, questions, target.ollama ? { keep_alive: KEEP_ALIVE } : {});
-      const started = this.now();
-      let res: Response;
-      try {
-        res = await this.deps.fetch(target.url, {
-          method: 'POST',
-          headers: { ...headers, ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}), 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal,
-        });
-      } catch (error) {
-        if (signal.aborted) throw new DecisionError('failed', `${target.source.label} didn’t answer in time.`);
-        throw new DecisionError('failed', `${target.source.provider} couldn’t be reached: ${message(error)}`);
+      const auth = { ...headers, ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}), 'Content-Type': 'application/json' };
+      const server = `${target.owner.kind}:${target.owner.id}`;
+      // LM Studio answers only with a loaded model: it is loaded the first time, and again when LM Studio let it go.
+      const loadKey = `${target.root}|${target.model}`;
+      if (target.load && !this.loaded.has(loadKey)) await this.loadModel(target, auth, signal);
+      // A server not known yet is asked in System One first, and in OpenAI's format when it doesn't know that.
+      const learned = this.formats.get(server);
+      const first: DecisionDialect = target.dialect === 'auto' ? (learned ?? 'systemone') : target.dialect;
+      let attempt = await this.post(target, first, state, questions, auth, signal);
+      if (attempt.kind === 'unknown' && target.dialect === 'auto' && !learned) {
+        const other: DecisionDialect = first === 'systemone' ? 'openai-decisions' : 'systemone';
+        const second = await this.post(target, other, state, questions, auth, signal);
+        if (second.kind !== 'unknown') attempt = second;
       }
-      const json: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        const said = errorText(json);
-        const hint = res.status === 401 || res.status === 403 ? ' Check its key in Settings.' : res.status === 404 ? ` Is ${target.model} still there?` : '';
-        throw new DecisionError('failed', `${target.source.provider} answered ${res.status}${said ? `: ${said}` : '.'}${hint}`);
+      if (attempt.kind === 'unloaded' && target.load) {
+        this.loaded.delete(loadKey);
+        await this.loadModel(target, auth, signal);
+        attempt = await this.post(target, attempt.dialect, state, questions, auth, signal);
       }
-      const parsed = parseDecision(json, questions, target.dialect);
-      return { answers: parsed.answers, source: target.source, model: parsed.model ?? target.model, ms: this.now() - started, usage: parsed.usage };
+      if (attempt.kind === 'answer') {
+        if (target.dialect === 'auto') this.formats.set(server, attempt.dialect);
+        return { ...attempt.result, source: target.source };
+      }
+      if (attempt.kind === 'unknown')
+        throw new DecisionError(
+          'failed',
+          `${target.source.provider} doesn’t answer decision requests${attempt.said ? ` (“${attempt.said}”)` : ''}. It needs a version with decision models: Ollama 0.35 or later, a current LM Studio or llama.cpp server.`,
+        );
+      if (attempt.kind === 'unloaded') throw new DecisionError('failed', `${target.source.label} isn’t loaded in ${target.source.provider}: load it there, or let Atelier find it again (Settings › Admin › Decision models).`);
+      throw new DecisionError('failed', attempt.message);
     } finally {
       release?.();
     }
+  }
+
+  /** LM Studio: loads the model (a minute at most, or as long as the caller waits). */
+  private async loadModel(target: DecisionTarget, headers: Record<string, string>, signal: AbortSignal): Promise<void> {
+    let res: Response;
+    try {
+      res = await this.deps.fetch(target.load!, { method: 'POST', headers, body: JSON.stringify({ model: target.model }), signal: AbortSignal.any([signal, AbortSignal.timeout(DECIDE_TIMEOUT_MS)]) });
+    } catch (error) {
+      if (signal.aborted) throw new DecisionError('failed', `${target.source.label} is still loading in ${target.source.provider}.`);
+      throw new DecisionError('failed', `${target.source.provider} couldn’t be reached: ${message(error)}`);
+    }
+    const json: unknown = await res.json().catch(() => null);
+    if (!res.ok) throw new DecisionError('failed', `${target.source.provider} couldn’t load ${target.source.label}${errorText(json) ? `: ${errorText(json)}` : ` (${res.status})`}.`);
+    this.loaded.add(`${target.root}|${target.model}`);
+  }
+
+  /** One request in one format: the answer, or why there is none. */
+  private async post(target: DecisionTarget, dialect: DecisionDialect, state: DecisionState, questions: readonly DecisionQuestion[], headers: Record<string, string>, signal: AbortSignal): Promise<{ kind: 'answer'; dialect: DecisionDialect; result: Omit<DecideResult, 'source'> } | { kind: 'unknown'; dialect: DecisionDialect; said: string | undefined } | { kind: 'unloaded'; dialect: DecisionDialect } | { kind: 'failed'; dialect: DecisionDialect; message: string }> {
+    const body = dialect === 'openai-decisions' ? openAiBody(target.model, state, questions) : systemOneBody(target.model, state, questions, target.ollama ? { keep_alive: KEEP_ALIVE } : {});
+    const started = this.now();
+    let res: Response;
+    try {
+      res = await this.deps.fetch(endpointOf(target.root, dialect), { method: 'POST', headers, body: JSON.stringify(body), signal });
+    } catch (error) {
+      if (signal.aborted) throw new DecisionError('failed', `${target.source.label} didn’t answer in time.`);
+      throw new DecisionError('failed', `${target.source.provider} couldn’t be reached: ${message(error)}`);
+    }
+    const json: unknown = await res.json().catch(() => null);
+    const said = errorText(json);
+    const answers = typeof json === 'object' && json !== null && 'answers' in json;
+    // An address the server doesn't have: a 404 or 405, or (LM Studio before decision models) a 200 that says so.
+    if (res.status === 404 && !said?.match(/model/i)) return { kind: 'unknown', dialect, said };
+    if (res.status === 405 || (!answers && said && UNKNOWN_ENDPOINT.test(said))) return { kind: 'unknown', dialect, said };
+    if (!answers && said && NOT_LOADED.test(said)) return { kind: 'unloaded', dialect };
+    if (!res.ok || !answers) {
+      const hint = res.status === 401 || res.status === 403 ? ' Check its key in Settings.' : res.status === 404 ? ` Is ${target.model} still there?` : '';
+      return { kind: 'failed', dialect, message: `${target.source.provider} answered ${res.status}${said ? `: ${said}` : res.ok ? ' without answers.' : '.'}${hint}` };
+    }
+    const parsed = parseDecision(json, questions, dialect);
+    return { kind: 'answer', dialect, result: { answers: parsed.answers, model: parsed.model ?? target.model, ms: this.now() - started, usage: parsed.usage } };
   }
 
   /** Checks a service before it is saved: lists its models and asks one a yes-or-no question. */

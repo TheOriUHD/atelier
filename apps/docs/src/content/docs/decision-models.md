@@ -22,6 +22,7 @@ Most setups need nothing new: a decision model of a provider you already have sh
 | Where | How |
 |---|---|
 | **Ollama** 0.35 or later, on your computer or your server | `ollama pull nimble` (9 GB, Apache 2.0) or `ollama pull tev1` (4.4 GB, MIT). The [Ollama provider](/providers/) you have finds them. |
+| **LM Studio** with a decision model loaded or downloaded (from its model catalog) | Your LM Studio provider (OpenAI-compatible, `http://localhost:1234/v1`) offers it: LM Studio's own model list says which models decide, and Atelier loads one that isn't loaded. LM Studio has decision models only in its recent versions; an older one answers "Unexpected endpoint or method", and Atelier says to update it. |
 | **llama.cpp**'s `llama-server` with a decision model (OpenJev, Laya, Julia…) | Your llama.cpp provider offers it, by its name. Or add the server as **Another System One server** (below). |
 | **TypeSafe Jev**, the decision model this kind started with | Add it in **Settings › Admin › Decision models** with a key from the [TypeSafe console](https://console.typesafe.ai/keys). You pay for what it reads; it writes nothing. |
 | **OpenAI**'s Decisions API (`gpt-6-luna`) | Your OpenAI provider with an API key offers it. Choose it by name: Atelier never starts paying for one on its own. |
@@ -30,6 +31,12 @@ Most setups need nothing new: a decision model of a provider you already have sh
 
 With none chosen, Atelier uses a service you added for decision models, else one on a server you run (nimble before
 tev1). A model of a provider you pay per request (OpenAI, OpenRouter) is used only when you choose it.
+
+**A model of a provider you have.** When a server can't say which of its models decide (an OpenAI-compatible server
+elsewhere, an older listing), choose **A model of a provider…** in the Decision model list, pick the provider and type
+the model's name as its server knows it. **Try** asks it a yes-or-no question first. Atelier asks such a server in
+TypeSafe's System One format first and in OpenAI's Decisions format when it doesn't know that one, and remembers which
+worked.
 
 **Which one?** On an AMD Radeon AI PRO R9700 with Ollama 0.40.17 we measured a check of an action at 180 ms with nimble
 and 105 ms with tev1, once loaded (the first call loads the model: 3.5 to 5 seconds). nimble judged 12 of our 14 test
@@ -40,7 +47,7 @@ sorting than for Auto mode.
 
 - **Decision models** on or off for everyone.
 - **Decision model**: the one Atelier asks, or **Automatic** (see above). Each is marked as running on a server you run
-  or as a paid service.
+  or as a paid service. **A model of a provider…** names one of a provider you have.
 - **Services**: TypeSafe Jev, Decision Models or another System One server, with its address and key. **Test** asks it
   a question before you save it.
 - **Auto mode check**, **Decide tool** and **Small choices**: what it is used for, below.

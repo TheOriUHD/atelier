@@ -87,6 +87,10 @@ describe('the two formats', () => {
 
 const ollama: ProviderConfig = { id: 'gpu', type: 'ollama', name: 'Ollama on the GPU box', baseUrl: 'http://192.168.20.25:11434', enabled: true, headers: {} } as ProviderConfig;
 const openai: ProviderConfig = { id: 'oai', type: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com', apiKey: '${secret:provider-oai}', enabled: true, headers: {} } as ProviderConfig;
+const together: ProviderConfig = { id: 'together', type: 'openai-compatible', name: 'Together', baseUrl: 'https://api.together.xyz/v1', enabled: true, headers: {} } as ProviderConfig;
+const lmstudio: ProviderConfig = { id: 'lms', type: 'openai-compatible', name: 'LM Studio', baseUrl: 'http://192.168.20.236:1234/v1', enabled: true, headers: {} } as ProviderConfig;
+/** What every address of an LM Studio from before decision models answers. */
+const UNEXPECTED = (path: string) => new Response(JSON.stringify({ error: `Unexpected endpoint or method. (POST ${path})` }), { status: 200 });
 const typesafe: DecisionServiceConfig = { id: 'typesafe', name: 'TypeSafe Jev', type: 'systemone', baseUrl: 'https://api.typesafe.ai', apiKey: '${secret:decision-typesafe}', preset: 'typesafe', enabled: true };
 
 interface Call {
@@ -175,9 +179,13 @@ describe('which decision models there are', () => {
 
   it('reads a source id, and builds its target from the settings alone', () => {
     expect(parseSourceId('text:gpu:nimble:latest')).toEqual({ kind: 'text', owner: 'gpu', model: 'nimble:latest' });
-    expect(targetFor('text:gpu:tev1', [ollama], [])).toMatchObject({ url: 'http://192.168.20.25:11434/v1/systemone', model: 'tev1', ollama: true, dialect: 'systemone' });
-    expect(targetFor('text:oai:gpt-6-luna', [openai], [])).toMatchObject({ url: 'https://api.openai.com/v1/decisions', dialect: 'openai-decisions' });
-    expect(targetFor('service:typesafe:jev-latest', [], [typesafe])).toMatchObject({ url: 'https://api.typesafe.ai/v1/systemone' });
+    expect(targetFor('text:gpu:tev1', [ollama], [])).toMatchObject({ root: 'http://192.168.20.25:11434', model: 'tev1', ollama: true, dialect: 'systemone' });
+    expect(targetFor('text:oai:gpt-6-luna', [openai], [])).toMatchObject({ root: 'https://api.openai.com', dialect: 'openai-decisions' });
+    expect(targetFor('service:typesafe:jev-latest', [], [typesafe])).toMatchObject({ root: 'https://api.typesafe.ai', dialect: 'systemone' });
+    // Any model of an OpenAI-compatible provider can be named, wherever it runs; its format is found by asking.
+    expect(targetFor('text:together:my-decider', [together], [])).toMatchObject({ root: 'https://api.together.xyz', dialect: 'auto', source: { local: false } });
+    // Providers without decision models can't.
+    expect(targetFor('text:claude:x', [{ id: 'claude', type: 'anthropic', name: 'Anthropic', baseUrl: 'https://api.anthropic.com', enabled: true, headers: {} } as ProviderConfig], [])).toBeNull();
     expect(targetFor('text:gone:x', [ollama], [])).toBeNull();
     expect(pickAutomatic([])).toBeNull();
   });
@@ -239,6 +247,75 @@ describe('asking', () => {
     expect(await service.testService(typesafe, 'k')).toMatchObject({ ok: true, models: ['jev-latest'] });
     const broken = make({}, { 'https://api.typesafe.ai/v1/models': () => ({ data: [{ name: 'jev-latest' }] }), 'https://api.typesafe.ai/v1/systemone': () => new Response('{"error":"bad key"}', { status: 401 }) });
     expect(await broken.testService(typesafe, 'k')).toMatchObject({ ok: false, error: expect.stringContaining('401') });
+  });
+});
+
+describe('LM Studio and other servers of providers set up already', () => {
+  /** LM Studio's own list, as its docs show it: the decision model not loaded yet. */
+  const LIST = {
+    models: [
+      { type: 'llm', key: 'google/gemma-4-26b-a4b', loaded_instances: [{ id: 'google/gemma-4-26b-a4b', config: { context_length: 4096 } }] },
+      { type: 'decision', key: 'bespokelabs/nimble', decision_type: 'pplx-decider', loaded_instances: [] },
+      { type: 'embedding', key: 'text-embedding-nomic-embed-text-v1.5', loaded_instances: [] },
+    ],
+  };
+  const OPENAI_ANSWER = { model: 'bespokelabs/nimble', answers: [{ type: 'predicate', name: 'spam', probability: 0.9 }], usage: { input_tokens: 40, output_tokens: 0 } };
+  const SPAM: DecisionQuestion[] = [{ name: 'spam', type: 'yesno', instructions: 'Is this spam?' }];
+
+  it('finds LM Studio’s decision models in its own list, loads one that isn’t loaded, and asks it in OpenAI’s format', async () => {
+    const calls: Call[] = [];
+    const service = make({ text: [lmstudio] }, {
+      'http://192.168.20.236:1234/api/v1/models/load': () => ({ type: 'decision', instance_id: 'bespokelabs/nimble', status: 'loaded' }),
+      'http://192.168.20.236:1234/api/v1/models': () => LIST,
+      'http://192.168.20.236:1234/v1/decisions': () => OPENAI_ANSWER,
+    }, calls);
+    const status = await service.status(true);
+    expect(status.sources).toEqual([{ id: 'text:lms:bespokelabs/nimble', label: 'bespokelabs/nimble', provider: 'LM Studio', local: true }]);
+    expect(status.source?.id).toBe('text:lms:bespokelabs/nimble');
+    const result = await service.decide({ state: 'WIN A PHONE', questions: SPAM }, { admin: false });
+    expect(result.answers[0]).toEqual({ type: 'yesno', name: 'spam', probability: 0.9 });
+    const posts = calls.filter((c) => c.method === 'POST').map((c) => c.url);
+    expect(posts).toEqual(['http://192.168.20.236:1234/api/v1/models/load', 'http://192.168.20.236:1234/v1/decisions']);
+    expect(calls.at(-1)!.body).toMatchObject({ model: 'bespokelabs/nimble', input: 'WIN A PHONE', questions: [{ type: 'predicate', name: 'spam' }] });
+    // Loaded once: the next decision goes straight to it.
+    await service.decide({ state: 'hello', questions: SPAM }, { admin: false });
+    expect(calls.filter((c) => c.url.endsWith('/load'))).toHaveLength(1);
+  });
+
+  it('says in plain words that an LM Studio from before decision models can’t answer, instead of “no answers”', async () => {
+    const service = make({ text: [lmstudio] }, {
+      'http://192.168.20.236:1234/api/v1/models': () => UNEXPECTED('/api/v1/models'),
+      'http://192.168.20.236:1234/api/tags': () => UNEXPECTED('/api/tags'),
+      'http://192.168.20.236:1234/v1/models': () => ({ data: [{ id: 'nimble-9b' }, { id: 'qwen3-8b' }] }),
+      'http://192.168.20.236:1234/v1/systemone': () => UNEXPECTED('/v1/systemone'),
+      'http://192.168.20.236:1234/v1/decisions': () => UNEXPECTED('/v1/decisions'),
+    });
+    // The model shows by its name, so the admin sees what is there; asking it says what to do.
+    expect((await service.status(true)).sources.map((x) => x.label)).toEqual(['nimble-9b']);
+    await expect(service.decide({ state: 'x', questions: SPAM }, { admin: false })).rejects.toThrow(
+      'LM Studio doesn’t answer decision requests (“Unexpected endpoint or method. (POST /v1/systemone)”). It needs a version with decision models: Ollama 0.35 or later, a current LM Studio or llama.cpp server.',
+    );
+  });
+
+  it('asks a named model of a server it doesn’t know in System One first, then in OpenAI’s format, and remembers which worked', async () => {
+    const calls: Call[] = [];
+    const service = make({ text: [together], source: 'text:together:my-decider' }, {
+      'https://api.together.xyz/v1/systemone': () => new Response('{"error":"Not Found"}', { status: 404 }),
+      'https://api.together.xyz/v1/decisions': () => OPENAI_ANSWER,
+    }, calls);
+    expect((await service.decide({ state: 'x', questions: SPAM }, { admin: false })).answers[0]).toMatchObject({ probability: 0.9 });
+    await service.decide({ state: 'y', questions: SPAM }, { admin: false });
+    expect(calls.map((c) => c.url)).toEqual(['https://api.together.xyz/v1/systemone', 'https://api.together.xyz/v1/decisions', 'https://api.together.xyz/v1/decisions']);
+  });
+
+  it('lists the providers an admin can name a decision model of', async () => {
+    const service = make({ text: [ollama, together, openai, { id: 'claude', type: 'anthropic', name: 'Anthropic', baseUrl: 'https://api.anthropic.com', enabled: true, headers: {} } as ProviderConfig] }, { 'http://192.168.20.25:11434/api/tags': () => TAGS });
+    expect((await service.status(true)).providers).toEqual([
+      { id: 'gpu', name: 'Ollama on the GPU box' },
+      { id: 'together', name: 'Together' },
+      { id: 'oai', name: 'OpenAI' },
+    ]);
+    expect((await service.status(false)).providers).toBeUndefined();
   });
 });
 

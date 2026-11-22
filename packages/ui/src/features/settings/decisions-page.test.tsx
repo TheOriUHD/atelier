@@ -64,6 +64,15 @@ function renderPage(decisions: Partial<Settings['decisions']> = {}, current: Dec
     'decisions.testService': () => ({ ok: true, models: ['s1-fast', 's1-pro'], ms: 84 }),
     'decisions.saveService': () => current,
     'decisions.removeService': () => ({ ...current, sources: [nimble] }),
+    'decisions.decide': ({ source }: { source?: string }) =>
+      source === 'text:lms:old-model'
+        ? Promise.reject(Object.assign(new Error('LM Studio doesn’t answer decision requests (“Unexpected endpoint or method. (POST /v1/systemone)”).'), { code: 'decision_failed' }))
+        : { answers: [{ type: 'yesno', name: 'probe', probability: 0.99 }], source: { id: source ?? '', label: 'x', provider: 'LM Studio', local: true }, model: 'x', ms: 42, usage: { inputTokens: 9, outputTokens: 0 } },
+    'models.list': () => [
+      { ref: 'lms/bespokelabs/nimble', providerId: 'lms', modelId: 'bespokelabs/nimble' },
+      { ref: 'lms/google/gemma-4-26b-a4b', providerId: 'lms', modelId: 'google/gemma-4-26b-a4b' },
+      { ref: 'ollama/qwen3-8b', providerId: 'ollama', modelId: 'qwen3-8b' },
+    ],
     'decisions.resetComparison': () => ({ ...current, comparison: comparison({ checked: 0, bothAllowed: 0, wronglyAllowed: 0, leftToReviewer: 0, medianMs: null, misses: [] }) }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -103,10 +112,43 @@ describe('the decision model', () => {
     await waitFor(() => expect(callsTo('settings.reset')).toEqual([{ layer: 'global', path: ['decisions', 'source'] }]));
   });
 
+  it('names a model of a provider set up already: tries it, then uses it', async () => {
+    renderPage({}, status({ providers: [{ id: 'lms', name: 'LM Studio' }, { id: 'ollama', name: 'Ollama' }] }));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Decision model' }));
+    pick(await screen.findByRole('option', { name: 'A model of a provider…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'A model of a provider' });
+    // The provider's own models are offered as they are typed; the other provider's aren't.
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Model' }), { target: { value: 'nim' } });
+    expect(within(dialog).queryByRole('button', { name: 'qwen3-8b' })).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'bespokelabs/nimble' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Try' }));
+    expect(await within(dialog).findByText('It answered in 42 ms.')).toBeTruthy();
+    expect(callsTo('decisions.decide')).toMatchObject([{ source: 'text:lms:bespokelabs/nimble', questions: [{ type: 'yesno' }] }]);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Use it' }));
+    await waitFor(() => expect(callsTo('settings.set')).toEqual([{ layer: 'global', path: ['decisions', 'source'], value: 'text:lms:bespokelabs/nimble' }]));
+  });
+
+  it('shows why a named model can’t answer, before it is used', async () => {
+    renderPage({}, status({ providers: [{ id: 'lms', name: 'LM Studio' }] }));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Decision model' }));
+    pick(await screen.findByRole('option', { name: 'A model of a provider…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'A model of a provider' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Model' }), { target: { value: 'old-model' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Try' }));
+    expect((await within(dialog).findByRole('alert')).textContent).toMatch(/doesn’t answer decision requests/);
+    expect(callsTo('settings.set')).toEqual([]);
+  });
+
+  it('offers to name a model when none was found, where a provider can have one', async () => {
+    renderPage({}, status({ source: null, sources: [], providers: [{ id: 'lms', name: 'LM Studio' }], comparison: comparison({ checked: 0 }), problems: [] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Name a model…' }));
+    expect(await screen.findByRole('dialog', { name: 'A model of a provider' })).toBeTruthy();
+  });
+
   it('says how to get one when there is none', async () => {
     renderPage({}, status({ source: null, sources: [], comparison: comparison({ checked: 0 }), problems: [] }));
-    expect(await screen.findByText(/None yet\. Pull/)).toBeTruthy();
-    expect(row('decisions.source').getByText(/Ollama 0\.35 or later, or add a service below/)).toBeTruthy();
+    expect(await screen.findByText(/None found yet\. Pull/)).toBeTruthy();
+    expect(row('decisions.source').getByText(/Ollama 0\.35 or later, load a decision model in LM Studio, or add a service below/)).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Decision model' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Try it' }).hasAttribute('disabled')).toBe(true);
   });

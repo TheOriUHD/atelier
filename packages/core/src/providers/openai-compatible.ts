@@ -5,6 +5,8 @@
 import { presetOf, type MessageError, type Part, type StopReason, type Usage } from '@atelier/protocol';
 import { DEFAULT_CONTEXT, listedModel } from './catalog.ts';
 import { bearer, classifyError, guardStream, jsonHeaders, postStream, probe, requestJson } from './http.ts';
+import { lmStudioIds, lmStudioModels } from './lmstudio.ts';
+import { isLocalServer } from './scheduler.ts';
 import { parseSSE } from './sse.ts';
 import type { AdapterDeps, ChatRequest, ListedModel, ProviderAdapter, ProviderInstance, StreamEvent } from './types.ts';
 import {
@@ -17,6 +19,7 @@ import {
   num,
   parseToolInput,
   rec,
+  rootUrl,
   str,
   strings,
   textOf,
@@ -402,8 +405,15 @@ export function createOpenAICompatibleAdapter(instance: ProviderInstance, deps: 
     type: instance.type,
 
     async listModels(signal) {
-      const json = await requestJson(deps, instance, modelsUrl, { headers: headers(), ...(signal ? { signal } : {}) });
+      // LM Studio lists its decision and embedding models among the chat models; its own list says which are which.
+      const [json, native] = await Promise.all([
+        requestJson(deps, instance, modelsUrl, { headers: headers(), ...(signal ? { signal } : {}) }),
+        isLocalServer(instance.baseUrl) ? requestJson(deps, instance, rootUrl(instance.baseUrl, '/api/v1/models'), { headers: headers(), ...(signal ? { signal } : {}) }).catch(() => null) : null,
+      ]);
+      const lm = lmStudioModels(native);
+      const notChat = lm ? lmStudioIds(lm.filter((m) => m.type === 'decision')) : new Set<string>();
       return arr(rec(json).data)
+        .filter((m) => !notChat.has(String(rec(m).id)))
         .map((m) => modelFromMetadata(instance, m))
         .filter((m): m is ListedModel => m !== null);
     },

@@ -38,6 +38,18 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.9',
+    intro: 'Decision models from LM Studio, and from any provider you have.',
+    highlights: [
+      {
+        icon: Signpost,
+        title: 'LM Studio’s decision models, and any provider’s',
+        body: 'Atelier now finds the decision models of an LM Studio you added as a provider, and loads one that isn’t loaded. In Settings › Admin › Decision models, A model of a provider… lets you name a decision model of any provider you have, try it, and use it. A server without decision models now says so plainly, such as an older LM Studio, which needs updating.',
+      },
+    ],
+    also: ['LM Studio’s decision models no longer show up among its chat models.'],
+  },
+  {
     version: '0.10.8',
     intro: 'Decision models: models that pick instead of write, in about a tenth of a second, on your own GPU or from TypeSafe Jev, OpenAI and OpenRouter. Auto mode, the assistant and you can all use one.',
     highlights: [

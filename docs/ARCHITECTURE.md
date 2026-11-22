@@ -1364,8 +1364,15 @@ options, and offers them to people and to the assistant.
   it) and OpenAI's Decisions API (`POST /v1/decisions`: questions as a list with `choices` and `levels`, answers as a
   list). Both come back in one shape; a refusal is an answer of its own.
 - **Where they come from** (`sources.ts`), with nothing to add for most: an Ollama provider's models whose
-  capabilities include `decision` (`/api/tags` lists them since 0.40; `/api/show` before), a llama.cpp provider's by
-  name, an OpenAI key's `gpt-6-luna`, OpenRouter's (`/v1/models?output_modalities=decisions`) and Requesty's lists.
+  capabilities include `decision` (`/api/tags` lists them since 0.40; `/api/show` before), a local OpenAI-compatible or
+  llama.cpp provider asked what it is (LM Studio's `GET /api/v1/models` says `type: "decision"` and whether a model is
+  loaded, and its models are asked on `/v1/decisions` and loaded through `/api/v1/models/load`; an Ollama behind `/v1`
+  by `/api/tags`; anything else by the models' names), an OpenAI key's `gpt-6-luna`, OpenRouter's
+  (`/v1/models?output_modalities=decisions`) and Requesty's lists. An admin can also name any model of an Ollama,
+  llama.cpp, OpenAI or OpenAI-compatible provider (`status.providers`); a server whose format isn't known is asked in
+  System One first and in OpenAI's format when it doesn't know that (404, 405, or LM Studio's 200 with "Unexpected
+  endpoint"), and the one that answered is kept per server. LM Studio's decision models are left out of its chat model
+  list (`openai-compatible.ts`).
   A **decision service** (settings `decisions.services`: TypeSafe Jev, Decision Models, any System One server, its key a
   `${secret:decision-<id>}`) is added only for them. Source ids are `text:<provider>:<model>` and
   `service:<service>:<model>`. With none chosen (`decisions.source`), a service's model is used, else one of a server

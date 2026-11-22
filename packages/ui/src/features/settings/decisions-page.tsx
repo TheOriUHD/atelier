@@ -15,6 +15,7 @@ import { describeError, rpc } from '../../lib/rpc.ts';
 import { DecideDialog } from '../decisions/decide-dialog.tsx';
 import { DecisionServiceDialog, presetOf, testSummary, toServiceDraft, serviceFormFrom, type TestState } from './decision-service-dialog.tsx';
 import { ITEM_ROW_CLASS, ItemTile } from './item-row.tsx';
+import { NamedDecisionModelDialog } from './named-decision-model-dialog.tsx';
 import { keyHint } from './provider-form.ts';
 import { useSecrets } from './provider-queries.ts';
 import { plural } from './provider-wizard.tsx';
@@ -24,6 +25,8 @@ import { useSetting } from './use-setting.ts';
 
 /** The source picker's value for "no choice": source ids always have a colon. */
 const AUTO = 'auto';
+/** The picker's entry that opens "A model of a provider". */
+const NAMED = 'named';
 
 export function DecisionsPage() {
   const enabled = useSetting<boolean>(['decisions', 'enabled']);
@@ -61,7 +64,12 @@ const describe = (s: DecisionSource) => `${s.label} · ${s.provider}`;
 
 function SourceRow({ status }: { status: DecisionStatus }) {
   const setting = useSetting<string | undefined>(['decisions', 'source']);
+  const [naming, setNaming] = useState(false);
   const { sources } = status;
+  const providers = status.providers ?? [];
+  const named = providers.length > 0 && (
+    <NamedDecisionModelDialog open={naming} onOpenChange={setNaming} providers={providers} onUse={async (source) => void (await setting.set(source))} />
+  );
   const problems = status.problems ?? [];
   // The setting, not `status.chosen`: it changes the moment it is picked.
   const chosen = setting.value ?? null;
@@ -80,17 +88,25 @@ function SourceRow({ status }: { status: DecisionStatus }) {
         id="decisions.source"
         detail={
           <>
-            None yet. Pull <span className="font-mono text-code">nimble</span> or <span className="font-mono text-code">tev1</span> into Ollama 0.35 or later, or add a service below.
+            None found yet. Pull <span className="font-mono text-code">nimble</span> or <span className="font-mono text-code">tev1</span> into Ollama 0.35 or later, load a decision model in LM Studio, or add a service below.
+            {providers.length > 0 && ' Or name a decision model of a provider set up already.'}
             {quiet}
           </>
         }
       >
-        {null}
+        {providers.length > 0 ? (
+          <>
+            <Button size="sm" onClick={() => setNaming(true)}>
+              Name a model…
+            </Button>
+            {named}
+          </>
+        ) : null}
       </SettingRow>
     );
   const byId = new Map(sources.map((s) => [s.id, s]));
   const gone = !!chosen && !byId.has(chosen);
-  const options: SelectOption[] = [{ value: AUTO, label: 'Automatic' }, ...sources.map((s) => ({ value: s.id, label: describe(s) }))];
+  const options: SelectOption[] = [{ value: AUTO, label: 'Automatic' }, ...sources.map((s) => ({ value: s.id, label: describe(s) })), ...(providers.length ? [{ value: NAMED, label: 'A model of a provider…' }] : [])];
   const picked = !chosen || gone ? (status.source ? `Automatic: ${status.source.label} on ${status.source.provider}.` : 'Automatic picks no paid model by itself: choose one to use it.') : null;
   return (
     <SettingRow
@@ -107,12 +123,13 @@ function SourceRow({ status }: { status: DecisionStatus }) {
       }
     >
       {(label) => (
+        <>
         <Select
           {...label}
           className="max-w-80"
           options={options}
           value={chosen && !gone ? chosen : AUTO}
-          onValueChange={(v) => void (v === AUTO ? setting.clear() : setting.set(v))}
+          onValueChange={(v) => (v === NAMED ? setNaming(true) : void (v === AUTO ? setting.clear() : setting.set(v)))}
           renderOption={(o) => {
             const s = byId.get(o.value);
             return s ? (
@@ -124,6 +141,8 @@ function SourceRow({ status }: { status: DecisionStatus }) {
             );
           }}
         />
+        {named}
+        </>
       )}
     </SettingRow>
   );

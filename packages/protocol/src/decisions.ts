@@ -246,5 +246,7 @@ export const DecisionStatus = z.object({
   comparison: DecisionComparison.optional(),
   /** Admins: a service or provider that couldn't be asked for its models, by name. */
   problems: z.array(z.object({ provider: z.string(), error: z.string() })).optional(),
+  /** Admins: the providers set up here whose models can be named as the decision model (`text:<id>:<model>`). */
+  providers: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
 });
 export type DecisionStatus = z.infer<typeof DecisionStatus>;
