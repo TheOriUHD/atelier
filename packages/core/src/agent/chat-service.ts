@@ -49,6 +49,8 @@ import {
   type PermissionMode,
   type PermissionRequest,
   type QuestionAnswer,
+  type DecideResult,
+  type DecisionQuestion,
   type SafeguardsOverride,
   type Todo,
   type ToolCallPart,
@@ -90,6 +92,9 @@ import { createPreviewTool } from '../tools/preview.ts';
 import { createInlineVisualTool } from '../tools/inline-visual.ts';
 import { createAgentTool, type Delegation } from '../tools/agent.ts';
 import { createAskUserTool } from '../tools/ask-user.ts';
+import { createDecideTool } from '../tools/decide.ts';
+import { actionSummary, AUTO_CHECK_QUESTIONS, quickAllows } from '../decisions/auto-check.ts';
+import type { DecisionService } from '../decisions/service.ts';
 import { createSkillTool } from '../tools/skill.ts';
 import { renderSkill, renderSkillList, type Skill } from '../extensions/skills.ts';
 import { renderCommand, type Command } from '../extensions/commands.ts';
@@ -296,6 +301,11 @@ export interface ChatServiceDeps {
     available(session: SessionRow): Promise<boolean>;
     modelList(session: SessionRow): Promise<string>;
   };
+  /**
+   * Decision models (ARCHITECTURE §28): Auto mode's quick check, the Decide tool and small choices (does the reply ask
+   * something). `uses` is what the admin turned on; without this, none of them.
+   */
+  decisions?: { service: DecisionService; uses(): { autoMode: 'off' | 'compare' | 'approve'; tool: boolean; helpers: boolean } };
   /** Sound generation (ARCHITECTURE §23): speech, music and sound effects, for GenerateAudio. */
   audio?: {
     generate: GenerateAudioDeps['generate'];
@@ -578,6 +588,7 @@ export class ChatService {
   private readonly computerTools: Tool[];
   private readonly browserTool: BrowserTool | null;
   private readonly askUser: Tool;
+  private readonly decideTool: Tool;
   private readonly exitPlanMode: Tool;
   private readonly skill: Tool;
   /** One tool set per running workspace: BashOutput keeps read offsets per instance. */
@@ -664,6 +675,7 @@ export class ChatService {
       },
     });
     this.askUser = createAskUserTool((sessionId, request, signal) => this.interactions.ask<QuestionAnswer>(sessionId, 'question', request, signal, { answers: {} }));
+    this.decideTool = createDecideTool({ decide: (input, signal) => this.deps.decisions!.service.decide(input, { admin: false, priority: 'foreground', signal }) });
     this.exitPlanMode = createExitPlanModeTool({
       mode: async (sessionId) => (await this.deps.permissionContext?.(await this.requireSession(sessionId)))?.mode ?? null,
       approve: (sessionId, request, signal) => this.interactions.ask<PermissionAnswer>(sessionId, 'permission', request, signal, { behavior: 'deny', message: 'The response was stopped.' }),
@@ -2158,6 +2170,12 @@ export class ChatService {
     if (blocks.row >= BLOCKS_IN_A_ROW || blocks.total >= BLOCKS_TOTAL) {
       return { behavior: 'ask', reason: `Auto mode paused after ${blocks.row >= BLOCKS_IN_A_ROW ? `${blocks.row} blocked actions in a row` : `${blocks.total} blocked actions`}. ${decision.reason}` };
     }
+    // The decision model's quick check (ARCHITECTURE §28): on a host's turn only; a guest's action always goes to the reviewer.
+    const quick = guest ? null : await this.quickCheck(session, asker, call, decision, cwd, signal);
+    if (quick?.approved) {
+      this.autoBlocks.set(asker, { ...blocks, row: 0 });
+      return { behavior: 'allow' };
+    }
     let reply: string;
     try {
       const top = await this.requireSession(asker);
@@ -2194,6 +2212,11 @@ export class ChatService {
     }
     const verdict = parseVerdict(reply);
     if (!verdict) return { behavior: 'ask', reason: `Auto mode couldn't read its reviewer's answer. ${decision.reason}` };
+    // How the quick check did against the reviewer: the numbers an admin decides by whether it may approve on its own.
+    if (quick)
+      void quick.result.then((result) => {
+        if (result) this.deps.decisions?.service.compared({ wouldAllow: quickAllows(result), reviewerAllowed: verdict.decision === 'allow', reviewerVerdict: `${verdict.decision.toUpperCase()}${'reason' in verdict && verdict.reason ? `: ${verdict.reason}` : ''}`, tool: call.name, summary: actionSummary(call), ms: result.ms });
+      });
     if (verdict.decision === 'allow') {
       this.autoBlocks.set(asker, { ...blocks, row: 0 });
       return { behavior: 'allow' };
@@ -2228,12 +2251,41 @@ export class ChatService {
     };
   }
 
+  /**
+   * Auto mode's quick check by the decision model, when the admin turned it on: in `approve` it waits for the answer
+   * (a few seconds at most) and lets a sure "fine" run without the reviewer; in `compare` it only starts it, and the
+   * answer is set against the reviewer's later. Null when there's no check.
+   */
+  private async quickCheck(session: SessionRow, asker: string, call: { name: string; input: unknown }, decision: Decision, cwd: string | null, signal: AbortSignal): Promise<{ approved: boolean; result: Promise<DecideResult | null> } | null> {
+    const d = this.deps.decisions;
+    const mode = d?.uses().autoMode ?? 'off';
+    if (!d || mode === 'off' || !d.service.ready) return null;
+    const conversation = (await this.deps.repo.branch(asker)).messages;
+    const agent = session.id === asker ? undefined : (await this.deps.repo.branch(session.id)).messages;
+    const state = reviewInput({ conversation, agent, call, reason: decision.reason, cwd });
+    // Approving waits for it, so a model that has to load first isn't waited for long; comparing waits for nobody.
+    const result = d.service.ask(state, AUTO_CHECK_QUESTIONS, { purpose: 'Auto mode', priority: 'urgent', timeoutMs: mode === 'approve' ? QUICK_CHECK_MS : 30_000, signal });
+    if (mode !== 'approve') return { approved: false, result };
+    const answer = await result;
+    if (!quickAllows(answer)) return { approved: false, result };
+    d.service.approvedOne(answer!.ms);
+    return { approved: true, result };
+  }
+
   /** Whether the turn's last reply ends by asking the person something: then the turn waits for them. */
   private async endsAsking(sessionId: string): Promise<boolean> {
     const { messages } = await this.deps.repo.branch(sessionId);
     const last = messages.findLast((m) => m.role === 'assistant');
     const text = last?.parts.flatMap((p) => (p.type === 'text' ? [p.text] : [])).join('').trim() ?? '';
-    return /\?\s*(\*\*)?\s*$/.test(text);
+    const asks = /\?\s*(\*\*)?\s*$/.test(text);
+    const d = this.deps.decisions;
+    // The decision model reads it as a person would: "Shall I go on with the migration, or stop here." asks too.
+    if (text && d?.uses().helpers && d.service.ready) {
+      const result = await d.service.ask(text.slice(-2000), [ENDS_ASKING], { purpose: 'whether the reply asks something', priority: 'background', timeoutMs: 8_000 });
+      const answer = result?.answers[0];
+      if (answer?.type === 'yesno') return answer.probability >= 0.5;
+    }
+    return asks;
   }
 
   /** After each tool call: PostToolUse hook feedback and context, and a nudge when the task list has gone stale. */
@@ -2658,10 +2710,12 @@ export class ChatService {
     const images = (await this.imagesFor(session)) ? [createGenerateImageTool({ generate: (input, ctx) => this.deps.images!.generate(input, ctx) })] : [];
     const videos = (await this.videosFor(session)) ? [createGenerateVideoTool({ generate: (input, ctx) => this.deps.videos!.generate(input, ctx) })] : [];
     const sounds = (await this.audioFor(session)) ? [createGenerateAudioTool({ generate: (input, ctx) => this.deps.audio!.generate(input, ctx) })] : [];
+    // Decide, where the backend has a decision model and the admin left the tool on; a shared session's guests don't use the host's.
+    const decideTools = !shared && this.deps.decisions?.uses().tool && this.deps.decisions.service.ready ? [this.decideTool] : [];
     const merged = this.unified(session);
     // A chat given a folder while Chat and Cowork were one (and since turned off) gets no sandbox tools there: they would
     // run in that folder without asking.
-    if (session.mode === 'chat' && !merged) return [...(terminal ? [] : [createArtifactTool(this.deps.artifacts)]), ...inlineVisual, ...images, ...videos, ...sounds, ...((await this.inSandbox(session)) ? this.sandboxTools(session) : []), this.time, ...usage, ...skills, ...web, ...connect, ...memory, ...mcp];
+    if (session.mode === 'chat' && !merged) return [...(terminal ? [] : [createArtifactTool(this.deps.artifacts)]), ...inlineVisual, ...images, ...videos, ...sounds, ...((await this.inSandbox(session)) ? this.sandboxTools(session) : []), this.time, ...usage, ...skills, ...web, ...decideTools, ...connect, ...memory, ...mcp];
     const workspace = await this.deps.workspace?.(session);
     let code: Tool[] = [];
     // A merged chat with no folder yet: Cowork's file and command tools, on a sandbox made the first time one runs.
@@ -2683,7 +2737,7 @@ export class ChatService {
     // Sub-agents can't ask the person anything and don't delegate further; a defined one keeps to its tool list.
     if (session.parentSessionId) {
       const def = catalog?.agents.find((a) => a.name === session.overrides.agent);
-      const tools = [...code, this.todoWrite, this.sendToParent, this.time, ...skills, ...web, ...mcp];
+      const tools = [...code, this.todoWrite, this.sendToParent, this.time, ...skills, ...web, ...decideTools, ...mcp];
       return def ? tools.filter((t) => (!def.tools || def.tools.includes(t.name)) && !def.disallowedTools.includes(t.name)) : tools;
     }
     const agent = createAgentTool((parentId, call, task, signal) => this.delegate(parentId, call, task, signal), catalog?.agents ?? []);
@@ -2705,7 +2759,7 @@ export class ChatService {
     const saveVideo = workspace && videos.length ? [createSaveVideoTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
     // And with sound: SaveAudio exists only where a session can make one.
     const saveAudio = workspace && sounds.length ? [createSaveAudioTool(workspace, { history: (id) => this.deps.repo.history(id), read: (sha) => this.deps.blobs.read(sha), ...(checkpoints ? { checkpoint: (ctx, path) => checkpoints.capture(workspace, ctx.sessionId, path) } : {}) })] : [];
-    return [...code, this.todoWrite, this.askUser, agent, ...between, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...preview, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...connect, ...computer, ...browser, ...memory, ...mcp];
+    return [...code, this.todoWrite, this.askUser, agent, ...between, this.time, ...usage, ...stopTasks, ...moveSession, ...skills, ...(session.mode === 'code' ? [this.exitPlanMode] : []), ...artifact, ...preview, ...inlineVisual, ...images, ...videos, ...sounds, ...saveImage, ...saveVideo, ...saveAudio, ...web, ...decideTools, ...connect, ...computer, ...browser, ...memory, ...mcp];
   }
 
   /** What memory a session gets (memory/access.ts `memoryFor`); none without the memory service. */
@@ -3884,6 +3938,14 @@ async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boo
 }
 /** Times a turn that ended with open items on its task list goes back to work. */
 const MAX_CONTINUE_ROUNDS = 4;
+/** Auto mode's quick check, when it may approve: a loaded decision model answers in a fraction of this. */
+const QUICK_CHECK_MS = 4_000;
+/** The decision model's question about a reply's end. */
+const ENDS_ASKING: DecisionQuestion = {
+  name: 'asks',
+  type: 'yesno',
+  instructions: 'This is the end of an AI agent’s reply to the person it works for. Does it end by asking the person something they must answer before the work can go on: a question, a choice between options, or a permission?',
+};
 
 type SessionHooks = { workspace: Workspace; configs: HooksConfig[] };
 

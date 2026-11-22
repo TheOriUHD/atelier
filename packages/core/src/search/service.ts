@@ -50,6 +50,11 @@ export interface SearchDeps {
   config(): Promise<SearchConfig>;
   /** Values that must never appear in a query (the stored secrets). */
   secretValues?(): Promise<readonly string[]>;
+  /**
+   * What a query is about, by the decision model (ARCHITECTURE §28), for Atelier's own search; null when it has none
+   * or isn't sure, and the words decide as before.
+   */
+  topic?(query: string, signal: AbortSignal): Promise<Topic | null>;
   /** Reads the relevant passages of a result page; without it results carry their snippets only. */
   excerpt?: ExcerptReader | undefined;
   /** Replacement result-page URLs, for tests that must not reach the internet. */
@@ -139,9 +144,11 @@ export class SearchService {
     const config = await this.deps.config();
     const own = config.provider !== 'auto' && isConfigured({ provider: config.provider, url: config.url, apiKey: config.apiKey }) ? config.provider : null;
     const when = new Date(this.clock.now());
-    const topic: Topic = input.topic ?? detectTopic(req.query, when);
+    // Atelier's own search sends a query to the engines for its topic; a provider someone set up takes every query.
+    const judged = !input.topic && !own ? await this.deps.topic?.(req.query, signal).catch(() => null) : null;
+    const topic: Topic = input.topic ?? judged ?? detectTopic(req.query, when);
     // One hint of news and no more: the feeds join the general engines instead of replacing them.
-    const lean = !input.topic && topic === 'general' && leansNews(req.query, when);
+    const lean = !input.topic && !judged && topic === 'general' && leansNews(req.query, when);
     const key = [own ?? `auto:${topic}${lean ? '+news' : ''}`, req.freshness ?? '', req.allowed.join(','), req.blocked.join(','), req.query.toLowerCase()].join('|');
     const hit = this.cache.get(key, this.clock.now());
     if (hit) return { ...hit, cached: true };

@@ -3326,3 +3326,81 @@ Saves a sound made in this conversation (by its `aud_…` id) as a file in the f
   "additionalProperties": false
 }
 ````
+
+### Decide
+
+````text
+Sorts or judges texts with the decision model: for each text it answers your questions with the likeliest option and its probability, in about a tenth of a second per text, without you reading them.
+- Use it to triage or filter many things at once (issues, emails, log lines, search results, files, rows): pass them as `items`, up to 200, and read only the ones that matter yourself. For one text, pass `text`.
+- Each question is `yesno` (answered with the probability of yes), `choice` (one of `options`), or `score` (a level among `options`, lowest first). An option can say what it means after a colon: "bug: something that worked and broke".
+- Up to 8 questions per call; they all apply to every item. Write each question so it can be answered from the item alone.
+- It answers only with options and probabilities, never with text or reasons. A probability near 0.5 means it isn’t sure: look at those yourself.
+````
+
+````json
+{
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The texts to judge, each on its own (up to 200)."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One text to judge, instead of `items`."
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,40}$",
+            "description": "A short name for the answer (\"topic\"); q1, q2… when absent."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "yesno",
+              "choice",
+              "score"
+            ]
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 26,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "description": "choice: the options; score: the levels, lowest first. Not for yesno."
+          }
+        },
+        "required": [
+          "type",
+          "question"
+        ]
+      }
+    }
+  },
+  "required": [
+    "questions"
+  ]
+}
+````

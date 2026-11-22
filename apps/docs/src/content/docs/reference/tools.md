@@ -55,6 +55,7 @@ without asking are on [Permissions](/permissions/), and how descriptions are kep
 | [`SaveVideo`](#savevideo) | Code (some setups) | Saves a video made in this conversation (by its `vid_…` id) as a file in the folder. |
 | [`GenerateAudio`](#generateaudio) | Chat (some setups), Code (some setups) | Makes a sound and shows it in the conversation for the person to play: speech read in a voice, a piece of music, or a sound effect. |
 | [`SaveAudio`](#saveaudio) | Code (some setups) | Saves a sound made in this conversation (by its `aud_…` id) as a file in the folder. |
+| [`Decide`](#decide) | Chat (some setups), Code (some setups) | Sorts or judges texts with the decision model: for each text it answers your questions with the likeliest option and its probability, in about a tenth of a second per text, without you reading them. |
 
 ## Read
 
@@ -1599,3 +1600,25 @@ Saves a sound made in this conversation (by its `aud_…` id) as a file in the f
 |---|---|---|---|
 | `audio` | string | yes | The sound id, like aud_ab12cd34. |
 | `file_path` | string | yes | Where to save it. |
+
+## Decide
+
+**Available in:** Chat (some setups), Code (some setups)
+
+### Description
+
+````text wrap
+Sorts or judges texts with the decision model: for each text it answers your questions with the likeliest option and its probability, in about a tenth of a second per text, without you reading them.
+- Use it to triage or filter many things at once (issues, emails, log lines, search results, files, rows): pass them as `items`, up to 200, and read only the ones that matter yourself. For one text, pass `text`.
+- Each question is `yesno` (answered with the probability of yes), `choice` (one of `options`), or `score` (a level among `options`, lowest first). An option can say what it means after a colon: "bug: something that worked and broke".
+- Up to 8 questions per call; they all apply to every item. Write each question so it can be answered from the item alone.
+- It answers only with options and probabilities, never with text or reasons. A probability near 0.5 means it isn’t sure: look at those yourself.
+````
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of string | no | The texts to judge, each on its own (up to 200). |
+| `text` | string | no | One text to judge, instead of `items`. |
+| `questions` | array of object | yes |  |

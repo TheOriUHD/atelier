@@ -295,6 +295,8 @@ const CASE_INFO: Record<string, string> = {
   'code.full.videos': 'Code with a video model: GenerateVideo and SaveVideo.',
   'chat.full.audio': 'Chat with a sound model: GenerateAudio for speech, music and sound effects, and how to use it.',
   'code.full.audio': 'Code with a sound model: GenerateAudio and SaveAudio.',
+  'chat.full.decide': 'Chat with a decision model: the Decide tool, for sorting many texts at once.',
+  'code.full.decide': 'Code with a decision model: the Decide tool.',
   'chat.full.personality-custom': 'Chat with a custom personality and a concise response style.',
   'code.full': 'Code, full tier: the baseline.',
   'code.full.plan': 'Code in plan mode.',

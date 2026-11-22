@@ -31,6 +31,7 @@ import { MemoryService } from '../../memory/memory-service.ts';
 import type { Tool } from '../../tools/types.ts';
 import type { Workspace } from '../../workspaces/workspace.ts';
 import type { Overrides } from '../templates.ts';
+import type { DecisionService } from '../../decisions/service.ts';
 
 export interface PromptCase {
   mode: Mode;
@@ -82,6 +83,8 @@ export interface PromptCase {
   videos?: boolean;
   /** A sound model: GenerateAudio and SaveAudio. */
   audio?: boolean;
+  /** A decision model, with the Decide tool left on. */
+  decide?: boolean;
 }
 
 export interface Assembled {
@@ -326,6 +329,14 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
             },
           }
         : {}),
+      ...(c.decide
+        ? {
+            decisions: {
+              service: { ready: { source: { id: 'text:gpu:nimble', label: 'nimble', provider: 'Ollama', local: true } }, decide: async () => Promise.reject(new Error('Not in a prompt snapshot.')) } as unknown as DecisionService,
+              uses: () => ({ autoMode: 'off' as const, tool: true, helpers: false }),
+            },
+          }
+        : {}),
       ...(c.computer
         ? {
             computer: {
@@ -543,6 +554,8 @@ export const CASES: Record<string, PromptCase> = {
   'chat.full.audio': { mode: 'chat', audio: true },
   'code.full.audio': { mode: 'code', audio: true },
   'code.compact.audio': { mode: 'code', tier: 'compact', audio: true },
+  'chat.full.decide': { mode: 'chat', decide: true },
+  'code.full.decide': { mode: 'code', decide: true },
   'code.compact.computer': { mode: 'code', tier: 'compact', computer: true },
   'code.compact.browser': { mode: 'code', tier: 'compact', computer: true, browser: true },
   'code.full.desktop': { mode: 'code', app: 'desktop' },

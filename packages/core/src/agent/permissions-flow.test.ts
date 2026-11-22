@@ -18,6 +18,7 @@ import { textOutput, type Tool } from '../tools/types.ts';
 import type { Workspace } from '../workspaces/workspace.ts';
 import { ChatService, type ChatServiceDeps } from './chat-service.ts';
 import type { InteractionBroker } from './interactions.ts';
+import { DecisionService } from '../decisions/service.ts';
 
 const quietPrefs = () => { const prefs = defaultUserPrefs(); return { ...prefs, code: { ...prefs.code, suggestions: false } }; };
 
@@ -1248,6 +1249,70 @@ describe('auto mode', () => {
     expect(lastPending()).toBeNull();
     expect(reviews[0]).toContain('<message>run the tests</message>');
     expect(reviews[0]).toContain('<pending_action tool="Bash">');
+  });
+
+  describe('with a decision model’s quick check', () => {
+    /** A decision model that answers every quick check with these probabilities. */
+    async function decisionModel(run: number, harm: number, autoMode: 'off' | 'compare' | 'approve') {
+      const asked: unknown[] = [];
+      const decisions = new DecisionService({
+        settings: () => ({ enabled: true, source: 'text:gpu:nimble', services: [], text: [{ id: 'gpu', type: 'ollama', name: 'Ollama', baseUrl: 'http://10.0.0.5:11434', enabled: true, headers: {} } as never] }),
+        credentials: async () => ({ headers: {} }),
+        fetch: async (_url, init) => {
+          asked.push(JSON.parse(String(init.body)));
+          return Response.json({ model: 'nimble', answers: { run: { type: 'choice', choice: 'run', probabilities: { run, review: 1 - run }, confidence: 0.9 }, harm: { type: 'noul', noul: harm } }, usage: { input_tokens: 900, output_tokens: 0 } });
+        },
+      });
+      await decisions.current();
+      return { decisions, asked, extra: { decisions: { service: decisions, uses: () => ({ autoMode, tool: true, helpers: false }) } } };
+    }
+
+    it('approving: runs an action it is sure of without the reviewer, and counts it', async () => {
+      const { decisions, asked, extra } = await decisionModel(0.97, 0.05, 'approve');
+      const chat = service(reviewed(['BLOCK']), [bashTool as Tool], undefined, {}, extra);
+      const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await chat.send(s.id, [{ type: 'text', text: 'run the tests' }]);
+      await chat.settle(s.id);
+      expect(runs).toBe(1);
+      expect(reviews).toEqual([]);
+      expect(asked[0]).toMatchObject({ model: 'nimble', keep_alive: '30m', questions: { run: { type: 'choice' }, harm: { type: 'noul' } } });
+      expect(JSON.stringify(asked[0])).toContain('<pending_action tool=\\"Bash\\">');
+      expect(decisions.comparison()).toMatchObject({ approved: 1, checked: 0 });
+    });
+
+    it('approving: leaves an action it isn’t sure of to the reviewer, who decides as before', async () => {
+      const { decisions, extra } = await decisionModel(0.97, 0.6, 'approve');
+      const chat = service(reviewed(['BLOCK [Test]: deletes data']), [bashTool as Tool], undefined, {}, extra);
+      const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await chat.send(s.id, [{ type: 'text', text: 'go' }]);
+      await until(() => reviews.length === 1);
+      await chat.stop(s.id);
+      expect(runs).toBe(0);
+      await until(() => decisions.comparison().checked === 1);
+      expect(decisions.comparison()).toMatchObject({ approved: 0, leftToReviewer: 1, wronglyAllowed: 0 });
+    });
+
+    it('comparing: the reviewer decides, and the quick check is measured against it', async () => {
+      const { decisions, extra } = await decisionModel(0.95, 0.05, 'compare');
+      const chat = service(reviewed(['ALLOW', 'BLOCK [Test]: not asked for'], 2), [bashTool as Tool], undefined, {}, extra);
+      const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await chat.send(s.id, [{ type: 'text', text: 'go' }]);
+      await until(() => reviews.length === 2);
+      await chat.settle(s.id);
+      expect(runs).toBe(1);
+      await until(() => decisions.comparison().checked === 2);
+      expect(decisions.comparison()).toMatchObject({ checked: 2, bothAllowed: 1, wronglyAllowed: 1, approved: 0, misses: [{ tool: 'Bash', summary: 'Bash: npm test', verdict: 'BLOCK: [Test]: not asked for' }] });
+    });
+
+    it('off: asks no decision model', async () => {
+      const { asked, extra } = await decisionModel(0.99, 0, 'off');
+      const chat = service(reviewed(['ALLOW']), [bashTool as Tool], undefined, {}, extra);
+      const s = await repo.create({ mode: 'code', userId: null, permissionMode: 'auto' });
+      await chat.send(s.id, [{ type: 'text', text: 'run the tests' }]);
+      await chat.settle(s.id);
+      expect(asked).toEqual([]);
+      expect(reviews).toHaveLength(1);
+    });
   });
 
   it('never reviews through the ChatGPT Chat page, which would take the conversation’s slot: the person decides', async () => {

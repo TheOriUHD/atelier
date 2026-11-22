@@ -175,6 +175,7 @@ import { getAt, leafPaths } from '../util/json-path.ts';
 import { interpolate, secretRefs } from '../util/interpolate.ts';
 import { BuiltinSpeech, DictationError, DictationService } from '../dictation/index.ts';
 import { DecisionError, DecisionService } from '../decisions/service.ts';
+import { searchTopic, worthRemembering } from '../decisions/helpers.ts';
 
 export interface Logger {
   info(message: string, data?: Record<string, unknown>): void;
@@ -1076,9 +1077,12 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   // values are looked up (for a minute at a time) so that no query can carry one out.
   let secretValues: { at: number; values: string[] } | null = null;
   const searchBase = platform.env.ATELIER_SEARCH_BASE?.replace(/\/$/, '');
+  /** Whether Atelier's own small choices may ask the decision model (the admin's switch, and one being there). */
+  const decisionHelpers = () => settings.effective.decisions.helpers && !!decisions.ready;
   const search = new SearchService({
     fetch: httpFetch,
     webFetch: platform.webFetch,
+    topic: (query, signal) => (decisionHelpers() ? searchTopic(decisions, query, signal) : Promise.resolve(null)),
     config: () => resolveSearchConfig(settings.effective.capabilities.webSearch, (value) => interpolate(value, { secret: (id) => secrets.forSettings(id), env: (name) => platform.env[name] }).then((r) => r.value)),
     secretValues: async () => {
       if (secretValues && Date.now() - secretValues.at < 60_000) return secretValues.values;
@@ -1145,6 +1149,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   const memory = new MemoryService({
     db,
     sessions,
+    worthRemembering: (transcript) => (decisionHelpers() ? worthRemembering(decisions, transcript) : Promise.resolve(null)),
     prefs: (userId) => prefs.get(userId),
     name: async (userId) => (await prefs.get(userId)).callMe.trim() || (await accounts.get(userId)).name,
     models: registry,
@@ -1274,6 +1279,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
   });
 
   const chat = new ChatService({
+    decisions: { service: decisions, uses: () => settings.effective.decisions },
     coop: {
       isShared: (id) => coop.isShared(id),
       rootOf: (id) => coop.rootOf(id),

@@ -69,6 +69,11 @@ export interface MemoryHooks {
 
 export interface MemoryServiceDeps {
   db: Db;
+  /**
+   * Whether a conversation holds anything worth remembering, by the decision model (ARCHITECTURE §28), before the
+   * model reads it for memory: false skips that, null (no decision model, not sure) leaves it to the model.
+   */
+  worthRemembering?(transcript: string): Promise<boolean | null>;
   sessions: SessionRepo;
   prefs(userId: string): Promise<UserPrefs>;
   /** How the assistant addresses the person (their "call me", else their account name). */
@@ -451,6 +456,11 @@ export class MemoryService implements MemoryHooks {
     }
     let transcript = fresh.map((m) => `${m.role === 'user' ? 'Person' : 'Assistant'}: ${messageText(m.parts).trim()}`).join('\n\n');
     if (transcript.length > TRANSCRIPT_CHARS) transcript = `[… earlier part left out]\n${transcript.slice(-TRANSCRIPT_CHARS)}`;
+    // Most conversations hold nothing to keep: a decision model that is sure of that saves reading this one for memory.
+    if ((await this.deps.worthRemembering?.(transcript).catch(() => null)) === false) {
+      await this.repo.setProgress(userId, sessionId, last.id);
+      return [];
+    }
     const scope = session.projectId;
     let changes: MemoryChange[];
     try {

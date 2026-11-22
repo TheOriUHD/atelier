@@ -8,7 +8,7 @@ editUrl: false
 
 What a model really receives is more than the templates: the builder joins a core prompt, fragments, optional
 safeguards, an `<env>` block, instruction files, skills and personalization, and the request also carries the tool
-definitions. The files below are the complete assembled text of 48 typical sessions: every system block in
+definitions. The files below are the complete assembled text of 50 typical sessions: every system block in
 order (with the cache breakpoints marked), the notes on the first message, and the tools as JSON.
 
 They are produced by the project’s test suite with fixed inputs (the date 2026-01-15 in Europe/Berlin, fake model
@@ -49,6 +49,8 @@ prompts or replies.
 | [`chat.full.audio`](/prompts/assembled/chat.full.audio.txt) | Chat with a sound model: GenerateAudio for speech, music and sound effects, and how to use it. | 40 KB |
 | [`code.full.audio`](/prompts/assembled/code.full.audio.txt) | Code with a sound model: GenerateAudio and SaveAudio. | 58 KB |
 | [`code.compact.audio`](/prompts/assembled/code.compact.audio.txt) | Code, compact tier, with a sound model: the shorter GenerateAudio schema. | 23 KB |
+| [`chat.full.decide`](/prompts/assembled/chat.full.decide.txt) | Chat with a decision model: the Decide tool, for sorting many texts at once. | 37 KB |
+| [`code.full.decide`](/prompts/assembled/code.full.decide.txt) | Code with a decision model: the Decide tool. | 54 KB |
 | [`code.compact.computer`](/prompts/assembled/code.compact.computer.txt) | Code, compact tier, with computer use on. | 26 KB |
 | [`code.compact.browser`](/prompts/assembled/code.compact.browser.txt) | Code, compact tier, with computer use on and Atelier for Chrome connected. | 29 KB |
 | [`code.full.desktop`](/prompts/assembled/code.full.desktop.txt) | Code, full tier, written from the desktop app: Preview opens web pages in its Browser pane. | 53 KB |

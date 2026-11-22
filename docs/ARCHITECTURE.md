@@ -1350,6 +1350,51 @@ admin chose.
   `NSMicrophoneUsageDescription`), and links to the system's microphone privacy page when it is refused. A browser needs
   a secure page (https or localhost) for the microphone.
 
+## 28. Decision models
+
+Decision models don't write: they read a text (the `state`) and answer typed questions about it with probabilities, in
+about a tenth of a second. Atelier uses them where a whole model call is too slow or too costly for a pick among a few
+options, and offers them to people and to the assistant.
+
+- **Questions and answers** (`packages/protocol/src/decisions.ts`): yes or no (the probability of yes), a choice among
+  2 to 255 options (each option's probability, the likeliest, a confidence), and a score on 2 to 10 ordered levels
+  (each level's probability, the likeliest, the expected level). Up to 64 questions per request.
+- **Two formats** (`packages/core/src/decisions/wire.ts`): TypeSafe's System One (`POST /v1/systemone`: questions as a
+  map with `criteria`; Ollama 0.35+, llama.cpp's server, OpenRouter, Requesty, Decision Models and NVIDIA Dynamo speak
+  it) and OpenAI's Decisions API (`POST /v1/decisions`: questions as a list with `choices` and `levels`, answers as a
+  list). Both come back in one shape; a refusal is an answer of its own.
+- **Where they come from** (`sources.ts`), with nothing to add for most: an Ollama provider's models whose
+  capabilities include `decision` (`/api/tags` lists them since 0.40; `/api/show` before), a llama.cpp provider's by
+  name, an OpenAI key's `gpt-6-luna`, OpenRouter's (`/v1/models?output_modalities=decisions`) and Requesty's lists.
+  A **decision service** (settings `decisions.services`: TypeSafe Jev, Decision Models, any System One server, its key a
+  `${secret:decision-<id>}`) is added only for them. Source ids are `text:<provider>:<model>` and
+  `service:<service>:<model>`. With none chosen (`decisions.source`), a service's model is used, else one of a server
+  someone runs; a provider's paid model only when an admin names it.
+- **Asking** (`service.ts`): listings are kept five minutes (sooner when settings or a provider's status change); a
+  local provider's request waits for a slot on that server's queue like a chat request (`RequestScheduler.hold`), and
+  Ollama is told to keep the model loaded for 30 minutes (`keep_alive`). `decide` is for people and the tool (a minute
+  at most, errors in words); `ask` is for Atelier's own uses and answers null instead of failing.
+- **Uses:**
+  - **Auto mode's quick check** (`auto-check.ts`, `ChatService.quickCheck`), settings `decisions.autoMode`. The decision
+    model gets the reviewer's own input (`reviewInput`) and two questions: run or review, and whether it could destroy,
+    expose, spend or send. Only a host's turns; a guest's action always goes to the reviewer. `compare` (the default)
+    starts it beside the reviewer and counts how they agreed (`decisions.json` in the data folder: both allowed, left to
+    the reviewer, and the misses, actions it would have let through that the reviewer didn't). `approve` waits for it
+    (4 s at most) and lets an action run without the reviewer only when run ≥ 0.9 and harm < 0.3; anything else goes
+    to the reviewer as before. The engine's rules (dangerous commands, paths outside the roots, connectors, protected
+    files) decide before either. Measured on Ollama 0.40.17 on an AMD R9700: nimble 12 of 14 known cases as expected
+    and no risky one let through, 180 ms; tev1 too unsure to approve anything (`decisions.live.test.ts`).
+  - **The Decide tool** (`tools/decide.ts`, settings `decisions.tool`): up to 200 items and 8 questions per call, six
+    requests at once, counts per option first and a line per item. Not in shared sessions.
+  - **Small choices** (`helpers.ts`, `ChatService.endsAsking`, settings `decisions.helpers`): whether a reply ends by
+    asking the person something (permanent-goal mode goes on only when it doesn't), a web search's topic (news,
+    programming or general, when it is 60 % sure), and whether a conversation holds anything to remember (below 15 %
+    the memory update skips it). Each keeps its old way when there is no decision model or it doesn't answer.
+  - **People:** the Decide window and `atelier decide` (`decisions.decide`; another source for admins only).
+- **Settings › Admin › Decision models** picks the model, adds services (`decisions.testService`, `saveService`,
+  `removeService`), switches the uses, and shows the quick check's numbers (`decisions.resetComparison`);
+  `decisions.changed` tells windows when anything moved.
+
 ## 20. Decisions
 
 - **Q1 Repo, CI and updates.** The source is a GitHub repository; releases are published from it.
