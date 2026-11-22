@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultUserPrefs, type Mode, type Project, type SessionSummary, type SettingsPath, type WorkspaceSummary } from '@atelier/protocol';
+import { defaultSettings, defaultUserPrefs, type Mode, type Project, type SessionSummary, type SettingsPath, type WorkspaceSummary } from '@atelier/protocol';
 import { TooltipProvider } from '../components/ui/index.ts';
 import { backend, callsTo, resetBackend, snapshot } from '../features/settings/test-backend.ts';
 import { setPath } from '../lib/json-path.ts';
@@ -397,5 +397,40 @@ describe('the Images entry', () => {
     renderSidebar('/code');
     await waitFor(() => expect(callsTo('imageModels.list')).toHaveLength(1));
     expect((await links()).map((l) => l.textContent)).not.toContain('Images');
+  });
+});
+
+describe('the Decide window under More', () => {
+  const nimble = { id: 'text:ollama:nimble', label: 'nimble', provider: 'Ollama', local: true };
+  const more = async () => {
+    fireEvent.click(within(await nav()).getByRole('button', { name: 'More' }));
+    // Its other rows are there at once; Decide… comes with the decision models' status.
+    await screen.findByRole('button', { name: 'Keyboard shortcuts' });
+  };
+
+  it('opens where there is a decision model', async () => {
+    Object.assign(backend.handlers, { 'settings.get': () => snapshot(), 'decisions.status': () => ({ enabled: true, source: nimble, sources: [], chosen: null }) });
+    renderSidebar('/');
+    await more();
+    fireEvent.click(await screen.findByRole('button', { name: 'Decide…' }));
+    expect(await screen.findByRole('dialog', { name: 'Decide' })).toBeTruthy();
+  });
+
+  it('isn’t there without one', async () => {
+    Object.assign(backend.handlers, { 'settings.get': () => snapshot(), 'decisions.status': () => ({ enabled: true, source: null, sources: [], chosen: null }) });
+    renderSidebar('/');
+    await more();
+    await waitFor(() => expect(callsTo('decisions.status')).toHaveLength(1));
+    expect(screen.queryByRole('button', { name: 'Decide…' })).toBeNull();
+  });
+
+  it('doesn’t ask a server from before decision models', async () => {
+    const { decisions: _, ...older } = defaultSettings();
+    Object.assign(backend.handlers, { 'settings.get': () => ({ ...snapshot(), effective: older }) });
+    renderSidebar('/');
+    await more();
+    await waitFor(() => expect(callsTo('settings.get').length).toBeGreaterThan(0));
+    expect(callsTo('decisions.status')).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'Decide…' })).toBeNull();
   });
 });

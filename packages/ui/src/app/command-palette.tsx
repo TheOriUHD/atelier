@@ -3,7 +3,7 @@ import { useDeferredValue, useState, type ReactNode } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Command } from 'cmdk';
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
-import { Bug, Ghost, Lightbulb, Lock, MessageSquare, Plus, Search, Settings as SettingsIcon, Users, type LucideIcon } from 'lucide-react';
+import { Bug, Ghost, Lightbulb, Lock, MessageSquare, Plus, Search, Settings as SettingsIcon, Signpost, Users, type LucideIcon } from 'lucide-react';
 import { Icon, Kbd, cn } from '../components/ui/index.ts';
 import { dialogBackdropClass } from '../components/ui/styles.ts';
 import { relativeTime } from '../lib/dates.ts';
@@ -14,6 +14,7 @@ import { useMode, useNewChat, useNewTemporaryChat, useOpenSettings } from './nav
 import { useLockNow, useScreenLock } from '../features/auth/screen-lock.ts';
 import { sessionTitle } from '../lib/sessions.ts';
 import { JoinLinkDialog } from '../features/coop/join-link-dialog.tsx';
+import { DecideDialog, useDecideOffered } from '../features/decisions/decide-dialog.tsx';
 
 interface Action {
   id: string;
@@ -39,6 +40,8 @@ export function CommandPalette() {
   const lock = useScreenLock();
   const lockNow = useLockNow(openSettings);
   const [joining, setJoining] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  const decide = useDecideOffered();
 
   const close = () => {
     setOpen(false);
@@ -48,6 +51,7 @@ export function CommandPalette() {
     { id: 'new-chat', label: { chat: 'New chat', work: 'New Cowork task', code: 'New session' }[mode], icon: Plus, run: newChat },
     { id: 'new-temporary-chat', label: 'New temporary chat', icon: Ghost, run: newTemporaryChat },
     { id: 'join-coop', label: 'Join a co-op session…', icon: Users, run: () => setJoining(true) },
+    ...(decide ? [{ id: 'decide', label: 'Decide…', icon: Signpost, run: () => setDeciding(true) }] : []),
     { id: 'settings', label: 'Settings', icon: SettingsIcon, run: () => openSettings() },
     { id: 'report-issue', label: 'Report an issue…', icon: Bug, run: () => void openReporter('issue') },
     { id: 'request-feature', label: 'Request a feature…', icon: Lightbulb, run: () => void openReporter('feature') },
@@ -58,6 +62,7 @@ export function CommandPalette() {
   return (
     <>
     <JoinLinkDialog open={joining} onOpenChange={setJoining} />
+    {(decide || deciding) && <DecideDialog open={deciding} onOpenChange={setDeciding} />}
     <BaseDialog.Root open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className={dialogBackdropClass} />
