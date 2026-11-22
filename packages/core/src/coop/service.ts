@@ -39,12 +39,14 @@ export interface ParticipantInfo {
 
 export type RoomRow = typeof coopRooms.$inferSelect;
 
-/** What the relay side adds for desktop hosts (host.ts); absent on a team server, where co-op needs no relay. */
+/** What the relay side adds (host.ts): invite links and guests from other computers. */
 export interface CoopRelayPort {
   invite(sessionId: string): { url: string; expiresAt: number } | null;
   knocking(sessionId: string): { id: string; name: string; fingerprint: string[] }[];
   /** Whether the guest `participantId`'s computer is connected right now. */
   peerOnline(sessionId: string, participantId: string): boolean;
+  /** Whether invite links work here: the relay is on (absent: they do wherever the port is). */
+  enabled?(): boolean;
 }
 
 export interface CoopDeps {
@@ -59,6 +61,11 @@ export interface CoopDeps {
   /** Accounts with a window on the session right now. */
   watchers(sessionId: string): Set<string>;
   relay?: CoopRelayPort;
+  /**
+   * Where sessions run: `desktop`, the host's computer, where everyone takes part through the relay; `web`, a server,
+   * where its accounts take part on the server and guests from elsewhere through the relay. Desktop when absent.
+   */
+  surface?: 'desktop' | 'web';
   /** The host's models a guest may pick from while the host shares them. */
   hostModels?(hostUserId: string): Promise<{ ref: string; displayName: string }[]>;
   now?(): number;
@@ -294,7 +301,10 @@ export class CoopService {
       settings: await this.settings(sessionId),
       invite: host ? (this.deps.relay?.invite(sessionId) ?? null) : null,
       knocking: host ? (this.deps.relay?.knocking(sessionId) ?? []) : [],
-      via: room.relayUrl ? 'relay' : 'server',
+      // How this viewer takes part: a guest from another computer through the relay; a server's accounts on the server.
+      via: viewer.kind === 'peer' ? 'relay' : this.deps.surface === 'web' || !room.relayUrl ? 'server' : 'relay',
+      ...(host ? { invites: !!this.deps.relay && (this.deps.relay.enabled?.() ?? true) } : {}),
+      hostedOn: this.deps.surface === 'web' ? 'server' : 'computer',
       hostAway: false,
       ended: room.endedAt !== null,
       sharedUse: !host && viewer.models === 'host' ? await this.sharedUse(sessionId, viewer.id) : null,

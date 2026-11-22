@@ -11,6 +11,9 @@ export const FAKE_OIDC_PORT = Number(process.env.ATELIER_E2E_OIDC_PORT ?? 7362);
 export const FAKE_IMAGES_PORT = Number(process.env.ATELIER_E2E_IMAGES_PORT ?? 11610);
 export const FAKE_VIDEO_PORT = Number(process.env.ATELIER_E2E_VIDEO_PORT ?? 11620);
 export const FAKE_AUDIO_PORT = Number(process.env.ATELIER_E2E_AUDIO_PORT ?? 11630);
+/** The co-op relay e2e/serve.mjs starts (e2e/coop-relay.mjs): the web server's ATELIER_COOP_RELAY, and the specs' other backends'. */
+export const COOP_RELAY_PORT = Number(process.env.ATELIER_E2E_RELAY_PORT ?? 7364);
+export const COOP_RELAY_URL = `http://127.0.0.1:${COOP_RELAY_PORT}`;
 
 /** e2e/serve.mjs starts the web server with this as ATELIER_SETUP_TOKEN. */
 export const SETUP_TOKEN = 'atelier-e2e-setup-token';

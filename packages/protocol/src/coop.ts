@@ -65,6 +65,12 @@ export const CoopSettings = z.object({
    * (navigator). They turn it on for themselves; the host can turn it off. Null: nobody.
    */
   navigator: z.string().nullable().default(null),
+  /**
+   * How guests' actions on the host's folder and computer are decided: `auto`, Auto mode's reviewer (the host's model)
+   * checks each one and asks the host only when it isn't sure; `ask`, the host approves each one (their mode, Accept edits
+   * at most). Plan mode holds for everyone either way. Absent from older backends, which always ask.
+   */
+  guestActions: z.enum(['auto', 'ask']).optional(),
 });
 export type CoopSettings = z.infer<typeof CoopSettings>;
 
@@ -75,6 +81,7 @@ export const DEFAULT_COOP_SETTINGS: CoopSettings = {
   guestsKeepCopy: true,
   allowGuestModels: true,
   navigator: null,
+  guestActions: 'auto',
 };
 
 /**
@@ -128,6 +135,10 @@ export const CoopState = z.object({
   hostModels: z.array(z.object({ ref: z.string(), displayName: z.string() })).optional(),
   /** On a guest's computer: they lend their own connectors to their turns. */
   lending: z.boolean().optional(),
+  /** The host can send invite links (the relay is on where the session runs); absent from older backends. */
+  invites: z.boolean().optional(),
+  /** Where the session runs: the host's computer or an Atelier server; absent from older backends (a computer). */
+  hostedOn: z.enum(['computer', 'server']).optional(),
 });
 export type CoopState = z.infer<typeof CoopState>;
 
@@ -171,6 +182,8 @@ export interface InviteMeta {
   hostName: string;
   title: string;
   mode: 'chat' | 'work' | 'code';
+  /** The session runs on an Atelier server, not the host's computer (absent: a computer). */
+  on?: 'server';
 }
 
 const b64url = {
@@ -196,7 +209,7 @@ export function parseInviteFragment(invite: string): { roomId: string; secret: s
     try {
       const value = JSON.parse(b64url.decode(meta)) as Partial<InviteMeta>;
       if (typeof value.hostName === 'string' && typeof value.title === 'string' && (value.mode === 'chat' || value.mode === 'work' || value.mode === 'code'))
-        parsed = { hostName: value.hostName.slice(0, 80), title: value.title.slice(0, 200), mode: value.mode };
+        parsed = { hostName: value.hostName.slice(0, 80), title: value.title.slice(0, 200), mode: value.mode, ...(value.on === 'server' ? { on: 'server' as const } : {}) };
     } catch {
       parsed = null;
     }

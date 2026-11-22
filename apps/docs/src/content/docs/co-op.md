@@ -9,9 +9,11 @@ written and every change as it lands, writes their own messages, and picks which
 The session stays where it is: on the computer of the person who started co-op (the **host**), or on your team's
 server. Nobody needs an account with Atelier.
 
-- **Between two computers**, the desktop apps meet through an encrypted relay at `coop.atelierhq.dev`. It passes the
-  traffic on and can't read it. See [Privacy](#privacy).
-- **On a team server**, the host adds teammates who have accounts there. Nothing leaves the server.
+- **With people elsewhere**, Atelier on each side (the desktop app, or an Atelier server for the people signed in to
+  it) meets through an encrypted relay at `coop.atelierhq.dev`, from an invite link. It passes the traffic on and can't
+  read it. See [Privacy](#privacy).
+- **On a team server**, the host can also add teammates who have accounts there. That needs no relay: nothing leaves
+  the server.
 
 ## Start co-op
 
@@ -24,8 +26,10 @@ Open the session and click **Co-op** (the two-person button) in its header.
 3. You see **Ben wants to join** with four emoji. Ben sees the same four. Compare them, by voice or in another
    chat, and click **Let in**. If they don't match, someone else is in between: click **Decline**.
 
-**On a team server:** pick people under **Teammates**, choose what they can do, and add them. They see the session in
-their sidebar straight away.
+**On a team server:** click **Start co-op**, pick teammates, choose what they can do, and add them. They see the
+session in their sidebar straight away. For someone who isn't on the server, click **Copy invite link** instead (or
+later, in the same popover): they join as above, from their own computer or their own server. The link is there while
+the server's admin keeps co-op with other computers on.
 
 The link lets new people ask to join for 24 hours. A new link replaces it, and the old one stops working. Someone you
 let in before comes back to the session without a link and without asking again, even after the link expired, until
@@ -37,12 +41,14 @@ Click the invite link someone sent you. It opens a page at `atelierhq.dev/join` 
 the page sends nothing anywhere. The join card says whose session it is, that it runs on their computer, and what
 you share. Choose what answers your messages, then click **Join** and wait for the host to let you in.
 
-If the link doesn't open Atelier (a Linux AppImage, for example, can't register it), open Atelier yourself and paste
-the link into **File › Join a Co-op Session…** in the desktop app, **More › Join a co-op session…** in the sidebar,
-or the same command in the command palette.
+If the link doesn't open Atelier (a Linux AppImage, for example, can't register it, and a browser has nothing to hand
+it to), open Atelier yourself and paste the link into **File › Join a Co-op Session…** in the desktop app,
+**More › Join a co-op session…** in the sidebar, or the same command in the command palette.
 
-To join a session on another computer you need the desktop app in **Run on this computer** mode. A desktop signed in
-to a server joins co-op sessions on that server only.
+You can join from anywhere you use Atelier: the desktop app on its own, the desktop app or a browser signed in to an
+Atelier server, and the iPhone and iPad app. Signed in to a server, you join as your account there: the session shows
+in your sidebar on every device you use, your own models and connectors are your account's on that server, and a copy
+you keep is a session of yours there.
 
 ## Working together
 
@@ -80,10 +86,16 @@ falls back to the host's models.
 
 The host's folder, terminal and computer are the host's. In a guest's turn:
 
-- Everything that would ask the host asks the host, in every mode: the host's **Always allow** rules, Auto mode and
-  Bypass don't apply to guests' turns. A guest's turn edits files at most as far as **Accept edits** would, and an edit
-  to what configures git, shells, editors or the agent (`.git/`, `.claude/`, `.atelier/`, `.vscode/`, shell startup
-  files and the like) asks the host even then.
+- **Auto mode checks guests' actions** (on by default, in the host's Co-op popover): Auto mode's reviewer, on the
+  host's model, looks at each action a guest's turn wants to take, knowing it is a guest's turn and who wrote which
+  message. What it clears runs without asking anyone; what it blocks is refused, with the reason, to the agent; what
+  it isn't sure of asks the host. That holds whatever the host's own mode, except Plan, which holds for everyone.
+- Some things always ask the host, Auto mode or not: anything outside the session's folder, dangerous commands, the
+  host's own connectors, and edits to what configures git, shells, editors or the agent (`.git/`, `.claude/`,
+  `.atelier/`, `.vscode/`, shell startup files and the like). Bypass and the host's **Always allow** rules never apply
+  to guests' turns.
+- With **Auto mode checks guests' actions** off, the host approves each command: a guest's turn edits files in the
+  folder at most as far as **Accept edits** would, and everything else asks the host.
 - A guest's message that joins the host's turn (**Join this turn**) makes the rest of that turn a guest's turn too.
 - The question shows **Waiting for Ada to approve…** to everyone else. Nobody answers it within 5 minutes: it is
   declined, and the agent is told.
@@ -115,16 +127,23 @@ Hover a message and pick an emoji. Everyone sees who reacted.
 
 ## Leaving and ending
 
-- **Leave** takes you out of a session you joined.
+- **Leave** takes you out of a session you joined. While the host lets guests keep a copy, you keep one as you leave.
 - The host can **Remove** anyone. Their turn stops, their waiting messages and open questions go, and the work they
   started in the background stops.
 - **End co-op** ends it for everyone. The session is the host's alone again.
-- **Guests keep a copy when co-op ends** (on by default) gives each guest the conversation as a session of their own.
+- **Guests keep a copy when co-op ends** (on by default) gives each guest the conversation as a session of their own,
+  teammates on a server included.
+
+Someone who knocks reaches you wherever you are in Atelier: a notice with **Review**, which opens the session's Co-op
+popover, a notification while Atelier is in the background, and the session's row in the sidebar asks for your
+attention. A question waiting for you (a guest's own connector, or one the host trusts you to answer) notifies you
+the same way; one that is someone else's doesn't.
 
 ## When the host's computer is away
 
 While a session has co-op on, the host's computer stays awake (its screen may still turn off). If it goes to sleep or
-offline anyway, guests see that it is away, and the session goes on when it is back. The screen lock hides the host's
+offline anyway, guests see that it is away, and the session goes on when it is back. A session on a server is there
+as long as the server runs; after a restart its guests come back by themselves. The screen lock hides the host's
 own windows only; guests carry on, and questions for the host wait and time out as above.
 
 ## What a shared session leaves out
@@ -144,7 +163,7 @@ looks like such a name tag inside a message is that person's own text.
 ## Privacy
 
 Between computers, the traffic goes through the relay end to end encrypted (Noise, with the invite's secret and each
-computer's device key), only while co-op is on. The relay sees the computers' IP addresses, the room's id, when
+side's own key: a computer's, or on a server each account's own), only while co-op is on. The relay sees the computers' IP addresses, the room's id, when
 people connect and how much they send. It sees no names, messages, files or emoji, and keeps nothing.
 
 The part of the invite link after `#` is the secret: browsers don't send it to any server, and the relay never sees
@@ -161,7 +180,10 @@ See [Privacy](/privacy/) and [Security](/security/).
 The relay is in the repository (`deploy/coop/`, a Cloudflare Worker), and a self-hosted server can run one too:
 
 - On a server, set `ATELIER_SERVE_COOP_RELAY=1`; it serves the relay at `/api/coop`.
-- On every desktop that takes part, set `ATELIER_COOP_RELAY` to that address (`https://atelier.example.com/api/coop`).
-  The host and every guest must use the same relay. An empty value switches co-op between computers off.
+- On every desktop and server that takes part, set `ATELIER_COOP_RELAY` to that address
+  (`https://atelier.example.com/api/coop`). The host and every guest must use the same relay.
+
+An empty `ATELIER_COOP_RELAY` switches co-op with other computers off: on a desktop, co-op altogether; on a server,
+invite links and joining sessions elsewhere, while teammates on the server still work together.
 
 See [Environment variables](/environment-variables/).

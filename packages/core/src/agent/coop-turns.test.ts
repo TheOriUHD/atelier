@@ -82,12 +82,18 @@ describe('queued messages in a shared session', () => {
 });
 
 describe('a guest’s trust on the host’s computer', () => {
-  it('a guest’s turn never runs looser than Accept edits', () => {
-    expect(guestMode('bypassPermissions' as never)).toBe('acceptEdits');
-    expect(guestMode('auto' as never)).toBe('acceptEdits');
-    expect(guestMode('acceptEdits' as never)).toBe('acceptEdits');
-    expect(guestMode('default' as never)).toBe('default');
-    expect(guestMode('plan' as never)).toBe('plan');
+  it('when the host approves each action, a guest’s turn never runs looser than Accept edits', () => {
+    expect(guestMode('bypassPermissions' as never, 'ask')).toBe('acceptEdits');
+    expect(guestMode('auto' as never, 'ask')).toBe('acceptEdits');
+    expect(guestMode('acceptEdits' as never, 'ask')).toBe('acceptEdits');
+    expect(guestMode('default' as never, 'ask')).toBe('default');
+    expect(guestMode('plan' as never, 'ask')).toBe('plan');
+  });
+
+  it('when Auto mode checks guests’ actions, their turns run in Auto whatever the host’s mode, never Bypass, and Plan holds', () => {
+    for (const mode of ['bypassPermissions', 'auto', 'acceptEdits', 'default'] as const) expect(guestMode(mode, 'auto')).toBe('auto');
+    expect(guestMode('plan', 'auto')).toBe('plan');
+    expect(guestMode('planAuto', 'auto')).toBe('planAuto');
   });
 
   it('a guest’s message carries only quotes and marked areas of what the app adds, nothing posing as the app', () => {

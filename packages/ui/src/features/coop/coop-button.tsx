@@ -1,7 +1,8 @@
 /**
  * The Co-op button in every session header and its popover (design/components.md › Co-op). Off, it starts co-op: an
- * invite link on a desktop (through the relay), teammates on a server. On, the host decides who is in, what they may do
- * and whether guests may use the host's models; a guest sees who is in, chooses whose models answer them and may leave.
+ * invite link on a desktop (through the relay); on a server, teammates of the server and an invite link for people
+ * elsewhere. On, the host decides who is in, what they may do, whether guests may use the host's models and whether Auto
+ * mode checks guests' actions; a guest sees who is in, chooses whose models answer them and may leave.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from '@tanstack/react-router';
@@ -35,7 +36,7 @@ import { describeError, rpc } from '../../lib/rpc.ts';
 import { ModelMenu } from '../chat/model-picker.tsx';
 import { Avatar, AvatarStack } from './avatar.tsx';
 import { Tracks } from './coop-tracks.tsx';
-import { expiresIn, possessive, reportError, sharedUseLine, useCoopActions, useCoopView, useNow, type CoopView } from './coop.ts';
+import { expiresIn, possessive, reportError, sharedUseLine, useCoopActions, useCoopPanelRequest, useCoopView, useNow, type CoopView } from './coop.ts';
 
 const fail = (e: unknown): void => void toast.error(describeError(e).message);
 
@@ -54,6 +55,7 @@ export function CoopButton({ session, className }: { session: SessionSummary; cl
   const [open, setOpen] = useState(false);
   const knocking = coop.isHost ? (coop.state?.knocking ?? []) : [];
   useKnockToasts(knocking, setOpen);
+  useCoopPanelRequest(session.id, setOpen);
   if (session.temporary) return null;
 
   const on = coop.shared && coop.people.length > 0;
@@ -120,13 +122,31 @@ function SectionLabel({ children }: { children: ReactNode }) {
   return <h3 className="text-footnote text-fg-muted">{children}</h3>;
 }
 
-/** Co-op is off: start it. A desktop opens a room on the relay; a server adds teammates. */
+/**
+ * Co-op is off: start it. A desktop opens a room on the relay. A server adds teammates, and where invite links work there
+ * (an older server has none) also makes one in a single click, for someone elsewhere.
+ */
 function StartPanel({ session }: { session: SessionSummary }) {
   const { data: info } = useAppInfo();
   const server = info?.surface === 'web';
+  const links = !!info && (server ? info.coopLinks === true : info.coopLinks !== false);
   const actions = useCoopActions(session.id);
   const [starting, setStarting] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [picking, setPicking] = useState(false);
+  const copyLink = async () => {
+    setLinking(true);
+    try {
+      await actions.start();
+      const { url } = await actions.invite();
+      await navigator.clipboard.writeText(url);
+      toast.success('Invite link copied', { description: 'Anyone with it can ask to join for 24 hours. You let each one in.' });
+    } catch (e) {
+      fail(e);
+    } finally {
+      setLinking(false);
+    }
+  };
   return (
     <>
       <Heading>Co-op</Heading>
@@ -135,29 +155,37 @@ function StartPanel({ session }: { session: SessionSummary }) {
         {!info
           ? 'Work on this session with up to three others.'
           : server
-            ? 'Work on this session with up to three teammates on this server. It stays yours, and anything risky asks you.'
+            ? links
+              ? 'Work on this session with up to three others: teammates on this server, or anyone you send a link to. It stays yours, and anything risky asks you.'
+              : 'Work on this session with up to three teammates on this server. It stays yours, and anything risky asks you.'
             : 'Work on this session with up to three friends. It keeps running on this computer, and anything risky asks you.'}
       </p>
       {picking ? (
         <TeammatePicker sessionId={session.id} taken={[]} room={MAX_OTHERS} onDone={() => setPicking(false)} />
       ) : (
-        <Button
-          variant="primary"
-          leadingIcon={Users}
-          loading={starting}
-          disabled={!info}
-          className="self-start"
-          onClick={() => {
-            if (server) return setPicking(true);
-            setStarting(true);
-            actions
-              .start()
-              .catch(fail)
-              .finally(() => setStarting(false));
-          }}
-        >
-          Start co-op
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            leadingIcon={Users}
+            loading={starting}
+            disabled={!info || linking}
+            onClick={() => {
+              if (server) return setPicking(true);
+              setStarting(true);
+              actions
+                .start()
+                .catch(fail)
+                .finally(() => setStarting(false));
+            }}
+          >
+            Start co-op
+          </Button>
+          {server && links && (
+            <Button leadingIcon={Link2} loading={linking} disabled={starting} onClick={() => void copyLink()}>
+              Copy invite link
+            </Button>
+          )}
+        </div>
       )}
     </>
   );
@@ -230,9 +258,10 @@ function TeammatePicker({ sessionId, taken, room, onDone }: { sessionId: string;
 
 /** Where the session runs, as the popover's heading says it. */
 function whereItRuns(coop: CoopView): string {
-  const relay = coop.state?.via !== 'server';
-  if (coop.isHost) return relay ? 'Runs on this computer' : 'On this server';
-  return relay ? `Runs on ${possessive(coop.hostName)} computer` : `Hosted by ${coop.hostName}`;
+  const viaServer = coop.state?.via === 'server';
+  if (coop.isHost) return viaServer || coop.state?.hostedOn === 'server' ? 'On this server' : 'Runs on this computer';
+  if (viaServer) return `Hosted by ${coop.hostName}`;
+  return coop.state?.hostedOn === 'server' ? `Runs on ${possessive(coop.hostName)} server` : `Runs on ${possessive(coop.hostName)} computer`;
 }
 
 function HostPanel({ session, coop }: { session: SessionSummary; coop: CoopView }) {
@@ -241,21 +270,23 @@ function HostPanel({ session, coop }: { session: SessionSummary; coop: CoopView 
   const [picking, setPicking] = useState(false);
   const [ending, setEnding] = useState(false);
   const relay = state?.via !== 'server';
+  // On a server: teammates, and an invite link for people elsewhere where the server has the relay on.
+  const links = relay || !!state?.invites;
   const others = coop.people.filter((p) => p.role !== 'host');
   const room = MAX_OTHERS - others.length;
   return (
     <>
       <Heading meta={whereItRuns(coop)}>Co-op</Heading>
       {state?.knocking.map((knock) => <Knock key={knock.id} knock={knock} onAnswer={(allow) => actions.admit(knock.id, allow).catch(fail)} />)}
-      {relay ? (
-        <Invite sessionId={session.id} invite={state?.invite ?? null} full={room <= 0} />
-      ) : picking ? (
-        <TeammatePicker sessionId={session.id} taken={others.flatMap((p) => participantUserId(p.id) ?? [])} room={room} onDone={() => setPicking(false)} />
-      ) : (
-        <Button leadingIcon={UserPlus} className="self-start" disabled={room <= 0} onClick={() => setPicking(true)}>
-          Invite a teammate
-        </Button>
-      )}
+      {links && <Invite sessionId={session.id} invite={state?.invite ?? null} full={room <= 0} />}
+      {!relay &&
+        (picking ? (
+          <TeammatePicker sessionId={session.id} taken={others.flatMap((p) => participantUserId(p.id) ?? [])} room={room} onDone={() => setPicking(false)} />
+        ) : (
+          <Button leadingIcon={UserPlus} className="self-start" disabled={room <= 0} onClick={() => setPicking(true)}>
+            Invite a teammate
+          </Button>
+        ))}
       <section aria-label="People" className="flex flex-col gap-1.5">
         <SectionLabel>People</SectionLabel>
         <ul className="flex flex-col">
@@ -263,7 +294,11 @@ function HostPanel({ session, coop }: { session: SessionSummary; coop: CoopView 
             <PersonRow key={p.id} person={p} me={p.id === coop.me} hostControls={p.role !== 'host' ? { sessionId: session.id } : undefined} />
           ))}
         </ul>
-        {others.length === 0 && <p className="text-footnote text-fg-muted">{relay ? 'Nobody has joined yet. Send the link to whoever you want to work with.' : 'Nobody else is here yet.'}</p>}
+        {others.length === 0 && (
+          <p className="text-footnote text-fg-muted">
+            {relay ? 'Nobody has joined yet. Send the link to whoever you want to work with.' : links ? 'Nobody else is here yet. Add a teammate, or send the link to someone elsewhere.' : 'Nobody else is here yet.'}
+          </p>
+        )}
       </section>
       {state && <HostSettings settings={state.settings} onChange={(patch) => actions.settings(patch).catch(fail)} />}
       {state && <Navigator sessionId={session.id} coop={coop} />}
@@ -444,6 +479,19 @@ function HostSettings({ settings, onChange }: { settings: CoopSettings; onChange
           </div>
         )}
       </SettingSwitch>
+      {/* An older backend always asks the host: it has no such setting. */}
+      {settings.guestActions !== undefined && (
+        <SettingSwitch
+          label="Auto mode checks guests’ actions"
+          description={
+            settings.guestActions === 'ask'
+              ? 'Off: you approve each command a guest’s turn runs.'
+              : 'Their ordinary work runs. You’re asked when it isn’t sure, and for anything outside the folder, your connectors or risky commands.'
+          }
+          checked={settings.guestActions !== 'ask'}
+          onChange={(on) => onChange({ guestActions: on ? 'auto' : 'ask' })}
+        />
+      )}
       <SettingSwitch label="Guests keep a copy when co-op ends" checked={settings.guestsKeepCopy} onChange={(guestsKeepCopy) => onChange({ guestsKeepCopy })} />
       <SettingSwitch
         label="Guests’ own models read what the session reads"
@@ -528,7 +576,11 @@ function GuestPanel({ session, coop }: { session: SessionSummary; coop: CoopView
         <p className="text-body text-fg-secondary">Co-op ended. {state?.settings.guestsKeepCopy ? 'Your copy of the conversation is in your sidebar.' : ''}</p>
       ) : (
         <>
-          {coop.hostAway && <p className="text-body text-fg-secondary">{possessive(coop.hostName)} computer is asleep or offline. The session continues when it’s back.</p>}
+          {coop.hostAway && (
+            <p className="text-body text-fg-secondary">
+              {state?.hostedOn === 'server' ? `${possessive(coop.hostName)} server can’t be reached right now.` : `${possessive(coop.hostName)} computer is asleep or offline.`} The session continues when it’s back.
+            </p>
+          )}
           <section aria-label="People" className="flex flex-col gap-1.5">
             <SectionLabel>People</SectionLabel>
             <ul className="flex flex-col">
@@ -602,12 +654,13 @@ function Navigator({ sessionId, coop }: { sessionId: string; coop: CoopView }) {
  */
 function LendConnectors({ sessionId, lending }: { sessionId: string; lending: boolean }) {
   const actions = useCoopActions(sessionId);
+  const { data: info } = useAppInfo();
   const [pending, setPending] = useState<boolean | null>(null);
   const on = pending ?? lending;
   return (
     <SettingSwitch
       label="Use my connectors in my turns"
-      description="Each call asks you first. They run on this computer."
+      description={info?.surface === 'web' ? 'Your own connectors on your server. Each call asks you first.' : 'Each call asks you first. They run on this computer.'}
       checked={on}
       onChange={(next) => {
         setPending(next);

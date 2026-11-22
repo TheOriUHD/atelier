@@ -57,17 +57,19 @@ export class BlobAccess {
   }
 
   /**
-   * Whether a session (with its sub-agents and side chats) refers to a blob: what a co-op guest on another computer may
-   * fetch of it (coop/host.ts), and attach to their messages there.
+   * Whether a session (with its sub-agents and tracks) refers to a blob: what a co-op guest on another computer may
+   * fetch of it (coop/host.ts), and attach to their messages there. Side chats are the host's own, and so are the avatars
+   * of a server's other accounts: only the people in the session show theirs.
    */
   inSession(sessionId: string, sha256: string): boolean {
     if (!SHA.test(sha256)) return false;
     const db = this.db.$client;
     const values: Record<string, string> = { s: sessionId, sha: sha256, quoted: `"blob":"${sha256}"` };
     const has = (sql: string) => db.prepare(sql).get(Object.fromEntries(Object.entries(values).filter(([k]) => sql.includes(`@${k}`)))) !== undefined;
-    const ours = `(SELECT @s UNION SELECT id FROM sessions WHERE parent_session_id = @s)`;
+    const ours = `(SELECT @s UNION SELECT id FROM sessions WHERE parent_session_id = @s AND coalesce(json_extract(overrides, '$.sideChat'), 0) != 1)`;
+    const people = `(SELECT user_id FROM sessions WHERE id = @s UNION SELECT user_id FROM session_participants WHERE session_id = @s AND left_at IS NULL AND user_id IS NOT NULL)`;
     return (
-      has(`SELECT 1 FROM users WHERE avatar_blob = @sha LIMIT 1`) ||
+      has(`SELECT 1 FROM users WHERE avatar_blob = @sha AND id IN ${people} LIMIT 1`) ||
       has(`SELECT 1 FROM files WHERE blob = @sha AND session_id IN ${ours} LIMIT 1`) ||
       has(`SELECT 1 FROM generated_images WHERE blob = @sha AND session_id IN ${ours} LIMIT 1`) ||
       has(`SELECT 1 FROM messages WHERE session_id IN ${ours} AND instr(parts, @quoted) > 0 LIMIT 1`)

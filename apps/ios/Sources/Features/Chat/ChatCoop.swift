@@ -99,6 +99,10 @@ struct ChatCoopSheet: View {
             Text(onServer ? "Work on this conversation with up to three teammates on this server. It stays yours, and anything risky asks you." : "Work on this conversation with up to three friends. It keeps running on the computer that hosts it, and anything risky asks you.").font(.subheadline).foregroundStyle(Theme.inkSecondary)
             if picking { teammatePicker } else {
                 Button { if onServer { picking = true; loadDirectory() } else { run { try await ChatCoopActions.start(store) } } } label: { Label("Start co-op", systemImage: "person.2").foregroundStyle(Theme.clay) }.disabled(busy)
+                // A server with invite links: a link for someone elsewhere, without adding a teammate first.
+                if onServer && store.info["coopLinks"].bool {
+                    Button { run { try await ChatCoopActions.start(store); invite = try await ChatCoopActions.invite(store) } } label: { Label("Make an invite link", systemImage: "link").foregroundStyle(Theme.clay) }.disabled(busy)
+                }
             }
         }
     }
@@ -160,8 +164,9 @@ struct ChatCoopSheet: View {
         }
     }
 
+    /// An invite link (a computer's session, or a server's that has invite links on), and on a server its teammates too.
     @ViewBuilder private var inviteSection: some View {
-        if state["via"].string != "server" {
+        if state["via"].string != "server" || state["invites"].bool {
             Section {
                 if room <= 0 { Text("The conversation is full: four people at most.").font(.subheadline).foregroundStyle(Theme.inkMuted) }
                 else {
@@ -169,7 +174,8 @@ struct ChatCoopSheet: View {
                     Button { run { invite = try await ChatCoopActions.invite(store) } } label: { Label(state["invite"] == .null && invite == nil ? "Make an invite link" : "Make a new link", systemImage: "link") }
                 }
             } footer: { Text(state["invite"] == .null && invite == nil ? "Anyone with the link can ask to join for 24 hours. You let each one in." : "The old link stops working when you make a new one.") }
-        } else if room > 0 {
+        }
+        if state["via"].string == "server" && room > 0 {
             Section { if picking { teammatePicker } else { Button { picking = true; loadDirectory() } label: { Label("Invite a teammate", systemImage: "person.badge.plus") } } }
         }
     }

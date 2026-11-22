@@ -200,6 +200,28 @@ export function reportError(sessionId: string | null | undefined, error: unknown
   toast.error(describeError(error).message);
 }
 
+/** Sessions whose Co-op panel opens once their page shows: a knock's Review, from anywhere in the app. */
+const panelRequests = new Set<string>();
+const panelListeners = new Set<(sessionId: string) => void>();
+
+/** Opens a session's Co-op panel: now when its page is open, else as soon as it is. */
+export function openCoopPanel(sessionId: string): void {
+  panelRequests.add(sessionId);
+  for (const listener of panelListeners) listener(sessionId);
+}
+
+/** The Co-op button's side of `openCoopPanel`. */
+export function useCoopPanelRequest(sessionId: string, open: (open: boolean) => void): void {
+  useEffect(() => {
+    const take = (id: string) => {
+      if (id === sessionId && panelRequests.delete(id)) open(true);
+    };
+    take(sessionId);
+    panelListeners.add(take);
+    return () => void panelListeners.delete(take);
+  }, [sessionId, open]);
+}
+
 /** Whether a failed call failed because the host's computer is away. */
 export const hostAwayError = (error: unknown): boolean => errorCode(error) === 'host_away';
 

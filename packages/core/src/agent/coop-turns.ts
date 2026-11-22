@@ -93,10 +93,17 @@ const STRICTNESS = ['plan', 'planAuto', 'default', 'acceptEdits', 'auto', 'bypas
 type Mode = (typeof STRICTNESS)[number];
 
 /**
- * The mode a guest's turn runs at: never the host's Auto or Bypass, which trust the host's own requests. Edits inside the
- * folder go through (Rewind undoes them); commands, the network and anything outside the folder ask the host.
+ * The mode a guest's turn runs at; never Bypass, which trusts the host's own requests. Plan mode holds for everyone.
+ * - `auto` (the host's choice in the co-op settings, and the default): Auto mode, whatever the host's own mode. Its
+ *   reviewer, on the host's model, knows the turn is a guest's and judges it for the host; what it isn't sure of asks
+ *   the host, and so does anything outside the folder, a dangerous command, the host's connectors and what configures
+ *   git, shells or the agent (permissions/engine.ts `guest`).
+ * - `ask`: the host's mode, Accept edits at most. Edits inside the folder go through (Rewind undoes them); commands, the
+ *   network and anything outside the folder ask the host.
  */
-export function guestMode(hostMode: Mode): Mode {
+export function guestMode(hostMode: Mode, actions: 'auto' | 'ask' = 'ask'): Mode {
+  if (hostMode === 'plan' || hostMode === 'planAuto') return hostMode;
+  if (actions === 'auto') return 'auto';
   return STRICTNESS.indexOf(hostMode) <= STRICTNESS.indexOf('acceptEdits') ? hostMode : 'acceptEdits';
 }
 

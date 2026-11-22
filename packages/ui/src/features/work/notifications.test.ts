@@ -129,6 +129,49 @@ describe('task notifications', () => {
   });
 });
 
+describe('co-op notifications', () => {
+  const shared = (status: SessionStatus, coop: NonNullable<SessionSummary['coop']>) => task(status, { mode: 'code', title: 'Water', coop });
+
+  it('a question tells only the person it is for, and a knock tells the host', () => {
+    const notifier = createTaskNotifier(false);
+    const open = vi.fn();
+    // Ben's turn asks Ada (the host): her notification; Cy, a teammate, isn't asked, so nothing for him.
+    notifier.update(shared('running', { role: 'host', hostName: 'Ada', participants: 3, waitingOnYou: false }), prefs(), open);
+    notifier.update(shared('waiting', { role: 'host', hostName: 'Ada', participants: 3, waitingOnYou: true }), prefs(), open);
+    const cy = createTaskNotifier(false);
+    cy.update(shared('running', { role: 'editor', hostName: 'Ada', participants: 3, waitingOnYou: false }), prefs(), open);
+    cy.update(shared('waiting', { role: 'editor', hostName: 'Ada', participants: 3, waitingOnYou: false }), prefs(), open);
+    expect(FakeNotification.shown.map((n) => n.title)).toEqual(['Code session needs your input']);
+
+    // A guest's own question in a session they joined (its status there stays as it is): theirs.
+    const ben = createTaskNotifier(false);
+    ben.update(shared('idle', { role: 'editor', hostName: 'Ada', participants: 3, mirror: true, waitingOnYou: false }), prefs(), open);
+    ben.update(shared('waiting', { role: 'editor', hostName: 'Ada', participants: 3, mirror: true, waitingOnYou: true }), prefs(), open);
+    expect(FakeNotification.shown.map((n) => n.title)).toEqual(['Code session needs your input', 'Code session needs your input']);
+
+    // Someone knocks: the host hears it once, and clicking opens the session.
+    FakeNotification.shown = [];
+    const knocked = vi.fn();
+    const host = createTaskNotifier(false, knocked);
+    host.seed([shared('idle', { role: 'host', hostName: 'Ada', participants: 1 })]);
+    for (let i = 0; i < 2; i++) host.update(shared('idle', { role: 'host', hostName: 'Ada', participants: 1, knocking: [{ id: 'k1', name: 'Ben' }] }), prefs(), open);
+    expect(FakeNotification.shown.map((n) => [n.title, n.options.body])).toEqual([['Ben wants to join', 'Water: compare the four emoji, then let them in.']]);
+    expect(knocked).toHaveBeenCalledTimes(1);
+    expect(knocked.mock.calls[0]![0]).toMatchObject({ sessionId: 's1', id: 'k1', name: 'Ben', title: 'Water' });
+    FakeNotification.shown[0]!.onclick!();
+    expect(open).toHaveBeenCalledWith('s1');
+  });
+
+  it('while the window is in front, a knock is a toast there, not a notification', () => {
+    focused = true;
+    const knocked = vi.fn();
+    const host = createTaskNotifier(false, knocked);
+    host.update(task('idle', { coop: { role: 'host', hostName: 'Ada', participants: 1, knocking: [{ id: 'k1', name: 'Ben' }] } }), prefs(), vi.fn());
+    expect(FakeNotification.shown).toEqual([]);
+    expect(knocked).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('askToNotify', () => {
   it('asks once the person wants notifications and has not answered yet', () => {
     FakeNotification.permission = 'default';

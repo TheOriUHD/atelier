@@ -42,8 +42,37 @@ import type { ModelResolver } from '../agent/chat-service.ts';
 import type { StreamEvent } from '../providers/types.ts';
 import type { Db } from '../store/db.ts';
 import { coopMemberships } from '../store/schema.ts';
+import { CoopError } from './channel.ts';
 import { lanes, type JsonChannel } from './lanes.ts';
 import { PEER_SELF } from './peer-model.ts';
+
+/**
+ * Why joining failed, said to the person as it is: the channel's own errors would otherwise reach their window as an
+ * internal error, with nothing to go on.
+ */
+export function joinFailure(error: unknown): unknown {
+  if (!(error instanceof CoopError)) return error;
+  switch (error.code) {
+    case 'not_found':
+    case 'room_closed':
+      return appError('not_found', 'That co-op session isn’t open any more: the host ended it, or the link expired. Ask for a new link.');
+    case 'refused':
+    case 'forbidden':
+      return appError('forbidden', 'The host’s session didn’t take this link: a newer one may have replaced it. Ask for a new link.');
+    case 'full':
+      return appError('invalid_request', 'That session is full: four people at most.');
+    case 'host_key_changed':
+      return appError('forbidden', 'The host isn’t on the computer you joined from before. Ask them for a new link to be sure it’s them.');
+    case 'rate_limited':
+      return appError('rate_limited', 'Too many tries just now. Wait a minute and try again.');
+    case 'timeout':
+      return appError('host_away', 'The host’s Atelier didn’t answer in time. Try again while it’s open.');
+    case 'aborted':
+      return appError('aborted', 'Joining was cancelled.');
+    default:
+      return appError('host_away', `Couldn’t reach the co-op relay: ${error.message} Check the connection and try again.`);
+  }
+}
 
 /** A guest's channel to the host (channel.ts `GuestChannel`). */
 export interface GuestChannelPort extends JsonChannel {
@@ -60,7 +89,8 @@ export interface GuestChannelPort extends JsonChannel {
 }
 
 export interface GuestTransportPort {
-  join(opts: { relayUrl: string; roomId: string; secret: string; name: string; version: string; hostKey: string | null; signal?: AbortSignal }): Promise<GuestChannelPort>;
+  /** `userId`: whose device key the handshake uses (on a server, each account has its own). */
+  join(opts: { relayUrl: string; roomId: string; secret: string; name: string; version: string; hostKey: string | null; signal?: AbortSignal; userId?: string }): Promise<GuestChannelPort>;
 }
 
 /** A connector tool of this person's that they may lend to their turns in someone else's session. */
@@ -99,6 +129,16 @@ export interface CoopGatewayDeps {
   saveCopy(userId: string, snapshot: SessionSnapshot, title: string): Promise<string | null>;
   /** Whether a sidebar group is this person's (to file a mirror in it). */
   ownsGroup(userId: string, groupId: string): Promise<boolean>;
+  /**
+   * A server: many accounts on one backend. Each joins with its own device key, under ids of its own (two accounts of
+   * one server can be in the same room), and sees a blob of a mirror only once its own host sent it (`canRead`,
+   * `grant`): one that is here already may be another account's. A desktop has one person and leaves these out.
+   */
+  perAccount?: boolean;
+  /** Whether the account may read a blob already (something of theirs refers to it). */
+  canRead?(userId: string, sha256: string): Promise<boolean>;
+  /** The account's host sent this blob for a session they are in: theirs to read for a while (store/blob-access.ts). */
+  grant?(userId: string, sha256: string): void;
   log(message: string, error?: unknown): void;
   now?(): number;
 }
@@ -139,6 +179,8 @@ interface Link {
    */
   children: Set<string>;
   watchedChildren: Set<string>;
+  /** The question the host's session waits on is this person's to answer: their sidebar and notifications say so. */
+  waitingOnYou: boolean;
 }
 
 /** Sub-agents' and tracks' session ids a snapshot or event names: tool calls that started one, background agents. */
@@ -158,8 +200,29 @@ export function childSessionIds(value: unknown, out = new Set<string>(), depth =
 /** At most this many of the guest's own model's requests run for the host at once. */
 const MAX_STREAMS = 3;
 
-/** The mirror's id on the guest's computer. */
-export const mirrorId = (roomId: string, hostSessionId: string): string => `${COOP_MIRROR_PREFIX}${roomId}_${hostSessionId}`;
+/** A short tag of an account, for ids that must differ between two accounts of one server. */
+const accountTag = (userId: string): string => createHash('sha256').update(userId).digest('base64url').slice(0, 12);
+
+/**
+ * The mirror's id on the guest's backend: `coop_<room>_<host session>` on a desktop (one person), with the account's tag
+ * after it on a server (`account`), where two accounts may join the same room.
+ */
+export const mirrorId = (roomId: string, hostSessionId: string, account?: string): string => `${COOP_MIRROR_PREFIX}${roomId}_${hostSessionId}${account ? `_${accountTag(account)}` : ''}`;
+
+/** Where the room's pre-shared key is kept: one per room on a desktop, one per account and room on a server. */
+export const pskSecretId = (roomId: string, account?: string): string => `coop-psk-${roomId}${account ? `-${accountTag(account)}` : ''}`;
+
+/** `value` without the parts that name a blob in `missing` (a copy keeps only what its host really sent). */
+function withoutBlobs<T>(value: T, missing: ReadonlySet<string>): T {
+  if (Array.isArray(value))
+    return value.filter((v) => !(v && typeof v === 'object' && typeof (v as { blob?: unknown }).blob === 'string' && missing.has((v as { blob: string }).blob))).map((v) => withoutBlobs(v, missing)) as T;
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = k === 'blob' && typeof v === 'string' && missing.has(v) ? '' : withoutBlobs(v, missing);
+    return out as T;
+  }
+  return value;
+}
 
 const callKey = (name: string, input: unknown): string => createHash('sha256').update(name).update('\n').update(JSON.stringify(input ?? null)).digest('hex');
 
@@ -187,13 +250,14 @@ export class CoopGateway {
   /** Joins from an invite: connects, introduces the person, and waits for the host to let them in (`waiting`). */
   async join(userId: string, invite: string, models: ModelsChoice, model: string | null = null): Promise<{ sessionId: string; waiting: boolean; fingerprint?: string[] }> {
     const relayUrl = this.deps.relayUrl();
-    if (!relayUrl) throw appError('unsupported', 'Co-op between computers is switched off on this computer.');
+    if (!relayUrl) throw appError('unsupported', this.deps.perAccount ? 'An admin turned off co-op with other computers on this server.' : 'Co-op between computers is switched off on this computer.');
     const parsed = parseInviteFragment(invite);
     if (!parsed) throw appError('invalid_request', 'That isn’t a co-op invite link.');
     // Already in it (a second click on the same link): the same mirror.
     for (const link of this.links.values())
       if (link.membership.userId === userId && link.membership.roomId === parsed.roomId && !link.ended) return { sessionId: link.membership.id, waiting: !link.admitted, ...(link.channel ? { fingerprint: [...link.channel.fingerprint] } : {}) };
-    const pskSecret = `coop-psk-${parsed.roomId}`;
+    const account = this.deps.perAccount ? userId : undefined;
+    const pskSecret = pskSecretId(parsed.roomId, account);
     const meta = parsed.meta ?? { hostName: 'Someone', title: 'Shared session', mode: 'chat' as const };
     const placeholder: Membership = {
       id: '',
@@ -218,8 +282,11 @@ export class CoopGateway {
     const link = this.blank(placeholder, models, model);
     // The invite's secret until the host gives them their own (`keep`), which then replaces it.
     await this.deps.secrets.set(pskSecret, parsed.secret);
-    const welcome = await this.connect(link, parsed.secret);
-    const id = mirrorId(parsed.roomId, welcome.sessionId);
+    const welcome = await this.connect(link, parsed.secret).catch((e: unknown) => {
+      link.channel?.close();
+      throw joinFailure(e);
+    });
+    const id = mirrorId(parsed.roomId, welcome.sessionId, account);
     const joined = { ...placeholder, id, hostKey: link.channel!.remoteKey, hostName: welcome.hostName, hostSessionId: welcome.sessionId, title: welcome.title, mode: welcome.mode };
     // Joining again keeps how they filed it in their sidebar (their name for it, pinned, group).
     const { localTitle: _t, pinnedAt: _p, groupId: _g, archivedAt: _a, finishedUnseenAt: _u, ...fresh } = joined;
@@ -254,14 +321,14 @@ export class CoopGateway {
   }
 
   private blank(membership: Membership, models: ModelsChoice, model: string | null): Link {
-    return { membership, channel: null, client: null, welcome: null, admitted: false, connected: false, watched: false, state: null, snapshot: null, models, model, secondary: new Set(), lend: false, allowed: new Map(), asked: new Map(), streams: new Map(), ended: false, children: new Set(), watchedChildren: new Set() };
+    return { membership, channel: null, client: null, welcome: null, admitted: false, connected: false, watched: false, state: null, snapshot: null, models, model, secondary: new Set(), lend: false, allowed: new Map(), asked: new Map(), streams: new Map(), ended: false, children: new Set(), watchedChildren: new Set(), waitingOnYou: false };
   }
 
   /** The channel to the host, its two directions, and what the host tells. */
   private async connect(link: Link, secret: string): Promise<CoopWelcome> {
     const { userId } = link.membership;
     const profile = await this.deps.profile(userId);
-    const channel = await this.deps.transport.join({ relayUrl: link.membership.relayUrl, roomId: link.membership.roomId, secret, name: profile.name, version: this.deps.version, hostKey: link.membership.hostKey });
+    const channel = await this.deps.transport.join({ relayUrl: link.membership.relayUrl, roomId: link.membership.roomId, secret, name: profile.name, version: this.deps.version, hostKey: link.membership.hostKey, userId });
     const { coop, peer } = lanes(channel);
     const client = createRpcClient(CoopContract, coop);
     link.channel = channel;
@@ -354,10 +421,29 @@ export class CoopGateway {
 
   private event(link: Link, seq: number, event: RunEvent): void {
     this.learn(link, event);
-    if (event.type === 'pending') this.noteAsked(link, event.pending);
+    if (event.type === 'pending') {
+      this.noteAsked(link, event.pending);
+      this.noteWaiting(link, event.pending);
+    }
     if (link.snapshot && seq > link.snapshot.seq) link.snapshot = { ...link.snapshot, seq };
     const me = link.welcome?.participantId ?? link.state?.me;
     this.deps.emitSession(link.membership.id, seq, event.type === 'presence' && me ? { ...event, participants: ownModelHere(event.participants, me) } : event);
+  }
+
+  /**
+   * Whether the question the host's session waits on is this person's: their own (a connector they lend), or the host's
+   * when the host trusts them with approvals. Their sidebar shows it waiting and their notifications tell them.
+   */
+  private noteWaiting(link: Link, pending: PendingInteraction | null): void {
+    const me = link.welcome?.participantId ?? link.state?.me;
+    const people = link.state?.participants ?? [];
+    const self = people.find((p) => p.id === me);
+    const hostId = people.find((p) => p.role === 'host')?.id;
+    const approver = pending ? (pending.approver ?? hostId) : undefined;
+    const mine = !!pending && !!me && (approver === me || (!!self?.trusted && self.role !== 'viewer' && !!hostId && approver === hostId));
+    if (mine === link.waitingOnYou) return;
+    link.waitingOnYou = mine;
+    this.changed(link);
   }
 
   /** The guest's own connector calls are asked of them in the session; what they allow there may run once. */
@@ -383,8 +469,16 @@ export class CoopGateway {
       effort: null,
       connectorsOff: [],
       research: false,
-      coop: { role: link.state?.role === 'viewer' ? 'viewer' : 'editor', hostName: m.hostName, participants: link.state?.participants.length ?? 2, mirror: true, ...(ended ? { ended: true } : {}) },
-      status: 'idle',
+      coop: {
+        role: link.state?.role === 'viewer' ? 'viewer' : 'editor',
+        hostName: m.hostName,
+        participants: link.state?.participants.length ?? 2,
+        mirror: true,
+        waitingOnYou: !ended && link.waitingOnYou,
+        ...(link.state?.hostedOn ? { hostedOn: link.state.hostedOn } : {}),
+        ...(ended ? { ended: true } : {}),
+      },
+      status: !ended && link.waitingOnYou ? 'waiting' : 'idle',
       pinnedAt: m.pinnedAt,
       groupId: m.groupId,
       archivedAt: m.archivedAt,
@@ -405,17 +499,24 @@ export class CoopGateway {
   }
 
   /** Co-op ended for them (they left, were removed, or the host ended it): a copy if the host allows one. */
-  private async end(link: Link, copy: boolean, reason?: 'declined' | 'removed' | 'ended'): Promise<void> {
+  /** `farewell`: what to tell the host once the copy is made, before the channel closes (their own leave). */
+  private async end(link: Link, copy: boolean, reason?: 'declined' | 'removed' | 'ended', farewell?: () => Promise<unknown>): Promise<void> {
     if (link.ended) return;
     link.ended = true;
     for (const s of link.streams.values()) s.abort();
     let copySessionId: string | null = null;
     if (copy && reason !== 'declined') {
       // The latest of the conversation, fetched while the channel still stands.
-      const snapshot = (await link.client?.call('coop.subscribe', {}).catch(() => null)) ?? link.snapshot;
-      if (snapshot) for (const sha of blobsOf(snapshot.messages)) await this.fetchBlob(link.membership.userId, sha).catch(() => false);
+      let snapshot = (await link.client?.call('coop.subscribe', {}).catch(() => null)) ?? link.snapshot;
+      const missing = new Set<string>();
+      // From this link itself: it is ended already, so the other lookups pass it by.
+      if (snapshot) for (const sha of blobsOf(snapshot.messages)) if (!(await this.ownBlob(link.membership.userId, sha)) && !(await this.blobFrom(link, sha).catch(() => false))) missing.add(sha);
+      // On a server a copy names only blobs its host sent (or the account's own): a message of the host's could name
+      // any hash, and the copy would let them read another account's file.
+      if (snapshot && this.deps.perAccount && missing.size) snapshot = { ...snapshot, messages: withoutBlobs(snapshot.messages, missing) };
       if (snapshot) copySessionId = await this.deps.saveCopy(link.membership.userId, snapshot, link.membership.title).catch(() => null);
     }
+    await farewell?.();
     link.channel?.close();
     link.client?.close();
     if (link.membership.id) {
@@ -446,16 +547,21 @@ export class CoopGateway {
   /** The person removes an ended mirror from their sidebar. */
   async forget(userId: string, id: string): Promise<void> {
     const link = this.links.get(id);
-    if (link && !link.ended) await this.leave(userId, id);
+    // Removing it from the sidebar keeps nothing: no copy appears in its place.
+    if (link && !link.ended) await this.leave(userId, id, false);
     this.links.delete(id);
     await this.deps.db.delete(coopMemberships).where(and(eq(coopMemberships.id, id), eq(coopMemberships.userId, userId)));
     this.deps.emitToUser(userId, 'sessions.removed', { id });
   }
 
-  async leave(userId: string, id: string): Promise<void> {
+  /**
+   * They leave: a copy first when the host lets guests keep one (the leave dialog promises it), then the host is told.
+   * Someone still waiting to be let in has nothing to copy.
+   */
+  async leave(userId: string, id: string, keepCopy = true): Promise<void> {
     const link = this.mine(userId, id);
-    await link.client?.call('coop.leave', {}).catch(() => undefined);
-    await this.end(link, false);
+    const settings = keepCopy && link.admitted && link.connected ? ((await link.client?.call('coop.state', {}).catch(() => null)) ?? link.state)?.settings : link.state?.settings;
+    await this.end(link, keepCopy && link.admitted && !!settings?.guestsKeepCopy, undefined, async () => link.client?.call('coop.leave', {}).catch(() => undefined));
   }
 
   private mine(userId: string, id: string): Link {
@@ -529,6 +635,7 @@ export class CoopGateway {
         const snapshot = await link.client.call('coop.subscribe', {});
         link.snapshot = snapshot;
         this.learn(link, snapshot);
+        this.noteWaiting(link, snapshot.pending ?? null);
         return { ...snapshot, session: { ...this.summary(link), title: link.membership.localTitle ?? snapshot.session.title, mode: snapshot.session.mode, model: snapshot.session.model, effort: snapshot.session.effort, status: snapshot.session.status } };
       }
       case 'sessions.unsubscribe':
@@ -579,7 +686,8 @@ export class CoopGateway {
         return { ok: true };
       case 'chat.send':
         this.askedFor(link, input.answerWith);
-        return this.live(userId, id).call('chat.send', { parentId: (input.parentId as string | null | undefined) ?? null, parts: input.parts as never, ...(typeof input.answerWith === 'string' ? { answerWith: input.answerWith } : {}) });
+        // No parent named: after the host's latest message, as for anyone's send (null would start a new branch).
+        return this.live(userId, id).call('chat.send', { ...(input.parentId !== undefined ? { parentId: input.parentId as string | null } : {}), parts: input.parts as never, ...(typeof input.answerWith === 'string' ? { answerWith: input.answerWith } : {}) });
       case 'chat.queue':
         this.askedFor(link, input.answerWith);
         return this.live(userId, id).call('chat.queue', { parts: input.parts as never, ...(input.joinTurn ? { joinTurn: true } : {}), ...(typeof input.answerWith === 'string' ? { answerWith: input.answerWith } : {}) });
@@ -685,18 +793,43 @@ export class CoopGateway {
     return { session, messages: [], siblings: {}, streamingMessageId: null, pending: null, todos: [], tasks: [], toolOutput: {}, context: null, compacting: false, queued: null, phase: null, outbox: [], seq: 0 } as unknown as SessionSnapshot;
   }
 
-  /** A blob a mirror's message refers to, fetched from the hosts this person is connected to (the host checks it). */
+  /**
+   * A blob a mirror's message refers to, fetched from the hosts this person is connected to (the host checks it). On a
+   * server a blob that is here already counts only when it is the account's own: otherwise their host must send it, and
+   * then it is theirs to read (`grant`).
+   */
   async fetchBlob(userId: string | null, sha256: string): Promise<boolean> {
-    if (await this.deps.hasBlob(sha256)) return true;
+    if (await this.ownBlob(userId, sha256)) return true;
+    if (this.deps.perAccount && userId === null) return false;
     for (const link of this.links.values()) {
       if ((userId !== null && link.membership.userId !== userId) || link.ended || !link.client || !link.connected || !link.admitted) continue;
-      const got = await link.client.call('blob.get', { sha256 }).catch(() => null);
-      if (!got) continue;
-      const bytes = new Uint8Array(Buffer.from(got.dataBase64, 'base64'));
-      if (createHash('sha256').update(bytes).digest('hex') !== sha256) continue;
-      await this.deps.putBlob(bytes, got.mime);
-      return true;
+      if (await this.blobFrom(link, sha256)) return true;
     }
+    return false;
+  }
+
+  /** The blob is here and theirs to see: any blob here on a desktop, one of the account's own on a server. */
+  private async ownBlob(userId: string | null, sha256: string): Promise<boolean> {
+    if (!(await this.deps.hasBlob(sha256))) return false;
+    if (!this.deps.perAccount || !this.deps.canRead) return true;
+    return userId !== null && (await this.deps.canRead(userId, sha256));
+  }
+
+  /** Asks one host for a blob of its session, checks it against its hash, keeps it, and lets the account read it. */
+  private async blobFrom(link: Link, sha256: string): Promise<boolean> {
+    if (!link.client) return false;
+    const got = await link.client.call('blob.get', { sha256 }).catch(() => null);
+    if (!got) return false;
+    const bytes = new Uint8Array(Buffer.from(got.dataBase64, 'base64'));
+    if (createHash('sha256').update(bytes).digest('hex') !== sha256) return false;
+    await this.deps.putBlob(bytes, got.mime);
+    this.deps.grant?.(link.membership.userId, sha256);
+    return true;
+  }
+
+  /** Whether the account has a mirror whose host may send it blobs right now (a window asks for one of its images). */
+  connectedFor(userId: string): boolean {
+    for (const link of this.links.values()) if (link.membership.userId === userId && !link.ended && link.client && link.connected && link.admitted) return true;
     return false;
   }
 
@@ -718,8 +851,9 @@ export class CoopGateway {
         const refused = await this.deps.limit(userId);
         if (refused) throw appError('limit_reached', refused);
         const { adapter, info } = await this.deps.models.resolve(request.model, userId);
-        // Images and documents the request shows, from the host, checked against their hash.
-        for (const sha of blobsOf(request.messages)) await this.fetchBlob(userId, sha);
+        // Images and documents the request shows, from the host, checked against their hash. On a server one the host
+        // can't send is refused rather than read here: it may be another account's.
+        for (const sha of blobsOf(request.messages)) if (!(await this.fetchBlob(userId, sha)) && this.deps.perAccount) throw appError('forbidden', 'That file isn’t part of this session.');
         const controller = new AbortController();
         ctx.signal.addEventListener('abort', () => controller.abort(), { once: true });
         link.streams.set(streamId, controller);
@@ -728,7 +862,8 @@ export class CoopGateway {
         ) as Message[];
         const server = (event: StreamEvent) => streamed({ streamId, event });
         try {
-          for await (const event of adapter.stream({ ...request, effort: (request.effort ?? undefined) as never, messages, signal: controller.signal })) {
+          // The host names the model by its ref here (`chatgpt/gpt-6.1`); the provider wants its own id (`gpt-6.1`).
+          for await (const event of adapter.stream({ ...request, model: info.modelId, effort: (request.effort ?? undefined) as never, messages, signal: controller.signal })) {
             if (event.type === 'usage') this.deps.recordUsage({ userId, sessionId: link.membership.id, model: info, usage: event.usage, mode: link.membership.mode });
             server(event);
             if (event.type === 'finish') break;

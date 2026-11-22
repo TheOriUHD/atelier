@@ -16,9 +16,10 @@ import { openDatabase, type Db } from '../store/db.ts';
 import { coopMemberships, users } from '../store/schema.ts';
 import type { ModelResolver } from '../agent/chat-service.ts';
 import type { ChatRequest, ProviderAdapter, StreamEvent } from '../providers/types.ts';
-import { CoopGateway, mirrorId, type CoopGatewayDeps } from './gateway.ts';
+import { CoopGateway, mirrorId, pskSecretId, type CoopGatewayDeps } from './gateway.ts';
 import { lanes } from './lanes.ts';
 import { peerAdapter, PEER_SELF, peerProviderType, withPeerModels } from './peer-model.ts';
+import { peerModelRef } from '@atelier/protocol';
 import { channelPair, settle, type ChannelPair } from './test-channels.ts';
 
 const ROOM = 'R'.repeat(22);
@@ -73,6 +74,7 @@ beforeEach(async () => {
     'coop.unsubscribe': record('coop.unsubscribe'),
     'chat.respond': record('chat.respond'),
     'chat.send': async (input: unknown) => (calls.push({ method: 'chat.send', input }), { userMessageId: 'm1' }),
+    'chat.secondOpinion': record('chat.secondOpinion'),
     'coop.leave': record('coop.leave'),
     'coop.models': async () => ({}) as never,
   } as unknown as Handlers<typeof CoopContract, object>;
@@ -119,7 +121,7 @@ describe('co-op gateway on the guest’s computer', () => {
     const snapshot = (await gateway.call('u2', 'sessions.subscribe', { id: sessionId })) as SessionSnapshot;
     expect(snapshot.session).toMatchObject({ id: sessionId, workspaceId: null, coop: { mirror: true, hostName: 'Ada' } });
     await gateway.call('u2', 'chat.send', { sessionId, parts: [{ type: 'text', text: 'hi' }] });
-    expect(calls.at(-1)).toEqual({ method: 'chat.send', input: { parentId: null, parts: [{ type: 'text', text: 'hi' }] } });
+    expect(calls.at(-1)).toEqual({ method: 'chat.send', input: { parts: [{ type: 'text', text: 'hi' }] } });
     // The host's events reach the windows here under the mirror's id.
     hostServer.emit('session.event', { seq: 8, event: { type: 'typing', participantId: 'x' } });
     await settle();
@@ -142,6 +144,149 @@ describe('co-op gateway on the guest’s computer', () => {
     await settle();
     expect(events).toEqual([{ type: 'text', delta: 'hello' }, { type: 'usage', usage: { input: 10, output: 2 } }, { type: 'finish', reason: 'end' }]);
     expect((streamed[0]!.messages[0]!.parts[0] as { provider: string }).provider).toBe('anthropic');
+  });
+
+  it('runs their own model with its provider’s own model id, through the host’s peer adapter, whatever the provider', async () => {
+    // Refs as the guest's registry names them (`<provider id>/<model id>`), and the id each provider must be sent: the
+    // ChatGPT Plan said "The 'chatgpt/gpt-6.1-sol' model is not supported" when it got the whole ref.
+    const cases: [string, string][] = [
+      ['chatgpt/gpt-6.1-sol', 'gpt-6.1-sol'],
+      ['openai/gpt-5.2', 'gpt-5.2'],
+      ['anthropic/claude-sonnet-5', 'claude-sonnet-5'],
+      ['ollama/qwen3:30b', 'qwen3:30b'],
+      ['copilot/gpt-5-mini', 'gpt-5-mini'],
+      ['lmstudio/openai/gpt-oss-20b', 'openai/gpt-oss-20b'],
+    ];
+    const received: string[] = [];
+    const recording: ProviderAdapter = {
+      ...adapter,
+      async *stream(request: ChatRequest): AsyncIterable<StreamEvent> {
+        received.push(request.model);
+        yield { type: 'text', delta: 'ok' };
+        yield { type: 'finish', reason: 'end' };
+      },
+    };
+    const modelId = (ref: string) => ref.slice(ref.indexOf('/') + 1);
+    gateway = new CoopGateway({ ...deps, models: { resolve: async (ref) => ({ adapter: recording, info: { ...modelInfo(ref), modelId: modelId(ref) } }), firstAvailable: async () => undefined } });
+    const [[chosen], ...named] = cases as [[string, string], ...[string, string][]];
+    const { sessionId } = await gateway.join('u2', INVITE, 'own', chosen);
+    // The others they name for one answer each: an @mention, and a second opinion.
+    for (const [i, [ref]] of named.entries()) {
+      if (i % 2) await gateway.call('u2', 'chat.secondOpinion', { sessionId, messageId: 'a1', model: `own:${ref}` });
+      else await gateway.call('u2', 'chat.send', { sessionId, parts: [{ type: 'text', text: 'hi' }], answerWith: `own:${ref}` });
+    }
+    // The host's side, as backend.ts wraps its registry: none of these are the host's own.
+    const host = withPeerModels({ resolve: async () => Promise.reject(new Error('not one of the host’s')), firstAvailable: async () => undefined }, () => peer, () => 'Ben');
+    const key = PARTICIPANT.slice('peer:'.length);
+    for (const [ref] of cases) {
+      const { adapter: theirs, info } = await host.resolve(peerModelRef(key, ref));
+      // The host's loop sends the model id it knows, as for any model (chat-service.ts).
+      for await (const event of theirs.stream({ model: info.modelId, system: [], messages: [], maxOutputTokens: 10, signal: new AbortController().signal })) expect(event.type).not.toBe('error');
+    }
+    expect(received).toEqual(cases.map(([, id]) => id));
+  });
+
+  it('a failure of their own model says it was theirs, in the host’s session', async () => {
+    const failing: ProviderAdapter = {
+      ...adapter,
+      async *stream(): AsyncIterable<StreamEvent> {
+        yield { type: 'finish', reason: 'error', error: { code: 'provider_error', message: 'ChatGPT Plan request failed (400): no such model.' } };
+      },
+    };
+    gateway = new CoopGateway({ ...deps, models: { resolve: async (ref) => ({ adapter: failing, info: modelInfo(ref) }), firstAvailable: async () => undefined } });
+    await gateway.join('u2', INVITE, 'own', 'chatgpt/gpt-6.1-sol');
+    const host = withPeerModels({ resolve: async () => Promise.reject(new Error('no')), firstAvailable: async () => undefined }, () => peer, () => 'Ben');
+    const { adapter: theirs } = await host.resolve(peerModelRef(PARTICIPANT.slice(5), 'chatgpt/gpt-6.1-sol'));
+    const out: StreamEvent[] = [];
+    for await (const event of theirs.stream({ model: 'x', system: [], messages: [], maxOutputTokens: 10, signal: new AbortController().signal })) out.push(event);
+    expect(out.at(-1)).toMatchObject({ type: 'finish', reason: 'error', error: { message: 'Ben’s own model (Mine) failed: ChatGPT Plan request failed (400): no such model.' } });
+  });
+
+  it('on a server, two accounts in the same room have mirrors, keys and secrets of their own', async () => {
+    const used: (string | undefined)[] = [];
+    const stored = new Map<string, string>();
+    await db.insert(users).values({ id: 'u3', username: 'cy', name: 'Cy', role: 'user', passwordHash: 'x', createdAt: 1, updatedAt: 1 });
+    gateway = new CoopGateway({
+      ...deps,
+      perAccount: true,
+      transport: { join: async ({ userId }) => (used.push(userId), channelPair({ guestKey: `key-${userId}`, hostKey: 'key-ada' }).guest) },
+      secrets: { get: async (id) => stored.get(id), set: async (id, v) => void stored.set(id, v), delete: async (id) => void stored.delete(id) },
+    });
+    // Each channel here has no host behind it: joining stops at the hello, after the keys and ids are chosen.
+    await Promise.race([gateway.join('u2', INVITE, 'host').catch(() => undefined), settle(20)]);
+    await Promise.race([gateway.join('u3', INVITE, 'host').catch(() => undefined), settle(20)]);
+    expect(used).toEqual(['u2', 'u3']);
+    expect([...stored.keys()].sort()).toEqual([pskSecretId(ROOM, 'u2'), pskSecretId(ROOM, 'u3')].sort());
+    expect(pskSecretId(ROOM, 'u2')).not.toBe(pskSecretId(ROOM, 'u3'));
+    expect(mirrorId(ROOM, 'host-1', 'u2')).not.toBe(mirrorId(ROOM, 'host-1', 'u3'));
+    // A desktop keeps the ids it always had.
+    expect(mirrorId(ROOM, 'host-1')).toBe(`coop_${ROOM}_host-1`);
+    expect(pskSecretId(ROOM)).toBe(`coop-psk-${ROOM}`);
+  });
+
+  it('on a server, a copy keeps only the files its host really sent, and a blob here already is read only once the host sent it', async () => {
+    const theirs = 'b'.repeat(64);
+    const bytes = Buffer.from('from the host');
+    const sentSha = (await import('node:crypto')).createHash('sha256').update(bytes).digest('hex');
+    const granted: string[] = [];
+    let copied: SessionSnapshot['messages'] = [];
+    const { coop } = lanes(pair.host);
+    hostServer.close();
+    // The host's snapshot names two blobs: one it sends, and another account's of this server that it doesn't have.
+    hostServer = serveRpc(
+      CoopContract,
+      {
+        'coop.hello': async () => ({ admitted: true, participantId: PARTICIPANT, hostName: 'Ada', sessionId: 'host-1', title: 'Shader', mode: 'code', fingerprint: ['🐙', '🌵', '🎈', '🚀'] }),
+        'coop.state': async () => null,
+        'coop.subscribe': async () =>
+          ({
+            session: { id: 'host-1', title: 'Shader', mode: 'code' },
+            messages: [{ id: 'u1', sessionId: 'host-1', parentId: null, role: 'user', parts: [{ type: 'text', text: 'look' }, { type: 'image', blob: theirs, mime: 'image/png' }, { type: 'image', blob: sentSha, mime: 'image/png' }], createdAt: 1 }],
+            siblings: {},
+            seq: 1,
+          }) as unknown as SessionSnapshot,
+        'blob.get': async ({ sha256 }: { sha256: string }) => {
+          if (sha256 !== sentSha) throw new Error('not in this session');
+          return { mime: 'image/png', dataBase64: bytes.toString('base64') };
+        },
+      } as unknown as Handlers<typeof CoopContract, object>,
+      coop,
+      {},
+    );
+    gateway = new CoopGateway({
+      ...deps,
+      perAccount: true,
+      hasBlob: async () => true,
+      canRead: async () => false,
+      grant: (_userId, sha) => void granted.push(sha),
+      saveCopy: async (_userId, snapshot) => ((copied = snapshot.messages), 'copy-1'),
+    });
+    const { sessionId } = await gateway.join('u2', INVITE, 'host');
+    // A blob that is here already but isn't theirs: only the host's own copy of it lets them read it.
+    expect(await gateway.fetchBlob('u2', theirs)).toBe(false);
+    expect(await gateway.fetchBlob('u2', sentSha)).toBe(true);
+    expect(granted).toEqual([sentSha]);
+    expect(await gateway.fetchBlob('someone-else', sentSha)).toBe(false);
+
+    hostServer.emit('gone', { reason: 'ended', copy: true });
+    await settle(20);
+    expect(toUser).toContainEqual({ event: 'sessions.removed', payload: { id: sessionId } });
+    expect(JSON.stringify(copied)).not.toContain(theirs);
+    expect(JSON.stringify(copied)).toContain(sentSha);
+  });
+
+  it('a join that fails on the way says why in plain words, not as an internal error', async () => {
+    const { CoopError } = await import('./channel.ts');
+    for (const [code, expected] of [
+      ['refused', 'forbidden'],
+      ['room_closed', 'not_found'],
+      ['full', 'invalid_request'],
+      ['network', 'host_away'],
+    ] as const) {
+      gateway = new CoopGateway({ ...deps, transport: { join: async () => Promise.reject(new CoopError(code, 'x')) } });
+      await refused(gateway.join('u2', INVITE, 'host'), expected);
+    }
+    expect(await gateway.list('u2')).toEqual([]);
   });
 
   it('their connectors are lent only when they say so, and each call only after they allowed it', async () => {

@@ -45,7 +45,21 @@ export const SessionSummary = z.object({
    * Co-op: this viewer's part in it, and who hosts it. Absent for a session of one's own that nobody else is in.
    * `mirror`: shown on a guest's own computer for a session that runs on the host's (packages/core/src/coop/gateway.ts).
    */
-  coop: z.object({ role: z.enum(['host', 'editor', 'viewer']), hostName: z.string(), participants: z.number().int(), mirror: z.boolean().optional(), ended: z.boolean().optional() }).optional(),
+  coop: z
+    .object({
+      role: z.enum(['host', 'editor', 'viewer']),
+      hostName: z.string(),
+      participants: z.number().int(),
+      mirror: z.boolean().optional(),
+      ended: z.boolean().optional(),
+      /** The host's view: who is asking to come in (their notifications and sidebar dot). */
+      knocking: z.array(z.object({ id: z.string(), name: z.string() })).max(8).optional(),
+      /** The question the session waits on is this viewer's to answer (absent from older backends). */
+      waitingOnYou: z.boolean().optional(),
+      /** A session joined elsewhere: whether it runs on the host's computer or an Atelier server, once known. */
+      hostedOn: z.enum(['computer', 'server']).optional(),
+    })
+    .optional(),
   status: SessionStatus,
   pinnedAt: z.number().nullable(),
   createdAt: z.number(),
@@ -679,6 +693,11 @@ export const AppInfo = z.object({
   deviceLink: z.object({ protocol: z.number(), services: z.array(z.string()) }).optional(),
   /** This backend can generate images (ARCHITECTURE §23); a newer app hides the feature on an older server. */
   imageGeneration: z.boolean().optional(),
+  /**
+   * Co-op with other computers works here (ARCHITECTURE §24): invite links and joining from one (the relay is on).
+   * Absent from older backends: a desktop's did, an older server's didn't.
+   */
+  coopLinks: z.boolean().optional(),
   /** Chat and Cowork are one kind of conversation here; an older server keeps Cowork as it was, and the app shows it so. */
   unifiedChat: z.boolean().optional(),
   /** Plan mode can be answered by the Auto reviewer (`planAuto`); an older server knows only Plan. */

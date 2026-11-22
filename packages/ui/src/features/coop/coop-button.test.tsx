@@ -70,6 +70,60 @@ describe('the host’s Co-op popover', () => {
     await waitFor(() => expect(callsTo('coop.add')).toEqual([{ sessionId: 's1', userIds: ['cy'], role: 'editor' }]));
   });
 
+  it('on a server, starts co-op and copies an invite link for someone elsewhere in one click', async () => {
+    let current: CoopState | null = null;
+    resetBackend({
+      'app.info': () => ({ surface: 'web', coopLinks: true }) as AppInfo,
+      'coop.start': () => (current = coopState({ via: 'server', hostedOn: 'server', invites: true, participants: [ADA] })),
+      'coop.invite': () => ({ url: 'https://atelierhq.dev/join#v1.room.secret', expiresAt: Date.now() + 24 * 3600_000 }),
+    });
+    renderCoop(<CoopButton session={summary()} />, { live: liveState(summary()), state: () => current });
+    const popover = await open('Co-op');
+    expect(await within(popover).findByText(/teammates on this server, or anyone you send a link to/)).toBeTruthy();
+    fireEvent.click(within(popover).getByRole('button', { name: 'Copy invite link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://atelierhq.dev/join#v1.room.secret'));
+    expect(callsTo('coop.start')).toEqual([{ sessionId: 's1' }]);
+    expect(callsTo('coop.invite')).toEqual([{ sessionId: 's1' }]);
+  });
+
+  it('on a server without invite links, offers teammates only', async () => {
+    resetBackend({ 'app.info': () => ({ surface: 'web', coopLinks: false }) as AppInfo });
+    renderCoop(<CoopButton session={summary()} />, { live: liveState(summary()), state: () => null });
+    const popover = await open('Co-op');
+    expect(await within(popover).findByText(/up to three teammates on this server/)).toBeTruthy();
+    expect(within(popover).queryByRole('button', { name: 'Copy invite link' })).toBeNull();
+  });
+
+  it('a host on a server has both: teammates of the server and an invite link for people elsewhere', async () => {
+    resetBackend({ 'app.info': () => ({ surface: 'web', coopLinks: true }) as AppInfo, 'coop.invite': () => ({ url: 'https://atelierhq.dev/join#v1.room.s', expiresAt: Date.now() + 24 * 3600_000 }) });
+    renderCoop(<CoopButton session={hosting} />, { live: liveState(hosting), state: coopState({ via: 'server', hostedOn: 'server', invites: true, participants: [ADA] }) });
+    const popover = await open(/^Co-op/);
+    expect(await within(popover).findByText('On this server')).toBeTruthy();
+    expect(within(popover).getByRole('button', { name: 'Invite a teammate' })).toBeTruthy();
+    expect(within(popover).getByText(/Add a teammate, or send the link to someone elsewhere/)).toBeTruthy();
+    fireEvent.click(within(popover).getByRole('button', { name: 'Copy invite link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('https://atelierhq.dev/join#v1.room.s'));
+  });
+
+  it('lets Auto mode check guests’ actions, or has the host approve each one', async () => {
+    const settings = vi.fn((input: { settings: Partial<CoopState['settings']> }) => coopState({ settings: { ...coopState().settings, ...input.settings } }));
+    resetBackend({ 'app.info': () => appInfo('desktop'), 'coop.settings': settings });
+    renderCoop(<CoopButton session={hosting} />, { live: liveState(hosting), state: coopState() });
+    const popover = await open('Co-op: you, Ben');
+    const auto = within(popover).getByRole('switch', { name: 'Auto mode checks guests’ actions' });
+    expect(auto.getAttribute('aria-checked')).toBe('true');
+    expect(within(popover).getByText(/You’re asked when it isn’t sure/)).toBeTruthy();
+    fireEvent.click(auto);
+    await waitFor(() => expect(settings).toHaveBeenLastCalledWith({ sessionId: 's1', settings: { guestActions: 'ask' } }));
+  });
+
+  it('a guest of a session on someone’s server is told it runs there', async () => {
+    resetBackend({ 'app.info': () => appInfo('desktop') });
+    renderCoop(<CoopButton session={guestOf} />, { live: liveState(guestOf), state: coopState({ me: BEN.id, role: 'editor', hostedOn: 'server' }) });
+    const popover = await open(/^Co-op/);
+    expect(await within(popover).findByText('Runs on Ada’s server')).toBeTruthy();
+  });
+
   it('lets in whoever knocks after comparing the fingerprint both sides see, or declines them', async () => {
     const knock = { id: 'k1', name: 'Ben', fingerprint: ['🐙', '🌵', '🎈', '🚀'] };
     resetBackend({ 'app.info': () => appInfo('desktop'), 'coop.admit': () => ({ ok: true }) });

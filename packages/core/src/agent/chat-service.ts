@@ -22,6 +22,7 @@ import {
   participantUserId,
   type ContextPart,
   type ContextUsage,
+  parsePeerModelRef,
   type Participant,
   type ControllerMethods,
   type Effort,
@@ -59,7 +60,7 @@ import { appError, imageId, LIMIT_REACHED, lentToolOf, parseAnswerWith, parseLen
 import type { Admission } from '../usage/limits.ts';
 import { createHash } from 'node:crypto';
 import type { ArtifactRepo } from '../artifacts/artifact-repo.ts';
-import { BLOCKS_IN_A_ROW, BLOCKS_TOTAL, parseVerdict, redirectKey, reviewInput, reviewLeniency } from '../permissions/auto-mode.ts';
+import { BLOCKS_IN_A_ROW, BLOCKS_TOTAL, parseVerdict, redirectKey, reviewInput, reviewLeniency, type GuestReview } from '../permissions/auto-mode.ts';
 import { decide, outsideRoots, SANDBOX_CODE_TOOLS, SANDBOX_TOOLS, sandboxDecide, suggestRule, takesScreen, type Decision, type PermissionContext } from '../permissions/engine.ts';
 import { InteractionBroker } from './interactions.ts';
 import type { FileRepo } from '../files/file-repo.ts';
@@ -255,8 +256,10 @@ export interface ChatServiceDeps {
   /**
    * Tools of the enabled MCP connectors, offered in every mode (ARCHITECTURE §9-B). `connectorUser`: whose own connectors
    * join the shared ones (co-op: the turn's person when they bring theirs; null for none); the session's person otherwise.
+   * `peer`: the turn is a co-op guest's from another computer, who is no member of this backend (a server keeps its
+   * shared connectors to its own accounts).
    */
-  mcpTools?(session: SessionRow, connectorUser?: string | null): Promise<Tool[]>;
+  mcpTools?(session: SessionRow, connectorUser?: string | null, opts?: { peer?: boolean }): Promise<Tool[]>;
   /** Adds an MCP server the person agreed to (AddConnector) to their connectors and connects to it; without it the tool isn't offered. */
   addConnector?(session: SessionRow, connector: NewConnector): Promise<AddedConnector>;
   /** Computer use on the person's computer (ARCHITECTURE §22): whether a session can have it, and its controller. */
@@ -857,6 +860,12 @@ export class ChatService {
     await this.start(sessionId, true, {
       before: async () => {
         const session = await this.requireSession(sessionId);
+        // A reply branches off a message of this session only: another session's would pull its conversation into this
+        // one's history (a co-op guest names the parent too).
+        if (parentId) {
+          const parent = await this.deps.repo.getMessage(parentId);
+          if (!parent || parent.sessionId !== sessionId) throw new Error('Message not found');
+        }
         const message = await this.deps.repo.insertMessage({
           id,
           sessionId,
@@ -948,8 +957,6 @@ export class ChatService {
 
   /** Retry = a new sibling reply to the same user turn. */
   async retry(sessionId: string, messageId: string, by?: TurnParticipant | null): Promise<void> {
-    // In co-op the new reply runs as the person who asked for it: their models, their cost.
-    if (by) this.forcedActors.set(sessionId, by);
     await this.start(sessionId, false, {
       before: async () => {
         const target = await this.deps.repo.getMessage(messageId);
@@ -958,6 +965,9 @@ export class ChatService {
         if (!anchor) throw new Error('Nothing to retry');
         await this.deps.repo.update(sessionId, { headMessageId: anchor.id });
         this.wakes.delete(sessionId);
+        // In co-op the new reply runs as the person who asked for it: their models, their cost. Only once this run
+        // really starts: a retry refused (another turn running, no such message) mustn't hand the next turn to them.
+        if (by) this.forcedActors.set(sessionId, by);
       },
     });
   }
@@ -1331,7 +1341,6 @@ export class ChatService {
 
   /** Carries on with a reply a restart cut off: "Continue" as the person's message, with a note on what happened. */
   async continue(sessionId: string, by?: TurnParticipant | null): Promise<void> {
-    if (by) this.forcedActors.set(sessionId, by);
     await this.start(sessionId, true, {
       before: async () => {
         const session = await this.requireSession(sessionId);
@@ -1353,6 +1362,8 @@ export class ChatService {
         });
         this.emit(sessionId, { type: 'message', message });
         this.wakes.delete(sessionId);
+        // As for a retry: theirs only once this run starts.
+        if (by) this.forcedActors.set(sessionId, by);
       },
     });
   }
@@ -1877,6 +1888,13 @@ export class ChatService {
     return by.trusted && by.role !== 'viewer' && approver === (await this.hostParticipantId(sessionId));
   }
 
+  /** Co-op: the participant who may answer the question open in this session now (the host when it names nobody); null when none is. */
+  async waitingFor(sessionId: string): Promise<string | null> {
+    const approver = this.interactions.openApprover(sessionId);
+    if (approver === undefined) return null;
+    return approver ?? (await this.hostParticipantId(sessionId));
+  }
+
   /**
    * Co-op: someone left or was removed. Their turn stops, their waiting messages go, their open questions are denied,
    * and the background work started for them ends.
@@ -1956,8 +1974,9 @@ export class ChatService {
     seen.ctx = ctx;
     // A sub-agent's questions appear in its parent's transcript, where the person is looking.
     const asker = askerOf(session);
-    // Co-op: a guest's turn acts on the host's computer without the host's trust. Their standing allow rules, Auto and
-    // Bypass don't apply; edits in the folder go through at most, the rest asks the host (coop-turns.ts guestMode).
+    // Co-op: a guest's turn acts on the host's computer without the host's trust. Their standing allow rules and Bypass
+    // don't apply; Auto mode's reviewer checks their actions for the host (or the host approves each, as they chose:
+    // coop-turns.ts guestMode), and what reaches beyond the folder asks the host (permissions/engine.ts `guest`).
     const actor = this.actors.get(session.id) ?? this.actors.get(asker);
     // A guest's message that joined someone else's turn makes the rest of it a guest's turn too: it never runs on the
     // host's standing rules or mode.
@@ -1970,7 +1989,14 @@ export class ChatService {
     const folders = target && credentialPath(target) ? [] : [...(this.folderRules.get(key(asker)) ?? []), ...(main ? (this.folderRules.get(key(main.id)) ?? []) : [])];
     const standing = guest ? [] : ctx.rules.allow;
     const rules = { ...ctx.rules, allow: [...standing, ...(this.sessionRules.get(key(asker)) ?? []), ...(main ? (this.sessionRules.get(key(main.id)) ?? []) : []), ...folders] };
-    const judge: PermissionContext = { ...ctx, ...(guest ? { mode: guestMode(ctx.mode), guest: true } : {}), rules, isReadOnly: (name) => (name === tool.name && tool.readOnly) || ctx.isReadOnly(name), offers: (name) => offered.has(name) };
+    const coopSettings = guest && this.deps.coop ? await this.deps.coop.settings(await this.deps.coop.rootOf(session.id)).catch(() => null) : null;
+    const judge: PermissionContext = {
+      ...ctx,
+      ...(guest ? { mode: guestMode(ctx.mode, coopSettings?.guestActions ?? 'ask'), guest: true } : {}),
+      rules,
+      isReadOnly: (name) => (name === tool.name && tool.readOnly) || ctx.isReadOnly(name),
+      offers: (name) => offered.has(name),
+    };
     const screen = await this.screenFor(current, judge.mode, call.name);
     if (screen) judge.screen = screen;
     // A chat's sandbox runs under its fixed rules: Bash and Read in a plain chat, every code tool in a merged one that has no
@@ -2004,7 +2030,7 @@ export class ChatService {
     if (insisted) {
       reason = `Auto mode suggested another way${insisted.way ? `: ${insisted.way}` : '.'} The assistant asks to do it this way instead. ${verdict.reason}`;
     } else if (verdict.behavior === 'review' && pre?.permission !== 'ask') {
-      const review = await this.autoReview(current, asker, final, verdict, ctx.cwd, signal);
+      const review = await this.autoReview(current, asker, final, verdict, ctx.cwd, signal, guest ? await this.guestReview(session, actor) : null);
       if (review.behavior === 'allow') {
         if (takes) this.screenTaken.add(session.id);
         return { allow: true, ...(input ? { input } : {}) };
@@ -2126,6 +2152,7 @@ export class ChatService {
     decision: Decision,
     cwd: string | null,
     signal: AbortSignal,
+    guest: GuestReview | null = null,
   ): Promise<{ behavior: 'allow' } | { behavior: 'deny'; message: string } | { behavior: 'ask'; reason: string } | { behavior: 'redirect'; way: string }> {
     const blocks = this.autoBlocks.get(asker) ?? { row: 0, total: 0 };
     if (blocks.row >= BLOCKS_IN_A_ROW || blocks.total >= BLOCKS_TOTAL) {
@@ -2133,8 +2160,12 @@ export class ChatService {
     }
     let reply: string;
     try {
-      const ref = session.model ?? (await this.requireSession(asker)).model;
+      const top = await this.requireSession(asker);
+      // The session's model, or the one its turns run with when it names none (the default).
+      const ref = session.model ?? top.model ?? (await this.modelRef(top));
       if (!ref) throw new Error('no model');
+      // A guest's action is checked by the host's own model: never one that runs on a guest's computer.
+      if (guest && parsePeerModelRef(ref)) return { behavior: 'ask', reason: `Auto mode checks guests’ actions with the host’s own model, and this session’s is a guest’s. ${decision.reason}` };
       let model = await this.deps.models.resolve(ref, session.userId);
       // Browser chat has one conversation slot, and a review through it would take the slot from the conversation (and
       // cost a message of the person's plan each time): the small model reviews, and without one the person decides.
@@ -2145,9 +2176,12 @@ export class ChatService {
       }
       const conversation = (await this.deps.repo.branch(asker)).messages;
       const agent = session.id === asker ? undefined : (await this.deps.repo.branch(session.id)).messages;
+      const overrides = this.deps.promptOverrides();
+      const system = render(template('auto-mode', overrides), { leniency: reviewLeniency(model.adapter.type) });
       reply = await collectText(model, {
-        system: [{ text: render(template('auto-mode', this.deps.promptOverrides()), { leniency: reviewLeniency(model.adapter.type) }) }],
-        user: reviewInput({ conversation, agent, call, reason: decision.reason, cwd }),
+        // A guest's turn: the reviewer judges for the host, and knows whose words are whose.
+        system: [{ text: guest ? `${system}\n${render(template('auto-mode-coop', overrides), { host: escapeTags(guest.host), guest: escapeTags(guest.guest) })}` : system }],
+        user: reviewInput({ conversation, agent, call, reason: decision.reason, cwd, ...(guest ? { authors: guest.authors } : {}) }),
         maxOutputTokens: 400,
         signal: AbortSignal.any([signal, AbortSignal.timeout(10 * 60_000)]),
         queue: { priority: 'urgent', timeoutMs: 90_000 },
@@ -2173,6 +2207,24 @@ export class ChatService {
       behavior: 'deny',
       // A block mustn't quietly shrink the task: when the work needs this, the person is asked now, not told at the end.
       message: `Auto mode blocked this action: ${verdict.reason} Don't reach the same result another way. Take a safer approach; if the task can't be done without it, ask the person now (AskUser where you have it) whether to allow it and why, and keep working on the rest.`,
+    };
+  }
+
+  /**
+   * Co-op: what Auto mode's reviewer is told about a guest's turn: whose session it is, whose turn, and who wrote each
+   * message (a message without an author is the host's).
+   */
+  private async guestReview(session: SessionRow, actor: TurnActor | undefined): Promise<GuestReview | null> {
+    const coop = this.deps.coop;
+    if (!coop) return null;
+    const people = await coop.list(await coop.rootOf(session.id)).catch(() => [] as Participant[]);
+    const host = people.find((p) => p.role === 'host');
+    const names = new Map(people.map((p) => [p.id, p.name]));
+    const guest = actor?.participant && actor.participant.role !== 'host' ? actor.participant.name : 'a guest, whose message joined this turn';
+    return {
+      host: host?.name ?? 'the host',
+      guest,
+      authors: (m) => (!m.author || m.author === host?.id ? { name: host?.name ?? 'the host', host: true } : { name: names.get(m.author) ?? 'someone who left', host: false }),
     };
   }
 
@@ -2588,7 +2640,8 @@ export class ChatService {
     const shared = actor?.shared ?? (await this.deps.coop?.isShared(session.id)) ?? false;
     const connectorUser = !shared ? session.userId : actor?.participant?.role === 'host' ? session.userId : actor?.participant?.models === 'own' && actor.participant.kind === 'account' ? actor.participant.userId : null;
     const lent = shared && actor?.participant?.kind === 'peer' ? ((await this.deps.coop?.lentTools?.(session.id, actor.participant).catch(() => [])) ?? []) : [];
-    const mcp = [...((await this.deps.mcpTools?.(session, connectorUser)) ?? []), ...lent];
+    const peer = shared && actor?.participant?.kind === 'peer';
+    const mcp = [...((await this.deps.mcpTools?.(session, connectorUser, peer ? { peer } : undefined)) ?? []), ...lent];
     // Adding a connector asks the person, which a sub-agent can't.
     const connect = this.deps.addConnector && !session.parentSessionId && !shared ? [this.addConnector] : [];
     // Computer use: top-level Code and Cowork sessions only (a sub-agent can't ask for apps, and several would fight over one mouse).

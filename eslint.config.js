@@ -5,7 +5,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['.claude/**', '**/dist/**', '**/out/**', '**/release/**', '**/coverage/**', '**/.wrangler/**', '**/.astro/**', 'design/reference/**', 'design/scripts/*.js', '**/*.d.ts'] },
+  { ignores: ['.claude/**', '**/dist/**', '**/dist-firefox/**', '**/out/**', '**/release/**', '**/coverage/**', '**/.wrangler/**', '**/.astro/**', 'design/reference/**', 'design/scripts/*.js', '**/*.d.ts'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {

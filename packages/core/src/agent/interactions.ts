@@ -80,6 +80,12 @@ export class InteractionBroker {
     return w && w.sessionId === sessionId ? { ...(w.approver ? { approver: w.approver } : {}) } : null;
   }
 
+  /** Co-op: who may answer the question open in this session (null: its person, the host); undefined when none is open. */
+  openApprover(sessionId: string): string | null | undefined {
+    for (const w of this.waiting.values()) if (w.sessionId === sessionId) return w.approver ?? null;
+    return undefined;
+  }
+
   /** Co-op: someone left: the questions only they could answer are denied. */
   denyFor(sessionId: string, approver: string): void {
     for (const w of [...this.waiting.values()]) if (w.sessionId === sessionId && w.approver === approver) w.cancel();

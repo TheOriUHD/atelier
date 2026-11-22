@@ -36,7 +36,7 @@ export function CoopBanner({ coop, live, className }: { coop: CoopView; live?: P
         <div role="status" className={frame}>
           <Icon icon={WifiOff} className="shrink-0 text-fg-muted" />
           <span className="min-w-0 flex-1 py-0.5">
-            {possessive(coop.hostName)} computer is asleep or offline: the session continues when it’s back. Anything you send until then stays in the message box.
+            {coop.state?.hostedOn === 'server' ? `${possessive(coop.hostName)} server can’t be reached right now` : `${possessive(coop.hostName)} computer is asleep or offline`}: the session continues when it’s back. Anything you send until then stays in the message box.
           </span>
         </div>
       )}

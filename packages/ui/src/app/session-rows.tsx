@@ -63,11 +63,12 @@ export function coopLabel(session: Pick<SessionSummary, 'id' | 'coop'>): { label
   if (!c && !isCoopMirror(session.id)) return null;
   if (c?.role === 'host') {
     const others = Math.max(0, c.participants - 1);
-    const hint = others === 0 ? 'co-op, nobody joined yet' : `co-op with ${others} ${others === 1 ? 'other' : 'others'}`;
+    const knock = c.knocking?.[0];
+    const hint = knock ? `co-op, ${knock.name} wants to join` : others === 0 ? 'co-op, nobody joined yet' : `co-op with ${others} ${others === 1 ? 'other' : 'others'}`;
     return { label: hint.charAt(0).toUpperCase() + hint.slice(1), hint, host: null };
   }
   const host = c?.hostName ?? 'the host';
-  const where = c?.mirror || isCoopMirror(session.id) ? `on ${host}’s computer` : `with ${host}`;
+  const where = c?.mirror || isCoopMirror(session.id) ? (c?.hostedOn === 'server' ? `on ${host}’s server` : `on ${host}’s computer`) : `with ${host}`;
   const hint = c?.ended ? `${where}, co-op ended` : where;
   return { label: c?.ended ? `Co-op ended, ${where}` : `Co-op ${where}`, hint, host };
 }
@@ -103,11 +104,21 @@ export function StatusGlyph({ status, unseen = false }: { status: SessionStatus;
   return <span aria-hidden className="size-2 rounded-full border-[1.5px] border-fg-muted" />;
 }
 
+/**
+ * Co-op: someone knocking on the host's session wants the host, as a question does; a question that is someone else's
+ * to answer is the session still working, not one for this person.
+ */
+export function glyphStatus(session: Pick<SessionSummary, 'status' | 'coop'>): SessionStatus {
+  if (session.coop?.role === 'host' && session.coop.knocking?.length) return 'waiting';
+  if (session.status === 'waiting' && session.coop?.waitingOnYou === false) return 'running';
+  return session.status;
+}
+
 /** A session's glyph in a list; the one you are in has nothing to announce that you aren't looking at. */
 function SessionGlyph({ session }: { session: SessionSummary }) {
   const params = useParams({ strict: false });
   const { cells } = useCodeSplit();
-  return <StatusGlyph status={session.status} unseen={!!session.finishedUnseen && params.sessionId !== session.id && !cells.includes(session.id)} />;
+  return <StatusGlyph status={glyphStatus(session)} unseen={!!session.finishedUnseen && params.sessionId !== session.id && !cells.includes(session.id)} />;
 }
 
 /**

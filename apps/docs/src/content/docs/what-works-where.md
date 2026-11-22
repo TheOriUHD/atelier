@@ -26,7 +26,7 @@ links to the section with the details.
 | [Computer use](/computer-use/) | ✓ | ✓, on the computer the folder is on, else the one you last wrote from | — | — |
 | [Browser pane and Preview](/code/#browser) | ✓ | ✓ | — | — |
 | [Artifacts](/artifacts/) and inline visuals | ✓ | ✓ | ✓ | — |
-| [Co-op](/co-op/) | With other computers, through the relay | With teammates on the server | With teammates on the server | — |
+| [Co-op](/co-op/) | With other computers, through the relay | With teammates on the server, and through the relay with people elsewhere | With teammates on the server, and through the relay with people elsewhere | — |
 | [Memory](/memory/#where-memory-applies) | ✓ | ✓ | ✓ | — (Code has none) |
 | [Web search and fetch](/web-search/) | Runs on this computer | Runs on the server | Runs on the server | Here, or on its server |
 | [Model servers on your computer](/local-models/#your-computers-models-on-a-server) | [Detected](/providers/#detection) on their usual ports | **Settings › Your models**, for you alone | Through your desktop app, while it is connected | [Offered at setup](/cli/#the-first-start), on its own |
