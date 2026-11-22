@@ -47,12 +47,13 @@ beforeEach(async () => {
   relay = await startCoopRelay({ port: 0 });
 });
 
+// Whole backends close slowly while the rest of the suite runs alongside.
 afterEach(async () => {
   for (const b of backends.splice(0)) await b.dispose().catch(() => undefined);
   for (const m of mocks.splice(0)) m.kill();
   await relay.close();
   for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
-});
+}, 60_000);
 
 const until = async (check: () => unknown | Promise<unknown>, ms = 20_000): Promise<void> => {
   const end = Date.now() + ms;
