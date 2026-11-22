@@ -14,20 +14,25 @@ export interface CoopHandlerDeps<C> {
   userId(ctx: C): string;
   /** Accounts on this backend others may invite (a team server); empty on a desktop. */
   directory(callerId: string): Promise<{ userId: string; name: string; avatar: string | null }[]>;
-  /** Whether this backend is a server (teammates) or a desktop (the relay). */
+  /** Whether this backend is a server (teammates, and invite links for people elsewhere) or a desktop (invite links). */
   surface: 'desktop' | 'web';
+  /**
+   * A copy of the conversation as a session of the account's own, for a teammate on this server who leaves, or when the
+   * host ends co-op, while the host lets guests keep one (guests from other computers keep theirs in gateway.ts).
+   */
+  keepCopy?(sessionId: string, userId: string): Promise<void>;
   /** Stops what a participant who is removed or leaves had running (chat-service.ts), and forgets their reads. */
   forgetParticipant(sessionId: string, participant: { id: string; userId: string | null }): Promise<void>;
-  /** The relay side on a desktop host (host.ts); absent on a server. */
+  /** The relay side (host.ts): invite links and knocks; absent where co-op between computers is off. */
   relay?: {
     open(sessionId: string): Promise<void>;
     invite(sessionId: string): Promise<{ url: string; expiresAt: number }>;
     admit(sessionId: string, knockId: string, allow: boolean): Promise<void>;
     close(sessionId: string): Promise<void>;
   };
-  /** A guest's desktop joining a session on another computer (gateway.ts). */
+  /** A person joining a session on another computer or server from an invite link (gateway.ts). */
   join?(userId: string, invite: string, models: ModelsChoice): Promise<{ sessionId: string; waiting: boolean; fingerprint?: string[] }>;
-  /** A guest's desktop leaving a mirrored session (gateway.ts). */
+  /** A person leaving a mirrored session (gateway.ts). */
   leaveMirror?(sessionId: string): Promise<boolean>;
   error(code: string, message: string): Error;
 }
@@ -50,10 +55,12 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
       return d.coop.state(sessionId, as);
     },
 
+    // A desktop opens its room on the relay; a server shares the session on the server, and opens a room on the relay
+    // only once the host asks for an invite link (teammates need none).
     'coop.start': async ({ sessionId }: { sessionId: string }, ctx: C) => {
       const as = await host(ctx, sessionId, 'coop.start');
       if (d.surface === 'desktop') {
-        if (!d.relay) throw d.error('unsupported', 'Co-op between computers isn’t available here.');
+        if (!d.relay) throw d.error('unsupported', 'Co-op between computers is switched off on this computer.');
         await d.relay.open(sessionId);
       } else await d.coop.start(sessionId, { relayUrl: null });
       return state(sessionId, as);
@@ -61,7 +68,8 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
 
     'coop.invite': async ({ sessionId }: { sessionId: string }, ctx: C) => {
       await host(ctx, sessionId, 'coop.invite');
-      if (!d.relay) throw d.error('unsupported', 'On a server, add teammates instead of sending a link.');
+      if (!d.relay) throw d.error('unsupported', d.surface === 'web' ? 'An admin turned off invite links on this server: add teammates instead.' : 'Co-op between computers is switched off on this computer.');
+      if (d.surface === 'web' && !(await d.coop.room(sessionId))) await d.coop.start(sessionId, { relayUrl: null });
       return d.relay.invite(sessionId);
     },
 
@@ -84,7 +92,7 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
 
     'coop.admit': async ({ sessionId, knockId, allow }: { sessionId: string; knockId: string; allow: boolean }, ctx: C) => {
       await host(ctx, sessionId, 'coop.admit');
-      if (!d.relay) throw d.error('unsupported', 'Nobody knocks on a server: teammates are added.');
+      if (!d.relay) throw d.error('not_found', 'They’re no longer waiting.');
       await d.relay.admit(sessionId, knockId, allow);
       return { ok: true as const };
     },
@@ -148,6 +156,7 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
       if (d.leaveMirror && (await d.leaveMirror(sessionId))) return { ok: true as const };
       const as = await d.access(ctx, sessionId, 'coop.leave');
       if (as.role === 'host') throw d.error('invalid_request', 'The host ends co-op instead of leaving.');
+      if (as.userId && d.keepCopy && (await d.coop.settings(sessionId)).guestsKeepCopy) await d.keepCopy(sessionId, as.userId).catch(() => undefined);
       const gone = await d.coop.remove(sessionId, as.id);
       if (gone) await d.forgetParticipant(sessionId, { id: gone.id, userId: gone.userId });
       return { ok: true as const };
@@ -155,15 +164,18 @@ export function coopHandlers<C>(d: CoopHandlerDeps<C>) {
 
     'coop.end': async ({ sessionId }: { sessionId: string }, ctx: C) => {
       await host(ctx, sessionId, 'coop.end');
+      const copies = (await d.coop.settings(sessionId)).guestsKeepCopy;
       // Guests across computers are told first, while they may still fetch the copy the host lets them keep.
       await d.relay?.close(sessionId);
+      // Teammates on this server get theirs here, before they lose the session.
+      if (copies && d.keepCopy) for (const p of await d.coop.participants.list(sessionId)) if (p.userId) await d.keepCopy(sessionId, p.userId).catch(() => undefined);
       const gone = await d.coop.end(sessionId);
       for (const p of gone) await d.forgetParticipant(sessionId, { id: p.id, userId: p.userId });
       return { ok: true as const };
     },
 
     'coop.join': async ({ invite, models }: { invite: string; models: ModelsChoice }, ctx: C) => {
-      if (!d.join) throw d.error('unsupported', 'Joining a session on another computer needs the desktop app, running on this computer.');
+      if (!d.join) throw d.error('unsupported', d.surface === 'web' ? 'An admin turned off co-op with other computers on this server.' : 'Co-op between computers is switched off on this computer.');
       return d.join(d.userId(ctx), invite, models);
     },
   };

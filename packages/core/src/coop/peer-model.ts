@@ -142,7 +142,8 @@ export function withPeerModels(base: ModelResolver, peerOf: PeerLookup, nameOf: 
       if (!peer) throw new ModelUnavailableError(`${name ? `${name}’s` : 'Their'} computer isn’t connected right now, so their own model can’t answer.`);
       let cached = described.get(ref);
       if (!cached || Date.now() - cached.at > 5 * 60_000) {
-        const info = await peer.call('model.describe', { ref: parsed.ref }).catch((e: unknown) => {
+        // A computer that doesn't answer fails the turn after a while instead of holding it.
+        const info = await peer.call('model.describe', { ref: parsed.ref }, { signal: AbortSignal.timeout(30_000) }).catch((e: unknown) => {
           throw new ModelUnavailableError(`${peerModelLabel(name, null)} isn’t available: ${e instanceof Error ? e.message : String(e)}`);
         });
         // It is their model on their computer: never one of the host's own, never hidden from its user.

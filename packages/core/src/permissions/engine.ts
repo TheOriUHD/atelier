@@ -32,7 +32,9 @@ export interface PermissionContext extends MatchContext {
   offers?(tool: string): boolean;
   /**
    * Co-op: a guest's turn, or one a guest's message joined (agent/coop-turns.ts). Edits to what configures git, shells,
-   * editors or the agent itself ask the host even in Accept edits: such an edit can make the host's computer run commands.
+   * editors or the agent itself ask the host even in Accept edits and Auto: such an edit can make the host's computer run
+   * commands. In Auto, anything outside the session's folder and every dangerous command ask the host too: Auto's
+   * reviewer judges the rest, knowing it is a guest's turn.
    */
   guest?: boolean;
   /**
@@ -54,6 +56,8 @@ export interface Decision {
 }
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'SaveImage', 'SaveVideo', 'SaveAudio']);
+/** Tools that make media on the person's providers (and at their cost). */
+const GENERATE_TOOLS = new Set(['GenerateImage', 'GenerateVideo', 'GenerateAudio']);
 /** Folders and files whose edits change how git, shells, editors or the agent itself behave: never auto-approved. */
 const PROTECTED_DIRS = new Set(['.git', '.vscode', '.idea', '.husky', '.cargo', '.devcontainer', '.yarn', '.mvn', '.claude', '.atelier']);
 const PROTECTED_FILES =
@@ -115,8 +119,9 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
 
   const warning =
     isBash && !bypass ? dangerousReason(call.input.command as string, { cwd: ctx.cwd, home: ctx.home, roots: ctx.roots, ...(ctx.flavor ? { flavor: ctx.flavor } : {}), ...(auto ? { scratch: [...SCRATCH_DIRS, tmpdir()] } : {}) }) : null;
-  // Deleting outside the workspace asks the person even in Auto mode: a model's slip there can't be undone.
-  const critical = auto && !!warning && /deletes .*, outside the workspace$/.test(warning);
+  // Deleting outside the workspace asks the person even in Auto mode: a model's slip there can't be undone. A guest's
+  // dangerous command asks the host whatever it is.
+  const critical = auto && !!warning && (!!ctx.guest || /deletes .*, outside the workspace$/.test(warning));
   const warned = (d: Decision): Decision =>
     warning ? { behavior: critical ? 'ask' : unsure, reason: `This command ${warning}.`, warning, ...(d.rule ? { rule: d.rule } : {}) } : d;
 
@@ -152,6 +157,8 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   if (intrusive) return { behavior: 'review', reason: intrusive };
   if (ASKS_ITSELF.has(call.name)) return { behavior: 'allow', reason: 'It asks the person itself.' };
   // Making an image touches nothing but the provider, and a per-turn limit caps it: Auto has nothing to review.
+  // A guest's image, video or sound goes to the review: the host pays for it.
+  if (auto && ctx.guest && GENERATE_TOOLS.has(call.name)) return { behavior: 'review', reason: `A guest’s turn uses the host’s provider for ${call.name}.` };
   if (auto && call.name === 'GenerateImage') return { behavior: 'allow', reason: 'It only makes an image.' };
   // Same for a video: it costs more, but the per-turn limit (2 by default) and the admin's daily limits stand in for review.
   if (auto && call.name === 'GenerateVideo') return { behavior: 'allow', reason: 'It only makes a video.' };
@@ -166,8 +173,12 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   // A connector describes its own tools: a read-only hint lets a call into plan mode but never skips the prompt,
   // and its paths are the server's, not the workspace's.
   const connector = call.name.startsWith('mcp__');
+  // The host's connectors reach the host's own accounts: in a guest's turn the host approves each call, Auto or not.
+  if (connector && ctx.guest) return { behavior: 'ask', reason: `${call.name} uses one of the host’s connectors in a guest’s turn: the host approves that.` };
   const outside = connector ? null : outsideRoots(call, ctx);
   if (outside) {
+    // A guest's turn stays in the session's folder: anything elsewhere on the host's computer is the host's to allow.
+    if (ctx.guest) return { behavior: 'ask', reason: `${call.name} wants to access ${outside}, outside the session’s folder: the host approves that.` };
     // Auto mode: looking at a file elsewhere on the machine is ordinary work. Credentials, keys and private data still
     // go to the reviewer, and so does anything that writes (below the reviewer decides, as for edits in the workspace).
     if (auto && ctx.isReadOnly(call.name) && !EDIT_TOOLS.has(call.name)) {
@@ -186,6 +197,7 @@ export function decide(call: ToolCall, ctx: PermissionContext): Decision {
   }
   if (auto && EDIT_TOOLS.has(call.name)) {
     const target = protectedTarget(call);
+    if (target && ctx.guest) return { behavior: 'ask', reason: `${call.name} changes ${target}, which configures tools or the agent itself: the host approves that.` };
     return target ? { behavior: 'review', reason: `${call.name} changes ${target}, which configures tools or the agent itself.` } : { behavior: 'allow', reason: 'Auto mode: an edit in the workspace.' };
   }
   return warned({ behavior: unsure, reason: `${call.name} needs your approval.` });

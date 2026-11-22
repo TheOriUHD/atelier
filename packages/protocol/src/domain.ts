@@ -45,7 +45,19 @@ export const SessionSummary = z.object({
    * Co-op: this viewer's part in it, and who hosts it. Absent for a session of one's own that nobody else is in.
    * `mirror`: shown on a guest's own computer for a session that runs on the host's (packages/core/src/coop/gateway.ts).
    */
-  coop: z.object({ role: z.enum(['host', 'editor', 'viewer']), hostName: z.string(), participants: z.number().int(), mirror: z.boolean().optional(), ended: z.boolean().optional() }).optional(),
+  coop: z
+    .object({
+      role: z.enum(['host', 'editor', 'viewer']),
+      hostName: z.string(),
+      participants: z.number().int(),
+      mirror: z.boolean().optional(),
+      ended: z.boolean().optional(),
+      /** The host's view: who is asking to come in (their notifications and sidebar dot). */
+      knocking: z.array(z.object({ id: z.string(), name: z.string() })).max(8).optional(),
+      /** The question the session waits on is this viewer's to answer (absent from older backends). */
+      waitingOnYou: z.boolean().optional(),
+    })
+    .optional(),
   status: SessionStatus,
   pinnedAt: z.number().nullable(),
   createdAt: z.number(),

@@ -22,6 +22,17 @@ export interface ReviewSubject {
   /** Why the engine sent it for review (a dangerous command's warning, a protected file). */
   reason: string;
   cwd: string | null;
+  /** Co-op: who wrote each message (a guest's turn is reviewed for the host, who must know whose words are whose). */
+  authors?: (m: Message) => { name: string; host: boolean };
+}
+
+/** Co-op: a guest's turn as the review sees it (agent/chat-service.ts guestReview, prompts/auto-mode-coop.md). */
+export interface GuestReview {
+  /** The host's name: the folder, the terminal and the computer are theirs. */
+  host: string;
+  /** Whose turn it is. */
+  guest: string;
+  authors: (m: Message) => { name: string; host: boolean };
 }
 
 /** Every tag escaped, not only Atelier's: nothing the agent wrote can close or forge one here. */
@@ -40,8 +51,19 @@ function withoutPlea(name: string, input: unknown): unknown {
 }
 
 /** The review request: the person's words, what the agent did, and the call to judge. */
-export function reviewInput({ conversation, agent, call, reason, cwd }: ReviewSubject): string {
-  const requests = conversation.filter((m) => m.role === 'user' && m.kind === 'normal').map(said).filter(Boolean).slice(-REQUESTS);
+export function reviewInput({ conversation, agent, call, reason, cwd, authors }: ReviewSubject): string {
+  // In co-op each message says who wrote it, the host or a guest: only the host's words widen what is allowed.
+  const from = (m: Message) => {
+    const who = authors?.(m);
+    return who ? ` from="${escapeTags(who.name).replace(/"/g, '&quot;')}" role="${who.host ? 'host' : 'guest'}"` : '';
+  };
+  const requests = conversation
+    .filter((m) => m.role === 'user' && m.kind === 'normal')
+    .flatMap((m) => {
+      const text = said(m);
+      return text ? [{ text, from: from(m) }] : [];
+    })
+    .slice(-REQUESTS);
   const task = agent?.find((m) => m.role === 'user');
   const actions = (agent ?? conversation)
     .flatMap((m) => (m.role === 'assistant' ? m.parts : []))
@@ -49,7 +71,7 @@ export function reviewInput({ conversation, agent, call, reason, cwd }: ReviewSu
     .slice(-ACTIONS);
   return [
     `<project>${escapeTags(cwd ?? 'none')}</project>`,
-    `<person_messages>\n${requests.map((r) => `<message>${escapeTags(clip(r, 2000))}</message>`).join('\n')}\n</person_messages>`,
+    `<person_messages>\n${requests.map((r) => `<message${r.from}>${escapeTags(clip(r.text, 2000))}</message>`).join('\n')}\n</person_messages>`,
     ...(task ? [`<subagent_task>${escapeTags(clip(said(task), 2000))}</subagent_task>`] : []),
     `<earlier_actions>\n${escapeTags(actions.join('\n') || '(none)')}\n</earlier_actions>`,
     `<pending_action tool="${escapeTags(call.name)}">\n${escapeTags(clip(JSON.stringify(withoutPlea(call.name, call.input), null, 1), 8000))}\n</pending_action>`,

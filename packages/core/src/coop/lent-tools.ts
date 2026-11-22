@@ -6,9 +6,13 @@
 import { lentToolName, PeerContract, type RpcClient } from '@atelier/protocol';
 import type { Tool, ToolOutput } from '../tools/types.ts';
 
+/** How long a turn waits for a guest's computer to list what it lends. */
+const LIST_TIMEOUT_MS = 10_000;
+
 /** A guest's lent tools, named for the host's session; none while they don't lend or aren't connected. */
 export async function lentTools(peer: RpcClient<typeof PeerContract>, keyId: string, putBlob: (bytes: Uint8Array, mime: string) => Promise<string>): Promise<Tool[]> {
-  const listed = await peer.call('mcp.list', {}).catch(() => []);
+  // A guest's computer that doesn't answer (an older app, a stalled one) lends nothing: the turn mustn't wait on it.
+  const listed = await peer.call('mcp.list', {}, { signal: AbortSignal.timeout(LIST_TIMEOUT_MS) }).catch(() => []);
   return listed.map((t) => ({
     name: lentToolName(keyId, t.name),
     description: `${t.description}\n\nThis is one of a guest's own connectors, lent to their turns: they approve each call.`,

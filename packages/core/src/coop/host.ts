@@ -58,7 +58,8 @@ export interface HostRoomPort {
 /** The transport (channel.ts and invite.ts), behind a port so the host can be tested without a relay. */
 export interface CoopTransportPort {
   createRoom(relayUrl: string): Promise<{ roomId: string; hostToken: string }>;
-  openHostRoom(opts: { relayUrl: string; roomId: string; hostToken: string; secrets: string[] }): Promise<HostRoomPort>;
+  /** `owner`: the session's account, whose device key the room uses (on a server, each account has its own). */
+  openHostRoom(opts: { relayUrl: string; roomId: string; hostToken: string; secrets: string[]; owner?: string | null }): Promise<HostRoomPort>;
   deleteRoom(relayUrl: string, roomId: string, hostToken: string): Promise<void>;
   /** A fresh invite secret (32 random bytes, base64url). */
   newSecret(): string;
@@ -90,8 +91,10 @@ export interface CoopHostDeps {
     list(sessionId: string): Promise<CoopTrack[]>;
     diff(sessionId: string, trackId: string): Promise<{ diff: string; truncated: boolean; base: string | null }>;
   };
-  /** The sessions with a room open: the computer stays awake for them. */
+  /** The sessions with a room open: the computer stays awake for them (a desktop; a server is always on). */
   keepAwake(sessionIds: string[]): void;
+  /** Where the session runs, for what the host is told: `computer` (a desktop, the default) or `server`. */
+  where?: 'computer' | 'server';
   /** The host's windows should read the co-op state again (someone knocked, came, went). */
   stateChanged(sessionId: string): void;
   log(message: string, error?: unknown): void;
@@ -113,13 +116,17 @@ interface Knock {
   peer: PeerChannelPort;
   hello: CoopHello;
   keyId: string;
-  admit(): void;
+  /** Settles once they are in, or with why not (the host is told: nothing fails quietly). */
+  admit(): Promise<void>;
   decline(): void;
+  /** When they knocked, for the order the host sees them in. */
+  at: number;
 }
 
 interface Guest {
   participantId: string;
   keyId: string;
+  name: string;
   channel: PeerChannelPort;
   /** The guest's computer, for their own models and connectors. */
   peer: RpcClient<typeof PeerContract>;
@@ -183,7 +190,8 @@ export class CoopHost {
   async open(sessionId: string): Promise<void> {
     if (this.rooms.has(sessionId)) return;
     const relayUrl = this.deps.relayUrl();
-    if (!relayUrl) throw appError('unsupported', 'Co-op between computers is switched off on this computer.');
+    if (!relayUrl) throw appError('unsupported', this.deps.where === 'server' ? 'An admin turned off invite links on this server: add teammates instead.' : 'Co-op between computers is switched off on this computer.');
+    const owner = (await this.deps.sessionRow(sessionId))?.userId ?? null;
     const known = await this.deps.coop.room(sessionId);
     let roomId = known?.roomId ?? null;
     let hostToken = known?.hostTokenSecret ? await this.deps.secrets.get(known.hostTokenSecret) : null;
@@ -196,7 +204,8 @@ export class CoopHost {
       await this.deps.secrets.set(`coop-host-${sessionId}`, hostToken);
       await this.deps.secrets.set(`coop-invite-${sessionId}`, secret);
       await this.deps.coop.start(sessionId, { relayUrl, roomId, hostTokenSecret: `coop-host-${sessionId}` });
-      await this.deps.coop.setRoom(sessionId, { inviteSecret: `coop-invite-${sessionId}`, inviteExpiresAt: this.now() + INVITE_TTL_MS });
+      // A session already shared with teammates on a server gets its room on the relay now (`start` keeps the row it has).
+      await this.deps.coop.setRoom(sessionId, { relayUrl, roomId, hostTokenSecret: `coop-host-${sessionId}`, inviteSecret: `coop-invite-${sessionId}`, inviteExpiresAt: this.now() + INVITE_TTL_MS });
     }
     // The guests let in before come back with their own secrets.
     const members = new Map<string, string>();
@@ -207,7 +216,7 @@ export class CoopHost {
     }
     const inviteUntil = (await this.deps.coop.room(sessionId))?.inviteExpiresAt ?? 0;
     const r: Room = { sessionId, roomId, room: null as unknown as HostRoomPort, secret, inviteUntil, members, inviteUrl: null, knocks: new Map(), guests: new Map() };
-    r.room = await this.deps.transport.openHostRoom({ relayUrl, roomId, hostToken, secrets: this.secretsOf(r) });
+    r.room = await this.deps.transport.openHostRoom({ relayUrl, roomId, hostToken, secrets: this.secretsOf(r), owner });
     const room = r.room;
     this.rooms.set(sessionId, r);
     this.scheduleLapse(r);
@@ -236,7 +245,7 @@ export class CoopHost {
     this.scheduleLapse(r);
     const row = await this.deps.sessionRow(sessionId);
     const hostName = row?.userId ? await this.deps.hostName(row.userId) : 'Someone';
-    r.inviteUrl = makeInviteUrl(r.roomId, r.secret, { hostName, title: row?.title || 'Untitled', mode: (row?.mode ?? 'chat') as 'chat' | 'work' | 'code' });
+    r.inviteUrl = makeInviteUrl(r.roomId, r.secret, { hostName, title: row?.title || 'Untitled', mode: (row?.mode ?? 'chat') as 'chat' | 'work' | 'code', ...(this.deps.where === 'server' ? { on: 'server' as const } : {}) });
     this.deps.stateChanged(sessionId);
     return { url: r.inviteUrl, expiresAt: r.inviteUntil };
   }
@@ -245,8 +254,14 @@ export class CoopHost {
     const knock = this.rooms.get(sessionId)?.knocks.get(knockId);
     if (!knock) throw appError('not_found', 'They’re no longer waiting.');
     if (allow && (await this.deps.coop.list(sessionId)).length >= MAX_PEOPLE) throw appError('invalid_request', 'A co-op session has room for four people in all.');
-    if (allow) knock.admit();
+    if (allow) await knock.admit();
     else knock.decline();
+  }
+
+  /** The name a guest gave, while they are connected (what their model's failures say). */
+  peerName(keyId: string): string | null {
+    for (const r of this.rooms.values()) for (const g of r.guests.values()) if (g.keyId === keyId && g.admitted) return g.name;
+    return null;
   }
 
   /** Co-op ended: everyone is told and let go, and the room is deleted on the relay. */
@@ -305,7 +320,8 @@ export class CoopHost {
   forward(sessionId: string, seq: number, event: RunEvent): void {
     const r = this.rooms.get(sessionId);
     if (r) {
-      for (const g of r.guests.values()) if (g.admitted && g.subscribed) g.server.emit('session.event', { seq, event });
+      // A question goes to everyone in, watching or not: the one it is for hears it wherever they are (notifications).
+      for (const g of r.guests.values()) if (g.admitted && (g.subscribed || event.type === 'pending')) g.server.emit('session.event', { seq, event });
       return;
     }
     for (const room of this.rooms.values()) for (const g of room.guests.values()) if (g.admitted && g.children.has(sessionId)) g.server.emit('child.event', { sessionId, seq, event });
@@ -405,7 +421,7 @@ export class CoopHost {
         // Someone let in before (their device key on a participant row still in the session) comes back without asking.
         const known = await this.deps.coop.participants.get(sessionId, participantId);
         if (known && known.leftAt === null && known.peerKey === channel.remoteKey) {
-          guest = { participantId, keyId, channel, peer, server, admitted: true, subscribed: false, children: new Set() };
+          guest = { participantId, keyId, name: hello.name, channel, peer, server, admitted: true, subscribed: false, children: new Set() };
           r.guests.set(participantId, guest);
           await this.deps.coop.participants.update(sessionId, participantId, { name: hello.name, avatar: hello.avatar });
           await this.deps.coop.presence(sessionId);
@@ -418,8 +434,9 @@ export class CoopHost {
           peer: channel,
           hello,
           keyId,
-          admit: () => {
-            void (async () => {
+          at: this.now(),
+          admit: async () => {
+            await (async () => {
               if ((await this.deps.coop.list(sessionId)).length >= MAX_PEOPLE) throw appError('invalid_request', 'A co-op session has room for four people in all.');
               const settings = await this.deps.coop.settings(sessionId);
               const models = hello.models === 'own' && hello.model ? 'own' : settings.shareModels ? 'host' : 'own';
@@ -431,12 +448,15 @@ export class CoopHost {
               r.room.setSecrets(this.secretsOf(r));
               if (models === 'own' && hello.model) await this.deps.coop.participants.update(sessionId, participantId, { model: `peer-${keyId}/${hello.model}` });
               r.knocks.delete(id);
-              guest = { participantId, keyId, channel, peer, server, admitted: true, subscribed: false, children: new Set() };
+              guest = { participantId, keyId, name: hello.name, channel, peer, server, admitted: true, subscribed: false, children: new Set() };
               r.guests.set(participantId, guest);
               server.emit('admitted', { participantId, memberSecret: member });
               await this.deps.coop.presence(sessionId);
               this.deps.stateChanged(sessionId);
-            })().catch((e: unknown) => this.deps.log('admitting a guest failed', e));
+            })().catch((e: unknown) => {
+              this.deps.log('admitting a guest failed', e);
+              throw e;
+            });
           },
           decline: () => {
             r.knocks.delete(id);
