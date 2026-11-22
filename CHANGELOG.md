@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.8] — 2026-11-22
+
 Decision models: models that pick instead of write, in about a tenth of a second, on your own GPU (Ollama 0.35 or later with `nimble` or `tev1`, llama.cpp) or from TypeSafe Jev, OpenAI and OpenRouter. Auto mode can check actions with one before its reviewer, the assistant can sort hundreds of texts with the Decide tool, and you can ask one yourself in the Decide window or with `atelier decide`.
 
 **Updating a server.** Nothing to change: **Update now**, **Update automatically** or `docker compose pull && docker compose up -d`. For a decision model on the server's own GPU, update Ollama there to 0.35 or later and `ollama pull nimble`; Atelier finds it by itself.
