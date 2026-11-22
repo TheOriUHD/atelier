@@ -226,12 +226,21 @@ host's folder.
   or **Can watch**). They can't reach the host's other sessions, settings, terminal, other files, connectors or
   memory.
 - A guest from another computer never signs in to the host's Atelier. Their computer is admitted to the session only.
+  On a server that hosts the session, they reach no other account's sessions, files or pictures and none of the
+  server's shared connectors.
+- On a server, each account takes part with a key of its own: two people of one server are two guests to a host, and
+  a host who let one of them in lets nobody else in with it. A file of a session joined elsewhere becomes readable
+  for its account only once that session's host sent it.
 - The files they see are the session's own changes and attachments.
 
 **What guests' turns may do.**
-- A guest's turns get none of the host's standing **Always allow** rules, and never run in Auto or Bypass: at most
-  **Accept edits**, so commands, network access and anything outside the folder ask the host. Edits to files that make
-  tools run things (`.git/hooks`, `.claude/`, `.atelier/`, `.vscode/`, shell startup files) ask the host too.
+- A guest's turns get none of the host's standing **Always allow** rules and never run in Bypass. By default Auto
+  mode's reviewer checks their actions, on the host's model: it is told the turn is a guest's, and which message is
+  whose, so a guest's request alone can't approve what the host wouldn't. What it isn't sure of asks the host.
+- Whatever Auto mode says, anything outside the session's folder, dangerous commands, the host's connectors and edits
+  to files that make tools run things (`.git/hooks`, `.claude/`, `.atelier/`, `.vscode/`, shell startup files) ask the
+  host. With **Auto mode checks guests' actions** off, a guest's turn runs at **Accept edits** at most, and commands
+  and network access ask the host too.
 - A guest's message that joins the host's running turn turns the rest of it, and the sub-agents it starts, into a
   guest's turn.
 - A guest from another computer may attach up to 100 files or 200 MB a day, and queue up to 20 messages.

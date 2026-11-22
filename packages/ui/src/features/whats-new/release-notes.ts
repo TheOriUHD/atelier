@@ -39,8 +39,13 @@ export interface ReleaseNotes {
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
     version: '0.10.7',
-    intro: 'Atelier for Firefox, notifications for every conversation (on Windows too), a Stop that always stops, Roblox Studio and any other program as a connector, and an Auto mode that points to the gentler way.',
+    intro: 'Co-op on Atelier servers with far fewer approvals, Atelier for Firefox, notifications for every conversation (on Windows too), a Stop that always stops, Roblox Studio and any other program as a connector, and an Auto mode that points to the gentler way.',
     highlights: [
+      {
+        icon: Users,
+        title: 'Co-op from your server, with far fewer approvals',
+        body: 'Signed in to an Atelier server, in a browser, the desktop app or on your iPhone, you can now join someone’s session from their invite link (More › Join a co-op session…), and invite people who aren’t on your server with Copy invite link, next to your teammates. Guests’ actions no longer each need your OK: Auto mode checks them for you and asks only when it isn’t sure, or for anything outside the folder. Knocks and questions now reach you wherever you are in the app.',
+      },
       {
         icon: Bell,
         title: 'Know when it’s done or needs you',
@@ -86,6 +91,7 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       'When it looks something up in the browser, it reads several results, follows links that lead closer and answers with what it found, linked to its sources.',
       'Switching the update channel back to Stable drops a beta that was already downloaded, so it is no longer installed when Atelier quits.',
       'The media kit at media.atelierhq.dev has the logos, app icons, banners, screenshots and colours, linked from the website’s footer.',
+      'In co-op, a guest who answers with their own model from the ChatGPT Plan (or any other provider) is answered again instead of failing, and leaving a session keeps the copy the Leave dialog promises.',
     ],
   },
   {

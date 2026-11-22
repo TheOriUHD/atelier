@@ -341,6 +341,7 @@ The variables you will most often set on a server. The complete list, including 
 | `ATELIER_UPDATER_URL` | none | The updater service, for **Update now** and **Update automatically**. |
 | `ATELIER_UPDATE_FEED` | `https://updates.atelierhq.dev` | Where the server looks up the newest version; `off` stops the lookup, unless `ATELIER_UPDATES_REPO` is set. |
 | `ATELIER_IMAGE` | set in released images | What image this is; empty means built from source. |
+| `ATELIER_COOP_RELAY` | `https://coop.atelierhq.dev` | The relay for [co-op](/co-op/) with people elsewhere: invite links for your accounts' sessions, and your accounts joining sessions on other computers and servers. Empty turns that off; teammates on the server still work together, which needs no relay. |
 
 Put a value in `compose.yaml` under `environment:`, or write a placeholder there and keep the value in a `.env` file next to
 it, which is how Compose fills in `${NAME}`:
@@ -602,6 +603,9 @@ Atelier does not publish measured requirements. What is known:
 - [ ] Docker's `updater` service kept only if you accept the Docker socket trade-off.
 - [ ] Image tags pinned if you want to decide when updates happen.
 - [ ] Providers' keys scoped and spend-limited at the provider; everyone on the server shares them.
+- [ ] Co-op with people elsewhere left on (the default) only if your accounts may invite outsiders into their sessions
+  and join sessions elsewhere; `ATELIER_COOP_RELAY=` (empty) turns it off. Guests from elsewhere never sign in to the
+  server and get none of its shared connectors.
 - [ ] Admin account sign-ins reviewed under **Settings › Account › Active sessions**.
 - [ ] Consider putting the `sandbox` container on a network of its own: by default it shares the Compose network with
   the server and can reach it.
