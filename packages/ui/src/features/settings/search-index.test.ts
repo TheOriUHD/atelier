@@ -133,7 +133,9 @@ describe('settings search index', () => {
 
   it('finds this computer’s System rows only in the desktop app', () => {
     expect(ids('launch at login', false)).toEqual([]);
-    expect(ids('beta')).toEqual([]);
+    // The server's own channel is an admin's, on every app.
+    expect(ids('beta')).toEqual(['server.updateChannel']);
+    expect(ids('beta', false)).toEqual([]);
     platform.desktop = {};
     try {
       expect(ids('launch at login', false)).toEqual(['system.launchAtLogin']);

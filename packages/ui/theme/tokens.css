@@ -265,7 +265,7 @@
   --at-shadow-composer: 0 0 0 1px rgba(11, 11, 11, 0.10), 0 4px 20px rgba(0, 0, 0, 0.035);
   --at-shadow-card-ring: 0 0 0 1px rgba(11, 11, 11, 0.10);
   --at-shadow-field-drop: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --at-shadow-focus: inset 0 0 0 1px #FCFCFB, 0 0 0 1px #2A78D6, 0 0 6px 1px #CDE2FB;
+  --at-shadow-focus: inset 0 0 0 1px #FCFCFB, 0 0 0 1px #2A78D6, 0 0 0 3px #CDE2FB;
   --at-shadow-slider-thumb: 0 0 0 1px rgba(11, 11, 11, 0.04), 0 0 12px rgba(11, 11, 11, 0.06);
 }
 
@@ -358,7 +358,7 @@
   --at-shadow-composer: inset 0 0 0 1px rgba(255, 255, 255, 0.10), 0 4px 20px rgba(0, 0, 0, 0.035);
   --at-shadow-card-ring: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
   --at-shadow-field-drop: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --at-shadow-focus: inset 0 0 0 1px #151515, 0 0 0 1px #2A78D6, 0 0 6px 1px rgba(24, 79, 149, 0.60);
+  --at-shadow-focus: inset 0 0 0 1px #151515, 0 0 0 1px #2A78D6, 0 0 0 3px rgba(24, 79, 149, 0.60);
   --at-shadow-slider-thumb: 0 0 12px rgba(11, 11, 11, 0.24);
 }
 
@@ -452,7 +452,7 @@
     --at-shadow-composer: inset 0 0 0 1px rgba(255, 255, 255, 0.10), 0 4px 20px rgba(0, 0, 0, 0.035);
     --at-shadow-card-ring: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
     --at-shadow-field-drop: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --at-shadow-focus: inset 0 0 0 1px #151515, 0 0 0 1px #2A78D6, 0 0 6px 1px rgba(24, 79, 149, 0.60);
+    --at-shadow-focus: inset 0 0 0 1px #151515, 0 0 0 1px #2A78D6, 0 0 0 3px rgba(24, 79, 149, 0.60);
     --at-shadow-slider-thumb: 0 0 12px rgba(11, 11, 11, 0.24);
   }
 }

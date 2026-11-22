@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { compareVersions, type ServerUpdateStatus, type SignupPolicy } from '@atelier/protocol';
+import { compareVersions, type ServerUpdateStatus, type SignupPolicy, type UpdateChannel } from '@atelier/protocol';
 import { Button, ProgressBar, Select, Switch, type SelectOption } from '../../components/ui/index.ts';
 import { relativeTime } from '../../lib/dates.ts';
 import { rpc } from '../../lib/rpc.ts';
@@ -13,8 +13,15 @@ const POLICIES: SelectOption<SignupPolicy>[] = [
   { value: 'open', label: 'Open, with approval' },
 ];
 
+const CHANNELS: SelectOption<UpdateChannel>[] = [
+  { value: 'stable', label: 'Stable' },
+  { value: 'beta', label: 'Beta' },
+];
+
 export const SERVER_UPDATES = ['server', 'updates'] as const;
 export const MANUAL_UPDATE = 'docker compose pull && docker compose up -d';
+/** What an updater from before 0.10.7 needs once before it can install betas (a server names the exact command). */
+export const UPDATE_UPDATER = 'docker compose pull updater && docker compose up -d updater';
 
 export function ServerPage() {
   const signup = useSetting<SignupPolicy>(['server', 'signup']);
@@ -44,24 +51,45 @@ function VersionSection() {
     refetchInterval: (query) => (running(query.state.data) || autoBusy(query.state.data) ? 2000 : false),
   });
   const { error, run } = useWrite();
+  const [checking, setChecking] = useState(false);
   if (!status) return null;
 
   const newer = status.latest && compareVersions(status.latest.version, status.version) > 0 ? status.latest.version : null;
-  const check = () => run(async () => qc.setQueryData(SERVER_UPDATES, await rpc().call('server.updates', { refresh: true })));
+  // It looks again even when the last look was a moment ago, and the button says so while it does.
+  const check = async () => {
+    setChecking(true);
+    try {
+      await run(async () => qc.setQueryData(SERVER_UPDATES, await rpc().call('server.updates', { refresh: true })));
+    } finally {
+      setChecking(false);
+    }
+  };
   // No question first: a refusal shows on the row.
   const update = async () => void (await run(async () => qc.setQueryData(SERVER_UPDATES, await rpc().call('server.update', {}))));
   const updating = running(status) || status.auto?.state === 'installing';
+  const beta = status.channel === 'beta';
 
   let versionDetail: ReactNode;
-  if (newer) versionDetail = `Atelier ${newer} is available.`;
-  else if (status.latest) versionDetail = `Up to date. Checked ${relativeTime(status.latest.checkedAt)}.`;
+  if (newer) versionDetail = `Atelier ${newer} is available${newer.includes('-') ? ' (a beta)' : ''}.`;
+  else if (status.latest) {
+    const newest = beta ? 'the newest version, betas included' : 'the newest release';
+    // A server on a beta is ahead of the newest release, which isn't its version.
+    const ahead = compareVersions(status.version, status.latest.version) > 0;
+    versionDetail = `Up to date: ${ahead ? `newer than ${newest}, ${status.latest.version}` : `${status.latest.version} is ${newest}`}. Checked ${relativeTime(status.latest.checkedAt)}.`;
+  }
   else versionDetail = status.latestError ?? 'Checking for a newer version…';
+  const checkButton = (
+    <Button loading={checking} disabled={checking} onClick={() => void check()}>
+      {checking ? 'Checking…' : 'Check now'}
+    </Button>
+  );
 
   return (
     <SettingsSection title="Version">
       <SettingRow id="server.version" detail={versionDetail}>
         <span className="text-body text-fg-secondary tabular-nums">{status.version}</span>
       </SettingRow>
+      {status.channel && status.install === 'updater' && <ChannelRow status={status} onChange={() => void qc.invalidateQueries({ queryKey: SERVER_UPDATES })} />}
       {status.auto && status.install === 'updater' && <AutoUpdateRow onChange={() => void qc.invalidateQueries({ queryKey: SERVER_UPDATES })} />}
       <SettingRow id="server.update" detail={<UpdateDetail status={status} newer={newer} />} error={error ?? failure(status)}>
         {status.install === 'updater' &&
@@ -74,11 +102,36 @@ function VersionSection() {
               Update now
             </Button>
           ) : (
-            <Button onClick={() => void check()}>Check now</Button>
+            checkButton
           ))}
-        {status.install !== 'updater' && <Button onClick={() => void check()}>Check now</Button>}
+        {status.install !== 'updater' && checkButton}
       </SettingRow>
     </SettingsSection>
+  );
+}
+
+/** Releases only, or betas too: the server then looks in both and takes the newer. */
+function ChannelRow({ status, onChange }: { status: ServerUpdateStatus; onChange(): void }) {
+  const setting = useSetting<UpdateChannel>(['server', 'updateChannel']);
+  // An updater from before 0.10.7 can only install the compose file's own tags, and betas have none of those.
+  const old = status.channel === 'beta' && status.exactVersions === false;
+  return (
+    <SettingRow
+      id="server.updateChannel"
+      setting={setting}
+      {...(old
+        ? {
+            detail: (
+              <>
+                This server’s updater is too old to install betas. Update it once: on the server’s host, in the folder with compose.yaml, run{' '}
+                <code className="font-mono text-footnote break-all">{status.updaterUpdate ?? UPDATE_UPDATER}</code>
+              </>
+            ),
+          }
+        : {})}
+    >
+      {(label) => <Select {...label} options={CHANNELS} value={setting.value ?? status.channel ?? 'stable'} onValueChange={(v) => void setting.set(v).then(onChange)} />}
+    </SettingRow>
   );
 }
 

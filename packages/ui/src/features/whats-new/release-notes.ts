@@ -86,6 +86,8 @@ export const RELEASE_NOTES: readonly ReleaseNotes[] = [
       'When it looks something up in the browser, it reads several results, follows links that lead closer and answers with what it found, linked to its sources.',
       'Switching the update channel back to Stable drops a beta that was already downloaded, so it is no longer installed when Atelier quits.',
       'The media kit at media.atelierhq.dev has the logos, app icons, banners, screenshots and colours, linked from the website’s footer.',
+      'A server can follow the beta channel: Settings › Admin › Server › Update channel. Check now says what it found, and the server’s updater now updates itself with the rest.',
+      'Add price finds a model as you type its name, and the focus ring around a field is sharp instead of a soft glow.',
     ],
   },
   {

@@ -2,13 +2,44 @@
 import { spawn } from 'node:child_process';
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, symlink } from 'node:fs/promises';
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { hostname } from 'node:os';
-import { dirname, isAbsolute, relative } from 'node:path';
+import { hostname, tmpdir } from 'node:os';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 
-/** What this updater can do beyond the first version's pull-and-restart in one go; `GET /status` lists it. */
-export const FEATURES = ['pull'] as const;
+/**
+ * What this updater can do beyond the first version's pull-and-restart in one go; `GET /status` lists it. `pull`:
+ * download ahead and install later (0.10.6). `version`: install one exact version (`?version=0.10.7-beta.6`), which is
+ * how a server on the beta channel gets betas: they have only their version's image tag, never `:latest` (0.10.7).
+ */
+export const FEATURES = ['pull', 'version'] as const;
+
+/** A version the updater may be asked for: plain semver, the image tag being `v` and it. */
+const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.]{1,32})?$/;
+
+/** Atelier's own images by what they are: the server, the sandbox, and this updater. */
+const OWN_IMAGES = { atelier: 'atelier', sandbox: 'atelier-sandbox', updater: 'atelier-updater' } as const;
+type Own = keyof typeof OWN_IMAGES;
+
+/** Whether `image` is Atelier's own image of that kind (by its name, wherever it is pulled from). */
+export function isOwnImage(image: string, kind: Own): boolean {
+  const name = image.split('@')[0]!;
+  const slash = name.lastIndexOf('/');
+  const colon = name.indexOf(':', slash + 1);
+  return (colon < 0 ? name : name.slice(0, colon)).slice(slash + 1) === OWN_IMAGES[kind];
+}
+
+/**
+ * `image` at the tag of `version` (`ghcr.io/theoriuhd/atelier:latest` → `…/atelier:v0.10.7-beta.6`), or null when it
+ * isn't Atelier's own image under that name (a custom one is left as the compose file has it). A digest pin is replaced too.
+ */
+export function imageAt(image: string, kind: Own, version: string): string | null {
+  if (!isOwnImage(image, kind)) return null;
+  const name = image.split('@')[0]!;
+  const slash = name.lastIndexOf('/');
+  const colon = name.indexOf(':', slash + 1);
+  return `${colon < 0 ? name : name.slice(0, colon)}:v${version}`;
+}
 
 /** The only services it ever touches. */
 export const SERVICES = ['atelier', 'sandbox'] as const;
@@ -109,6 +140,8 @@ export interface UpdaterOptions {
   projectMount?: string;
   /** Makes the host's project path lead to the mount, so compose resolves relative paths as on the host. */
   link?(hostPath: string, mount: string): Promise<void>;
+  /** Writes the compose file that names a chosen version's images; returns its path (in this container's temp folder). */
+  writeOverride?(content: string): Promise<string>;
   now?: () => number;
 }
 
@@ -160,20 +193,23 @@ export function manifestSizes(answer: unknown, platform: string): Map<string, nu
   return sizes;
 }
 
-export function createUpdater({ docker, self, secret, projectMount = '/project', link = linkProject, now = Date.now }: UpdaterOptions) {
+export function createUpdater({ docker, self, secret, projectMount = '/project', link = linkProject, writeOverride = writeOverrideFile, now = Date.now }: UpdaterOptions) {
   let job: Job = { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null, pulledAt: null };
   let running: Promise<void> = Promise.resolve();
 
   const inspect = async <T>(...args: string[]): Promise<T[]> => JSON.parse(await docker(['inspect', ...args])) as T[];
 
   const project = async () => {
-    const [me] = await inspect<{ Config: { Labels: Record<string, string> | null } }>(self);
+    const [me] = await inspect<{ Image?: string; Config: { Labels: Record<string, string> | null } }>(self);
     const labels = me?.Config.Labels ?? {};
     const name = labels[`${LABEL}.project`];
     const dir = labels[`${LABEL}.project.working_dir`];
     if (!name || !dir) throw new Error('The updater must run as a service of the Atelier compose project.');
-    const files = (labels[`${LABEL}.project.config_files`] ?? '').split(',').filter(Boolean);
-    return { name, dir, files };
+    // Compose records every file it was given, the version files this updater and its helper wrote too: they aren't the
+    // project's, and the next update writes its own again (or none, on the compose file's own tags).
+    const files = (labels[`${LABEL}.project.config_files`] ?? '').split(',').filter((f) => f && f !== OVERRIDE_PATH);
+    // This updater's own service in the project, and the image it runs (an id): an update brings it along.
+    return { name, dir, files, service: labels[`${LABEL}.service`] ?? null, imageId: me?.Image ?? null };
   };
 
   const services = async (name: string): Promise<Partial<Record<(typeof SERVICES)[number], Service>>> => {
@@ -191,10 +227,13 @@ export function createUpdater({ docker, self, secret, projectMount = '/project',
     return found;
   };
 
-  /** `pull`: download the new images; `restart`: recreate the server and the sandbox from the images on this host. */
-  const run = async ({ pull, restart }: { pull: boolean; restart: boolean }) => {
+  /**
+   * `pull`: download the new images; `restart`: recreate the server and the sandbox from the images on this host.
+   * `version`: those of that version (their `v<version>` tags) instead of the tags the compose file names.
+   */
+  const run = async ({ pull, restart, version }: { pull: boolean; restart: boolean; version: string | null }) => {
     try {
-      const { name, dir, files } = await project();
+      const { name, dir, files, service: own, imageId } = await project();
       const present = await services(name);
       const names = SERVICES.filter((s) => present[s]);
       if (present.atelier?.source) throw new Error('This server was built from source; update it by rebuilding its image.');
@@ -202,12 +241,18 @@ export function createUpdater({ docker, self, secret, projectMount = '/project',
       // Only the files the project was started with; anything outside its folder isn't mounted here.
       const outside = files.find((f) => relative(dir, f).startsWith('..') || !isAbsolute(f));
       if (outside) throw new Error(`The compose file ${outside} is outside the project folder the updater can see.`);
-      const compose = ['compose', '--project-name', name, '--project-directory', dir, ...files.flatMap((f) => ['--file', f])];
+      const base = ['compose', '--project-name', name, '--project-directory', dir, ...files.flatMap((f) => ['--file', f])];
+      // The updater comes along when it runs Atelier's own image: downloaded with the rest, put in place after the install.
+      const config = JSON.parse(await docker([...base, 'config', '--format', 'json'])) as { services?: Record<string, { image?: string }> };
+      const mine = own && config.services?.[own]?.image && isOwnImage(config.services[own].image, 'updater') ? own : null;
+      const override = version ? versionOverride(config, [...names, ...(mine ? [mine] : [])], version, mine) : null;
+      const compose = override ? [...base, '--file', await writeOverride(JSON.stringify(override, null, 2))] : base;
+      const pulls = [...names, ...(mine ? [mine] : [])];
       let progress: Progress | null = null;
       if (pull) {
         // The pull as JSON, a line an event, added up into the share downloaded so far against the layers' sizes.
-        const pulled = pullProgress(await layerSizes(compose, names));
-        await docker([...compose, '--progress', 'json', 'pull', ...names], (line) => {
+        const pulled = pullProgress(await layerSizes(compose, pulls));
+        await docker([...compose, '--progress', 'json', 'pull', ...pulls], (line) => {
           if (!line.trim()) return;
           pulled.line(line);
           job = { ...job, progress: pulled.get() };
@@ -222,9 +267,40 @@ export function createUpdater({ docker, self, secret, projectMount = '/project',
       job = { ...job, state: 'restarting', message: null, progress, pulledAt: null };
       await docker([...compose, 'up', '--detach', '--no-deps', ...names], (line) => line.trim() && (job = { ...job, message: line.trim() }));
       job = { ...job, state: 'done', message: null, finishedAt: now() };
+      // Last, this updater: a helper from the new image recreates it (it can't recreate itself, it would stop midway).
+      if (mine) await replaceSelf({ name, dir, files, service: mine, imageId, image: override?.services[mine]?.image ?? config.services![mine]!.image! }).catch(() => undefined);
     } catch (e) {
       job = { ...job, state: 'failed', message: e instanceof Error ? e.message : String(e), finishedAt: now(), pulledAt: null };
     }
+  };
+
+  /**
+   * One more compose file, on top of the project's, that names the images of `version` for Atelier's own services. The
+   * project's files stay as they are: a later `docker compose up -d` by hand goes back to the tags they name.
+   */
+  const versionOverride = (config: { services?: Record<string, { image?: string }> }, names: readonly string[], version: string, mine: string | null) => {
+    const services: Record<string, { image: string }> = {};
+    for (const service of names) {
+      const image = config.services?.[service]?.image;
+      const kind: Own = service === mine ? 'updater' : (service as Own);
+      const at = image ? imageAt(image, kind, version) : null;
+      if (at) services[service] = { image: at };
+    }
+    if (!services.atelier) throw new Error(`The compose file's atelier service doesn't run Atelier's own image, so the updater can't choose its version.`);
+    return { services };
+  };
+
+  /**
+   * Starts a short-lived container of the updater's new image that recreates this updater's service from it, when the
+   * image differs from the one this updater runs. It shares this container's volumes (the Docker socket, the project
+   * folder, the secret) and needs no network.
+   */
+  const replaceSelf = async (target: { name: string; dir: string; files: string[]; service: string; imageId: string | null; image: string }) => {
+    const id = (await docker(['image', 'inspect', '--format', '{{.Id}}', target.image]).catch(() => '')).trim();
+    if (!id || id === target.imageId) return;
+    const plan: ReplacePlan = { project: target.name, dir: target.dir, files: target.files, service: target.service, image: target.image };
+    // At most five minutes: an image too old to know the helper's job would otherwise sit there listening for ever.
+    await docker(['run', '--detach', '--rm', '--network', 'none', '--volumes-from', self, '--env', `${REPLACE_ENV}=${JSON.stringify(plan)}`, '--entrypoint', 'timeout', target.image, '300', 'node', '/app/updater.ts']);
   };
 
   /** Every layer's size from the registry, so the share is right from the start; empty when that can't be read in time. */
@@ -279,14 +355,47 @@ export function createUpdater({ docker, self, secret, projectMount = '/project',
         // `/pull` only downloads. `/update` downloads and installs, or with `?pull=false` installs what a `/pull` fetched.
         const pull = path === '/pull' || searchParams.get('pull') !== 'false';
         const restart = path === '/update';
+        // `?version=`: that version's images, not the compose file's tags (a beta has only its own version's tag).
+        const version = searchParams.get('version');
+        if (version !== null && !VERSION.test(version)) return { status: 400, body: { error: `"${version.slice(0, 40)}" isn't a version.` } };
         job = { state: pull ? 'pulling' : 'restarting', message: null, startedAt: now(), finishedAt: null, progress: null, pulledAt: pull ? null : job.pulledAt };
         // Answered before the work is done: recreating the server ends the connection that asked.
-        running = run({ pull, restart });
+        running = run({ pull, restart, version });
         return { status: 202, body: { job } };
       }
       return { status: 404, body: { error: 'Not found.' } };
     },
   };
+}
+
+/** What the helper container is told: which service of which project to recreate, and from which image. */
+export interface ReplacePlan {
+  project: string;
+  dir: string;
+  files: string[];
+  service: string;
+  image: string;
+}
+/** The helper's one input; with it the container recreates the updater and exits instead of listening. */
+export const REPLACE_ENV = 'ATELIER_UPDATER_REPLACE';
+
+/**
+ * The helper's work: recreate the updater's service from `image` (written over the compose file's own tag, which is how
+ * a beta updater stays a beta's), leaving every other service alone.
+ */
+export async function replaceUpdater(plan: ReplacePlan, { docker, projectMount = '/project', link = linkProject, writeOverride = writeOverrideFile }: Pick<UpdaterOptions, 'docker' | 'projectMount' | 'link' | 'writeOverride'>): Promise<void> {
+  if (!plan.project || !plan.dir || !plan.service || !plan.image || !Array.isArray(plan.files)) throw new Error('Nothing to replace.');
+  await link(plan.dir, projectMount);
+  const override = await writeOverride(JSON.stringify({ services: { [plan.service]: { image: plan.image } } }, null, 2));
+  const compose = ['compose', '--project-name', plan.project, '--project-directory', plan.dir, ...plan.files.flatMap((f) => ['--file', f]), '--file', override];
+  await docker([...compose, 'up', '--detach', '--no-deps', plan.service]);
+}
+
+/** The chosen version's compose file, in this container's own temp folder (the project folder is mounted read-only). */
+const OVERRIDE_PATH = join(tmpdir(), 'atelier-version.compose.json');
+async function writeOverrideFile(content: string): Promise<string> {
+  await writeFile(OVERRIDE_PATH, content, { mode: 0o600 });
+  return OVERRIDE_PATH;
 }
 
 /** The host's project folder (from the compose labels) as a link to the read-only mount, so `.env` and relative paths resolve. */
@@ -342,6 +451,17 @@ export const dockerCli: Docker = (args, onLine) =>
 
 /** Starts the HTTP listener (the container's command). */
 export function main(env: Record<string, string | undefined> = process.env): void {
+  // The helper an update started: it puts the new updater in place, then exits.
+  if (env[REPLACE_ENV]) {
+    void replaceUpdater(JSON.parse(env[REPLACE_ENV]) as ReplacePlan, { docker: dockerCli }).then(
+      () => console.log(JSON.stringify({ level: 'info', message: 'updater replaced' })),
+      (e: unknown) => {
+        console.error(JSON.stringify({ level: 'error', message: `replacing the updater failed: ${e instanceof Error ? e.message : String(e)}` }));
+        process.exitCode = 1;
+      },
+    );
+    return;
+  }
   const secretFile = env.ATELIER_UPDATER_SECRET ?? '/updater/secret';
   const updater = createUpdater({
     docker: dockerCli,

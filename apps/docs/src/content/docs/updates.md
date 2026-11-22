@@ -147,6 +147,10 @@ The server tells admins in **Settings › Admin › Server**: its version, the n
   volume is kept.
 - A server built from source is updated by rebuilding it.
 
+**Update channel** on the same page is the server's own: **Stable** installs releases, **Beta** betas too (whichever of
+the newest beta and the newest release is newer). It is separate from the desktop app's channel. See
+[Update channel](/self-hosting/#update-channel).
+
 Details, the updater's security trade-off and pinning a version are in
 [Run a server](/self-hosting/#updating). After a server update:
 

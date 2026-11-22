@@ -1914,6 +1914,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
 
   // The desktop app's own backend updates with the app, not through this.
   const serverUpdates = platform.serverUpdates !== undefined ? platform.serverUpdates : platform.surface === 'web' ? serverUpdatesFromEnv(platform.env) : null;
+  // Settings › Admin › Server › Update channel: releases, or betas too.
+  serverUpdates?.useChannel(() => settings.effective.server.updateChannel);
   const serverUpdateErrors = async <T>(run: () => Promise<T>): Promise<T> => {
     try {
       return await run();
@@ -1954,9 +1956,10 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         ...(platform.env.ATELIER_AUTO_UPDATE_WATCH_MS ? { watchMs: Math.max(20, Number(platform.env.ATELIER_AUTO_UPDATE_WATCH_MS) || 3000), quietMs: Math.max(0, Number(platform.env.ATELIER_AUTO_UPDATE_QUIET_MS) || 0) } : {}),
       })
     : null;
-  let autoUpdateWas = settings.effective.server.autoUpdate;
+  // Turned on, or another channel: it looks at once.
+  let autoUpdateWas = `${settings.effective.server.autoUpdate} ${settings.effective.server.updateChannel}`;
   settings.on('change', () => {
-    const now = settings.effective.server.autoUpdate;
+    const now = `${settings.effective.server.autoUpdate} ${settings.effective.server.updateChannel}`;
     if (now === autoUpdateWas) return;
     autoUpdateWas = now;
     autoUpdate?.poke();

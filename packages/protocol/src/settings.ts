@@ -201,8 +201,10 @@ export const SettingsSchema = z.object({
       signup: SignupPolicy.default('invite'),
       /** The server downloads a new version as soon as it is out and installs it when no turn is running (off unless an admin turns it on). */
       autoUpdate: z.boolean().default(false),
+      /** Which versions the server's update looks for: releases, or betas too (whichever is newer). */
+      updateChannel: z.enum(['stable', 'beta']).default('stable'),
     })
-    .default({ signup: 'invite', autoUpdate: false }),
+    .default({ signup: 'invite', autoUpdate: false, updateChannel: 'stable' }),
   /** How long the admin activity log of a shared server keeps its events (ARCHITECTURE §21). */
   audit: z.object({ retentionDays: z.number().int().min(7).max(365).default(90) }).default({ retentionDays: 90 }),
   /** System-wide permission rules in Claude Code syntax; projects and people add their own. */

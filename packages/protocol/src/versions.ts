@@ -28,6 +28,10 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/** Which versions an update looks for: releases only, or betas too (whichever is newer). */
+export const UpdateChannel = z.enum(['stable', 'beta']);
+export type UpdateChannel = z.infer<typeof UpdateChannel>;
+
 /** A run of the updater service: pull the images, then recreate the server and the sandbox. */
 export const ServerUpdateJob = z.object({
   state: z.enum(['idle', 'pulling', 'restarting', 'done', 'failed']),
@@ -78,5 +82,11 @@ export const ServerUpdateStatus = z.object({
   job: ServerUpdateJob.nullable(),
   /** Absent on a server from before automatic updates. */
   auto: ServerAutoUpdate.nullable().optional(),
+  /** The channel it looks in (Settings › Admin › Server › Update channel); absent on a server from before 0.10.7. */
+  channel: UpdateChannel.optional(),
+  /** Whether its updater can install one exact version, which betas need; null without a working updater, absent before 0.10.7. */
+  exactVersions: z.boolean().nullable().optional(),
+  /** The command, on the server's host, that updates an updater too old for the newest version; absent before 0.10.7. */
+  updaterUpdate: z.string().optional(),
 });
 export type ServerUpdateStatus = z.infer<typeof ServerUpdateStatus>;

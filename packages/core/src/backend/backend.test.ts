@@ -1890,6 +1890,50 @@ describe('server updates', () => {
     }
   });
 
+  it('follow the update channel an admin chooses: on beta the newest beta, installed by its exact version', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'atelier-server-updates-'));
+    const asked: string[] = [];
+    const serverUpdates = new ServerUpdates({
+      version: '0.10.6',
+      feed: 'https://feed.test',
+      updater: { url: 'http://updater:7341', secretFile: join(home, 'updater-secret') },
+      image: 'ghcr.io/theoriuhd/atelier',
+      fetch: async (input, init) => {
+        const url = String(input);
+        asked.push(`${init?.method ?? 'GET'} ${url}`);
+        if (url.endsWith('/stable/latest.yml')) return new Response('version: 0.10.6\n');
+        if (url.endsWith('/beta/latest.yml')) return new Response('version: 0.10.7-beta.6\n');
+        if (url.endsWith('/status')) return Response.json({ services: { atelier: { image: 'ghcr.io/theoriuhd/atelier:latest', source: false } }, job: { state: 'idle', message: null, startedAt: null, finishedAt: null }, features: ['pull', 'version'] });
+        return Response.json({}, { status: 202 });
+      },
+    });
+    const server = await createBackend({
+      surface: 'web',
+      configDir: home,
+      dataDir: home,
+      cipher: { encrypt: async (s) => s, decrypt: async (s) => s },
+      env: {},
+      logger: { info: () => {}, error: () => {} },
+      serverUpdates,
+    });
+    try {
+      const [clientSide, serverSide] = createMemoryTransportPair();
+      server.connect(serverSide, { client: { clientKind: 'web', ip: '127.0.0.1', userAgent: 'test' } });
+      const ada = createRpcClient(contract, clientSide);
+      await ada.call('auth.setup', { username: 'ada', name: 'Ada', password: 'correct horse', clientKind: 'web' });
+      // Stable: up to date, and the beta feed isn't even asked.
+      expect(await ada.call('server.updates', { refresh: true })).toMatchObject({ channel: 'stable', exactVersions: true, latest: { version: '0.10.6' } });
+      expect(asked.some((a) => a.includes('/beta/'))).toBe(false);
+      await ada.call('settings.set', { layer: 'global', path: ['server', 'updateChannel'], value: 'beta' });
+      expect(await ada.call('server.updates', {})).toMatchObject({ channel: 'beta', latest: { version: '0.10.7-beta.6' } });
+      await ada.call('server.update', {});
+      expect(asked).toContain('POST http://updater:7341/update?version=0.10.7-beta.6');
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   it('turn a source-built server’s update into a clear refusal', async () => {
     const home = await mkdtemp(join(tmpdir(), 'atelier-server-updates-'));
     const server = await createBackend({

@@ -86,7 +86,7 @@ describe('Server page', () => {
     current = status({ version: '0.1.9', job: { state: 'done', message: null, startedAt: Date.now() - 60_000, finishedAt: Date.now() - 1000, progress: null, pulledAt: null } });
     renderPage();
     const version = await row('server.version');
-    expect(await version.findByText(/^Up to date\./)).toBeTruthy();
+    expect(await version.findByText(/^Up to date: 0\.1\.9 is the newest release\./)).toBeTruthy();
     const update = await row('server.update');
     expect(update.getByText(/^Updated /)).toBeTruthy();
     expect(update.queryByRole('button', { name: 'Update now' })).toBeNull();
@@ -98,6 +98,48 @@ describe('Server page', () => {
     renderPage();
     fireEvent.click((await row('server.update')).getByRole('button', { name: 'Check now' }));
     await waitFor(() => expect(callsTo('server.updates')).toContainEqual({ refresh: true }));
+  });
+
+  it('says it is checking while it checks, then what it found', async () => {
+    current = status({ latest: { version: '0.1.8', checkedAt: Date.now() - 3 * 60_000 } });
+    let answer: (value: ServerUpdateStatus) => void = () => undefined;
+    resetBackend({
+      'settings.get': () => snapshot(),
+      'server.updates': (input: { refresh?: boolean }) => (input.refresh ? new Promise<ServerUpdateStatus>((resolve) => (answer = resolve)) : current),
+    });
+    renderPage();
+    const update = await row('server.update');
+    fireEvent.click(update.getByRole('button', { name: 'Check now' }));
+    const busy = await update.findByRole('button', { name: 'Checking…' });
+    expect((busy as HTMLButtonElement).disabled).toBe(true);
+    answer(status({ latest: { version: '0.1.8', checkedAt: Date.now() } }));
+    await update.findByRole('button', { name: 'Check now' });
+    expect((await row('server.version')).getByText(/Up to date: 0\.1\.8 is the newest release\. Checked/)).toBeTruthy();
+  });
+
+  it('offers the update channel on a server that has one, and writes it', async () => {
+    current = status({ channel: undefined });
+    renderPage();
+    await row('server.version');
+    expect(document.querySelector('[data-setting-row="server.updateChannel"]')).toBeNull();
+
+    current = status({ channel: 'stable', exactVersions: true });
+    cleanup();
+    renderPage();
+    const channel = await row('server.updateChannel');
+    fireEvent.click(channel.getByRole('combobox'));
+    const beta = await screen.findByRole('option', { name: 'Beta' });
+    // Base UI only accepts mouse clicks that started on the option.
+    fireEvent.pointerDown(beta, { pointerType: 'mouse' });
+    fireEvent.click(beta);
+    await waitFor(() => expect(callsTo('settings.set')).toContainEqual({ layer: 'global', path: ['server', 'updateChannel'], value: 'beta' }));
+  });
+
+  it('on beta, names a beta as one, and says how to update an updater too old for betas', async () => {
+    current = status({ version: '0.10.6', latest: { version: '0.10.7-beta.6', checkedAt: Date.now() }, channel: 'beta', exactVersions: false });
+    renderPage();
+    expect((await row('server.version')).getByText('Atelier 0.10.7-beta.6 is available (a beta).')).toBeTruthy();
+    expect((await row('server.updateChannel')).getByText('docker compose pull updater && docker compose up -d updater')).toBeTruthy();
   });
 
   it('explains the manual update without an updater service', async () => {

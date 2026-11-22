@@ -238,8 +238,16 @@ describe('Usage page prices (admins)', () => {
     expect(await dialog.findByText('Choose a model.')).toBeTruthy();
     expect(dialog.getAllByText('Enter dollars per million tokens, like 3 or 0.25.')).toHaveLength(2);
 
-    fireEvent.click(dialog.getByRole('combobox', { name: 'Model' }));
+    // A long list: typing part of a name narrows it.
+    const model = dialog.getByRole('combobox', { name: 'Model' });
+    const typeInto = (value: string) => fireEvent.input(model, { target: { value }, inputType: 'insertText' });
+    typeInto('qwen');
+    await waitFor(() => expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['qwen3 · Homelab']));
+    typeInto('nothing like it');
+    expect(await screen.findByText('No model matches.')).toBeTruthy();
+    typeInto('qwen');
     pick(await screen.findByRole('option', { name: 'qwen3 · Homelab' }));
+    expect((model as HTMLInputElement).value).toBe('qwen3 · Homelab');
     fireEvent.change(dialog.getByRole('textbox', { name: 'Input' }), { target: { value: '0.5' } });
     fireEvent.change(dialog.getByRole('textbox', { name: 'Output' }), { target: { value: '1.5' } });
     fireEvent.change(dialog.getByRole('textbox', { name: 'Cache read' }), { target: { value: 'free' } });
@@ -261,7 +269,7 @@ describe('Usage page prices (admins)', () => {
     await renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Edit the price of Claude Sonnet' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Edit price' }));
-    expect(dialog.getByRole('combobox', { name: 'Model' }).textContent).toContain('Claude Sonnet · Anthropic');
+    expect((dialog.getByRole('combobox', { name: 'Model' }) as HTMLInputElement).value).toBe('Claude Sonnet · Anthropic');
     expect((dialog.getByRole('textbox', { name: 'Output' }) as HTMLInputElement).value).toBe('15');
     fireEvent.change(dialog.getByRole('textbox', { name: 'Cache read' }), { target: { value: '0.3' } });
     fireEvent.click(dialog.getByRole('button', { name: 'Save' }));

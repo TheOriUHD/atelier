@@ -1413,6 +1413,13 @@ export const SETTINGS_INDEX = [
     keywords: ['version', 'update', 'upgrade', 'release', 'latest', 'docker', 'image'],
   },
   {
+    id: 'server.updateChannel',
+    page: 'server',
+    label: 'Update channel',
+    description: 'Stable installs releases. Beta also installs betas, which come before a release and may break things; a release newer than the last beta is installed too.',
+    keywords: ['beta', 'stable', 'prerelease', 'early access', 'channel', 'updates', 'new version'],
+  },
+  {
     id: 'server.autoUpdate',
     page: 'server',
     label: 'Update automatically',

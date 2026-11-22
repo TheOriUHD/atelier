@@ -365,10 +365,13 @@ describe('System page', () => {
     expect(ui.queryByRole('button', { name: 'System' })).toBeNull();
 
     const search = ui.getByRole('searchbox', { name: 'Search settings' });
-    for (const query of ['launch at login', 'update channel', 'data folder']) {
+    for (const query of ['launch at login', 'data folder']) {
       fireEvent.change(search, { target: { value: query } });
       expect(ui.getByText(`No settings match “${query}”.`)).toBeTruthy();
     }
+    // This computer's update channel isn't there; the server's own is, for its admin.
+    fireEvent.change(search, { target: { value: 'update channel' } });
+    expect(ui.getAllByRole('button', { name: /Update channel/ })).toHaveLength(1);
   });
 });
 

@@ -10,6 +10,7 @@ import {
   DialogFooter,
   Field,
   IconButton,
+  SearchSelect,
   SegmentedControl,
   Select,
   TextField,
@@ -502,11 +503,11 @@ function PriceDialog({
       <DialogContent title={editing ? 'Edit price' : 'Add price'} description="Dollars per million tokens. Requests made from now on use it.">
         <form noValidate onSubmit={form.onSubmit(values)} className="flex flex-col gap-4">
           <Field label="Model" error={form.errors.model}>
-            <Select
-              variant="field"
+            <SearchSelect
               options={options}
               value={values.model}
-              placeholder="Choose a model"
+              placeholder={editing ? undefined : 'Type to search models'}
+              empty="No model matches."
               disabled={!!editing}
               onValueChange={(model) => setValues((v) => ({ ...v, model }))}
             />

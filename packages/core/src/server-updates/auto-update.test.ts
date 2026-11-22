@@ -5,7 +5,7 @@ import { AutoUpdate, type AutoUpdateSource } from './auto-update.ts';
 const idleJob = (extra: Partial<ServerUpdateJob> = {}): ServerUpdateJob => ({ state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null, pulledAt: null, ...extra });
 
 /** An updater and a feed that the test moves along by hand. */
-function setup(options: { enabled?: boolean; ahead?: boolean; latest?: string | null; busy?: { turns: number; background: number }; source?: boolean } = {}) {
+function setup(options: { enabled?: boolean; ahead?: boolean; latest?: string | null; busy?: { turns: number; background: number }; source?: boolean; beta?: boolean; exact?: boolean } = {}) {
   const state = {
     enabled: options.enabled ?? true,
     latest: options.latest === undefined ? '0.10.6' : options.latest,
@@ -21,17 +21,25 @@ function setup(options: { enabled?: boolean; ahead?: boolean; latest?: string | 
     installError: null as Error | null,
     updaterError: undefined as string | null | undefined,
     source: options.source ?? false,
+    beta: options.beta ?? false,
+    exact: options.exact ?? true,
+    /** The versions the pulls and installs asked for (null: the compose file's own tags). */
+    versions: [] as (string | null)[],
   };
   const source: AutoUpdateSource = {
     version: '0.10.5',
     refreshLatest: async () => state.latest,
-    updaterState: async () => (state.updaterError !== undefined ? { ok: false, error: state.updaterError } : { ok: true, job: state.job, downloadsAhead: state.ahead, source: state.source }),
-    pull: async () => {
+    updaterState: async () => (state.updaterError !== undefined ? { ok: false, error: state.updaterError } : { ok: true, job: state.job, downloadsAhead: state.ahead, exactVersions: state.exact, source: state.source }),
+    exactVersion: (target) => (state.beta ? target : null),
+    updaterUpdate: () => 'docker compose pull updater && docker compose up -d updater',
+    pull: async (version = null) => {
+      state.versions.push(version);
       state.pulls++;
       if (state.pullAnswer === 'started') state.job = idleJob({ state: 'pulling', startedAt: state.now });
       return state.pullAnswer;
     },
-    install: async (pulled) => {
+    install: async (pulled, version = null) => {
+      state.versions.push(version);
       state.installs.push(pulled);
       if (state.installError) throw state.installError;
       state.job = idleJob({ state: 'restarting', startedAt: state.now });
@@ -59,6 +67,33 @@ function setup(options: { enabled?: boolean; ahead?: boolean; latest?: string | 
 }
 
 describe('automatic server updates', () => {
+  it('on the beta channel, downloads and installs the exact version it found', async () => {
+    const { auto, state, look, downloaded } = setup({ beta: true, latest: '0.10.7-beta.6' });
+    await look();
+    expect(auto.snapshot()).toMatchObject({ state: 'downloading', version: '0.10.7-beta.6' });
+    downloaded();
+    await look();
+    await look();
+    expect(state.installs).toEqual([true]);
+    expect(state.versions).toEqual(['0.10.7-beta.6', '0.10.7-beta.6']);
+  });
+
+  it('on stable, leaves the compose file’s tags as they are', async () => {
+    const { state, look, downloaded } = setup();
+    await look();
+    downloaded();
+    await look();
+    await look();
+    expect(state.versions).toEqual([null, null]);
+  });
+
+  it('says how to update an updater too old for betas, and downloads nothing', async () => {
+    const { auto, state, look } = setup({ beta: true, exact: false, latest: '0.10.7-beta.6' });
+    await look();
+    expect(state.pulls).toBe(0);
+    expect(auto.snapshot()).toMatchObject({ state: 'failed', error: expect.stringContaining('docker compose pull updater && docker compose up -d updater') });
+  });
+
   it('does nothing while the setting is off', async () => {
     const { auto, state, look } = setup({ enabled: false });
     await look();

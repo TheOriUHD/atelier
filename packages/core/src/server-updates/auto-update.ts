@@ -8,10 +8,10 @@
  * Nothing asks the admin: turning the setting on is the question.
  */
 import { compareVersions, type ServerAutoUpdate } from '@atelier/protocol';
-import type { ServerUpdates } from './server-updates.ts';
+import { betaNeedsNewUpdater, type ServerUpdates } from './server-updates.ts';
 
 /** What the automatic update needs of the server's own update module. */
-export type AutoUpdateSource = Pick<ServerUpdates, 'version' | 'refreshLatest' | 'updaterState' | 'pull' | 'install'>;
+export type AutoUpdateSource = Pick<ServerUpdates, 'version' | 'refreshLatest' | 'updaterState' | 'pull' | 'install' | 'exactVersion' | 'updaterUpdate'>;
 
 export interface AutoUpdateOptions {
   source: AutoUpdateSource;
@@ -192,6 +192,9 @@ export class AutoUpdate {
     }
     if (updater.source) return this.reset(true);
     this.downloadsAhead = updater.downloadsAhead;
+    // On the beta channel the updater is told the version: a beta's images have no `:latest`.
+    const exact = source.exactVersion(this.target);
+    if (exact && !updater.exactVersions) throw new Error(betaNeedsNewUpdater(source.updaterUpdate(exact)));
     if (updater.job.state === 'restarting') {
       // Started elsewhere (the admin's button): the server is about to restart, so nothing new may start now either.
       this.beginInstall(this.target);
@@ -201,7 +204,7 @@ export class AutoUpdate {
     if (updater.downloadsAhead) {
       if (updater.job.state === 'failed' && this.pullFor === this.target) throw new Error(updater.job.message ?? 'The download failed.');
       if (this.pullFor !== this.target) {
-        if ((await source.pull()) === 'unsupported') this.downloadsAhead = false;
+        if ((await source.pull(exact)) === 'unsupported') this.downloadsAhead = false;
         else {
           this.pullFor = this.target;
           this.pulled = false;
@@ -251,7 +254,7 @@ export class AutoUpdate {
     try {
       this.tried = { target: this.target!, at: this.now() };
       await this.options.memory?.save(this.tried).catch(() => undefined);
-      await this.options.source.install(this.pulled);
+      await this.options.source.install(this.pulled, this.options.source.exactVersion(this.target));
     } catch (e) {
       this.fail(e);
     }

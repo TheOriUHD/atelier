@@ -28,6 +28,7 @@ export {
 } from './menu.tsx';
 export { Popover, PopoverTrigger, PopoverContent, type PopoverContentProps } from './popover.tsx';
 export { Select, type SelectOption, type SelectProps } from './select.tsx';
+export { SearchSelect, type SearchSelectProps } from './search-select.tsx';
 export { Tooltip, TooltipProvider, TOOLTIP_DELAY, type TooltipProps, type TooltipProviderProps } from './tooltip.tsx';
 export {
   Dialog,

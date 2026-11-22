@@ -345,6 +345,7 @@ Admins only.
 | Setting | What it does |
 |---|---|
 | **Server version** | The version of Atelier this server runs. |
+| **Update channel** | Stable installs releases. Beta also installs betas, which come before a release and may break things; a release newer than the last beta is installed too. |
 | **Update automatically** | The server checks for a new version every minute and downloads it at once. It installs it as soon as no reply is being written and no sub-agent or background command is running, and waits while someone is using it. The server restarts for a few seconds and everyone reconnects by themselves; a message sent in that moment asks to be sent again in a few seconds. |
 | **Update server** | Installs the newest version of Atelier on this server now. It restarts, replies being written stop, and everyone reconnects by themselves. |
 | **Sign-up** | Invite only: admins add people or give them invite codes. Open: anyone who can reach this server can create an account, which waits for an admin to approve it. |

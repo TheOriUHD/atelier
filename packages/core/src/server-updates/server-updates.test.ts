@@ -13,9 +13,9 @@ beforeEach(async () => (dir = await mkdtemp(join(tmpdir(), 'atelier-server-updat
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
 /** The public feed and an updater service, recording what each was asked. */
-function fakeNetwork({ feedVersion = '0.1.9', feedUp = true, updater = 'registry' as 'registry' | 'source' | 'down' | 'busy' | 'old' } = {}) {
+function fakeNetwork({ feedVersion = '0.1.9', betaVersion = null as string | null, feedUp = true, updater = 'registry' as 'registry' | 'source' | 'down' | 'busy' | 'old' | 'pre-0.10.7' } = {}) {
   const requests: { url: string; method: string; auth: string | null }[] = [];
-  const state = { feedVersion, feedUp, updater };
+  const state = { feedVersion, betaVersion, feedUp, updater };
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = String(input);
     requests.push({ url, method: init?.method ?? 'GET', auth: new Headers(init?.headers).get('authorization') });
@@ -23,16 +23,22 @@ function fakeNetwork({ feedVersion = '0.1.9', feedUp = true, updater = 'registry
       if (!state.feedUp) throw new TypeError('fetch failed');
       return new Response(`version: ${state.feedVersion}\nfiles:\n  - url: Atelier-Setup.exe\nreleaseDate: '2026-10-17'\n`);
     }
+    if (url === `${FEED}/beta/latest.yml`) {
+      if (!state.feedUp || !state.betaVersion) return new Response('not found', { status: 404 });
+      return new Response(`version: ${state.betaVersion}\nfiles:\n  - url: Atelier-Setup.exe\n`);
+    }
     if (url.startsWith('https://api.github.com/repos/ada/atelier/releases/latest')) return Response.json({ tag_name: 'v0.2.0' });
+    if (url.startsWith('https://api.github.com/repos/ada/atelier/releases?')) return Response.json([{ tag_name: 'v0.3.0-beta.2', draft: true }, { tag_name: 'v0.3.0-beta.1' }, { tag_name: 'v0.2.0' }, { tag_name: 'nightly' }]);
     if (url.startsWith(UPDATER)) {
       if (state.updater === 'down') throw new TypeError('fetch failed');
       if (url.endsWith('/status')) {
         const image = state.updater === 'source' ? 'atelier:local' : 'ghcr.io/theoriuhd/atelier:latest';
-        return Response.json({ project: 'atelier', services: { atelier: { image, source: state.updater === 'source' } }, job: IDLE, ...(state.updater === 'old' ? {} : { features: ['pull'] }) });
+        const features = state.updater === 'old' ? {} : state.updater === 'pre-0.10.7' ? { features: ['pull'] } : { features: ['pull', 'version'] };
+        return Response.json({ project: 'atelier', services: { atelier: { image, source: state.updater === 'source' } }, job: IDLE, ...features });
       }
       // An updater from before 0.10.6 doesn't know the download-ahead step.
-      if (url.endsWith('/pull')) return state.updater === 'old' ? new Response('not found', { status: 404 }) : state.updater === 'busy' ? Response.json({ error: 'An update is already running.' }, { status: 409 }) : Response.json({ job: { ...IDLE, state: 'pulling' } }, { status: 202 });
-      if (url.endsWith('/update') || url.endsWith('/update?pull=false')) {
+      if (/\/pull(\?version=[\w.-]+)?$/.test(url)) return state.updater === 'old' ? new Response('not found', { status: 404 }) : state.updater === 'busy' ? Response.json({ error: 'An update is already running.' }, { status: 409 }) : Response.json({ job: { ...IDLE, state: 'pulling' } }, { status: 202 });
+      if (/\/update(\?(pull=false&?)?(version=[\w.-]+)?)?$/.test(url)) {
         if (state.updater === 'busy') return Response.json({ error: 'An update is already running.' }, { status: 409 });
         return Response.json({ job: { ...IDLE, state: 'pulling' } }, { status: 202 });
       }
@@ -61,7 +67,34 @@ describe('the newest server version', () => {
       image: 'ghcr.io/theoriuhd/atelier',
       updaterError: null,
       job: null,
+      channel: 'stable',
+      exactVersions: null,
+      updaterUpdate: 'docker compose pull updater && docker compose up -d updater',
     });
+  });
+
+  it('on the beta channel is the newer of the newest beta and the newest release', async () => {
+    let channel: 'stable' | 'beta' = 'beta';
+    const network = fakeNetwork({ feedVersion: '0.10.6', betaVersion: '0.10.7-beta.5' });
+    const { updates } = make({ channel: () => channel }, network);
+    expect((await updates.status()).latest?.version).toBe('0.10.7-beta.5');
+    // The release after the betas: the beta channel moves to it.
+    network.state.feedVersion = '0.10.7';
+    expect((await updates.status(true)).latest?.version).toBe('0.10.7');
+    // Back on stable it looks again at once, without waiting for the cache.
+    network.state.feedVersion = '0.10.6';
+    channel = 'stable';
+    expect(await updates.status()).toMatchObject({ channel: 'stable', latest: { version: '0.10.6' } });
+  });
+
+  it('on the beta channel is the stable one while there is no beta', async () => {
+    const { updates } = make({ channel: () => 'beta' }, fakeNetwork({ feedVersion: '0.10.6' }));
+    expect(await updates.status()).toMatchObject({ latest: { version: '0.10.6' }, latestError: null });
+  });
+
+  it('on the beta channel, from GitHub, is the newest release that isn’t a draft', async () => {
+    const { updates } = make({ repo: 'ada/atelier', channel: () => 'beta' });
+    expect((await updates.status()).latest?.version).toBe('0.3.0-beta.1');
   });
 
   it('is cached for ten minutes, unless asked to refresh', async () => {
@@ -185,6 +218,34 @@ describe('downloading ahead and installing', () => {
     expect(network.requests.at(-1)).toMatchObject({ method: 'POST', url: `${UPDATER}/update` });
     // An update that is already running is what was asked for.
     await expect(make(withUpdater(), fakeNetwork({ updater: 'busy' })).updates.install(false)).resolves.toBeUndefined();
+  });
+
+  it('on the beta channel, asks for the exact version it found, which a beta needs', async () => {
+    const network = fakeNetwork({ feedVersion: '0.10.6', betaVersion: '0.10.7-beta.6' });
+    const { updates } = make({ ...withUpdater(), version: '0.10.6', channel: () => 'beta' }, network);
+    expect(await updates.status()).toMatchObject({ channel: 'beta', exactVersions: true, latest: { version: '0.10.7-beta.6' } });
+    await updates.update();
+    expect(network.requests.filter((r) => r.method === 'POST')).toMatchObject([{ url: `${UPDATER}/update?version=0.10.7-beta.6` }]);
+    await updates.pull(updates.exactVersion('0.10.7-beta.6'));
+    expect(network.requests.at(-1)).toMatchObject({ url: `${UPDATER}/pull?version=0.10.7-beta.6` });
+    await updates.install(true, '0.10.7-beta.6');
+    expect(network.requests.at(-1)).toMatchObject({ url: `${UPDATER}/update?pull=false&version=0.10.7-beta.6` });
+  });
+
+  it('on the beta channel, refuses to install with an updater too old for betas, and says how to update it', async () => {
+    const network = fakeNetwork({ feedVersion: '0.10.6', betaVersion: '0.10.7-beta.6', updater: 'pre-0.10.7' });
+    const { updates } = make({ ...withUpdater(), version: '0.10.6', channel: () => 'beta' }, network);
+    expect(await updates.status()).toMatchObject({ exactVersions: false });
+    // Before the release, `:latest` is too old as well: the beta's own updater, under the name the compose file runs.
+    const command =
+      'docker pull ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6 && docker tag ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6 ghcr.io/theoriuhd/atelier-updater:latest && docker compose up -d updater';
+    expect((await updates.status()).updaterUpdate).toBe(command);
+    await expect(updates.update()).rejects.toMatchObject({ code: 'updater_old', message: expect.stringContaining(command) });
+    expect(network.requests.some((r) => r.method === 'POST')).toBe(false);
+  });
+
+  it('on stable, keeps the compose file’s tags even with an updater that could choose', async () => {
+    expect(make(withUpdater()).updates.exactVersion('0.1.9')).toBeNull();
   });
 
   it('looks for the newest version again whatever its cache says', async () => {

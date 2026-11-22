@@ -1,32 +1,39 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createUpdater, failureText, looksLocal, manifestSizes, pullProgress, type Docker } from './updater.ts';
+import { createUpdater, failureText, imageAt, looksLocal, manifestSizes, pullProgress, REPLACE_ENV, replaceUpdater, type Docker } from './updater.ts';
 
 const SECRET = 'shared-secret-from-the-volume';
 const AUTH = `Bearer ${SECRET}`;
 
 /** A Docker host with one compose project, recording every command it was given. */
-function fakeDocker({ image = 'ghcr.io/theoriuhd/atelier:latest', digests = ['ghcr.io/theoriuhd/atelier@sha256:1'], failPull = false } = {}) {
+function fakeDocker({ image = 'ghcr.io/theoriuhd/atelier:latest', digests = ['ghcr.io/theoriuhd/atelier@sha256:1'], failPull = false, updater = false, newUpdater = true, configFiles = '/home/ada/atelier/compose.yaml' } = {}) {
   const calls: string[][] = [];
   const docker: Docker = async (args, onLine) => {
     calls.push(args);
     if (args[0] === 'inspect' && args[1] === 'self-id') {
       return JSON.stringify([
         {
+          // `updater`: it runs as the project's `updater` service, from Atelier's own updater image.
+          ...(updater ? { Image: 'sha256:running-updater' } : {}),
           Config: {
             Labels: {
               'com.docker.compose.project': 'atelier',
               'com.docker.compose.project.working_dir': '/home/ada/atelier',
-              'com.docker.compose.project.config_files': '/home/ada/atelier/compose.yaml',
+              'com.docker.compose.project.config_files': configFiles,
+              ...(updater ? { 'com.docker.compose.service': 'updater' } : {}),
             },
           },
         },
       ]);
     }
+    if (args[0] === 'image' && args[1] === 'inspect') return newUpdater ? 'sha256:pulled-updater\n' : 'sha256:running-updater\n';
     if (args[0] === 'ps') return args.includes('label=com.docker.compose.service=atelier') ? 'c-atelier\n' : 'c-sandbox\n';
     if (args[0] === 'inspect' && args[1] === '--type') return JSON.stringify([{ RepoDigests: digests }]);
     if (args[0] === 'inspect') return JSON.stringify([{ Image: `sha256:${args[1]}`, Config: { Image: args[1] === 'c-atelier' ? image : 'ghcr.io/theoriuhd/atelier-sandbox:latest' } }]);
     if (args[0] === 'version') return 'linux/amd64\n';
-    if (args.includes('config')) return JSON.stringify({ services: { atelier: { image: 'ghcr.io/theoriuhd/atelier:latest' }, sandbox: { image: 'ghcr.io/theoriuhd/atelier-sandbox:latest' } } });
+    if (args.includes('config'))
+      return JSON.stringify({ services: { atelier: { image: 'ghcr.io/theoriuhd/atelier:latest' }, sandbox: { image: 'ghcr.io/theoriuhd/atelier-sandbox:latest' }, ...(updater ? { updater: { image: 'ghcr.io/theoriuhd/atelier-updater:latest' } } : {}) } });
     if (args[0] === 'manifest') {
       // The server's image has two layers, one of them on this host already; the sandbox's can't be read.
       if (args.at(-1)!.includes('sandbox')) throw new Error('denied');
@@ -51,8 +58,10 @@ function fakeDocker({ image = 'ghcr.io/theoriuhd/atelier:latest', digests = ['gh
 function setup(options: Parameters<typeof fakeDocker>[0] = {}) {
   const docker = fakeDocker(options);
   const link = vi.fn(async () => {});
-  const updater = createUpdater({ docker: docker.docker, self: 'self-id', secret: async () => SECRET, link, now: () => 1000 });
-  return { ...docker, updater, link };
+  const overrides: string[] = [];
+  const writeOverride = vi.fn(async (content: string) => (overrides.push(content), '/tmp/atelier-version.compose.json'));
+  const updater = createUpdater({ docker: docker.docker, self: 'self-id', secret: async () => SECRET, link, writeOverride, now: () => 1000 });
+  return { ...docker, updater, link, overrides };
 }
 
 describe('the updater service', () => {
@@ -83,7 +92,7 @@ describe('the updater service', () => {
       project: 'atelier',
       services: { atelier: { image: 'ghcr.io/theoriuhd/atelier:latest', source: false }, sandbox: { image: 'ghcr.io/theoriuhd/atelier-sandbox:latest', source: false } },
       job: { state: 'idle', message: null, startedAt: null, finishedAt: null, progress: null, pulledAt: null },
-      features: ['pull'],
+      features: ['pull', 'version'],
     });
   });
 
@@ -94,6 +103,7 @@ describe('the updater service', () => {
     await updater.settled();
     const compose = ['compose', '--project-name', 'atelier', '--project-directory', '/home/ada/atelier', '--file', '/home/ada/atelier/compose.yaml'];
     expect(calls.filter((c) => c[0] === 'compose')).toEqual([
+      [...compose, 'config', '--format', 'json'],
       [...compose, 'config', '--format', 'json'],
       [...compose, '--progress', 'json', 'pull', 'atelier', 'sandbox'],
       [...compose, 'up', '--detach', '--no-deps', 'atelier', 'sandbox'],
@@ -114,8 +124,80 @@ describe('the updater service', () => {
     expect((await updater.handle('POST', '/update?pull=false', AUTH)).status).toBe(202);
     expect(updater.job().state).toBe('restarting');
     await updater.settled();
-    expect(calls.filter((c) => c[0] === 'compose')).toEqual([[...compose, 'up', '--detach', '--no-deps', 'atelier', 'sandbox']]);
+    expect(calls.filter((c) => c[0] === 'compose' && !c.includes('config'))).toEqual([[...compose, 'up', '--detach', '--no-deps', 'atelier', 'sandbox']]);
     expect(updater.job()).toMatchObject({ state: 'done', pulledAt: null });
+  });
+
+  it('installs one exact version when asked: that version’s image tags over the compose file’s', async () => {
+    const { updater, calls, overrides } = setup();
+    const compose = ['compose', '--project-name', 'atelier', '--project-directory', '/home/ada/atelier', '--file', '/home/ada/atelier/compose.yaml'];
+    const chosen = [...compose, '--file', '/tmp/atelier-version.compose.json'];
+    expect((await updater.handle('POST', '/pull?version=0.10.7-beta.6', AUTH)).status).toBe(202);
+    await updater.settled();
+    expect(JSON.parse(overrides[0]!)).toEqual({ services: { atelier: { image: 'ghcr.io/theoriuhd/atelier:v0.10.7-beta.6' }, sandbox: { image: 'ghcr.io/theoriuhd/atelier-sandbox:v0.10.7-beta.6' } } });
+    expect(calls.filter((c) => c[0] === 'compose' && c.includes('pull'))).toEqual([[...chosen, '--progress', 'json', 'pull', 'atelier', 'sandbox']]);
+    calls.length = 0;
+    expect((await updater.handle('POST', '/update?pull=false&version=0.10.7-beta.6', AUTH)).status).toBe(202);
+    await updater.settled();
+    expect(calls.filter((c) => c[0] === 'compose' && c.includes('up'))).toEqual([[...chosen, 'up', '--detach', '--no-deps', 'atelier', 'sandbox']]);
+    expect(updater.job()).toMatchObject({ state: 'done' });
+  });
+
+  it('brings itself along: downloads its new image with the rest, and a helper from it recreates the updater after the install', async () => {
+    const { updater, calls, overrides } = setup({ updater: true });
+    const compose = ['compose', '--project-name', 'atelier', '--project-directory', '/home/ada/atelier', '--file', '/home/ada/atelier/compose.yaml', '--file', '/tmp/atelier-version.compose.json'];
+    await updater.handle('POST', '/update?version=0.10.7-beta.6', AUTH);
+    await updater.settled();
+    expect(JSON.parse(overrides[0]!).services.updater).toEqual({ image: 'ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6' });
+    expect(calls).toContainEqual([...compose, '--progress', 'json', 'pull', 'atelier', 'sandbox', 'updater']);
+    // The server and the sandbox first; the updater is never in the install's own `up`.
+    expect(calls.filter((c) => c.includes('up'))).toEqual([[...compose, 'up', '--detach', '--no-deps', 'atelier', 'sandbox']]);
+    const run = calls.find((c) => c[0] === 'run')!;
+    expect(run.slice(0, 8)).toEqual(['run', '--detach', '--rm', '--network', 'none', '--volumes-from', 'self-id', '--env']);
+    expect(JSON.parse(run[8]!.slice(REPLACE_ENV.length + 1))).toEqual({ project: 'atelier', dir: '/home/ada/atelier', files: ['/home/ada/atelier/compose.yaml'], service: 'updater', image: 'ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6' });
+    expect(run.slice(9)).toEqual(['--entrypoint', 'timeout', 'ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6', '300', 'node', '/app/updater.ts']);
+    expect(calls.indexOf(run)).toBeGreaterThan(calls.findIndex((c) => c.includes('up')));
+    expect(updater.job().state).toBe('done');
+  });
+
+  it('after a version install, reads the project’s own compose files without the version file it wrote', async () => {
+    // Compose records every file it was given: the updater its helper recreated carries the version file in its labels.
+    const { updater, calls } = setup({ updater: true, configFiles: `/home/ada/atelier/compose.yaml,${join(tmpdir(), 'atelier-version.compose.json')}` });
+    await updater.handle('POST', '/update?pull=false', AUTH);
+    await updater.settled();
+    expect(updater.job()).toMatchObject({ state: 'done' });
+    expect(calls.filter((c) => c.includes('up'))).toEqual([['compose', '--project-name', 'atelier', '--project-directory', '/home/ada/atelier', '--file', '/home/ada/atelier/compose.yaml', 'up', '--detach', '--no-deps', 'atelier', 'sandbox']]);
+  });
+
+  it('starts no helper when its image is already the newest', async () => {
+    const { updater, calls } = setup({ updater: true, newUpdater: false });
+    await updater.handle('POST', '/update', AUTH);
+    await updater.settled();
+    expect(calls.some((c) => c[0] === 'run')).toBe(false);
+    expect(updater.job().state).toBe('done');
+  });
+
+  it('as the helper, recreates only the updater’s service from the new image', async () => {
+    const { docker, calls } = fakeDocker();
+    const link = vi.fn(async () => {});
+    let written = '';
+    await replaceUpdater(
+      { project: 'atelier', dir: '/home/ada/atelier', files: ['/home/ada/atelier/compose.yaml'], service: 'updater', image: 'ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6' },
+      { docker, link, writeOverride: async (content) => ((written = content), '/tmp/updater.compose.json') },
+    );
+    expect(link).toHaveBeenCalledWith('/home/ada/atelier', '/project');
+    expect(JSON.parse(written)).toEqual({ services: { updater: { image: 'ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6' } } });
+    expect(calls).toEqual([['compose', '--project-name', 'atelier', '--project-directory', '/home/ada/atelier', '--file', '/home/ada/atelier/compose.yaml', '--file', '/tmp/updater.compose.json', 'up', '--detach', '--no-deps', 'updater']]);
+  });
+
+  it('refuses what isn’t a version, before running anything', async () => {
+    const { updater, calls } = setup();
+    for (const bad of ['latest', '0.10', '1.2.3;rm', '1.2.3 -f', '../1.2.3', `1.2.3-${'x'.repeat(40)}`]) {
+      const answer = await updater.handle('POST', `/update?version=${encodeURIComponent(bad)}`, AUTH);
+      expect(answer.status).toBe(400);
+    }
+    expect(calls).toEqual([]);
+    expect(updater.job().state).toBe('idle');
   });
 
   it('does not start a pull while another job runs', async () => {
@@ -154,6 +236,16 @@ describe('the updater service', () => {
     await updater.settled();
     expect(updater.job()).toMatchObject({ state: 'failed', message: expect.stringContaining('built from source') });
     expect(calls.some((c) => c[0] === 'compose')).toBe(false);
+  });
+
+  it('moves only Atelier’s own images to a version, from wherever they are pulled', () => {
+    expect(imageAt('ghcr.io/theoriuhd/atelier:latest', 'atelier', '0.10.7-beta.6')).toBe('ghcr.io/theoriuhd/atelier:v0.10.7-beta.6');
+    expect(imageAt('ghcr.io/theoriuhd/atelier', 'atelier', '0.10.7')).toBe('ghcr.io/theoriuhd/atelier:v0.10.7');
+    expect(imageAt('localhost:5000/mirror/atelier-sandbox:latest', 'sandbox', '0.10.7')).toBe('localhost:5000/mirror/atelier-sandbox:v0.10.7');
+    expect(imageAt('ghcr.io/theoriuhd/atelier@sha256:abc', 'atelier', '0.10.7')).toBe('ghcr.io/theoriuhd/atelier:v0.10.7');
+    // Someone's own sandbox image, or the server's image under the sandbox's name: left as they are.
+    expect(imageAt('me/my-sandbox:1', 'sandbox', '0.10.7')).toBeNull();
+    expect(imageAt('ghcr.io/theoriuhd/atelier:latest', 'sandbox', '0.10.7')).toBeNull();
   });
 
   it('tells local image names from registry ones', () => {

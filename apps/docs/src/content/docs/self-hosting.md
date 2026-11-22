@@ -110,8 +110,8 @@ Each release publishes the three images for **linux/amd64 and linux/arm64**, as 
 | `ghcr.io/theoriuhd/atelier-updater` | The optional updater service. |
 
 - The tag is the Git tag, including the `v`: `:v<version>`, not `:<version>`.
-- `:latest` moves with **every** `v*` tag, including prereleases such as `v0.3.0-beta.1`. If you do not want to follow
-  prereleases, pin a release tag in the Compose file.
+- `:latest` moves with every release. A prerelease such as `v0.10.7-beta.6` gets only its own tag, so a server follows
+  betas through the [update channel](#update-channel), not through `:latest`.
 - To build the server yourself from the repository root: `docker build -f apps/server/Dockerfile -t atelier .`
   (`--target sandbox` and `--target updater` build the other two). It needs BuildKit, the default in Docker 23 and later.
   An image built this way has no registry name, so **Settings › Admin › Server** tells you to update by rebuilding it.
@@ -433,13 +433,38 @@ What the page offers depends on how the server was installed:
 Desktop apps and open browser tabs say so when their version and the server's differ; the messages are in
 [Updates](/updates/#the-server).
 
+### Update channel
+
+**Settings › Admin › Server › Update channel** (with the `updater` service) chooses what the server installs:
+
+- **Stable** (the default): releases. The lookup is `stable/latest.yml`, and the updater installs the tags the Compose
+  file names (`:latest`), as before.
+- **Beta**: betas too. The server looks at both `beta/latest.yml` and `stable/latest.yml` and takes the newer, so a release
+  that comes after the last beta is installed as well. With `ATELIER_UPDATES_REPO` it takes the newest non-draft GitHub
+  release, prereleases included. The updater is told the exact version (`?version=0.10.7-beta.6`) and runs that version's
+  images, `:v0.10.7-beta.6`, through one more Compose file of its own on top of yours. Your `compose.yaml` stays as it
+  is, so a `docker compose up -d` by hand goes back to the tags it names.
+
+Going back to **Stable** never downgrades: the server stays on its beta until a release is newer. **Check now**,
+**Update now** and **Update automatically** all follow the channel. Betas come before a release and may break things;
+back up first.
+
+Installing betas needs an updater from 0.10.7 on. With an older one the page says so and names the one command to run on
+the host, in the folder with `compose.yaml`; until 0.10.7 is released that command fetches the beta's own updater, for
+example:
+
+```bash
+docker pull ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6 && docker tag ghcr.io/theoriuhd/atelier-updater:v0.10.7-beta.6 ghcr.io/theoriuhd/atelier-updater:latest && docker compose up -d updater
+```
+
 ### Updating automatically
 
 With the `updater` service, **Settings › Admin › Server › Update automatically** (off until an admin turns it on) makes
 the server do the whole update itself, so nobody has to open a page or answer a question:
 
 - The server looks up the newest version every minute, from the same place as the Server page, and downloads the new
-  images through the updater as soon as one is out. The lookup is the small `stable/latest.yml` file; with
+  images through the updater as soon as one is out. The lookup is the small `stable/latest.yml` file (on the beta
+  channel, `beta/latest.yml` too); with
   `ATELIER_UPDATES_REPO` set it asks GitHub's releases instead, which at one request a minute needs the token
   (`ATELIER_UPDATES_TOKEN`) to stay within GitHub's limit.
 - It installs when **no reply is being written and no sub-agent or background command runs** in any conversation, within
@@ -467,8 +492,9 @@ A container cannot replace itself, so the Compose file has a small optional serv
 which is **root on the host**, so it is deliberately limited:
 
 - It answers only `GET /status`, `POST /pull` (from 0.10.6: download the new images, change nothing) and `POST /update`
-  (pull, unless `?pull=false`, then recreate), on the Compose network (port 7341, not published). `/status` lists what it can
-  do (`features`), so a server with an older updater falls back to `/update` alone.
+  (pull, unless `?pull=false`, then recreate), on the Compose network (port 7341, not published). From 0.10.7 both take
+  `?version=` (a plain version number, checked before anything runs) to use that version's tags. `/status` lists what it
+  can do (`features`), so a server with an older updater falls back to what that one knows.
 - Both need a secret the server makes on first use in the `updater-secret` volume (mode 0600; the updater mounts it
   read-only). It is never in an environment variable or a committed file.
 - An update runs `docker compose pull` and `docker compose up -d --no-deps` for the `atelier` and `sandbox` services of the
@@ -483,10 +509,12 @@ else works, and the Server page shows the manual command. Things to know:
 
 - It updates the images the Compose file names. With `:latest` that means the newest; with a pinned tag (`:v<version>`) it
   pulls the same tag again and nothing changes. To move a pinned server, edit the tag and run `docker compose up -d`.
-- It does not update itself. `docker compose pull && docker compose up -d` on the host updates it with the rest (or only it:
-  `docker compose pull updater && docker compose up -d updater`). An updater from before 0.7.1 shows no progress bar, only
-  the last line Docker printed, and one from before 0.10.6 cannot download ahead for **Update automatically**, until it is
-  updated this way.
+- From 0.10.7 it brings itself along: an update also downloads the updater's new image, and after the server and the
+  sandbox are recreated, a short-lived container of that image (no network, this container's volumes, at most five
+  minutes) recreates the `updater` service from it. An updater from before 0.10.7 doesn't, so it needs updating once by
+  hand: `docker compose pull updater && docker compose up -d updater` (for betas before 0.10.7 is released, the command
+  under [Update channel](#update-channel)). An updater from before 0.7.1 shows no progress bar, only the last line Docker
+  printed, and one from before 0.10.6 cannot download ahead for **Update automatically**, until it is updated.
 - With private images, the updater needs a registry login: mount the host's `~/.docker/config.json` at
   `/root/.docker/config.json:ro`.
 - A server on host networking cannot reach `http://updater:7341`. Publish the updater on loopback only
