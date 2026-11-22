@@ -149,10 +149,11 @@ On a CI machine, `ATELIER_SERVER` and `ATELIER_TOKEN` connect without setup. The
 `atelier token` prints the one this terminal uses. Anyone with it works as you, so keep it in the CI's secrets; it lasts
 as long as it is used at least every 30 days, and signing that terminal out (Settings › Account › Sessions) ends it.
 
-## Decisions *(next release)*
+## Decisions
 
-`atelier decide` asks a decision model about a text. A decision model doesn't write a reply: it answers typed questions
-with how sure it is, in about a tenth of a second. The text is the argument, `--file <path>`, or what is piped in.
+`atelier decide` asks a [decision model](/decision-models/) about a text. A decision model doesn't write a reply: it
+answers typed questions with how sure it is, in about a tenth of a second. The text is the argument, `--file <path>`, or
+what is piped in.
 
 ```sh
 atelier decide "Win a free phone!" --yes-no "Is this spam?"
