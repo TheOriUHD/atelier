@@ -2358,6 +2358,7 @@ export async function createBackend(platform: Platform): Promise<Backend> {
       // A server takes these from desktop devices (ARCHITECTURE §21); their windows offer them only where both ends can.
       ...(platform.surface === 'web' ? { deviceLink: { protocol: DEVICE_LINK_PROTOCOL, services: [...SERVER_DEVICE_SERVICES] } } : {}),
       imageGeneration: true,
+      coopLinks: !!coopRelayUrl(),
       unifiedChat: true,
       planAuto: true,
       auditLog: !local,

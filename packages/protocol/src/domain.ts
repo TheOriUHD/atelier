@@ -691,6 +691,11 @@ export const AppInfo = z.object({
   deviceLink: z.object({ protocol: z.number(), services: z.array(z.string()) }).optional(),
   /** This backend can generate images (ARCHITECTURE §23); a newer app hides the feature on an older server. */
   imageGeneration: z.boolean().optional(),
+  /**
+   * Co-op with other computers works here (ARCHITECTURE §24): invite links and joining from one (the relay is on).
+   * Absent from older backends: a desktop's did, an older server's didn't.
+   */
+  coopLinks: z.boolean().optional(),
   /** Chat and Cowork are one kind of conversation here; an older server keeps Cowork as it was, and the app shows it so. */
   unifiedChat: z.boolean().optional(),
   /** Plan mode can be answered by the Auto reviewer (`planAuto`); an older server knows only Plan. */

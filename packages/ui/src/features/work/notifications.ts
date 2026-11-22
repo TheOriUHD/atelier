@@ -1,6 +1,9 @@
 /**
  * System notifications: a conversation's turn finished, failed or started waiting for the person (a question or a
  * permission) while they were in another window or app. Every conversation counts: Code, Cowork tasks and chats.
+ * Co-op (ARCHITECTURE §24): a shared session's question notifies only the person it is for (`coop.waitingOnYou`), on
+ * the host's computer and in a session they joined alike; someone knocking on the host's session notifies the host, as
+ * a notification in the background and a toast in front, wherever they are in the app.
  * Uses the HTML Notification API (browsers and Electron's renderer alike; on Windows the desktop app registers its app
  * id, without which the toasts don't show).
  */
@@ -8,6 +11,8 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import type { SessionStatus, SessionSummary, UserPrefs } from '@atelier/protocol';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
+import { toast } from '../../components/ui/index.ts';
+import { openCoopPanel } from '../coop/coop.ts';
 import { desktop } from '../../lib/platform.ts';
 import { usePrefs, useSessions } from '../../lib/queries.ts';
 import { rpc } from '../../lib/rpc.ts';
@@ -56,26 +61,67 @@ function focusWindow(): void {
   else window.focus();
 }
 
-/** Remembers each conversation's last status, so a change can be told apart from a repeat. */
-export function createTaskNotifier(unified = false) {
+/** Someone asking to come into the host's session: what to tell the host, and what to do when they answer. */
+export interface Knock {
+  sessionId: string;
+  id: string;
+  name: string;
+  title: string;
+}
+
+/**
+ * Remembers each conversation's last status, so a change can be told apart from a repeat; in co-op also whether its
+ * question was the person's and who knocked. `knocked` hears each new knock (the in-app toast, wherever the person is).
+ */
+export function createTaskNotifier(unified = false, knocked?: (knock: Knock, open: (sessionId: string) => void) => void) {
   const statuses = new Map<string, SessionStatus>();
+  const mine = new Map<string, boolean>();
+  const knocks = new Map<string, Set<string>>();
+  const show = (title: string, body: string, tag: string, sessionId: string, open: (sessionId: string) => void) => {
+    const notification = new Notification(title, { body, tag });
+    notification.onclick = () => {
+      notification.close();
+      focusWindow();
+      open(sessionId);
+    };
+  };
+  const allowed = () => !document.hasFocus() && supported() && Notification.permission === 'granted';
+  /** New knocks on the host's session: a toast where the person is, a notification when they are elsewhere. */
+  const newKnocks = (session: SessionSummary, prefs: Pick<UserPrefs, 'notifications'> | undefined, open: (sessionId: string) => void) => {
+    const now = session.coop?.role === 'host' ? (session.coop.knocking ?? []) : [];
+    const before = knocks.get(session.id) ?? new Set<string>();
+    knocks.set(session.id, new Set(now.map((k) => k.id)));
+    for (const k of now) {
+      if (before.has(k.id)) continue;
+      const knock = { sessionId: session.id, id: k.id, name: k.name, title: sessionTitle(session) };
+      knocked?.(knock, open);
+      if (prefs?.notifications.permissionNeeded !== false && allowed()) show(`${k.name} wants to join`, `${knock.title}: compare the four emoji, then let them in.`, `coop-knock:${k.id}`, session.id, open);
+    }
+  };
   return {
     /** What is already known (the recents), so a run started before this window opened still notifies when it ends. */
     seed(sessions: readonly SessionSummary[]): void {
-      for (const s of sessions) if (!statuses.has(s.id)) statuses.set(s.id, s.status);
+      for (const s of sessions) {
+        if (!statuses.has(s.id)) statuses.set(s.id, s.status);
+        if (!mine.has(s.id)) mine.set(s.id, !!s.coop?.waitingOnYou);
+        if (!knocks.has(s.id)) knocks.set(s.id, new Set((s.coop?.knocking ?? []).map((k) => k.id)));
+      }
     },
     update(session: SessionSummary, prefs: Pick<UserPrefs, 'notifications'> | undefined, open: (sessionId: string) => void): void {
-      const event = taskEvent(statuses.get(session.id), session.status);
+      const previous = statuses.get(session.id);
       statuses.set(session.id, session.status);
+      // Co-op: a question is the person's when its approver is them (a backend that says so); someone else's isn't.
+      const coop = session.coop?.waitingOnYou !== undefined;
+      const wasMine = mine.get(session.id) ?? false;
+      mine.set(session.id, !!session.coop?.waitingOnYou);
+      let event = taskEvent(previous, session.status);
+      if (coop && event === 'input') event = null;
+      if (coop && !wasMine && session.coop?.waitingOnYou) event = 'input';
+      newKnocks(session, prefs, open);
       const wanted = event === 'input' ? prefs?.notifications.permissionNeeded : prefs?.notifications.taskFinished;
-      if (!event || !wanted || document.hasFocus() || !supported() || Notification.permission !== 'granted') return;
+      if (!event || !wanted || !allowed()) return;
       // One per task: a newer one (it finished after asking) replaces the older.
-      const notification = new Notification(titles(session, unified)[event], { body: sessionTitle(session), tag: session.id });
-      notification.onclick = () => {
-        notification.close();
-        focusWindow();
-        open(session.id);
-      };
+      show(titles(session, unified)[event], sessionTitle(session), session.id, session.id, open);
     },
   };
 }
@@ -88,7 +134,20 @@ export function useTaskNotifications(enabled = true): void {
   const { data: tasks } = useSessions({ mode: 'work' });
   const { data: chats } = useSessions({ mode: 'chat' });
   const { data: code } = useSessions({ mode: 'code' });
-  const notifier = useMemo(() => createTaskNotifier(unified), [unified]);
+  // A knock while the person is in the app: a toast that takes them to it, its Co-op panel open (the session's own page
+  // shows the same toast, by the same id, with the emoji).
+  const notifier = useMemo(
+    () =>
+      createTaskNotifier(unified, (knock, open) =>
+        toast(`${knock.name} wants to join`, {
+          id: `coop-knock:${knock.id}`,
+          description: knock.title,
+          duration: 15_000,
+          action: { label: 'Review', onClick: () => (openCoopPanel(knock.sessionId), open(knock.sessionId)) },
+        }),
+      ),
+    [unified],
+  );
   useEffect(() => {
     if (!enabled) return;
     for (const list of [tasks, chats, code]) if (list) notifier.seed(list);

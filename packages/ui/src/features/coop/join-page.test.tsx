@@ -109,18 +109,39 @@ describe('the join card', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   });
 
-  it('explains that joining needs the desktop app, running on this computer', async () => {
+  it('joins from a browser signed in to an Atelier server, through the server', async () => {
     shell.surface = 'web';
-    show();
-    expect(await screen.findByText(/needs the Atelier desktop app, running on this computer/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+    resetBackend({ 'app.info': () => ({ surface: 'web' }) as AppInfo, 'coop.join': () => joined, 'coop.state': () => state });
+    const router = show();
+    fireEvent.click(await screen.findByRole('radio', { name: 'My models' }));
+    expect(await screen.findByText(/Your keys stay on your Atelier server\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+    await waitFor(() => expect(callsTo('coop.join')).toEqual([{ invite: fragment, models: 'own' }]));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/code/${guestOf.id}`));
   });
 
-  it('says so when a desktop app signed in to a server can’t join', async () => {
-    resetBackend({ 'app.info': () => ({ surface: 'web' }) as AppInfo });
+  it('joins from the desktop app signed in to a server too', async () => {
+    resetBackend({ 'app.info': () => ({ surface: 'web' }) as AppInfo, 'coop.join': () => joined, 'coop.state': () => state });
     show();
-    expect(await screen.findByText(/This app is connected to a server/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Join' }));
+    await waitFor(() => expect(callsTo('coop.join')).toHaveLength(1));
+  });
+
+  it('says a session that runs on an Atelier server runs there', async () => {
+    show(`/join/${inviteFragment(makeInviteUrl('R'.repeat(22), 's'.repeat(43), { hostName: 'Ada', title: 'Water', mode: 'code', on: 'server' }))}`);
+    expect(await screen.findByText('It runs on Ada’s Atelier server.')).toBeTruthy();
+  });
+
+  it('shows why a join failed, such as co-op with other computers turned off by an admin', async () => {
+    resetBackend({
+      'app.info': () => ({ surface: 'web' }) as AppInfo,
+      'coop.join': () => {
+        throw Object.assign(new Error('An admin turned off co-op with other computers on this server.'), { data: { code: 'unsupported' } });
+      },
+    });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Join' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/An admin turned off co-op with other computers on this server/);
   });
 
   it('turns down a link that isn’t an invite', async () => {

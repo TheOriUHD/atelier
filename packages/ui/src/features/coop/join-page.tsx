@@ -1,7 +1,9 @@
 /**
  * `#/join/<fragment>` (design/components.md › Co-op › Join card): an invite to someone else's session. The desktop app
- * opens it from `atelier://join#…` links (apps/desktop/src/main.ts). The card says whose session it is, where it runs
- * and what the guest shares; Join connects through the relay and waits for the host to let them in.
+ * opens it from `atelier://join#…` links (apps/desktop/src/main.ts); anywhere else (a browser on an Atelier server, the
+ * desktop app signed in to one) the person pastes the link (More › Join a co-op session…). The card says whose session
+ * it is, where it runs and what the guest shares; Join connects through the relay, from this person's own Atelier (their
+ * computer or their server), and waits for the host to let them in.
  */
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from '@tanstack/react-router';
@@ -9,7 +11,6 @@ import { MessageSquare, Plug, UserRound, type LucideIcon } from 'lucide-react';
 import { parseInviteFragment, type InviteMeta, type ModelsChoice } from '@atelier/protocol';
 import { Button, Icon, SegmentedControl, Spinner } from '../../components/ui/index.ts';
 import { SESSION_ROUTE } from '../../app/navigation.ts';
-import { surface } from '../../lib/platform.ts';
 import { useAppInfo } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 import { Avatar } from './avatar.tsx';
@@ -83,8 +84,8 @@ export function JoinCard({ fragment }: { fragment: string }) {
     home();
   };
 
-  // Joining runs on this computer's own backend: a browser, or a desktop app signed in to a server, can't.
-  const needsDesktop = surface === 'web' || info?.surface === 'web';
+  // Where the guest's own Atelier runs: their models, keys and connectors stay there.
+  const mine = info?.surface === 'web' ? 'your Atelier server' : 'this computer';
 
   return (
     <div className="flex min-h-0 flex-1 overflow-y-auto">
@@ -110,54 +111,39 @@ export function JoinCard({ fragment }: { fragment: string }) {
         ) : (
           <>
             <Question meta={meta} host={host} />
-            {needsDesktop ? (
-              <>
-                <p className="text-body text-fg-secondary">
-                  {surface === 'web'
-                    ? 'Joining a session on someone else’s computer needs the Atelier desktop app, running on this computer. Open the link there.'
-                    : 'This app is connected to a server. Joining a session on someone else’s computer needs Atelier to run on this computer.'}
-                </p>
-                <Button className="self-end" onClick={home}>
-                  Back
-                </Button>
-              </>
-            ) : (
-              <>
-                <Shares />
-                <div className="flex flex-col gap-2">
-                  <h2 id="join-models" className="text-footnote text-fg-muted">
-                    Answer my messages with
-                  </h2>
-                  <SegmentedControl
-                    aria-labelledby="join-models"
-                    size="sm"
-                    items={[
-                      { value: 'host', label: `${possessive(host)} models` },
-                      { value: 'own', label: 'My models' },
-                    ]}
-                    value={models}
-                    onValueChange={setModels}
-                    className="self-start"
-                  />
-                  <p className="text-footnote text-fg-muted">
-                    {models === 'host' ? `${host} pays for them, up to what they share each day.` : 'You choose which of your models once you’re in. Your keys stay on this computer.'}
-                  </p>
-                </div>
-                {step.name === 'error' && (
-                  <p role="alert" className="text-body text-danger-text">
-                    {step.message}
-                  </p>
-                )}
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={home}>
-                    Not now
-                  </Button>
-                  <Button variant="primary" loading={step.name === 'joining'} onClick={() => void join()}>
-                    Join
-                  </Button>
-                </div>
-              </>
+            <Shares />
+            <div className="flex flex-col gap-2">
+              <h2 id="join-models" className="text-footnote text-fg-muted">
+                Answer my messages with
+              </h2>
+              <SegmentedControl
+                aria-labelledby="join-models"
+                size="sm"
+                items={[
+                  { value: 'host', label: `${possessive(host)} models` },
+                  { value: 'own', label: 'My models' },
+                ]}
+                value={models}
+                onValueChange={setModels}
+                className="self-start"
+              />
+              <p className="text-footnote text-fg-muted">
+                {models === 'host' ? `${host} pays for them, up to what they share each day.` : `You choose which of your models once you’re in. Your keys stay on ${mine}.`}
+              </p>
+            </div>
+            {step.name === 'error' && (
+              <p role="alert" className="text-body text-danger-text">
+                {step.message}
+              </p>
             )}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={home}>
+                Not now
+              </Button>
+              <Button variant="primary" loading={step.name === 'joining'} onClick={() => void join()}>
+                Join
+              </Button>
+            </div>
           </>
         )}
       </div>
@@ -179,7 +165,7 @@ function Question({ meta, host }: { meta: InviteMeta | null; host: string }) {
             'Join this session?'
           )}
         </h1>
-        <p className="text-body text-fg-secondary">It runs on {possessive(host)} computer.</p>
+        <p className="text-body text-fg-secondary">{meta?.on === 'server' ? `It runs on ${possessive(host)} Atelier server.` : `It runs on ${possessive(host)} computer.`}</p>
       </div>
     </div>
   );
