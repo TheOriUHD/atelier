@@ -4,6 +4,8 @@ All notable changes per milestone. Tags: `v0.0.0-mN`.
 
 ## [Unreleased]
 
+## [0.10.10] — 2026-11-22
+
 - **Decide stays in the sidebar.** More › Decide (and the command palette's Decide) came and went: every change of any provider's status threw the decision models' list away and listed them again, and a provider that was busy or off right then (an Ollama loading a model, a computer asleep) briefly left no decision model, which every window was told at once; opening Settings › Admin › Decision models asked again and brought it back. Now the list in hand answers until a new one is complete, a provider that doesn't answer one time keeps the models it had, and windows hear `decisions.changed` only when what is offered changed. The entry is called Decide, without "…". People who aren't admins no longer receive the decision services' addresses with the settings.
 
 ## [0.10.9] — 2026-11-22
