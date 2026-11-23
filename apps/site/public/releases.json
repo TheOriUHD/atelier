@@ -1,49 +1,49 @@
 {
-  "version": "0.10.10",
-  "tag": "v0.10.10",
+  "version": "0.10.11",
+  "tag": "v0.10.11",
   "prerelease": false,
-  "publishedAt": "2026-11-22T20:26:05Z",
-  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.10.10",
+  "publishedAt": "2026-11-23T05:20:34Z",
+  "releaseUrl": "https://github.com/TheOriUHD/atelier/releases/tag/v0.10.11",
   "assets": {
     "macos-arm64": {
-      "name": "Atelier-0.10.10-arm64.dmg",
-      "size": 147704964,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.10-arm64.dmg"
+      "name": "Atelier-0.10.11-arm64.dmg",
+      "size": 147707202,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.11-arm64.dmg"
     },
     "macos-x64": {
-      "name": "Atelier-0.10.10.dmg",
-      "size": 154317492,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.10.dmg"
+      "name": "Atelier-0.10.11.dmg",
+      "size": 154329111,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.11.dmg"
     },
     "windows-x64": {
-      "name": "Atelier-Setup-0.10.10-x64.exe",
-      "size": 130728858,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.10.10-x64.exe"
+      "name": "Atelier-Setup-0.10.11-x64.exe",
+      "size": 130718736,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.10.11-x64.exe"
     },
     "windows-arm64": {
-      "name": "Atelier-Setup-0.10.10-arm64.exe",
-      "size": 124677702,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.10.10-arm64.exe"
+      "name": "Atelier-Setup-0.10.11-arm64.exe",
+      "size": 124667570,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-Setup-0.10.11-arm64.exe"
     },
     "linux-deb-x64": {
-      "name": "Atelier-0.10.10-amd64.deb",
-      "size": 116764224,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.10-amd64.deb"
+      "name": "Atelier-0.10.11-amd64.deb",
+      "size": 116766508,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.11-amd64.deb"
     },
     "linux-deb-arm64": {
-      "name": "Atelier-0.10.10-arm64.deb",
-      "size": 111969944,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.10-arm64.deb"
+      "name": "Atelier-0.10.11-arm64.deb",
+      "size": 111971812,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.11-arm64.deb"
     },
     "linux-appimage-x64": {
-      "name": "Atelier-0.10.10.AppImage",
-      "size": 146437623,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.10.AppImage"
+      "name": "Atelier-0.10.11.AppImage",
+      "size": 146441693,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.11.AppImage"
     },
     "linux-appimage-arm64": {
-      "name": "Atelier-0.10.10-arm64.AppImage",
-      "size": 147800723,
-      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.10-arm64.AppImage"
+      "name": "Atelier-0.10.11-arm64.AppImage",
+      "size": 147808886,
+      "url": "https://updates.atelierhq.dev/stable/Atelier-0.10.11-arm64.AppImage"
     }
   }
 }
