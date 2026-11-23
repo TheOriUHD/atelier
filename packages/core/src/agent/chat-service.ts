@@ -369,7 +369,7 @@ export interface ChatServiceDeps {
 }
 
 /** Bumped whenever the shipped prompt files change; recorded in snapshots for debugging and eval reports. */
-const PROMPT_VERSION = 4;
+const PROMPT_VERSION = 5;
 
 /**
  * A session's frozen system prompt and the facts it was built from (docs/PROMPTS.md §1.6). It is rebuilt when the

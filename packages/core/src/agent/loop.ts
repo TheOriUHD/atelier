@@ -546,7 +546,27 @@ export function parseStringifiedArgs(input: unknown, schema: unknown): Record<st
   const properties = rec(rec(schema).properties);
   const out = { ...input };
   let changed = false;
-  for (const [key, value] of Object.entries(input)) {
+  // A flag sent without its dash (`C` for Grep's `-C`): the model meant the one the schema has.
+  for (const key of Object.keys(input)) {
+    if (properties[key] || !properties[`-${key}`] || `-${key}` in input) continue;
+    out[`-${key}`] = out[key];
+    delete out[key];
+    changed = true;
+  }
+  // A chip or header label over its short limit (AskUser's 12 characters) is shortened rather than refused.
+  const shorten = (value: unknown, shape: unknown): unknown => {
+    const s = rec(shape);
+    const max = typeof s.maxLength === 'number' ? s.maxLength : undefined;
+    if (typeof value === 'string' && max !== undefined && max <= 24 && value.length > max) {
+      changed = true;
+      return `${value.slice(0, max - 1).trimEnd()}…`;
+    }
+    if (Array.isArray(value) && s.items) return value.map((v) => shorten(v, s.items));
+    if (isRecord(value) && s.properties) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shorten(v, rec(s.properties)[k])]));
+    return value;
+  };
+  for (const [key, value] of Object.entries(out)) out[key] = shorten(value, properties[key]);
+  for (const [key, value] of Object.entries(out)) {
     const want = rec(properties[key]).type;
     if (typeof value !== 'string' || (want !== 'array' && want !== 'object')) continue;
     let parsed: unknown;

@@ -53,7 +53,7 @@ const signedOutResponse = (message: string): Response =>
   new Response(JSON.stringify({ error: { code: 'unauthorized', message } }), { status: 401, headers: { 'content-type': 'application/json' } });
 
 /** The adapter's fetch, with the backend's address, account headers and body rules applied, and one retry on a 401. */
-export function codexFetch(inner: ProviderFetch, auth: ChatGptPort): ProviderFetch {
+export function codexFetch(inner: ProviderFetch, auth: ChatGptPort, parallel: (model: string) => boolean = () => true): ProviderFetch {
   return async (input, init) => {
     const path = new URL(input).pathname;
     const models = path.endsWith('/models');
@@ -68,8 +68,9 @@ export function codexFetch(inner: ProviderFetch, auth: ChatGptPort): ProviderFet
       for (const key of DROPPED) delete json[key];
       json.store = false;
       json.stream = true;
-      // Parallel calls are the model's to ask for; this backend wants it said either way.
-      json.parallel_tool_calls ??= false;
+      // This backend wants it said either way. On, as Codex has it, so independent reads and searches go in one step
+      // instead of a round trip each; off for the models the account's list marks `use_responses_lite`, as Codex does.
+      json.parallel_tool_calls ??= parallel(str(json.model) ?? '');
       // One cache key per conversation: the system prompt is frozen for a session.
       const instructions = str(json.instructions) ?? '';
       sessionId = createHash('sha256').update(instructions).digest('hex').slice(0, 32);
@@ -147,12 +148,16 @@ export function createChatGptAdapter(instance: ProviderInstance, deps: AdapterDe
     };
   }
   const configured: ProviderInstance = { ...instance, baseUrl: CHATGPT_BASE_URL, apiKey: 'chatgpt-session' };
-  const wrapped: AdapterDeps = { ...deps, fetch: codexFetch(deps.fetch, auth) };
+  // The models the account's list marks `use_responses_lite`: Codex sends them one tool call at a time.
+  const lite = new Set<string>();
+  const wrapped: AdapterDeps = { ...deps, fetch: codexFetch(deps.fetch, auth, (model) => !lite.has(model)) };
   const responses = createOpenAIAdapter(configured, wrapped);
 
   async function listAccountModels(signal?: AbortSignal): Promise<ListedModel[]> {
     try {
       const json = await requestJson(wrapped, configured, `${CHATGPT_BASE_URL}/models`, { headers: {}, ...(signal ? { signal } : {}) });
+      lite.clear();
+      for (const m of arr(rec(json).models).filter(isRecord)) if (str(m.slug) && m.use_responses_lite === true) lite.add(str(m.slug)!);
       const listed = chatgptModels(configured, json);
       if (listed.length) return listed;
     } catch (e) {

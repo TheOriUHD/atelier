@@ -234,8 +234,9 @@ a workspace file shown as Markdown stays as it is.
 
 ### 1.8 Size budgets
 
-Checked by `builder.test.ts` on assembled prompts, with 10% tolerance: Code's core and fragments 16,000 characters
-and its built-in tool descriptions 18,000; Chat's core and fragments 14,000, and 20,000 with the task part (a chat with its sandbox); the compact Code tool
+Checked by `builder.test.ts` on assembled prompts, with 10% tolerance: Code's core and fragments 18,000 characters
+(16,000 until 2026-11-23, raised for the rules on causes, real targets, deploys and shared machines that came out of
+reading where agents fell short) and its built-in tool descriptions 18,000; Chat's core and fragments 14,000, and 20,000 with the task part (a chat with its sandbox); the compact Code tool
 descriptions 6,000.
 
 **The compact total.** Local servers often run with a window of 4k–8k tokens, so in the compact tier the system prompt

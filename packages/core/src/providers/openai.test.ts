@@ -143,6 +143,26 @@ describe('openai responses adapter', () => {
     expect(await sent('gpt-5', 'medium')).toBe('medium');
   });
 
+  it('takes several tool calls in one reply, their arguments interleaved', async () => {
+    const two = sse([
+      ev('response.output_item.added', { output_index: 0, item: { id: 'fc_a', type: 'function_call', call_id: 'call_a', name: 'Read', arguments: '' } }),
+      ev('response.output_item.added', { output_index: 1, item: { id: 'fc_b', type: 'function_call', call_id: 'call_b', name: 'Grep', arguments: '' } }),
+      ev('response.function_call_arguments.delta', { item_id: 'fc_a', output_index: 0, delta: '{"file_path":"a.ts"}' }),
+      ev('response.function_call_arguments.delta', { item_id: 'fc_b', output_index: 1, delta: '{"pattern":"x"}' }),
+      ev('response.output_item.done', { output_index: 0, item: { id: 'fc_a', type: 'function_call', call_id: 'call_a', name: 'Read', arguments: '{"file_path":"a.ts"}' } }),
+      ev('response.output_item.done', { output_index: 1, item: { id: 'fc_b', type: 'function_call', call_id: 'call_b', name: 'Grep', arguments: '{"pattern":"x"}' } }),
+      COMPLETED({ input_tokens: 10, output_tokens: 5 }),
+    ]);
+    const { fetch } = fakeFetch({ 'POST /v1/responses': () => streamResponse(two) });
+    const events = await collect(createOpenAIAdapter(instance, deps(fetch)).stream(chatRequest({ model: 'gpt-6.1-sol', tools: TOOLS })));
+    const ended = events.filter((e) => e.type === 'tool_call_end');
+    expect(ended).toEqual([
+      { type: 'tool_call_end', id: 'call_a', input: { file_path: 'a.ts' } },
+      { type: 'tool_call_end', id: 'call_b', input: { pattern: 'x' } },
+    ]);
+    expect(finishOf(events).reason).toBe('tool_use');
+  });
+
   it('round-trips a function call with reasoning replay and function_call_output', async () => {
     const { fetch, calls } = fakeFetch({
       'POST /v1/responses': () => streamResponse(calls.length === 1 ? TOOL_STREAM : TEXT_STREAM),

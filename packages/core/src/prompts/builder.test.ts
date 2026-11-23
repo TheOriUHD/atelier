@@ -427,7 +427,7 @@ describe('assembled prompts', () => {
       };
     };
     // docs/PROMPTS.md §1.8, with its 10% tolerance.
-    expect((await size({ mode: 'code' })).prefix).toBeLessThan(16_000 * 1.1);
+    expect((await size({ mode: 'code' })).prefix).toBeLessThan(18_000 * 1.1);
     expect((await size({ mode: 'code' })).tools).toBeLessThan(18_000 * 1.1);
     expect((await size({ mode: 'chat' })).prefix).toBeLessThan(14_000 * 1.1);
     // A chat with its sandbox carries the task part too.

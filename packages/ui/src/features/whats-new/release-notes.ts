@@ -38,6 +38,26 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.11',
+    intro: 'The agents work more like a strong coding agent: they find causes, check their work where you use it, and finish what you asked.',
+    highlights: [
+      {
+        icon: ListChecks,
+        title: 'Agents that check their work where you use it',
+        body: 'The Code agent now finds the cause of a bug before changing code, and gathers evidence instead of trying one guess after another. It checks a change in the real app, page or device rather than calling it done because tests passed, and confirms a deploy really serves the new version. It takes every part of a message as its own item, checks what it can do itself before asking you, and keeps its reports short: your steps first, with the exact commands.',
+      },
+      {
+        icon: Cpu,
+        title: 'Faster with the ChatGPT Plan',
+        body: 'GPT models through your ChatGPT Plan now read and search several things in one step, as they do in Codex, instead of one round trip per call.',
+      },
+    ],
+    also: [
+      'Sub-agents check their own changes and report briefly, and Chat working on your files asks fewer questions and prefers commands and connectors over taking your screen.',
+      'A reply follows your report format only where it fits: a short question gets a short answer.',
+    ],
+  },
+  {
     version: '0.10.10',
     intro: 'Decide stays where it is.',
     highlights: [

@@ -207,7 +207,7 @@ export function createFileTools(workspace: Workspace, blobs?: Pick<BlobStore, 'p
             '- Text comes back with a line number and a tab in front of each line, up to 2,000 lines from the top. Pass `offset` and `limit` only for files too long to read at once, or to read just the part you need when you know where it is. Lines longer than 2,000 characters are cut off.',
             `- The line-number prefix isn't part of the file${has('Edit') ? '; never copy it into Edit' : ''}.`,
             '- Images (PNG, JPEG, GIF, WebP) are shown to you when this model can see images; PDFs come back as their text.',
-            `- Reading a path that doesn't exist only returns an error, so there is no need to check for it first${has('Bash') ? ' with Bash' : ''}.`,
+            `- Don't guess a path you haven't seen: find it with ${has('Glob') ? 'Glob or Grep' : 'Grep'} first. A path you were given or saw listed needs no check${has('Bash') ? ' with Bash' : ''} before you read it.`,
             "- Don't read a file again right after writing or editing it to confirm the change; the tool would have reported a failure.",
             '- When you will probably need several files, read them all in one message.',
           ].join('\n'),
@@ -335,6 +335,7 @@ export function createFileTools(workspace: Workspace, blobs?: Pick<BlobStore, 'p
           ].join('\n')
         : [
             'Replaces an exact piece of text in a file.',
+            '- Read the file in this session before editing it, so `old_string` comes from what is there now and the change fits the code around it.',
             "- `old_string` must match the file character for character, indentation included and Read's line-number prefix left out, and it must occur exactly once; otherwise the call fails. When the text repeats, add a neighbouring line until it is unique, or set `replace_all` when every copy should change (handy for renames).",
             '- Keep `old_string` short: the few lines that pin down the place.',
             '- `new_string` must differ from `old_string`.',

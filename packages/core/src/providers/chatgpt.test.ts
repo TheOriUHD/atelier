@@ -213,7 +213,7 @@ describe('codexFetch', () => {
     expect(h.get('x-codex-installation-id')).toBe('inst-1');
     expect(h.get('accept')).toBe('text/event-stream');
     const sent = JSON.parse(String(calls[0]!.init.body));
-    expect(sent).toMatchObject({ model: 'gpt-5.5', store: false, stream: true, instructions: 'Be brief.', parallel_tool_calls: false });
+    expect(sent).toMatchObject({ model: 'gpt-5.5', store: false, stream: true, instructions: 'Be brief.', parallel_tool_calls: true });
     for (const dropped of ['max_output_tokens', 'temperature', 'top_p']) expect(sent).not.toHaveProperty(dropped);
     expect(sent.prompt_cache_key).toMatch(/^[0-9a-f]{32}$/);
     expect(h.get('session-id')).toBe(sent.prompt_cache_key);
@@ -286,6 +286,28 @@ describe('chatgptModels', () => {
 });
 
 describe('the adapter', () => {
+  it('lets models take several tool calls at once, as Codex does, except those the account’s list marks lite', async () => {
+    const port: ChatGptPort = { credentials: async () => ({ accessToken: 't', accountId: 'a', installationId: 'i' }), observe: () => {} };
+    const sent: Record<string, unknown>[] = [];
+    const adapter = createChatGptAdapter(instance, {
+      fetch: async (url, init) => {
+        if (url.includes('registry.npmjs.org')) return Response.json({ version: '0.200.3' });
+        if (url.includes('/models')) return Response.json({ models: [{ slug: 'gpt-6.1-sol', visibility: 'list' }, { slug: 'gpt-6-astra', visibility: 'list', use_responses_lite: true }] });
+        sent.push(JSON.parse(String(init.body)));
+        return new Response('data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1}}}\n\n', { headers: { 'content-type': 'text/event-stream' } });
+      },
+      readBlob: async () => new Uint8Array(),
+      chatgpt: port,
+    });
+    await adapter.listModels();
+    for (const model of ['gpt-6.1-sol', 'gpt-6-astra'])
+      for await (const _ of adapter.stream({ model, system: [], messages: [{ id: 'm', role: 'user', parts: [{ type: 'text', text: 'hi' }] } as never], tools: [], signal: new AbortController().signal } as never)) void _;
+    expect(sent.map((b) => [b.model, b.parallel_tool_calls])).toEqual([
+      ['gpt-6.1-sol', true],
+      ['gpt-6-astra', false],
+    ]);
+  });
+
   it('lists the usual models when the account’s list cannot be read, and none when signed out', async () => {
     const port: ChatGptPort = { credentials: async () => ({ accessToken: 't', accountId: 'a', installationId: 'i' }), observe: () => {} };
     const failing = createChatGptAdapter(instance, { fetch: async () => new Response('', { status: 500 }), readBlob: async () => new Uint8Array(), chatgpt: port });

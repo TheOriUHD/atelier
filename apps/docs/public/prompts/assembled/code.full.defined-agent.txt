@@ -32,12 +32,12 @@ Use pnpm for every script. Run `pnpm test` before you report a change.
 
 # Notes on the first message: 0
 
-# Tools: 2, 3412 characters of JSON
+# Tools: 2, 3445 characters of JSON
 
 [
   {
     "name": "Read",
-    "description": "Reads a file from the workspace: text, an image or a PDF. Given a directory, it lists the entries instead.\n- Text comes back with a line number and a tab in front of each line, up to 2,000 lines from the top. Pass `offset` and `limit` only for files too long to read at once, or to read just the part you need when you know where it is. Lines longer than 2,000 characters are cut off.\n- The line-number prefix isn't part of the file.\n- Images (PNG, JPEG, GIF, WebP) are shown to you when this model can see images; PDFs come back as their text.\n- Reading a path that doesn't exist only returns an error, so there is no need to check for it first.\n- Don't read a file again right after writing or editing it to confirm the change; the tool would have reported a failure.\n- When you will probably need several files, read them all in one message.",
+    "description": "Reads a file from the workspace: text, an image or a PDF. Given a directory, it lists the entries instead.\n- Text comes back with a line number and a tab in front of each line, up to 2,000 lines from the top. Pass `offset` and `limit` only for files too long to read at once, or to read just the part you need when you know where it is. Lines longer than 2,000 characters are cut off.\n- The line-number prefix isn't part of the file.\n- Images (PNG, JPEG, GIF, WebP) are shown to you when this model can see images; PDFs come back as their text.\n- Don't guess a path you haven't seen: find it with Grep first. A path you were given or saw listed needs no check before you read it.\n- Don't read a file again right after writing or editing it to confirm the change; the tool would have reported a failure.\n- When you will probably need several files, read them all in one message.",
     "inputSchema": {
       "type": "object",
       "properties": {
