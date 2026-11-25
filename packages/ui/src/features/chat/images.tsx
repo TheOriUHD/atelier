@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from 'react';
 import { PreviewCard } from '@base-ui/react/preview-card';
 import { Lightbox, cn, type LightboxImage } from '../../components/ui/index.ts';
-import { popupMotionClass, positionerClass } from '../../components/ui/styles.ts';
+import { popupMotionClass, positionerClass, popupCollisionPadding } from '../../components/ui/styles.ts';
 import { blobUrl } from '../../lib/platform.ts';
 import type { ActivityStepView } from './turns.ts';
 
@@ -88,7 +88,7 @@ function Thumbnail({ image, position, total, onOpen }: { image: ViewedImage; pos
         <img src={image.src} alt="" loading="lazy" className="size-full object-cover" />
       </PreviewCard.Trigger>
       <PreviewCard.Portal>
-        <PreviewCard.Positioner side="top" align="end" sideOffset={8} className={positionerClass}>
+        <PreviewCard.Positioner collisionPadding={popupCollisionPadding} side="top" align="end" sideOffset={8} className={positionerClass}>
           <PreviewCard.Popup aria-label="Image preview" className={cn('flex w-fit flex-col overflow-hidden rounded-2xl bg-popover text-fg shadow-popover outline-none', popupMotionClass)}>
             <img src={image.src} alt={image.alt ?? ''} className="block max-h-[min(480px,60vh)] max-w-[min(640px,calc(100vw-32px))] bg-fill-ghost-hover object-contain" />
             <div className="flex items-center justify-between gap-4 border-t border-line px-3 py-2 text-footnote">

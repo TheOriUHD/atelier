@@ -4,7 +4,13 @@
  */
 
 /** Positioner for every anchored popup (menu, popover, select). */
-export const positionerClass = 'z-(--at-layout-z-popover) outline-none';
+export const positionerClass = 'z-(--at-layout-z-popover) outline-none app-no-drag';
+
+/**
+ * Popups keep clear of the title-bar strip (36px, with the window buttons at its right on Windows and Linux): inside it
+ * the window drags and the buttons sit on top, so a menu placed there can't be clicked. The default padding is 5.
+ */
+export const popupCollisionPadding = { top: 40, right: 8, bottom: 8, left: 8 };
 
 /** Menu / Popover surface: pad 4, r12, popover background and shadow. */
 export const popupSurfaceClass = 'rounded-2xl bg-popover p-1 text-body text-fg shadow-popover outline-none';

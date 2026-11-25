@@ -1,6 +1,6 @@
 import { Popover as BasePopover } from '@base-ui/react/popover';
 import { cn } from './cn.ts';
-import { popupMotionClass, popupSurfaceClass, positionerClass } from './styles.ts';
+import { popupMotionClass, popupSurfaceClass, positionerClass, popupCollisionPadding } from './styles.ts';
 
 /** Popover root. Holds open state; renders no element. */
 export const Popover = BasePopover.Root;
@@ -30,6 +30,7 @@ export function PopoverContent({
   return (
     <BasePopover.Portal>
       <BasePopover.Positioner
+        collisionPadding={popupCollisionPadding}
         side={side}
         align={align}
         sideOffset={sideOffset}

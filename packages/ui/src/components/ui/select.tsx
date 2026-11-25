@@ -9,6 +9,7 @@ import {
   popupMotionClass,
   popupScrollClass,
   popupSurfaceClass,
+  popupCollisionPadding,
   positionerClass,
 } from './styles.ts';
 
@@ -104,6 +105,7 @@ export function Select<V extends string = string>({
       </BaseSelect.Trigger>
       <BaseSelect.Portal>
         <BaseSelect.Positioner
+        collisionPadding={popupCollisionPadding}
           alignItemWithTrigger={false}
           side="bottom"
           align={variant === 'ghost' ? 'end' : 'start'}

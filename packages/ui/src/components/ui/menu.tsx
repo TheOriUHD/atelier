@@ -11,6 +11,7 @@ import {
   popupMotionClass,
   popupScrollClass,
   popupSurfaceClass,
+  popupCollisionPadding,
   positionerClass,
 } from './styles.ts';
 
@@ -51,6 +52,7 @@ export function MenuContent({
   return (
     <BaseMenu.Portal>
       <BaseMenu.Positioner
+        collisionPadding={popupCollisionPadding}
         side={side}
         align={align}
         sideOffset={sideOffset}
@@ -252,6 +254,7 @@ export function MenuSubmenu({ label, icon, hint, disabled, className, triggerCla
       </BaseMenu.SubmenuTrigger>
       <BaseMenu.Portal>
         <BaseMenu.Positioner
+        collisionPadding={popupCollisionPadding}
           side="inline-end"
           align="start"
           sideOffset={0}

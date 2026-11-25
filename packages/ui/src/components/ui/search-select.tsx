@@ -3,7 +3,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { cn } from './cn.ts';
 import { Icon } from './icon.tsx';
 import type { SelectOption } from './select.tsx';
-import { itemClass, itemOneLineClass, popupMotionClass, popupScrollClass, popupSurfaceClass, positionerClass } from './styles.ts';
+import { itemClass, itemOneLineClass, popupMotionClass, popupScrollClass, popupSurfaceClass, positionerClass, popupCollisionPadding } from './styles.ts';
 
 export interface SearchSelectProps<V extends string = string> {
   options: readonly SelectOption<V>[];
@@ -71,7 +71,7 @@ export function SearchSelect<V extends string = string>({
         </Combobox.Trigger>
       </div>
       <Combobox.Portal>
-        <Combobox.Positioner side="bottom" align="start" sideOffset={4} className={positionerClass}>
+        <Combobox.Positioner collisionPadding={popupCollisionPadding} side="bottom" align="start" sideOffset={4} className={positionerClass}>
           <Combobox.Popup className={cn(popupSurfaceClass, popupMotionClass, 'w-(--anchor-width) max-w-(--available-width)')}>
             <Combobox.Empty className="px-2.5 py-1.5 text-body text-fg-muted empty:hidden">{empty}</Combobox.Empty>
             <Combobox.List className={cn(popupScrollClass, 'max-h-[min(var(--available-height),20rem)]')}>
