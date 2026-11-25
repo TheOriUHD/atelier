@@ -11,6 +11,7 @@
  * The release runs it after `releases.mjs` and before deploying, so the sitemap carries the release's date.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -36,10 +37,15 @@ function shell() {
   return { sprite: sprite.replace(/\n\n<header$/, ''), header, footer };
 }
 
+/** The apps page's own stylesheet carries a hash of itself, so a change to it always reaches a browser that kept the old one. */
+const appsCssVersion = () => createHash('sha256').update(read('apps.css')).digest('hex').slice(0, 8);
+
 const version = () => /styles\.css\?v=([\w.-]+)/.exec(read('index.html'))?.[1] ?? '';
 
-function layout({ path, title, description, body, graph }) {
-  const { sprite, header, footer } = shell();
+function layout({ path, title, description, body, graph, apps = false }) {
+  const { sprite, header: shared, footer } = shell();
+  // The apps page has its own stylesheet and marks its own place in the header.
+  const header = apps ? shared.replace('<a href="/apps/">Apps</a>', '<a href="/apps/" aria-current="page">Apps</a>') : shared;
   const url = `${SITE}${path}`;
   const head = `<!doctype html>
 <html lang="en">
@@ -64,7 +70,7 @@ function layout({ path, title, description, body, graph }) {
 <script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@graph': graph })}</script>
 <script src="/theme.js"></script>
 <link rel="stylesheet" href="/styles.css?v=${version()}">
-</head>
+${apps ? `<link rel="stylesheet" href="/apps.css?v=${appsCssVersion()}">\n` : ''}</head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
@@ -72,8 +78,8 @@ ${sprite}
 
 ${header}
 
-<main id="main" class="section">
-  <div class="wrap compare">
+<main id="main" class="${apps ? 'apps-page' : 'section'}">
+  <div class="wrap${apps ? '' : ' compare'}">
 ${body}
   </div>
 </main>
@@ -210,6 +216,100 @@ ${HUB_SOURCES.map((s) => `      <li>${link(s)}</li>`).join('\n')}
   });
 }
 
+/** The apps page: every way to use Atelier, as tiles. Statuses are the truth today; change them here when a store approves an app. */
+const APPS_URL = {
+  chrome: 'https://chromewebstore.google.com/detail/atelier-for-chrome/efpchbhecdgeeadmefahpgidnfplajln',
+  firefox: 'https://addons.mozilla.org/firefox/addon/atelier-for-firefox/',
+};
+const ICON_ARROW = '<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>';
+const tile = ({ id, cls, icon, status, soon, title, text, meta, actions, extra, shot }) => `    <article class="app ${cls}" id="${id}">
+      <div class="app-top"><span class="app-icon"><svg class="icon" aria-hidden="true"><use href="#${icon}"/></svg></span><span class="status ${soon ? 'status-soon' : 'status-live'}">${esc(status)}</span></div>
+      <h2>${esc(title)}</h2>
+      <p>${esc(text)}</p>
+${meta ? `      <p class="app-meta">${esc(meta)}</p>\n` : ''}${extra ?? ''}${actions ? `      <div class="app-actions">${actions}</div>\n` : ''}${shot ?? ''}    </article>`;
+const go = (href, label, primary = false) => (primary ? `<a class="btn btn-primary btn-sm" href="${esc(href)}">${esc(label)}</a>` : `<a class="app-link" href="${esc(href)}">${esc(label)}${ICON_ARROW}</a>`);
+
+function appsPage() {
+  const title = 'All the ways to use Atelier: desktop, phone, browser, terminal and server';
+  const description = 'Atelier for macOS, Windows and Linux, for iPhone and iPad, in a browser from your own server, in your terminal, and as extensions for Chrome and Firefox.';
+  const tiles = [
+    tile({
+      id: 'desktop', cls: 'app-desktop', icon: 'i-window', status: 'Available', title: 'Desktop app',
+      text: 'Chat and Code in a window on your Mac, Windows PC or Linux computer, with the models you choose, local or hosted. It works on its own, or connects to your Atelier server.',
+      meta: 'macOS, Windows and Linux. Free for noncommercial use.',
+      actions: `${go('/download/#desktop', 'Download', true)}${go('https://docs.atelierhq.dev/getting-started/', 'Getting started')}`,
+      shot: `      <div class="app-shot"><picture><img src="/img/chat-1280.webp" srcset="/img/chat-1280.webp 1280w, /img/chat-2560.webp 2560w" sizes="(min-width: 900px) 640px, 100vw" width="4080" height="2550" alt="The Atelier desktop app showing a conversation" loading="lazy"></picture></div>\n`,
+    }),
+    tile({
+      id: 'ios', cls: 'app-phone', icon: 'i-phone', status: 'Coming to the App Store', soon: true, title: 'iPhone and iPad',
+      text: 'Your conversations and Code sessions on your phone, from your own server. Small models can run on the phone itself.',
+      meta: 'Atelier for iPhone and iPad. It is waiting for the App Store.',
+      shot: `      <div class="app-shot"><picture><img src="/img/phone-code-640.webp" srcset="/img/phone-code-640.webp 640w, /img/phone-code-1160.webp 1160w" sizes="260px" width="1160" height="2521" alt="Atelier on an iPhone, listing the computers and Code sessions" loading="lazy"></picture></div>\n`,
+    }),
+    tile({
+      id: 'web', cls: 'app-half', icon: 'i-server', status: 'Available', title: 'In your browser, from your server',
+      text: 'Run the Atelier server once, with Docker, and everyone you give an account opens it in any browser: the same Chat and Code, nothing to install on the device.',
+      meta: 'For you alone or for a team, with accounts, limits and single sign-on.',
+      actions: `${go('/download/#server', 'Get the server', true)}${go('https://docs.atelierhq.dev/self-hosting/', 'Self-hosting guide')}`,
+    }),
+    tile({
+      id: 'terminal', cls: 'app-half', icon: 'i-terminal', status: 'Available', title: 'Terminal app',
+      text: 'A Code session where you already work, in any terminal and over SSH, with the same tools, permissions and models as the desktop app.',
+      extra: `      <code class="app-command"><small>macOS and Linux</small>curl -fsSL https://updates.atelierhq.dev/cli | sh</code>\n      <code class="app-command"><small>Windows</small>irm https://updates.atelierhq.dev/cli.ps1 | iex</code>\n`,
+      actions: `${go('/download/#cli', 'More about the terminal app')}${go('https://docs.atelierhq.dev/cli/', 'Guide')}`,
+    }),
+    tile({
+      id: 'chrome', cls: 'app-half', icon: 'i-puzzle', status: 'Available', title: 'Atelier for Chrome',
+      text: 'Lets Atelier open web pages in tabs of its own, read them and fill in forms you asked it to, while you keep using your browser. It needs the Atelier desktop app on the same computer.',
+      meta: 'Chrome, Brave, Edge and Arc.',
+      actions: `${go(APPS_URL.chrome, 'Chrome Web Store', true)}${go('https://docs.atelierhq.dev/computer-use/#web-pages-atelier-for-chrome', 'How it works')}`,
+    }),
+    tile({
+      id: 'firefox', cls: 'app-half', icon: 'i-puzzle', status: 'Available', title: 'Atelier for Firefox',
+      text: 'The same extension for Firefox: its own tabs, in a group named after the chat, never your own tabs. It needs the Atelier desktop app on the same computer.',
+      meta: 'Firefox 140 or later.',
+      actions: `${go(APPS_URL.firefox, 'Firefox Add-ons', true)}${go('https://docs.atelierhq.dev/computer-use/#atelier-for-firefox', 'How it works')}`,
+    }),
+  ].join('\n');
+  const body = `    <div class="apps-intro">
+      <h1>Atelier on every device</h1>
+      <p class="lead">The desktop app, your browser, your phone and your terminal open the same workspace. Use whichever suits the moment.</p>
+    </div>
+    <svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></symbol>
+      <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M9.5 4.5a2 2 0 1 1 4 0V6H18a1 1 0 0 1 1 1v3.5h-1.5a2 2 0 1 0 0 4H19V18a1 1 0 0 1-1 1h-3.5v-1.5a2 2 0 1 0-4 0V19H7a1 1 0 0 1-1-1v-3.5H4.5a2 2 0 1 1 0-4H6V7a1 1 0 0 1 1-1h2.5V4.5Z"/></symbol>
+    </svg>
+    <div class="apps-grid">
+${tiles}
+    </div>
+    <section class="apps-fit" aria-labelledby="fit">
+      <h2 id="fit">How they fit together</h2>
+      <div class="fit-cols">
+        <div><h3>On their own</h3><p>The desktop app and the terminal app run by themselves, with your own models and keys. There is nothing to host and no account to make.</p></div>
+        <div><h3>With a server</h3><p>Sign in to the same Atelier server from every app and browser, and your conversations, projects and Code sessions on your own computers are there on each one.</p></div>
+        <div><h3>Extensions</h3><p>The browser extensions talk to the desktop app on the same computer. What a page shows goes to the desktop app and from there to the model you chose, and nowhere else.</p></div>
+      </div>
+      <div class="apps-cta"><a class="btn btn-primary" href="/download/">Download</a><a class="btn btn-quiet" href="https://docs.atelierhq.dev/getting-started/">Get started</a></div>
+    </section>`;
+  return layout({
+    path: '/apps/',
+    title,
+    description,
+    body,
+    apps: true,
+    graph: [
+      { '@type': 'WebPage', '@id': `${SITE}/apps/`, url: `${SITE}/apps/`, name: title, description, isPartOf: { '@id': `${SITE}/#website` }, about: { '@id': `${SITE}/#app` } },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Atelier', item: `${SITE}/` },
+          { '@type': 'ListItem', position: 2, name: 'Apps', item: `${SITE}/apps/` },
+        ],
+      },
+    ],
+  });
+}
+
 function llmsTxt() {
   return `# Atelier
 
@@ -219,6 +319,7 @@ Atelier is an independent project, not affiliated with any model provider. The w
 
 ## Start here
 - [Download](${SITE}/download/): desktop apps, the terminal app and the Docker server
+- [All the ways to use Atelier](${SITE}/apps/): the desktop app, iPhone and iPad, a browser, the terminal app, the server and the Chrome and Firefox extensions
 - [Get started](https://docs.atelierhq.dev/getting-started/): install, connect a model, first conversation
 - [Documentation](https://docs.atelierhq.dev/): every feature, the settings and the self-hosting guide
 - [Documentation for language models](https://docs.atelierhq.dev/llms.txt): an index of the documentation pages in Markdown, and [the whole documentation in one file](https://docs.atelierhq.dev/llms-full.txt)
@@ -252,6 +353,7 @@ export function sitemap() {
   const urls = [
     ['/', gitDate('index.html') || CHECKED],
     ['/download/', download || CHECKED],
+    ['/apps/', gitDate('apps/index.html') || CHECKED],
     ['/compare/', CHECKED],
     ...PAGES.map((p) => [`/compare/${p.slug}/`, CHECKED]),
   ];
@@ -265,6 +367,7 @@ ${urls.map(([path, date]) => `  <url><loc>${SITE}${path}</loc><lastmod>${date}</
 /** Every generated file but the sitemap (whose dates come from git and the release), by path under public/. */
 export function files() {
   return {
+    'apps/index.html': appsPage(),
     'compare/index.html': hubPage(),
     ...Object.fromEntries(PAGES.map((p) => [`compare/${p.slug}/index.html`, comparePage(p)])),
     'llms.txt': llmsTxt(),

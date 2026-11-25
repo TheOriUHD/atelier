@@ -12,7 +12,7 @@ describe('the pages search engines and AI agents read', () => {
 
   it('the sitemap lists every page that has a canonical address', () => {
     const listed = [...read('sitemap.xml').matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-    for (const path of ['/', '/download/', ...Object.keys(files()).filter((f) => f.endsWith('index.html') && f.startsWith('compare')).map((f) => `/${f.replace('index.html', '')}`)]) {
+    for (const path of ['/', '/download/', '/apps/', ...Object.keys(files()).filter((f) => f.endsWith('index.html') && f.startsWith('compare')).map((f) => `/${f.replace('index.html', '')}`)]) {
       expect(listed, path).toContain(`https://atelierhq.dev${path}`);
     }
     for (const url of listed) expect(url).toMatch(/\/$/);
@@ -31,6 +31,10 @@ describe('the pages search engines and AI agents read', () => {
 
   it('every page links to the comparisons, and the data has no empty fact', () => {
     for (const page of ['index.html', 'download/index.html', 'compare/index.html']) expect(read(page), page).toContain('href="/compare/"');
+    // The apps page is in every page's header and footer, and says what is true: a store that hasn't approved the phone app has no link.
+    for (const page of ['index.html', 'download/index.html', 'compare/index.html', 'apps/index.html', 'join/index.html', 'impressum/index.html', 'datenschutz/index.html']) expect(read(page), page).toContain('<a href="/apps/"');
+    expect(read('apps/index.html')).toContain('Coming to the App Store');
+    expect(read('apps/index.html')).not.toMatch(/apps\.apple\.com/);
     for (const [path, content] of Object.entries(files())) expect(content, path).not.toMatch(/undefined|\[object/);
   });
 });

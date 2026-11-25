@@ -6,6 +6,7 @@ Atelier is an independent project, not affiliated with any model provider. The w
 
 ## Start here
 - [Download](https://atelierhq.dev/download/): desktop apps, the terminal app and the Docker server
+- [All the ways to use Atelier](https://atelierhq.dev/apps/): the desktop app, iPhone and iPad, a browser, the terminal app, the server and the Chrome and Firefox extensions
 - [Get started](https://docs.atelierhq.dev/getting-started/): install, connect a model, first conversation
 - [Documentation](https://docs.atelierhq.dev/): every feature, the settings and the self-hosting guide
 - [Documentation for language models](https://docs.atelierhq.dev/llms.txt): an index of the documentation pages in Markdown, and [the whole documentation in one file](https://docs.atelierhq.dev/llms-full.txt)

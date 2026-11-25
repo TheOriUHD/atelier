@@ -497,6 +497,7 @@ const LINKS = {
   server: 'https://atelierhq.dev/download/#server',
   chrome: 'https://chromewebstore.google.com/detail/atelier-for-chrome/efpchbhecdgeeadmefahpgidnfplajln',
   firefox: 'https://addons.mozilla.org/firefox/addon/atelier-for-firefox/',
+  apps: 'https://atelierhq.dev/apps/',
 };
 
 function ProfileFooter() {
@@ -586,6 +587,8 @@ function ProfileFooter() {
             {link(Server, 'Server', LINKS.server)}
             {link(Globe, 'Atelier for Chrome', LINKS.chrome)}
             {link(Globe, 'Atelier for Firefox', LINKS.firefox)}
+            <MenuSeparator />
+            {link(Globe, 'All the ways to use Atelier', LINKS.apps)}
           </MenuSubmenu>
           <MenuSubmenu icon={Info} label="Learn more">
             {link(BookOpen, 'Documentation', LINKS.docs)}
