@@ -64,7 +64,7 @@ const CONFIG = {
   linux: process.env.ATELIER_RELEASE_LINUX ?? 'atelier-linux',
   windows: process.env.ATELIER_RELEASE_WINDOWS ?? 'atelier-win',
   /** The Windows machine's build folder: tools\node, src\ and the files this command copies there. */
-  windowsRoot: process.env.ATELIER_RELEASE_WINDOWS_ROOT ?? 'C:/atelier-build',
+  windowsRoot: process.env.ATELIER_RELEASE_WINDOWS_ROOT ?? 'C:/Builds/atelier',
   feed: process.env.ATELIER_RELEASE_FEED ?? 'https://updates.atelierhq.dev',
   notaryTimeoutHours: Number(process.env.ATELIER_RELEASE_NOTARY_HOURS ?? 4),
   updateKey: process.env.ATELIER_UPDATE_KEY ?? join(homedir(), '.atelier-release', 'update-signing.key'),

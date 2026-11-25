@@ -182,7 +182,7 @@ twenty minutes in shows up in two.
 machine). The Linux machine runs Ubuntu 24.04 with Node 24, pnpm (the version in `package.json`), Go 1.27 and Docker with
 buildx: make a user for it with your key, then run `deploy/ship/linux-builder-setup.sh` there as root once. It needs
 no credentials but one: for the server images, a `docker login ghcr.io` there (without it the images are
-built to prove they build, and not pushed). The Windows machine has `tools\node` (Node and pnpm) in its build folder. The
+built to prove they build, and not pushed). The Windows machine (Windows Server 2025 on its own hardware, default folder `C:\Builds\atelier`, which Defender leaves alone) has `tools\node` (Node and pnpm, the versions the build wants, apart from the system's own) in its build folder, and its default shell is PowerShell. The
 update-signing key (`~/.atelier-release/update-signing.key`), the Apple certificate and the notarization login stay on this
 Mac, and so do your `gh` and `wrangler` logins.
 
