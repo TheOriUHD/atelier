@@ -763,8 +763,8 @@ export function applyOverrides(m: DiscoveredModel, overrides: Settings['models']
     maxOutput: o.maxOutputTokens ?? m.maxOutput,
     capabilities: { ...m.capabilities, tools, vision: o.vision ?? m.capabilities.vision },
     tier: o.promptTier ?? m.tier,
-    // Adding a model by id says nothing about its capabilities.
-    source: Object.keys(o).some((k) => k !== 'manual') ? 'override' : m.source,
+    // Adding a model by id, or giving it a system prompt, says nothing about its capabilities.
+    source: Object.keys(o).some((k) => k !== 'manual' && k !== 'systemPrompt') ? 'override' : m.source,
     hidden: o.hidden ?? false,
     favorite: o.favorite ?? false,
     order: o.order ?? 1000,

@@ -127,6 +127,7 @@ Use it after pulling a new model, changing a memory budget, or restarting a mode
 | **Tool calling** | Automatic, Native, Prompted, None | See [Tool calling](#tool-calling-native-prompted-none). |
 | **Vision** | Automatic, Supported, Not supported | Whether images are sent to the model. |
 | **Prompt tier** | Automatic, Full, Compact | See [Prompt tiers](#prompt-tiers). |
+| **System prompt** | Text, up to 20,000 characters | Added after Atelier's own prompt whenever this model is used. See [A model's own system prompt](#a-models-own-system-prompt). |
 
 Saving writes each changed field to the settings file under `models.overrides["provider/model"]`; clearing a field removes
 it. A model's name, **Visible** and star are overrides too (`displayName`, `hidden`, `favorite`), and the file also accepts
@@ -235,6 +236,14 @@ and so do Mistral Small 4, Ministral 3, Codestral and Mistral Vibe Fast.
 
 Override it per model under **Prompt tier**: **Compact** for a model that struggles with the full prompt, **Full** for a capable
 local model that was given the compact one. The prompts are published verbatim in [Prompts](/prompts/).
+
+## A model's own system prompt
+
+**System prompt** in a model's settings gives that model instructions of its own: a language, a format it handles well,
+a quirk to work around (for example `/no_think` for a Qwen model you want fast). It doesn't replace Atelier's prompt; it is
+added after it in Chat, Code and sub-agents, next to the administrator's instructions (Admin › Capabilities ›
+Instructions), which come first. Like those, it ranks above the person's own instructions, applies to new conversations
+and to running ones at their next message, is never cut by the compact budget, and only admins can see it.
 
 ## Vision and PDFs
 

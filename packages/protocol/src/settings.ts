@@ -65,6 +65,11 @@ export const ModelOverride = z
     toolCalling: z.enum(['native', 'prompted', 'none']),
     vision: z.boolean(),
     promptTier: PromptTier,
+    /**
+     * Extra system prompt for this model, added after Atelier's own in every mode (sub-agents too), with the
+     * administrator's instructions. Admin-only: people who aren't admins never see it in the settings.
+     */
+    systemPrompt: z.string().max(20_000),
     /** Added by id in Settings › Admin › Models: listed for its provider even when the provider's model list leaves it out. */
     manual: z.boolean(),
   })

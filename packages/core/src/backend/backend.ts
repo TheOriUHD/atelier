@@ -567,6 +567,8 @@ export async function createBackend(platform: Platform): Promise<Backend> {
         // models, are the admin's business (the system AGENTS.md is admin-only too).
         hooks: {},
         prompts: { organizationInstructions: '' },
+        // A model's own system prompt is the admin's too.
+        models: { ...effective.models, overrides: Object.fromEntries(Object.entries(effective.models.overrides).map(([ref, { systemPrompt: _, ...o }]) => [ref, o])) },
         capabilities: { ...effective.capabilities, webSearch: { enabled: effective.capabilities.webSearch.enabled, provider: effective.capabilities.webSearch.provider } },
         // Which decision services there are, where and with which key, is the admin's business too.
         decisions: { ...effective.decisions, services: [] },

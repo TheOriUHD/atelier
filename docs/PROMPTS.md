@@ -165,6 +165,12 @@ of precedence. It is a setting of its own rather than the system AGENTS.md reuse
 conventions written for Code and for chats working in a folder. Like the files, it reaches new conversations, not running ones; regular
 users' settings don't include it; the compact budget never cuts it.
 
+**A model's own system prompt** (`models.overrides["provider/model"].systemPrompt`, Admin › Models › the model's
+settings) follows the administrator's text in the same block, as `<instructions source="model settings" kind="system">`,
+whenever that model runs the session: every mode, every tier and sub-agents. It adds to the prompt instead of replacing
+it, and the snapshot keeps its hash (`modelPromptHash`), so an edit reaches running sessions at their next turn. Like the
+administrator's text, regular users' settings don't include it and the compact budget never cuts it.
+
 **Writing instructions.** Code and a chat working as a task (`code.*.md` and `fragments/tasks.*.md`, a section in the
 full tier, one sentence in the compact tier) say that ATELIER.md holds the project's conventions and the person's lasting preferences, that a stated
 lasting preference goes into it with a word to the person, that a request to set up or update the project's

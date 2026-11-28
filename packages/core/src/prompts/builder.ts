@@ -45,6 +45,8 @@ export interface PromptContext {
   workspace?: WorkspaceFacts;
   /** The administrator's instructions for every conversation (Admin › Capabilities), in every mode. */
   organization?: string;
+  /** The administrator's extra system prompt for this session's model (Admin › Models › the model's settings), after `organization`. */
+  modelPrompt?: string;
   /** Code and Work sessions: CLAUDE.md, AGENTS.md and rules. */
   instructions?: InstructionFile[];
   /** The `<available_skills>` block. */
@@ -172,9 +174,13 @@ export function buildSystemPrompt(ctx: PromptContext): SystemBlock[] {
   const organization = ctx.organization?.trim()
     ? `<instructions source="admin settings" kind="system">\n${escapeTags(ctx.organization.trim())}\n</instructions>`
     : '';
+  // The model's own prompt adds to Atelier's rather than replacing it, and ranks with the administrator's text.
+  const modelPrompt = ctx.modelPrompt?.trim()
+    ? `<instructions source="model settings" kind="system">\n${escapeTags(ctx.modelPrompt.trim())}\n</instructions>`
+    : '';
   const files = ctx.instructions?.length ? renderInstructions(ctx.instructions) : '';
-  if (organization || files)
-    blocks.push({ text: [fill('strings/instructions-header'), organization, files].filter(Boolean).join('\n\n') });
+  if (organization || modelPrompt || files)
+    blocks.push({ text: [fill('strings/instructions-header'), organization, modelPrompt, files].filter(Boolean).join('\n\n') });
   // A defined agent may lack the Skill tool; then the list would offer what it can't load.
   if (ctx.skills && has('Skill')) blocks.push({ text: ctx.skills });
   if (ctx.subagent) return withLastCached(blocks);

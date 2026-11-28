@@ -392,6 +392,8 @@ interface SystemSnapshot {
   trimmed?: Trim[];
   /** sha256 of the memory digest the prompt carries; empty without one. */
   memoryHash?: string;
+  /** sha256 of the model's own system prompt (its settings); empty without one. */
+  modelPromptHash?: string;
 }
 
 interface ActiveRun {
@@ -3212,13 +3214,17 @@ export class ChatService {
     // The person's memory as it is now: a change to it rebuilds the prompt at the next turn.
     const memory = this.deps.memory && !shared ? await this.deps.memory.digest(row, await this.memoryAccess(row), { tier: info.tier, has: (name) => tools.some((t) => t.name === name) }).catch(() => null) : null;
     const memoryHash = memory ? createHash('sha256').update(memory).digest('hex') : '';
+    // The model's own system prompt (Admin › Models): editing it rebuilds the prompt at the next turn.
+    const modelPrompt = this.deps.settings().models.overrides[info.ref]?.systemPrompt?.trim() ?? '';
+    const modelPromptHash = modelPrompt ? createHash('sha256').update(modelPrompt).digest('hex') : '';
     const current =
       stored &&
       stored.tier === info.tier &&
       stored.modelRef === info.ref &&
       stored.safeguardsHash === (safeguards?.hash ?? '') &&
       stored.toolsetHash === hash(sent(frozen)) &&
-      (stored.memoryHash ?? '') === memoryHash;
+      (stored.memoryHash ?? '') === memoryHash &&
+      (stored.modelPromptHash ?? '') === modelPromptHash;
     if (stored && (current || !rebuild)) return stored;
 
     const skills = ((await this.deps.extensions?.(row))?.skills ?? []).filter((s) => !s.disableModelInvocation);
@@ -3247,6 +3253,7 @@ export class ChatService {
       ...(await this.definedAgentPrompt(row)),
       skills: renderSkillList(skills, skillBudget),
       organization: this.deps.settings().prompts.organizationInstructions,
+      ...(modelPrompt ? { modelPrompt } : {}),
       ...(code ? { workspace: code.workspace, instructions: personal ? code.instructions : code.instructions.filter((f) => f.kind !== 'personal') } : {}),
       ...(safeguards ? { safeguards } : {}),
       ...(memory ? { memory } : {}),
@@ -3267,6 +3274,7 @@ export class ChatService {
       mcpTools,
       ...(trimmed.length ? { trimmed } : {}),
       ...(memoryHash ? { memoryHash } : {}),
+      ...(modelPromptHash ? { modelPromptHash } : {}),
     };
     const blob = await this.deps.blobs.putText(JSON.stringify(snapshot), 'application/json');
     const lane = this.laneOf(row.id);

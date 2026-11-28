@@ -722,10 +722,14 @@ describe('connectors', () => {
     await client.call('settings.set', { layer: 'global', path: ['hooks'], value: { Stop: [{ hooks: [{ type: 'command', command: 'notify-admin' }] }] } });
     await client.call('settings.set', { layer: 'global', path: ['capabilities', 'webSearch'], value: { enabled: true, provider: 'brave', apiKey: '${secret:brave}' } });
     await client.call('settings.set', { layer: 'global', path: ['prompts', 'organizationInstructions'], value: 'Mention the staff discount.' });
+    await client.call('settings.set', { layer: 'global', path: ['models', 'overrides', 'acme/big'], value: { systemPrompt: 'Quote the price list.', vision: true } });
+    expect((await client.call('settings.get', {})).effective).toMatchObject({ models: { overrides: { 'acme/big': { systemPrompt: 'Quote the price list.' } } } });
+    expect((await user.call('settings.get', {})).effective).toMatchObject({ models: { overrides: { 'acme/big': { vision: true } } } });
     const seen = JSON.stringify((await user.call('settings.get', {})).effective);
     expect(seen).not.toContain('notify-admin');
     expect(seen).not.toContain('secret:brave');
     expect(seen).not.toContain('staff discount');
+    expect(seen).not.toContain('price list');
     expect((await user.call('settings.get', {})).effective).toMatchObject({ capabilities: { webSearch: { enabled: true, provider: 'brave' } } });
   });
   it('keeps a session’s connector switches', async () => {

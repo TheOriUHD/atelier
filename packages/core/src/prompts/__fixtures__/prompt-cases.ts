@@ -67,6 +67,8 @@ export interface PromptCase {
   permissionMode?: PermissionMode;
   /** The administrator's instructions for every conversation. */
   organization?: string;
+  /** The administrator's own system prompt for the session's model (Admin › Models). */
+  modelPrompt?: string;
   safeguards?: { system?: Partial<SafeguardsSettings>; person?: SafeguardsOverride };
   overrides?: Overrides;
   /** The person has memory (Settings › Memory) with a few entries; `entries` sets how many topics besides. */
@@ -242,6 +244,8 @@ export async function assemble(c: PromptCase, model = modelFor(c)): Promise<Asse
     settings.capabilities.webFetch = c.webFetch ?? true;
     settings.safeguards = { ...settings.safeguards, ...c.safeguards?.system };
     settings.prompts.organizationInstructions = c.organization ?? '';
+    // A fresh record: a schema default may be one shared object.
+    if (c.modelPrompt) settings.models = { ...settings.models, overrides: { [modelFor(c).ref]: { systemPrompt: c.modelPrompt } } };
     const prefs = defaultUserPrefs();
     prefs.callMe = c.personalization?.name ?? '';
     prefs.personalization = {

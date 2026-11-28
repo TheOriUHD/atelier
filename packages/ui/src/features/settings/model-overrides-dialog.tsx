@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ModelOverride, type ModelInfo } from '@atelier/protocol';
-import { Button, Dialog, DialogClose, DialogContent, DialogFooter, Field, Select, TextField, type SelectOption } from '../../components/ui/index.ts';
+import { Button, Dialog, DialogClose, DialogContent, DialogFooter, Field, Select, TextArea, TextField, type SelectOption } from '../../components/ui/index.ts';
 import { useSettings } from '../../lib/queries.ts';
 import { describeError, rpc } from '../../lib/rpc.ts';
 
@@ -24,7 +24,7 @@ const TIER_OPTIONS: SelectOption[] = [
   { value: 'compact', label: 'Compact' },
 ];
 
-const FIELDS = ['contextLength', 'maxOutputTokens', 'temperature', 'toolCalling', 'vision', 'promptTier'] as const;
+const FIELDS = ['contextLength', 'maxOutputTokens', 'temperature', 'toolCalling', 'vision', 'promptTier', 'systemPrompt'] as const;
 type OverrideField = (typeof FIELDS)[number];
 type Form = Record<OverrideField, string>;
 
@@ -32,6 +32,7 @@ const NUMBER_ERRORS: Partial<Record<OverrideField, string>> = {
   contextLength: 'Enter a whole number of tokens.',
   maxOutputTokens: 'Enter a whole number of tokens.',
   temperature: 'Enter a number from 0 to 2.',
+  systemPrompt: 'Keep it under 20,000 characters.',
 };
 
 function toForm(o: ModelOverride): Form {
@@ -42,6 +43,7 @@ function toForm(o: ModelOverride): Form {
     toolCalling: o.toolCalling ?? AUTO,
     vision: o.vision === undefined ? AUTO : o.vision ? 'yes' : 'no',
     promptTier: o.promptTier ?? AUTO,
+    systemPrompt: o.systemPrompt ?? '',
   };
 }
 
@@ -55,6 +57,7 @@ function fromForm(f: Form): Record<OverrideField, unknown> {
     toolCalling: pick(f.toolCalling),
     vision: f.vision === AUTO ? undefined : f.vision === 'yes',
     promptTier: pick(f.promptTier),
+    systemPrompt: f.systemPrompt.trim() ? f.systemPrompt.trim() : undefined,
   };
 }
 
@@ -68,7 +71,7 @@ export interface ModelOverridesDialogProps {
 export function ModelOverridesDialog({ model, open, onOpenChange }: ModelOverridesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={model.displayName} description="Override what Atelier detected about this model. Empty fields keep the detected value.">
+      <DialogContent title={model.displayName} description="Override what Atelier detected about this model, or give it a system prompt of its own. Empty fields keep the detected value.">
         <OverridesForm model={model} onDone={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
@@ -77,7 +80,12 @@ export function ModelOverridesDialog({ model, open, onOpenChange }: ModelOverrid
 
 function OverridesForm({ model, onDone }: { model: ModelInfo; onDone(): void }) {
   const { settings } = useSettings();
-  const current = settings?.models.overrides[model.ref] ?? {};
+  // The fields start from the saved values, so they wait for them.
+  if (!settings) return null;
+  return <LoadedForm model={model} current={settings.models.overrides[model.ref] ?? {}} onDone={onDone} />;
+}
+
+function LoadedForm({ model, current, onDone }: { model: ModelInfo; current: ModelOverride; onDone(): void }) {
   const [form, setForm] = useState(() => toForm(current));
   const [invalid, setInvalid] = useState<ReadonlySet<OverrideField>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -142,6 +150,14 @@ function OverridesForm({ model, onDone }: { model: ModelInfo; onDone(): void }) 
         </Field>
         <Field label="Prompt tier">
           <Select variant="field" options={TIER_OPTIONS} {...choose('promptTier')} />
+        </Field>
+        <Field
+          className="col-span-3"
+          label="System prompt"
+          description="Added after Atelier's own prompt whenever this model is used, in every mode. Only admins can see it."
+          error={errorFor('systemPrompt')}
+        >
+          <TextArea rows={5} placeholder="For example: Answer in British English." {...field('systemPrompt')} />
         </Field>
       </div>
       <p className="mt-4 text-footnote text-fg-muted">
