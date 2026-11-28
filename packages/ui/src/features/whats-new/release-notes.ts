@@ -38,6 +38,23 @@ export interface ReleaseNotes {
 
 export const RELEASE_NOTES: readonly ReleaseNotes[] = [
   {
+    version: '0.10.12',
+    intro: 'Give a model instructions of its own, and menus on Windows that open where you can click them.',
+    highlights: [
+      {
+        icon: FileText,
+        title: 'A system prompt for each model',
+        body: "Admins can give any model its own system prompt in Admin › Models › the model's settings. It is added after Atelier's own prompt, never in place of it, in Chat, Code and sub-agents, so you can tell one model to answer in a certain language or work around a quirk. Only admins can see it.",
+      },
+      {
+        icon: AppWindow,
+        title: 'Menus stay clear of the title bar',
+        body: 'On Windows and Linux, a dropdown such as the model picker could open into the strip at the top of the window, under the window buttons, where it could not be clicked. Menus now keep clear of it.',
+      },
+    ],
+    also: ['Profile › Get the apps › All the ways to use Atelier opens the new apps page on the website.'],
+  },
+  {
     version: '0.10.11',
     intro: 'The agents work more like a strong coding agent: they find causes, check their work where you use it, and finish what you asked.',
     highlights: [
